@@ -36,5 +36,5 @@ services:
       # Puerto del servidor
       - PORT=${PORT:-8000}
     volumes:
-      - /mnt/storage:/mnt/storage:ro
-      - /mnt/storage-6tb:/mnt/storage-6tb:ro
+      - /mnt/storage:/mnt/storage
+      - /mnt/storage-6tb:/mnt/storage-6tb
