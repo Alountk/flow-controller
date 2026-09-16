@@ -1,8 +1,7 @@
 # Docker Compose para despliegue con imagen de GHCR
 # Uso: docker compose -f docker-compose.deploy.yml up -d
 #
-# Requiere un archivo .env con las variables de configuración.
-# Copia .env.example y edita los valores.
+# Las variables de entorno se configuran en Portainer o directamente aqui.
 
 services:
   flow-controller:
@@ -10,8 +9,29 @@ services:
     container_name: flow-controller
     network_mode: host
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      # Radarr
+      - RADARR_URL=${RADARR_URL:-http://localhost:7878}
+      - RADARR_API_KEY=${RADARR_API_KEY:-}
+      # Sonarr
+      - SONARR_URL=${SONARR_URL:-http://localhost:8989}
+      - SONARR_API_KEY=${SONARR_API_KEY:-}
+      # AmuTorrent
+      - AMUTORRENT_URL=${AMUTORRENT_URL:-http://localhost:4000}
+      - AMUTORRENT_API_KEY=${AMUTORRENT_API_KEY:-}
+      - AMUTORRENT_USER=${AMUTORRENT_USER:-admin}
+      - AMUTORRENT_PASSWORD=${AMUTORRENT_PASSWORD:-}
+      # Seguridad
+      - SAFE_MODE=${SAFE_MODE:-true}
+      # Desarrollador
+      - DEVELOPER=${DEVELOPER:-false}
+      # Rutas de descarga
+      - FOLDER_DOWNLOAD_AMULE=${FOLDER_DOWNLOAD_AMULE:-/mnt/storage-6tb/shared-downloads/amule}
+      - FOLDER_DOWNLOAD_TORRENT=${FOLDER_DOWNLOAD_TORRENT:-/mnt/storage/downloads/qbittorrent/completed}
+      # Intervalos
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-15}
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - RETRY_DELAY=${RETRY_DELAY:-2}
     volumes:
       - /mnt/storage:/mnt/storage:ro
       - /mnt/storage-6tb:/mnt/storage-6tb:ro
