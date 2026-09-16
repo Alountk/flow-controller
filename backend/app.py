@@ -1266,7 +1266,7 @@ async def _run_copy_background(task_id: str, src_path: str, dst_root: str, servi
 
 
 IMPORT_POLL_INTERVAL = 5  # segundos entre polls de verificación de import
-IMPORT_POLL_TIMEOUT = 120  # timeout máximo en segundos
+IMPORT_POLL_TIMEOUT = 40  # timeout máximo en segundos
 
 
 async def _verify_import(task_id: str, service: dict, source: str, ids: dict):
