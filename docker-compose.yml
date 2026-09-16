@@ -28,6 +28,8 @@ services:
       - CHECK_INTERVAL=${CHECK_INTERVAL:-15}
       - MAX_RETRIES=${MAX_RETRIES:-3}
       - RETRY_DELAY=${RETRY_DELAY:-2}
+      # Puerto del servidor
+      - PORT=${PORT:-8000}
     volumes:
       - /mnt/storage:/mnt/storage:ro
       - /mnt/storage-6tb:/mnt/storage-6tb:ro
