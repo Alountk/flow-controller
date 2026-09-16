@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Propuesta 4: Sidebar Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #111113;
+      --sidebar: #18181b;
+      --main: #0f0f12;
+      --card: #1c1c21;
+      --card-hover: #222228;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-dim: #71717a;
+      --accent: #6366f1;
+      --accent-light: rgba(99,102,241,0.12);
+      --ok: #22c55e;
+      --ok-bg: rgba(34,197,94,0.1);
+      --bad: #ef4444;
+      --warn: #eab308;
+      --sidebar-w: 240px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--main);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: var(--sidebar-w); min-height: 100vh; flex-shrink: 0;
+      background: var(--sidebar); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0;
+    }
+    .sb-header {
+      padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+    }
+    .sb-brand { font-weight: 700; font-size: 16px; }
+    .sb-brand span { color: var(--accent); }
+    .sb-version { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+    .sb-nav { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; }
+    .sb-section { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #52525b; padding: 16px 10px 6px; font-weight: 600; }
+    .sb-link {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 8px; font-size: 13px;
+      color: var(--text-dim); text-decoration: none; transition: all 0.15s;
+    }
+    .sb-link:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .sb-link.active { color: var(--text); background: var(--accent-light); }
+    .sb-link .icon { font-size: 16px; width: 20px; text-align: center; }
+
+    .sb-footer {
+      padding: 16px 20px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .sb-avatar {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--accent-light); display: flex; align-items: center;
+      justify-content: center; font-size: 14px; font-weight: 700; color: var(--accent);
+    }
+    .sb-user { font-size: 12px; }
+    .sb-user .name { font-weight: 600; }
+    .sb-user .role { color: var(--text-dim); font-size: 11px; }
+
+    /* MAIN */
+    .main {
+      margin-left: var(--sidebar-w); flex: 1; min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+
+    /* TOP BAR */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 32px; height: 56px; border-bottom: 1px solid var(--border);
+      background: var(--sidebar); position: sticky; top: 0; z-index: 10;
+    }
+    .topbar-title { font-size: 15px; font-weight: 600; }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    .topbar-status {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--ok);
+    }
+    .topbar-status::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--ok); animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+      50% { box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+    }
+    .topbar-btn {
+      background: var(--accent); color: #fff; border: none;
+      padding: 7px 16px; border-radius: 8px; font-size: 12px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+
+    /* CONTENT */
+    .content { padding: 28px 32px; flex: 1; }
+
+    .content-header { margin-bottom: 28px; }
+    .content-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+    .content-header p { font-size: 13px; color: var(--text-dim); }
+
+    /* Pipeline */
+    .pipeline-row {
+      display: flex; align-items: center; gap: 0;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px 24px; margin-bottom: 24px;
+    }
+    .pr-node {
+      flex: 1; text-align: center; padding: 18px 12px;
+      border-radius: 10px; background: var(--main); border: 1px solid var(--border);
+    }
+    .pr-node.ok { border-color: rgba(34,197,94,0.3); }
+    .pr-icon { font-size: 26px; margin-bottom: 6px; }
+    .pr-name { font-weight: 600; font-size: 13px; }
+    .pr-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; margin-top: 4px;
+      padding: 2px 8px; border-radius: 999px;
+    }
+    .pr-badge.ok { background: var(--ok-bg); color: var(--ok); }
+    .pr-arrow { flex: 0 0 36px; text-align: center; color: var(--ok); font-weight: 700; font-size: 16px; }
+
+    /* Grid */
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 22px;
+    }
+    .card h3 {
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-dim); font-weight: 600; margin-bottom: 14px;
+    }
+
+    .stat-row { display: flex; align-items: baseline; gap: 8px; }
+    .stat-val { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
+    .stat-val.ok { color: var(--ok); }
+    .stat-val.warn { color: var(--warn); }
+    .stat-val.bad { color: var(--bad); }
+    .stat-val.accent { color: var(--accent); }
+    .stat-sub { font-size: 12px; color: var(--text-dim); }
+
+    /* Activity */
+    .act-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .act-list li {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 12px; color: var(--text-dim); padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .act-list li:last-child { border-bottom: none; }
+    .act-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .act-dot.ok { background: var(--ok); }
+    .act-dot.warn { background: var(--warn); }
+    .act-dot.bad { background: var(--bad); }
+    .act-time { margin-left: auto; font-size: 11px; color: #3f3f46; white-space: nowrap; }
+
+    /* Features list */
+    .feat-list { display: flex; flex-direction: column; gap: 12px; }
+    .feat-item { display: flex; gap: 12px; align-items: flex-start; }
+    .feat-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+    .feat-item h4 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+    .feat-item p { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+
+    .mockup-badge {
+      position: fixed; top: 16px; right: 16px;
+      background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3);
+      color: var(--warn); font-size: 10px; font-weight: 700;
+      padding: 4px 12px; border-radius: 999px; z-index: 100;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+<body>
+  <div class="mockup-badge">Prototipo 4 — Sidebar Dashboard</div>
+
+  <aside class="sidebar">
+    <div class="sb-header">
+      <div class="sb-brand">Flow<span>Controller</span></div>
+      <div class="sb-version">v0.1.0</div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-section">Principal</div>
+      <a href="#" class="sb-link active"><span class="icon">📊</span> Dashboard</a>
+      <a href="#" class="sb-link"><span class="icon">🔍</span> Trazabilidad</a>
+      <a href="#" class="sb-link"><span class="icon">🔄</span> Pipeline</a>
+      <div class="sb-section">Sistema</div>
+      <a href="#" class="sb-link"><span class="icon">🖥️</span> Servicios</a>
+      <a href="#" class="sb-link"><span class="icon">⚙️</span> Configuración</a>
+      <a href="#" class="sb-link"><span class="icon">📋</span> Logs</a>
+    </nav>
+    <div class="sb-footer">
+      <div class="sb-avatar">C</div>
+      <div class="sb-user">
+        <div class="name">Admin</div>
+        <div class="role">Desarrollador</div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title">Dashboard</span>
+      <div class="topbar-right">
+        <span class="topbar-status">En vivo</span>
+        <button class="topbar-btn">Abrir panel →</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="content-header">
+        <h1>Resumen del sistema</h1>
+        <p>Estado actual del pipeline de media y actividad reciente</p>
+      </div>
+
+      <!-- Pipeline -->
+      <div class="pipeline-row">
+        <div class="pr-node ok">
+          <div class="pr-icon">🎬</div>
+          <div class="pr-name">Radarr</div>
+          <div class="pr-badge ok">Online</div>
+        </div>
+        <div class="pr-arrow">→</div>
+        <div class="pr-node ok">
+          <div class="pr-icon">⬇️</div>
+          <div class="pr-name">AmuTorrent</div>
+          <div class="pr-badge ok">Online</div>
+        </div>
+        <div class="pr-arrow">→</div>
+        <div class="pr-node ok">
+          <div class="pr-icon">📺</div>
+          <div class="pr-name">Sonarr</div>
+          <div class="pr-badge ok">Online</div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid-3">
+        <div class="card">
+          <h3>Descargando</h3>
+          <div class="stat-row">
+            <span class="stat-val accent">12</span>
+            <span class="stat-sub">activas</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Stuck</h3>
+          <div class="stat-row">
+            <span class="stat-val warn">3</span>
+            <span class="stat-sub">atención</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Fallidas</h3>
+          <div class="stat-row">
+            <span class="stat-val bad">1</span>
+            <span class="stat-sub">24h</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two columns -->
+      <div class="grid-2">
+        <!-- Activity -->
+        <div class="card">
+          <h3>Actividad reciente</h3>
+          <ul class="act-list">
+            <li><span class="act-dot ok"></span> Import OK — The Matrix <span class="act-time">hace 2m</span></li>
+            <li><span class="act-dot warn"></span> Path mismatch — Dune Part Two <span class="act-time">hace 5m</span></li>
+            <li><span class="act-dot ok"></span> Download done — Oppenheimer <span class="act-time">hace 12m</span></li>
+            <li><span class="act-dot bad"></span> Import failed — Poor Things <span class="act-time">hace 18m</span></li>
+          </ul>
+        </div>
+
+        <!-- Features -->
+        <div class="card">
+          <h3>Características</h3>
+          <div class="feat-list">
+            <div class="feat-item">
+              <span class="feat-icon">🔍</span>
+              <div><h4>Trazabilidad</h4><p>Correlaciona por downloadId</p></div>
+            </div>
+            <div class="feat-item">
+              <span class="feat-icon">⚡</span>
+              <div><h4>Acciones directas</h4><p>Corrige con un clic</p></div>
+            </div>
+            <div class="feat-item">
+              <span class="feat-icon">🛡️</span>
+              <div><h4>Modo seguro</h4><p>Bloquea destructivas</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

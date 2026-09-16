@@ -1,7 +1,10 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { usePolling } from './hooks/usePolling'
+import { Sidebar, type Page } from './components/Sidebar'
+import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
 import { TraceView } from './components/TraceView'
+import { Prototypes } from './components/Prototypes'
 import {
   parseStatus,
   type ActionsResponse,
@@ -9,6 +12,7 @@ import {
   type StatusResponse,
   type ServiceKey,
   type TraceResponse,
+  type ConfigResponse,
 } from './types'
 
 const SERVICES: { key: ServiceKey; label: string }[] = [
@@ -16,6 +20,12 @@ const SERVICES: { key: ServiceKey; label: string }[] = [
   { key: 'amutorrent', label: 'AmuTorrent' },
   { key: 'sonarr', label: 'Sonarr' },
 ]
+
+const PAGE_TITLES: Record<Page, string> = {
+  dashboard: 'Dashboard',
+  trace: 'Trazabilidad',
+  prototypes: 'Prototipos',
+}
 
 function App() {
   const {
@@ -40,6 +50,14 @@ function App() {
     intervalMs: 60000,
   })
 
+  const { data: configData } = usePolling<ConfigResponse>('/api/config', {
+    intervalMs: 60000,
+  })
+
+  const [page, setPage] = useState<Page>('dashboard')
+
+  const developer = configData?.developer ?? false
+
   const handleActionDone = useCallback(() => {
     refreshTrace()
     refreshStatus()
@@ -59,61 +77,96 @@ function App() {
   const anyOffline = services.some((s) => s.state === 'offline')
   const broken = services.find((s) => s.state === 'offline')
 
-  const flowTitle = allOnline
-    ? 'Flujo operativo'
-    : anyOffline
-      ? `Flujo cortado en ${broken?.label ?? 'servicio'}`
-      : 'Comprobando servicios…'
-
-  const flowDesc = allOnline
-    ? 'Radarr, AmuTorrent y Sonarr responden correctamente.'
-    : anyOffline
-      ? broken?.reason
-      : 'Esperando la primera comprobación.'
+  const downloading = traceData?.summary?.downloading ?? 0
+  const importBlocked = traceData?.summary?.import_blocked ?? 0
+  const failed = traceData?.summary?.failed ?? 0
+  const completed = traceData?.summary?.downloaded ?? 0
 
   return (
-    <div className="app">
-      <header className="header">
-        <div>
-          <h1>Flow Controller</h1>
-          <p className="subtitle">Control del flujo Radarr → AmuTorrent → Sonarr</p>
-        </div>
-        <div className="header-meta">
-          <span>
-            <span className={`dot ${loading ? '' : 'live'}`} />
-            {loading ? 'Conectando…' : 'En vivo'}
-          </span>
-          <span>
-            {lastUpdated
-              ? `Última actualización: ${new Date(lastUpdated).toLocaleTimeString()}`
-              : 'Sin datos aún'}
-          </span>
-        </div>
-      </header>
+    <div className="layout">
+      <Sidebar active={page} onNavigate={setPage} developer={developer} />
 
-      <PipelineVisual services={services} />
+      <div className="main">
+        <Topbar
+          title={PAGE_TITLES[page]}
+          loading={loading}
+          lastUpdated={lastUpdated}
+        />
 
-      <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
-        <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
-        <div>
-          <div className="flow-title">{flowTitle}</div>
-          <div className="flow-desc">{flowDesc}</div>
+        <div className="content">
+          {page === 'dashboard' && (
+            <>
+              <div className="content-header">
+                <h1>Resumen del sistema</h1>
+                <p>Estado actual del pipeline de media y actividad reciente</p>
+              </div>
+
+              <PipelineVisual services={services} />
+
+              {error && <div className="error-box">Error de conexión con el backend: {error}</div>}
+
+              <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
+                <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
+                <div>
+                  <div className="flow-title">
+                    {allOnline
+                      ? 'Flujo operativo'
+                      : anyOffline
+                        ? `Flujo cortado en ${broken?.label ?? 'servicio'}`
+                        : 'Comprobando servicios…'}
+                  </div>
+                  <div className="flow-desc">
+                    {allOnline
+                      ? 'Radarr, AmuTorrent y Sonarr responden correctamente.'
+                      : anyOffline
+                        ? broken?.reason
+                        : 'Esperando la primera comprobación.'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dashboard-grid">
+                <div className="dash-card">
+                  <span className="dash-label">Descargando</span>
+                  <span className="dash-value accent">{downloading}</span>
+                  <span className="dash-sub">activas</span>
+                </div>
+                <div className="dash-card">
+                  <span className="dash-label">Stuck</span>
+                  <span className="dash-value warn">{importBlocked}</span>
+                  <span className="dash-sub">atención</span>
+                </div>
+                <div className="dash-card">
+                  <span className="dash-label">Fallidas</span>
+                  <span className="dash-value bad">{failed}</span>
+                  <span className="dash-sub">últimas 24h</span>
+                </div>
+                <div className="dash-card">
+                  <span className="dash-label">Completadas</span>
+                  <span className="dash-value ok">{completed}</span>
+                  <span className="dash-sub">esta semana</span>
+                </div>
+              </div>
+
+              <div className="legend">
+                <span><span className="dot" style={{ background: 'var(--ok)' }} /> Servicio online</span>
+                <span><span className="dot" style={{ background: 'var(--bad)' }} /> Servicio offline / flujo cortado</span>
+              </div>
+            </>
+          )}
+
+          {page === 'trace' && (
+            <TraceView
+              data={traceData}
+              loading={traceLoading}
+              actions={actionsData}
+              onActionDone={handleActionDone}
+            />
+          )}
+
+          {page === 'prototypes' && <Prototypes />}
         </div>
       </div>
-
-      {error && <div className="error-box">Error de conexión con el backend: {error}</div>}
-
-      <div className="legend">
-        <span><span className="dot" style={{ background: 'var(--ok)' }} /> Servicio online</span>
-        <span><span className="dot" style={{ background: 'var(--bad)' }} /> Servicio offline / flujo cortado</span>
-      </div>
-
-      <TraceView
-        data={traceData}
-        loading={traceLoading}
-        actions={actionsData}
-        onActionDone={handleActionDone}
-      />
     </div>
   )
 }

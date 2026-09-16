@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import shutil
 import time
 from contextlib import asynccontextmanager
@@ -12,6 +13,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import os
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("flow-controller")
 
 load_dotenv()
 
@@ -53,6 +61,13 @@ AMUTORRENT_INDEXER = os.getenv(
 # Modo seguro: si está activo, las acciones destructivas quedan bloqueadas
 # en el backend (no basta con la confirmación de la UI).
 SAFE_MODE = os.getenv("SAFE_MODE", "true").lower() in ("1", "true", "yes")
+
+# Modo desarrollador: habilita la pestaña de prototipos en el frontend.
+DEVELOPER = os.getenv("DEVELOPER", "false").lower() in ("1", "true", "yes")
+
+# Rutas de descarga en el host (para traducir save_path del contenedor)
+FOLDER_DOWNLOAD_AMULE = os.getenv("FOLDER_DOWNLOAD_AMULE", "/mnt/storage-6tb/shared-downloads/amule")
+FOLDER_DOWNLOAD_TORRENT = os.getenv("FOLDER_DOWNLOAD_TORRENT", "/mnt/storage/downloads/qbittorrent/completed")
 
 # Catálogo de acciones ofrecidas por la UI. `destructive` marca las que
 # alteran/eliminan datos; `scope` indica dónde se ejecuta.
@@ -318,6 +333,40 @@ async def refresh_status():
 
 # --- Trazabilidad del flujo (Radarr/Sonarr → aMuTorrent) ---
 
+async def _fetch_arr_all_series(session: aiohttp.ClientSession, service: dict) -> dict[int, str]:
+    """Devuelve {series_id: path} de todas las series de Sonarr."""
+    headers = _arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/series",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json(content_type=None)
+            return {s["id"]: s.get("path", "") for s in data if "id" in s}
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {}
+
+
+async def _fetch_arr_all_movies(session: aiohttp.ClientSession, service: dict) -> dict[int, str]:
+    """Devuelve {movie_id: path} de todas las películas de Radarr."""
+    headers = _arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/movie",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json(content_type=None)
+            return {m["id"]: m.get("path", "") for m in data if "id" in m}
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {}
+
+
 async def _fetch_arr_grabbed(session: aiohttp.ClientSession, service: dict, limit: int) -> list[dict]:
     """Últimos eventos 'grabbed' de un *arr (eventType=1)."""
     headers = _arr_headers(service["api_key"])
@@ -444,13 +493,27 @@ async def _build_traces(session: aiohttp.ClientSession) -> list[dict]:
         *(_fetch_arr_grabbed(session, s, TRACE_LIMIT) for s in arr_services),
         *(_fetch_arr_queue(session, s) for s in arr_services),
         *(_arr_download_clients(session, s) for s in arr_services),
+        *(_fetch_arr_all_series(session, s) for s in arr_services if s["key"] == "sonarr"),
+        *(_fetch_arr_all_movies(session, s) for s in arr_services if s["key"] == "radarr"),
     )
-    # gather devuelve grabs (n), colas (n), download_clients (n).
+    # gather devuelve grabs (n), colas (n), download_clients (n), [series], [movies]
     n = len(arr_services)
     grabs_by_service = dict(zip((s["key"] for s in arr_services), results[:n]))
     queues_by_service = dict(zip((s["key"] for s in arr_services), results[n:2*n]))
     dc_by_service = dict(zip((s["key"] for s in arr_services), results[2*n:3*n]))
     dc_hosts = {k: _dc_host_map(v) for k, v in dc_by_service.items()}
+
+    # Lookup de paths: series_id → path, movie_id → path
+    paths_by_id: dict[str, dict[int, str]] = {}
+    idx = 3 * n
+    for s in arr_services:
+        if s["key"] == "sonarr":
+            paths_by_id["sonarr"] = results[idx] if idx < len(results) else {}
+            idx += 1
+    for s in arr_services:
+        if s["key"] == "radarr":
+            paths_by_id["radarr"] = results[idx] if idx < len(results) else {}
+            idx += 1
 
     torrents = await _fetch_qbit_torrents(session)
     amu_hashes = {_normalize_hash(t.get("hash", "")) for t in torrents}
@@ -504,6 +567,10 @@ async def _build_traces(session: aiohttp.ClientSession) -> list[dict]:
                         "progress": round(torrent.get("progress", 0) * 100, 1),
                         "category": actual_cat,
                         "save_path": torrent.get("save_path"),
+                        "current_path": _resolve_current_path(
+                            torrent.get("save_path", ""),
+                            queue_item.get("downloadClient") if queue_item else None,
+                        ) if torrent.get("save_path") else None,
                         "size": torrent.get("size"),
                     } if torrent else None,
                     "expected_category": expected_cat,
@@ -517,6 +584,13 @@ async def _build_traces(session: aiohttp.ClientSession) -> list[dict]:
                         "movie_id": record.get("movieId"),
                         "series_id": record.get("seriesId"),
                     },
+                    "destination": (
+                        paths_by_id.get(key, {}).get(record.get("seriesId"))
+                        if key == "sonarr"
+                        else paths_by_id.get(key, {}).get(record.get("movieId"))
+                        if key == "radarr"
+                        else None
+                    ),
                     "queue": {
                         "state": queue_item.get("trackedDownloadState"),
                         "status": queue_item.get("trackedDownloadStatus"),
@@ -716,8 +790,20 @@ async def _amu_ws(
 # Mapeo de volúmenes Docker conocidos: container_path → host_path.
 # qBittorrent-novpn monta /mnt/storage:/data, así que /data/X → /mnt/storage/X.
 _VOLUME_MAP = [
+    ("/downloads/incoming/", "/mnt/storage-6tb/shared-downloads/amule/"),
+    ("/downloads/", "/mnt/storage-6tb/shared-downloads/"),
     ("/data/", "/mnt/storage/"),
+    ("/data-6tb/", "/mnt/storage-6tb/"),
 ]
+
+# Mapeo de cliente de descarga → carpeta base en el host.
+# Usado para resolver save_path del contenedor a la ruta real del host.
+_DOWNLOAD_CLIENT_PATHS: dict[str, str] = {
+    "amule": FOLDER_DOWNLOAD_AMULE,
+    "amutorrent": FOLDER_DOWNLOAD_AMULE,
+    "qbittorrent": FOLDER_DOWNLOAD_TORRENT,
+    "qbit": FOLDER_DOWNLOAD_TORRENT,
+}
 
 
 def _host_path(container_path: str) -> str:
@@ -730,6 +816,33 @@ def _host_path(container_path: str) -> str:
         if container_path.startswith(prefix):
             return replacement + container_path[len(prefix):]
     return container_path
+
+
+def _resolve_current_path(save_path: str, download_client: str | None) -> str:
+    """Resuelve la ruta real del host a partir del save_path del contenedor.
+
+    Primero intenta por el nombre del download_client (si se conoce).
+    Si no, intenta por el patrón del save_path (/downloads/incoming = aMule).
+    Como último recurso, usa el mapeo genérico de volúmenes.
+    """
+    if save_path:
+        # 1. Por download_client conocido
+        if download_client:
+            client_lower = download_client.lower()
+            for key, host_folder in _DOWNLOAD_CLIENT_PATHS.items():
+                if key in client_lower:
+                    log.info("resolve_path: client='%s' match='%s' → %s", download_client, key, host_folder)
+                    return host_folder
+        # 2. Por patrón del save_path
+        if save_path.startswith("/downloads/incoming"):
+            log.info("resolve_path: pattern match '/downloads/incoming' → %s", FOLDER_DOWNLOAD_AMULE)
+            return FOLDER_DOWNLOAD_AMULE
+        if save_path.startswith("/downloads"):
+            log.info("resolve_path: pattern match '/downloads' → %s", FOLDER_DOWNLOAD_TORRENT)
+            return FOLDER_DOWNLOAD_TORRENT
+    result = _host_path(save_path) if save_path else ""
+    log.info("resolve_path: fallback '%s' → '%s'", save_path, result)
+    return result
 
 
 async def _arr_series_root_folder(
@@ -770,19 +883,24 @@ async def _arr_movie_root_folder(
         return ""
 
 
-def _copy_files_to_root(output_path: str, root_folder: str) -> dict:
+def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool = False) -> dict:
     """Copia archivos desde output_path al root_folder.
 
     ``output_path`` es la ruta completa al archivo (o directorio) reportada
     por el cliente de descargas.  ``root_folder`` es el directorio de la
     librería del *arr (ej. /mnt/storage-6tb/shared-media/shows/Serie/).
 
+    Si ``is_host_path`` es True, la ruta ya está traducida al host y no se
+    aplica _host_path() de nuevo.
+
     Devuelve {ok, detail, files_copied}.
     """
-    src = Path(_host_path(output_path))
+    src = Path(output_path if is_host_path else _host_path(output_path))
     dst_dir = Path(root_folder)
+    log.info("copy_files: src=%s  dst=%s  is_host_path=%s", src, dst_dir, is_host_path)
 
     if not src.exists():
+        log.error("copy_files: fuente no encontrada: %s", src)
         return {"ok": False, "detail": f"fuente no encontrada: {src}"}
 
     dst_dir.mkdir(parents=True, exist_ok=True)
@@ -1079,10 +1197,12 @@ async def _do_action(
         })
 
     elif action == "copy_files":
+        log.info("action=copy_files source=%s ids=%s", source, ids)
         if not service:
             return {"ok": False, "steps": [{"target": "arr", "ok": False, "detail": "servicio desconocido"}]}
         output_path = payload.get("output_path") or ""
         if not output_path:
+            log.warning("copy_files: sin output_path en payload")
             return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "sin output_path"}]}
         # Obtener la root folder del *arr
         if source == "sonarr" and ids.get("series_id"):
@@ -1091,12 +1211,14 @@ async def _do_action(
             root = await _arr_movie_root_folder(session, service, ids["movie_id"])
         else:
             root = ""
+        log.info("copy_files: output_path=%s  root=%s", output_path, root)
         if not root:
+            log.error("copy_files: no se pudo obtener root folder para %s (series_id=%s, movie_id=%s)", source, ids.get("series_id"), ids.get("movie_id"))
             return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
-        # Copiar archivos
+        # Copiar archivos (output_path ya es ruta del host desde el frontend)
         steps.append({
             "target": "filesystem",
-            **_copy_files_to_root(output_path, root),
+            **_copy_files_to_root(output_path, root, is_host_path=True),
         })
         # Reintentar import
         steps.append({
@@ -1151,11 +1273,37 @@ async def run_action(action: str, payload: dict):
     }
 
 
+# --- Config (Developer mode) ---
+@app.get("/api/config")
+async def config():
+    return {"developer": DEVELOPER}
+
+
+# --- Prototypes listing ---
+PROTOTYPES_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "prototypes"))
+
+
+@app.get("/api/prototypes")
+async def list_prototypes():
+    if not os.path.isdir(PROTOTYPES_DIR):
+        return []
+    files = sorted(
+        f for f in os.listdir(PROTOTYPES_DIR) if f.endswith(".html")
+    )
+    return [
+        {"name": f.removesuffix(".html"), "file": f}
+        for f in files
+    ]
+
+
 # --- Frontend estático (React build) ---
 if os.path.isdir(FRONTEND_DIST):
     assets_dir = os.path.join(FRONTEND_DIST, "assets")
     if os.path.isdir(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+if os.path.isdir(PROTOTYPES_DIR):
+    app.mount("/prototypes", StaticFiles(directory=PROTOTYPES_DIR), name="prototypes")
 
 
 @app.get("/")
@@ -1170,6 +1318,8 @@ async def root():
 async def spa_fallback(full_path: str):
     """Fallback SPA: sirve archivos del build o index.html."""
     if full_path.startswith("api/"):
+        return {"detail": "Not Found"}
+    if full_path.startswith("prototypes/"):
         return {"detail": "Not Found"}
     candidate = os.path.normpath(os.path.join(FRONTEND_DIST, full_path))
     if FRONTEND_DIST in candidate and os.path.isfile(candidate):

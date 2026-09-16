@@ -1,0 +1,17 @@
+# Docker Compose para despliegue con imagen de GHCR
+# Uso: docker compose -f docker-compose.deploy.yml up -d
+#
+# Requiere un archivo .env con las variables de configuración.
+# Copia .env.example y edita los valores.
+
+services:
+  flow-controller:
+    image: ghcr.io/alountk/flow-controller:latest
+    container_name: flow-controller
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - /mnt/storage:/mnt/storage:ro
+      - /mnt/storage-6tb:/mnt/storage-6tb:ro

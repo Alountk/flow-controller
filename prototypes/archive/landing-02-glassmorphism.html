@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Propuesta 2: Glassmorphism</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --glass: rgba(255,255,255,0.06);
+      --glass-border: rgba(255,255,255,0.1);
+      --glass-strong: rgba(255,255,255,0.1);
+      --text: #f1f5f9;
+      --text-dim: #94a3b8;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56,189,248,0.3);
+      --ok: #34d399;
+      --bad: #f87171;
+      --warn: #fbbf24;
+      --purple: #a78bfa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; top: -200px; left: -100px;
+      width: 600px; height: 600px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(56,189,248,0.15), transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    body::after {
+      content: '';
+      position: fixed; bottom: -200px; right: -100px;
+      width: 500px; height: 500px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(167,139,250,0.12), transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; height: 64px;
+      background: rgba(15,23,42,0.7);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .nav-brand { font-weight: 700; font-size: 17px; }
+    .nav-brand span { color: var(--accent); }
+    .nav-links { display: flex; gap: 8px; }
+    .nav-links a {
+      font-size: 13px; font-weight: 500; color: var(--text-dim);
+      text-decoration: none; padding: 8px 16px; border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); background: var(--glass); }
+    .nav-links a.active { color: var(--accent); background: rgba(56,189,248,0.1); }
+    .nav-cta {
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      color: #fff; border: none; padding: 9px 22px; border-radius: 10px;
+      font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    /* HERO */
+    .hero {
+      position: relative; z-index: 1;
+      max-width: 750px; margin: 0 auto; text-align: center;
+      padding: 100px 24px 70px;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600; color: var(--accent);
+      background: var(--glass); border: 1px solid var(--glass-border);
+      padding: 6px 16px; border-radius: 999px; margin-bottom: 24px;
+      backdrop-filter: blur(8px);
+    }
+    .hero-badge .pulse {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--ok);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); }
+      50% { box-shadow: 0 0 0 6px rgba(52,211,153,0); }
+    }
+    .hero h1 {
+      font-size: 52px; font-weight: 700; letter-spacing: -0.04em;
+      line-height: 1.1; margin-bottom: 20px;
+      background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p { font-size: 17px; color: var(--text-dim); line-height: 1.6; max-width: 520px; margin: 0 auto 36px; }
+    .hero-btns { display: flex; gap: 14px; justify-content: center; }
+    .btn-glow {
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      color: #fff; border: none; padding: 14px 32px; border-radius: 12px;
+      font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+      box-shadow: 0 0 30px var(--accent-glow);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn-glow:hover { transform: translateY(-1px); box-shadow: 0 0 40px var(--accent-glow); }
+    .btn-glass {
+      background: var(--glass); color: var(--text); border: 1px solid var(--glass-border);
+      padding: 14px 32px; border-radius: 12px; font-size: 14px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+      backdrop-filter: blur(8px); transition: background 0.15s;
+    }
+    .btn-glass:hover { background: var(--glass-strong); }
+
+    /* CARDS */
+    .cards {
+      position: relative; z-index: 1;
+      max-width: 900px; margin: 0 auto; padding: 0 24px 80px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    }
+    .glass-card {
+      background: var(--glass); border: 1px solid var(--glass-border);
+      border-radius: 16px; padding: 28px 24px;
+      backdrop-filter: blur(12px); transition: transform 0.2s, border-color 0.2s;
+    }
+    .glass-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.18); }
+    .glass-card .icon { font-size: 28px; margin-bottom: 14px; }
+    .glass-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .glass-card p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+    /* PIPELINE */
+    .pipeline-wrap {
+      position: relative; z-index: 1;
+      max-width: 800px; margin: 0 auto; padding: 0 24px 80px;
+    }
+    .pipeline-glass {
+      display: flex; align-items: center; gap: 0;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      border-radius: 18px; padding: 36px 28px;
+      backdrop-filter: blur(16px);
+    }
+    .pg-node {
+      flex: 1; text-align: center; padding: 22px 14px;
+      border-radius: 14px; background: rgba(255,255,255,0.04);
+      border: 1px solid var(--glass-border);
+    }
+    .pg-node.ok { border-color: rgba(52,211,153,0.4); box-shadow: 0 0 24px -8px rgba(52,211,153,0.2); }
+    .pg-icon { font-size: 30px; margin-bottom: 8px; }
+    .pg-name { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .pg-status { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--ok); }
+    .pg-arrow {
+      flex: 0 0 40px; text-align: center;
+      color: var(--ok); font-size: 18px; font-weight: 700;
+      text-shadow: 0 0 12px rgba(52,211,153,0.5);
+    }
+
+    .mockup-badge {
+      position: fixed; top: 16px; right: 16px;
+      background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.4);
+      color: var(--warn); font-size: 10px; font-weight: 700;
+      padding: 4px 12px; border-radius: 999px; z-index: 100;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+
+    footer {
+      position: relative; z-index: 1;
+      text-align: center; padding: 32px 24px; font-size: 12px;
+      color: var(--text-dim); border-top: 1px solid var(--glass-border);
+    }
+  </style>
+</head>
+<body>
+  <div class="mockup-badge">Prototipo 2 — Glassmorphism</div>
+
+  <nav>
+    <div class="nav-brand">Flow<span>Controller</span></div>
+    <div class="nav-links">
+      <a href="#" class="active">Dashboard</a>
+      <a href="#">Trazabilidad</a>
+      <a href="#">Servicios</a>
+      <a href="#">Config</a>
+    </div>
+    <button class="nav-cta">Panel →</button>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge"><span class="pulse"></span> En vivo</div>
+    <h1>Tu pipeline de media,<bajo control total</h1>
+    <p>Monitorea Radarr, AmuTorrent y Sonarr en tiempo real. Detecta el punto de fallo y corrígelo con un clic.</p>
+    <div class="hero-btns">
+      <button class="btn-glow">Abrir dashboard</button>
+      <button class="btn-glass">GitHub</button>
+    </div>
+  </section>
+
+  <section class="pipeline-wrap">
+    <div class="pipeline-glass">
+      <div class="pg-node ok">
+        <div class="pg-icon">🎬</div>
+        <div class="pg-name">Radarr</div>
+        <div class="pg-status">Online</div>
+      </div>
+      <div class="pg-arrow">→</div>
+      <div class="pg-node ok">
+        <div class="pg-icon">⬇️</div>
+        <div class="pg-name">AmuTorrent</div>
+        <div class="pg-status">Online</div>
+      </div>
+      <div class="pg-arrow">→</div>
+      <div class="pg-node ok">
+        <div class="pg-icon">📺</div>
+        <div class="pg-name">Sonarr</div>
+        <div class="pg-status">Online</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cards">
+    <div class="glass-card">
+      <div class="icon">🔍</div>
+      <h3>Trazabilidad</h3>
+      <p>Correlaciona grabs, descargas e imports por downloadId en todos los servicios.</p>
+    </div>
+    <div class="glass-card">
+      <div class="icon">⚡</div>
+      <h3>Acciones directas</h3>
+      <p>Corrige categorías, path mappings y reintentos sin salir de la interfaz.</p>
+    </div>
+    <div class="glass-card">
+      <div class="icon">🛡️</div>
+      <h3>Modo seguro</h3>
+      <p>Bloquea operaciones destructivas. Solo se permiten con SAFE_MODE=false.</p>
+    </div>
+  </section>
+
+  <footer>Flow Controller &copy; 2026 — Prototipo de diseño</footer>
+</body>
+</html>

@@ -42,6 +42,7 @@ function actionsFor(trace: Trace): ActionKey[] {
     case 'downloaded':
       if (hasHash && trace.category_ok === false) list.push('fix_category')
       list.push('retry_import')
+      if (trace.torrent?.current_path) list.push('copy_files')
       if (hasTarget) list.push('research')
       if (hasHash) list.push('delete_torrent')
       break
@@ -69,7 +70,10 @@ function optionsFor(action: ActionKey, trace: Trace): ActionOptions | null {
   if (action === 'remove_queue') return { blocklist: true }
   if (action === 'delete_torrent') return { delete_files: true }
   if (action === 'fix_path_mapping') return derivePathMapping(trace)
-  if (action === 'copy_files') return { output_path: trace.queue?.output_path || '' }
+  if (action === 'copy_files') {
+    const src = trace.torrent?.current_path || trace.queue?.output_path || ''
+    return { output_path: src }
+  }
   return null
 }
 

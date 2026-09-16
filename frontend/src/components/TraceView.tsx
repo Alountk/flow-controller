@@ -128,10 +128,22 @@ function TraceRow({
                     <code>{formatSize(torrent.size)}</code>
                   </div>
                   <div className="span-2">
-                    <span className="detail-key">save_path</span>
-                    <code>{torrent.save_path ?? '—'}</code>
+                    <span className="detail-key">ubicación actual</span>
+                    <code>{torrent.current_path ?? torrent.save_path ?? '—'}</code>
                   </div>
+                  {torrent.current_path && torrent.save_path && torrent.current_path !== torrent.save_path && (
+                    <div className="span-2">
+                      <span className="detail-key">save_path (contenedor)</span>
+                      <code>{torrent.save_path}</code>
+                    </div>
+                  )}
                 </>
+              )}
+              {trace.destination && (
+                <div className="span-2">
+                  <span className="detail-key">folder destino</span>
+                  <code>{trace.destination}</code>
+                </div>
               )}
               {queue && (
                 <>

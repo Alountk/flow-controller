@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Propuesta 1: Minimalista</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fafbfc;
+      --bg-card: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --text-dim: #6b7280;
+      --accent: #2563eb;
+      --accent-light: #dbeafe;
+      --ok: #059669;
+      --ok-bg: #d1fae5;
+      --bad: #dc2626;
+      --bad-bg: #fee2e2;
+      --warn: #d97706;
+      --warn-bg: #fef3c7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; height: 60px;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-brand { font-weight: 700; font-size: 17px; color: var(--text); }
+    .nav-brand span { color: var(--accent); }
+    .nav-links { display: flex; gap: 32px; }
+    .nav-links a {
+      font-size: 14px; font-weight: 500; color: var(--text-dim);
+      text-decoration: none; transition: color 0.15s;
+    }
+    .nav-links a:hover, .nav-links a.active { color: var(--accent); }
+    .nav-cta {
+      background: var(--accent); color: #fff; border: none;
+      padding: 8px 20px; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+
+    /* HERO */
+    .hero {
+      max-width: 800px; margin: 0 auto; text-align: center;
+      padding: 80px 24px 60px;
+    }
+    .hero-badge {
+      display: inline-block; font-size: 12px; font-weight: 600;
+      color: var(--accent); background: var(--accent-light);
+      padding: 4px 14px; border-radius: 999px; margin-bottom: 20px;
+    }
+    .hero h1 { font-size: 44px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 16px; }
+    .hero p { font-size: 17px; color: var(--text-dim); line-height: 1.6; max-width: 560px; margin: 0 auto 32px; }
+    .hero-btns { display: flex; gap: 12px; justify-content: center; }
+    .btn-primary {
+      background: var(--accent); color: #fff; border: none;
+      padding: 12px 28px; border-radius: 10px; font-size: 14px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .btn-secondary {
+      background: var(--bg-card); color: var(--text); border: 1px solid var(--border);
+      padding: 12px 28px; border-radius: 10px; font-size: 14px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+
+    /* PIPELINE PREVIEW */
+    .pipeline-section {
+      max-width: 900px; margin: 0 auto; padding: 0 24px 80px;
+    }
+    .pipeline-preview {
+      display: flex; align-items: center; gap: 0;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 40px 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .pp-node {
+      flex: 1; text-align: center; padding: 24px 16px;
+      border-radius: 12px; background: #f9fafb; border: 1px solid var(--border);
+    }
+    .pp-node.ok { border-color: var(--ok); background: var(--ok-bg); }
+    .pp-icon { font-size: 32px; margin-bottom: 8px; }
+    .pp-name { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+    .pp-status { font-size: 12px; font-weight: 600; color: var(--ok); text-transform: uppercase; }
+    .pp-arrow {
+      flex: 0 0 48px; text-align: center; color: var(--ok);
+      font-size: 20px; font-weight: 700;
+    }
+
+    /* FEATURES */
+    .features {
+      max-width: 900px; margin: 0 auto; padding: 0 24px 80px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+    }
+    .feature-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px 24px;
+    }
+    .feature-icon { font-size: 28px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .feature-card p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+
+    /* MOCKUP BADGE */
+    .mockup-badge {
+      position: fixed; top: 16px; right: 16px;
+      background: var(--warn-bg); border: 1px solid var(--warn);
+      color: var(--warn); font-size: 10px; font-weight: 700;
+      padding: 4px 12px; border-radius: 999px; z-index: 100;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+
+    /* FOOTER */
+    footer {
+      text-align: center; padding: 32px 24px; font-size: 12px;
+      color: var(--text-dim); border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="mockup-badge">Prototipo 1 — Minimalista</div>
+
+  <nav>
+    <div class="nav-brand">Flow<span>Controller</span></div>
+    <div class="nav-links">
+      <a href="#" class="active">Dashboard</a>
+      <a href="#">Trazabilidad</a>
+      <a href="#">Servicios</a>
+      <a href="#">Configuración</a>
+    </div>
+    <button class="nav-cta">Abrir panel</button>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge">v0.1.0</div>
+    <h1>Controla tu pipeline<br>de media</h1>
+    <p>Monitorea Radarr, AmuTorrent y Sonarr en tiempo real. Detecta dónde se rompe el flujo y corrígelo con un clic.</p>
+    <div class="hero-btns">
+      <button class="btn-primary">Ver dashboard</button>
+      <button class="btn-secondary">Documentación</button>
+    </div>
+  </section>
+
+  <section class="pipeline-section">
+    <div class="pipeline-preview">
+      <div class="pp-node ok">
+        <div class="pp-icon">🎬</div>
+        <div class="pp-name">Radarr</div>
+        <div class="pp-status">Online</div>
+      </div>
+      <div class="pp-arrow">→</div>
+      <div class="pp-node ok">
+        <div class="pp-icon">⬇️</div>
+        <div class="pp-name">AmuTorrent</div>
+        <div class="pp-status">Online</div>
+      </div>
+      <div class="pp-arrow">→</div>
+      <div class="pp-node ok">
+        <div class="pp-icon">📺</div>
+        <div class="pp-name">Sonarr</div>
+        <div class="pp-status">Online</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature-card">
+      <div class="feature-icon">🔍</div>
+      <h3>Trazabilidad</h3>
+      <p>Correlaciona grabs, descargas e imports across todos los servicios por downloadId.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>Acciones rápidas</h3>
+      <p>Corrige categorías, path mappings y reintentos de import directamente desde la UI.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🛡️</div>
+      <h3>Modo seguro</h3>
+      <p>Bloquea acciones destructivas en producción. Actívelo solo cuando sea necesario.</p>
+    </div>
+  </section>
+
+  <footer>Flow Controller &copy; 2026 — Prototipo de diseño</footer>
+</body>
+</html>

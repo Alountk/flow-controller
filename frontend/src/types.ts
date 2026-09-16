@@ -58,6 +58,7 @@ export interface TraceTorrent {
   progress: number
   category: string | null
   save_path: string | null
+  current_path: string | null
   size: number | null
 }
 
@@ -90,6 +91,7 @@ export interface Trace {
   category_ok: boolean | null
   paused: boolean
   ids: TraceIds
+  destination: string | null
   queue: TraceQueue | null
 }
 
@@ -159,4 +161,15 @@ export const STAGE_LABELS: Record<TraceStage, string> = {
   importing: 'Importando',
   sent: 'Enviada',
   failed: 'Fallida',
+}
+
+/* ---- Config / Developer ---- */
+
+export interface ConfigResponse {
+  developer: boolean
+}
+
+export interface PrototypeFile {
+  name: string
+  file: string
 }

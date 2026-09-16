@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Propuesta 3: Bento Grid</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #09090b;
+      --card: #18181b;
+      --card-hover: #1f1f23;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-dim: #a1a1aa;
+      --accent: #818cf8;
+      --accent-bg: rgba(129,140,248,0.1);
+      --ok: #4ade80;
+      --ok-bg: rgba(74,222,128,0.1);
+      --bad: #f87171;
+      --warn: #facc15;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* NAV */
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 32px; height: 56px;
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-brand { font-weight: 800; font-size: 16px; letter-spacing: -0.02em; }
+    .nav-brand span { color: var(--accent); }
+    .nav-center { display: flex; gap: 4px; }
+    .nav-center a {
+      font-size: 13px; font-weight: 500; color: var(--text-dim);
+      text-decoration: none; padding: 6px 14px; border-radius: 8px;
+      transition: all 0.15s;
+    }
+    .nav-center a:hover { color: var(--text); }
+    .nav-center a.active { color: var(--text); background: var(--border); }
+    .nav-right { display: flex; align-items: center; gap: 12px; }
+    .nav-right .status {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--ok);
+    }
+    .nav-right .status::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--ok); animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.4); }
+      50% { box-shadow: 0 0 0 4px rgba(74,222,128,0); }
+    }
+    .nav-btn {
+      background: var(--text); color: var(--bg); border: none;
+      padding: 7px 16px; border-radius: 8px; font-size: 12px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+
+    /* BENTO */
+    .bento {
+      max-width: 960px; margin: 0 auto; padding: 32px 24px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: auto auto auto;
+      gap: 12px;
+    }
+
+    .bento-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 24px; overflow: hidden;
+      transition: background 0.15s;
+    }
+    .bento-card:hover { background: var(--card-hover); }
+
+    /* Span helpers */
+    .span-2 { grid-column: span 2; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-row-2 { grid-row: span 2; }
+
+    /* Title card */
+    .title-card {
+      grid-column: span 4;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 28px 32px;
+    }
+    .title-card h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; }
+    .title-card h1 span { color: var(--accent); }
+    .title-card p { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+
+    /* Pipeline card */
+    .pipeline-card {
+      grid-column: span 4;
+      display: flex; align-items: center; gap: 0;
+      padding: 28px 32px;
+    }
+    .pc-node {
+      flex: 1; text-align: center; padding: 20px 12px;
+      border-radius: 12px; background: var(--bg); border: 1px solid var(--border);
+    }
+    .pc-node.ok { border-color: rgba(74,222,128,0.3); }
+    .pc-icon { font-size: 26px; margin-bottom: 6px; }
+    .pc-name { font-weight: 600; font-size: 13px; }
+    .pc-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; margin-top: 4px;
+      padding: 2px 8px; border-radius: 999px;
+    }
+    .pc-badge.ok { background: var(--ok-bg); color: var(--ok); }
+    .pc-arrow { flex: 0 0 36px; text-align: center; color: var(--ok); font-weight: 700; font-size: 16px; }
+
+    /* Stat cards */
+    .stat-card { display: flex; flex-direction: column; gap: 8px; }
+    .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 600; }
+    .stat-card .value { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; }
+    .stat-card .value.ok { color: var(--ok); }
+    .stat-card .value.warn { color: var(--warn); }
+    .stat-card .value.bad { color: var(--bad); }
+    .stat-card .value.accent { color: var(--accent); }
+    .stat-card .sub { font-size: 12px; color: var(--text-dim); }
+
+    /* Feature cards */
+    .feat-card { display: flex; flex-direction: column; gap: 8px; }
+    .feat-card .icon { font-size: 24px; margin-bottom: 4px; }
+    .feat-card h3 { font-size: 14px; font-weight: 600; }
+    .feat-card p { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+
+    /* Activity card */
+    .activity-card h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 600; margin-bottom: 14px; }
+    .act-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .act-list li {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 12px; color: var(--text-dim);
+    }
+    .act-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .act-dot.ok { background: var(--ok); }
+    .act-dot.warn { background: var(--warn); }
+    .act-dot.bad { background: var(--bad); }
+    .act-time { margin-left: auto; font-size: 11px; color: #52525b; white-space: nowrap; }
+
+    .mockup-badge {
+      position: fixed; top: 16px; right: 16px;
+      background: rgba(250,204,21,0.1); border: 1px solid rgba(250,204,21,0.3);
+      color: var(--warn); font-size: 10px; font-weight: 700;
+      padding: 4px 12px; border-radius: 999px; z-index: 100;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+<body>
+  <div class="mockup-badge">Prototipo 3 — Bento Grid</div>
+
+  <nav>
+    <div class="nav-brand">Flow<span>Controller</span></div>
+    <div class="nav-center">
+      <a href="#" class="active">Dashboard</a>
+      <a href="#">Trace</a>
+      <a href="#">Servicios</a>
+      <a href="#">Config</a>
+    </div>
+    <div class="nav-right">
+      <span class="status">En vivo</span>
+      <button class="nav-btn">Panel →</button>
+    </div>
+  </nav>
+
+  <div class="bento">
+    <!-- Title -->
+    <div class="bento-card title-card">
+      <div>
+        <h1>Flow<span>Controller</span></h1>
+        <p>Monitoreo y control del pipeline de media</p>
+      </div>
+    </div>
+
+    <!-- Pipeline -->
+    <div class="bento-card pipeline-card">
+      <div class="pc-node ok">
+        <div class="pc-icon">🎬</div>
+        <div class="pc-name">Radarr</div>
+        <div class="pc-badge ok">Online</div>
+      </div>
+      <div class="pc-arrow">→</div>
+      <div class="pc-node ok">
+        <div class="pc-icon">⬇️</div>
+        <div class="pc-name">AmuTorrent</div>
+        <div class="pc-badge ok">Online</div>
+      </div>
+      <div class="pc-arrow">→</div>
+      <div class="pc-node ok">
+        <div class="pc-icon">📺</div>
+        <div class="pc-name">Sonarr</div>
+        <div class="pc-badge ok">Online</div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="bento-card stat-card">
+      <span class="label">Descargando</span>
+      <span class="value accent">12</span>
+      <span class="sub">activas ahora</span>
+    </div>
+    <div class="bento-card stat-card">
+      <span class="label">Stuck</span>
+      <span class="value warn">3</span>
+      <span class="sub">requieren atención</span>
+    </div>
+    <div class="bento-card stat-card">
+      <span class="label">Fallidas</span>
+      <span class="value bad">1</span>
+      <span class="sub">últimas 24h</span>
+    </div>
+    <div class="bento-card stat-card">
+      <span class="label">Completadas</span>
+      <span class="value ok">47</span>
+      <span class="sub">esta semana</span>
+    </div>
+
+    <!-- Features -->
+    <div class="bento-card feat-card">
+      <div class="icon">🔍</div>
+      <h3>Trazabilidad</h3>
+      <p>Correlaciona grabs, descargas e imports por downloadId.</p>
+    </div>
+    <div class="bento-card feat-card">
+      <div class="icon">⚡</div>
+      <h3>Acciones directas</h3>
+      <p>Corrige el pipeline con un clic sin salir de la UI.</p>
+    </div>
+
+    <!-- Activity -->
+    <div class="bento-card activity-card span-2">
+      <h3>Actividad reciente</h3>
+      <ul class="act-list">
+        <li><span class="act-dot ok"></span> Import OK — The Matrix <span class="act-time">hace 2m</span></li>
+        <li><span class="act-dot warn"></span> Path mismatch — Dune Part Two <span class="act-time">hace 5m</span></li>
+        <li><span class="act-dot ok"></span> Download done — Oppenheimer <span class="act-time">hace 12m</span></li>
+        <li><span class="act-dot bad"></span> Import failed — Poor Things <span class="act-time">hace 18m</span></li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

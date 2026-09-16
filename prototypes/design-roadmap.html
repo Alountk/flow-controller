@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Roadmap de Decisiones de Diseño</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #111113;
+      --card: #18181b;
+      --card-alt: #1c1c21;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-dim: #71717a;
+      --accent: #6366f1;
+      --accent-bg: rgba(99,102,241,0.1);
+      --ok: #22c55e;
+      --ok-bg: rgba(34,197,94,0.1);
+      --bad: #ef4444;
+      --bad-bg: rgba(239,68,68,0.08);
+      --warn: #eab308;
+      --warn-bg: rgba(234,179,8,0.1);
+      --muted: #52525b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; padding: 40px 24px 80px;
+      max-width: 860px; margin: 0 auto;
+    }
+
+    /* HEADER */
+    .header { margin-bottom: 48px; }
+    .header .tag {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--accent); background: var(--accent-bg);
+      padding: 4px 12px; border-radius: 999px; margin-bottom: 16px;
+    }
+    .header h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; }
+    .header p { font-size: 15px; color: var(--text-dim); line-height: 1.6; max-width: 600px; }
+
+    /* TIMELINE */
+    .timeline { position: relative; padding-left: 32px; }
+    .timeline::before {
+      content: ''; position: absolute; left: 11px; top: 0; bottom: 0;
+      width: 2px; background: var(--border);
+    }
+
+    .tl-item { position: relative; margin-bottom: 40px; }
+    .tl-item:last-child { margin-bottom: 0; }
+
+    .tl-dot {
+      position: absolute; left: -32px; top: 4px;
+      width: 24px; height: 24px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; z-index: 1;
+    }
+    .tl-dot.done { background: var(--ok-bg); border: 2px solid var(--ok); }
+    .tl-dot.current { background: var(--accent-bg); border: 2px solid var(--accent); animation: pulse-dot 2s infinite; }
+    .tl-dot.pending { background: var(--card); border: 2px solid var(--border); }
+    @keyframes pulse-dot {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.3); }
+      50% { box-shadow: 0 0 0 6px rgba(99,102,241,0); }
+    }
+
+    .tl-content {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 22px 24px;
+    }
+    .tl-content.highlight { border-color: var(--accent); background: rgba(99,102,241,0.04); }
+    .tl-date { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; font-weight: 600; }
+    .tl-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .tl-desc { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+
+    /* CHOICES */
+    .choices { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+    .choice {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 14px; border-radius: 10px;
+      background: var(--card-alt); border: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .choice.winner { border-color: var(--ok); background: var(--ok-bg); }
+    .choice.loser { opacity: 0.55; }
+    .choice-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .choice-text { line-height: 1.5; }
+    .choice-text strong { color: var(--text); }
+    .choice-text span { color: var(--text-dim); }
+
+    /* BADGES */
+    .badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 2px 8px; border-radius: 999px; margin-left: 8px;
+      vertical-align: middle;
+    }
+    .badge-chosen { background: var(--ok-bg); color: var(--ok); }
+    .badge-discarded { background: var(--bad-bg); color: var(--bad); }
+    .badge-pending { background: var(--warn-bg); color: var(--warn); }
+
+    /* NEXT STEPS */
+    .next-steps {
+      margin-top: 48px; padding: 24px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    }
+    .next-steps h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    .step-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .step-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13px; color: var(--text-dim); line-height: 1.5;
+    }
+    .step-num {
+      flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px;
+      background: var(--accent-bg); color: var(--accent); font-size: 11px;
+      font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+
+    /* SEPARATOR */
+    .sep {
+      height: 1px; background: var(--border); margin: 32px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="tag">Documento de diseño</div>
+    <h1>Roadmap de Decisiones</h1>
+    <p>Historial de decisiones de diseño de interfaz para Flow Controller. Cada decisión documenta las opciones evaluadas, la elegida y el porqué.</p>
+  </div>
+
+  <div class="timeline">
+
+    <!-- 1. Layout general -->
+    <div class="tl-item">
+      <div class="tl-dot done">✓</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 1 — Estructura</div>
+        <div class="tl-title">Layout general de la aplicación</div>
+        <div class="tl-desc">Decidir la estructura base de navegación de la interfaz.</div>
+        <div class="choices">
+          <div class="choice loser">
+            <span class="choice-icon">📄</span>
+            <div class="choice-text">
+              <strong>Minimalista (single-page)</strong> <span class="badge badge-discarded">Descartado</span><br>
+              <span> Sin navegación fija, todo en scroll vertical. Simple pero no escala con más secciones.</span>
+            </div>
+          </div>
+          <div class="choice loser">
+            <span class="choice-icon">🪟</span>
+            <div class="choice-text">
+              <strong>Glassmorphism</strong> <span class="badge badge-discarded">Descartado</span><br>
+              <span>Efectos visuales bonitos pero成本 de rendimiento en dispositivos débiles. Difícil de mantener.</span>
+            </div>
+          </div>
+          <div class="choice loser">
+            <span class="choice-icon">📦</span>
+            <div class="choice-text">
+              <strong>Bento Grid</strong> <span class="badge badge-discarded">Descartado</span><br>
+              <span>Cuadrícula tipo Apple. Moderno pero rígido para contenido dinámico como tablas de trazabilidad.</span>
+            </div>
+          </div>
+          <div class="choice winner">
+            <span class="choice-icon">📐</span>
+            <div class="choice-text">
+              <strong>Sidebar + Main</strong> <span class="badge badge-chosen">Elegido</span><br>
+              <span> Sidebar fijo con navegación por secciones + área de contenido principal. Escalable, familiar, y permite crecer con más módulos sin reestructurar.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Paleta de colores -->
+    <div class="tl-item">
+      <div class="tl-dot done">✓</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 1 — Estilo</div>
+        <div class="tl-title">Paleta de colores</div>
+        <div class="tl-desc">Definir la dirección cromática de la interfaz.</div>
+        <div class="choices">
+          <div class="choice loser">
+            <span class="choice-icon">☀️</span>
+            <div class="choice-text">
+              <strong>Claro (light mode)</strong> <span class="badge badge-discarded">Descartado</span><br>
+              <span>洗手 Fondo blanco. Legible de día pero cansa en uso prolongado nocturno, que es cuando más se gestiona media.</span>
+            </div>
+          </div>
+          <div class="choice winner">
+            <span class="choice-icon">🌑</span>
+            <div class="choice-text">
+              <strong>Oscuro (dark mode)</strong> <span class="badge badge-chosen">Elegido</span><br>
+              <span>Fondo #111113, cards #18181b. Menos fatiga visual, mejor contraste para indicadores de estado (verde/rojo), y coherente con el entorno de servidor/terminal.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Pipeline visual -->
+    <div class="tl-item">
+      <div class="tl-dot done">✓</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 1 — Componentes</div>
+        <div class="tl-title">Visualización del pipeline</div>
+        <div class="tl-desc">Cómo representar el flujo Radarr → AmuTorrent → Sonarr.</div>
+        <div class="choices">
+          <div class="choice loser">
+            <span class="choice-icon">📊</span>
+            <div class="choice-text">
+              <strong>Gráfico de barras / métricas</strong> <span class="badge badge-discarded">Descartado</span><br>
+              <span> Solo muestra números, no transmite el concepto de flujo o corte de cadena.</span>
+            </div>
+          </div>
+          <div class="choice winner">
+            <span class="choice-icon">🔗</span>
+            <div class="choice-text">
+              <strong>Nodos conectados con flechas</strong> <span class="badge badge-chosen">Elegido</span><br>
+              <span>Representación visual directa del pipeline. El conector se marca como roto cuando un nodo no está online. Intuitivo de un vistazo.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Trazabilidad -->
+    <div class="tl-item">
+      <div class="tl-dot done">✓</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 1 — Datos</div>
+        <div class="tl-title">Vista de trazabilidad</div>
+        <div class="tl-desc">Cómo mostrar la correlación entre grabs, descargas e imports.</div>
+        <div class="choices">
+          <div class="choice loser">
+            <span class="choice-icon">🌳</span>
+            <div class="choice-text">
+              <strong>Árbol jerárquico</strong> <span class="badge badge-discarded">Descartado</span><br>
+              <span>Visualmente pesado. Difícil de escalar con muchos items simultáneos.</span>
+            </div>
+          </div>
+          <div class="choice winner">
+            <span class="choice-icon">📋</span>
+            <div class="choice-text">
+              <strong>Tabla expandible con filtros</strong> <span class="badge badge-chosen">Elegido</span><br>
+              <span>Filtra por fase, ordena por prioridad (stuck primero), y cada fila se expande con detalles completos. Eficiente en espacio y familiar.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Modo seguro -->
+    <div class="tl-item">
+      <div class="tl-dot done">✓</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 1 — Seguridad</div>
+        <div class="tl-title">Modo seguro (SAFE_MODE)</div>
+        <div class="tl-desc">Protección contra acciones destructivas en producción.</div>
+        <div class="choices">
+          <div class="choice winner">
+            <span class="choice-icon">🛡️</span>
+            <div class="choice-text">
+              <strong>Bloqueo backend + confirmación UI</strong> <span class="badge badge-chosen">Elegido</span><br>
+              <span>Doble capa: el backend rechaza acciones destructivas si SAFE_MODE=true, y la UI muestra un modal de confirmación antes de ejecutar. No depende solo del frontend.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <!-- CURRENT -->
+    <div class="tl-item">
+      <div class="tl-dot current">◉</div>
+      <div class="tl-content highlight">
+        <div class="tl-date">Fase 2 — En progreso</div>
+        <div class="tl-title">Landing / Dashboard principal</div>
+        <div class="tl-desc">Diseñar la entrada principal de la aplicación combinando pipeline + stats + actividad en el layout sidebar.</div>
+        <div class="choices">
+          <div class="choice winner">
+            <span class="choice-icon">📐</span>
+            <div class="choice-text">
+              <strong>Sidebar dashboard</strong> <span class="badge badge-chosen">Base actual</span><br>
+              <span>Prototipo base: sidebar con secciones (Dashboard, Trazabilidad, Pipeline, Servicios, Config, Logs), topbar con estado, contenido con pipeline visual + stats + actividad reciente.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <!-- FUTURE -->
+    <div class="tl-item">
+      <div class="tl-dot pending">○</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 3 — Próximo</div>
+        <div class="tl-title">Pantalla de Trazabilidad</div>
+        <div class="tl-desc">Diseñar la vista detallada de trazabilidad como página independiente dentro del sidebar.</div>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot pending">○</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 3 — Próximo</div>
+        <div class="tl-title">Panel de Servicios</div>
+        <div class="tl-desc">Vista de estado detallado de cada servicio (Radarr, Sonarr, AmuTorrent) con health checks y configuración.</div>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot pending">○</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 4 — Futuro</div>
+        <div class="tl-title">Métricas y gráficas</div>
+        <div class="tl-desc">Dashboard con gráficas de throughput, tiempos de import, historial de errores y tendencias.</div>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot pending">○</div>
+      <div class="tl-content">
+        <div class="tl-date">Fase 4 — Futuro</div>
+        <div class="tl-title">Notificaciones</div>
+        <div class="tl-desc">Sistema de alertas (webhook, email, Telegram) para fallos de import o servicios caídos.</div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
