@@ -874,6 +874,25 @@ async def _arr_series_root_folder(
         return ""
 
 
+async def _arr_episode_season(
+    session: aiohttp.ClientSession, service: dict, episode_id: int
+) -> int | None:
+    """Devuelve el seasonNumber de un episodio en Sonarr, o None si no se encuentra."""
+    headers = _arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/episode/{episode_id}",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json(content_type=None)
+            return data.get("seasonNumber")
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return None
+
+
 async def _arr_movie_root_folder(
     session: aiohttp.ClientSession, service: dict, movie_id: int
 ) -> str:
@@ -1308,6 +1327,12 @@ async def _do_action(
         # Obtener la root folder del *arr
         if source == "sonarr" and ids.get("series_id"):
             root = await _arr_series_root_folder(session, service, ids["series_id"])
+            # Para Sonarr, añadir carpeta de temporada (Season X)
+            if root and ids.get("episode_id"):
+                season_num = await _arr_episode_season(session, service, ids["episode_id"])
+                if season_num is not None:
+                    root = str(Path(root) / f"Season {season_num}")
+                    log.info("copy_files: season folder → %s", root)
         elif source == "radarr" and ids.get("movie_id"):
             root = await _arr_movie_root_folder(session, service, ids["movie_id"])
         else:
@@ -1317,9 +1342,8 @@ async def _do_action(
             log.error("copy_files: no se pudo obtener root folder para %s (series_id=%s, movie_id=%s)", source, ids.get("series_id"), ids.get("movie_id"))
             return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
         # Calcular destino y lanzar copia en background
-        from pathlib import Path as _Path
-        _src_path = _Path(output_path)
-        dst_path = str(_Path(root) / _src_path.name)
+        _src_path = Path(output_path)
+        dst_path = str(Path(root) / _src_path.name)
         task_id = str(uuid.uuid4())
         _tasks[task_id] = {
             "status": "running",
