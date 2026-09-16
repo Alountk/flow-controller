@@ -912,6 +912,92 @@ async def _arr_movie_root_folder(
         return ""
 
 
+async def _arr_import_status(
+    session: aiohttp.ClientSession, service: dict, *, series_id: int | None = None, movie_id: int | None = None, season_number: int | None = None
+) -> dict:
+    """Verifica el estado de import y renombrado de un episodio/película.
+
+    Devuelve {has_file, needs_rename, file_path, detail}.
+    """
+    result = {"has_file": False, "needs_rename": None, "file_path": "", "detail": ""}
+    headers = _arr_headers(service["api_key"])
+
+    if movie_id:
+        # Radarr: comprobar hasFile
+        try:
+            async with session.get(
+                f"{service['url']}/api/v3/movie/{movie_id}",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    result["has_file"] = data.get("hasFile", False)
+        except (asyncio.TimeoutError, aiohttp.ClientError):
+            result["detail"] = "error consultando movie"
+
+        # Radarr: comprobar rename
+        if result["has_file"]:
+            try:
+                async with session.get(
+                    f"{service['url']}/api/v3/rename",
+                    params={"movieId": movie_id},
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                ) as resp:
+                    if resp.status == 200:
+                        renames = await resp.json(content_type=None)
+                        result["needs_rename"] = len(renames) > 0
+                        if renames:
+                            result["file_path"] = renames[0].get("existingPath", "")
+                            result["detail"] = f"renombrado pendiente: {renames[0].get('existingPath', '')} → {renames[0].get('newPath', '')}"
+                        else:
+                            result["detail"] = "importado y renombrado correctamente"
+            except (asyncio.TimeoutError, aiohttp.ClientError):
+                result["detail"] = "error consultando rename"
+
+    elif series_id:
+        # Sonarr: comprobar hasFile vía episode
+        # Necesitamos el episode_id, pero solo tenemos series_id
+        # Consultamos la serie para ver si tiene archivos en la temporada
+        if season_number is not None:
+            try:
+                async with session.get(
+                    f"{service['url']}/api/v3/episode",
+                    params={"seriesId": series_id, "seasonNumber": season_number},
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                ) as resp:
+                    if resp.status == 200:
+                        episodes = await resp.json(content_type=None)
+                        if episodes:
+                            result["has_file"] = episodes[0].get("hasFile", False)
+            except (asyncio.TimeoutError, aiohttp.ClientError):
+                result["detail"] = "error consultando episodes"
+
+        # Sonarr: comprobar rename
+        if result["has_file"] and season_number is not None:
+            try:
+                async with session.get(
+                    f"{service['url']}/api/v3/rename",
+                    params={"seriesId": series_id, "seasonNumber": season_number},
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                ) as resp:
+                    if resp.status == 200:
+                        renames = await resp.json(content_type=None)
+                        result["needs_rename"] = len(renames) > 0
+                        if renames:
+                            result["file_path"] = renames[0].get("existingPath", "")
+                            result["detail"] = f"renombrado pendiente: {renames[0].get('existingPath', '')} → {renames[0].get('newPath', '')}"
+                        else:
+                            result["detail"] = "importado y renombrado correctamente"
+            except (asyncio.TimeoutError, aiohttp.ClientError):
+                result["detail"] = "error consultando rename"
+
+    return result
+
+
 COPY_CHUNK_SIZE = 1024 * 1024  # 1 MB
 
 
@@ -1140,8 +1226,9 @@ async def _arr_add_remote_path(
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
 
-async def _run_copy_background(task_id: str, src_path: str, dst_root: str, service: dict, source: str):
+async def _run_copy_background(task_id: str, src_path: str, dst_root: str, service: dict, source: str, ids: dict | None = None):
     """Ejecuta la copia de archivos en background y actualiza el estado de la tarea."""
+    ids = ids or {}
     try:
         _tasks[task_id]["detail"] = "copiando archivos..."
         result = await asyncio.to_thread(
@@ -1161,9 +1248,12 @@ async def _run_copy_background(task_id: str, src_path: str, dst_root: str, servi
         })
         # Reintentar import después de copiar
         if result["ok"]:
+            _tasks[task_id]["detail"] = "importando..."
+            _tasks[task_id]["status"] = "importing"
             async with aiohttp.ClientSession() as session:
                 await _arr_command(session, service, {"name": "ProcessMonitoredDownloads"})
-            _tasks[task_id]["detail"] = result.get("detail", "") + " · import reintentado"
+            # Verificar import y renombrado
+            await _verify_import(task_id, service, source, ids)
     except CopyCancelled:
         _tasks[task_id].update({
             "status": "cancelled",
@@ -1173,6 +1263,70 @@ async def _run_copy_background(task_id: str, src_path: str, dst_root: str, servi
     except Exception as exc:
         log.exception("copy_files: error en background task %s", task_id)
         _tasks[task_id].update({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
+
+
+IMPORT_POLL_INTERVAL = 5  # segundos entre polls de verificación de import
+IMPORT_POLL_TIMEOUT = 120  # timeout máximo en segundos
+
+
+async def _verify_import(task_id: str, service: dict, source: str, ids: dict):
+    """Poll hasFile + rename para verificar que el import fue exitoso."""
+    start = time.time()
+    async with aiohttp.ClientSession() as session:
+        while time.time() - start < IMPORT_POLL_TIMEOUT:
+            if _tasks[task_id].get("cancelled"):
+                return
+
+            # Determinar parámetros de consulta
+            kwargs: dict = {}
+            if source == "radarr" and ids.get("movie_id"):
+                kwargs["movie_id"] = ids["movie_id"]
+            elif source == "sonarr" and ids.get("series_id"):
+                kwargs["series_id"] = ids["series_id"]
+                # Necesitamos el seasonNumber, lo sacamos del task dst_path o del episode
+                if ids.get("episode_id"):
+                    season = await _arr_episode_season(session, service, ids["episode_id"])
+                    if season is not None:
+                        kwargs["season_number"] = season
+
+            if not kwargs:
+                _tasks[task_id].update({"status": "done", "detail": "copia completada (sin verificación)"})
+                return
+
+            status = await _arr_import_status(session, service, **kwargs)
+
+            if not status["has_file"]:
+                elapsed = int(time.time() - start)
+                _tasks[task_id]["detail"] = f"esperando import... ({elapsed}s)"
+                await asyncio.sleep(IMPORT_POLL_INTERVAL)
+                continue
+
+            # hasFile = true: el archivo fue importado
+            if status["needs_rename"] is False:
+                _tasks[task_id].update({
+                    "status": "imported",
+                    "detail": "importado y renombrado correctamente",
+                })
+                return
+            elif status["needs_rename"] is True:
+                _tasks[task_id].update({
+                    "status": "renamed_needed",
+                    "detail": status.get("detail", "importado — necesita renombrado manual"),
+                })
+                return
+            else:
+                # No se pudo verificar rename, pero hasFile es true
+                _tasks[task_id].update({
+                    "status": "imported",
+                    "detail": status.get("detail", "importado correctamente"),
+                })
+                return
+
+    # Timeout
+    _tasks[task_id].update({
+        "status": "import_timeout",
+        "detail": f"timeout después de {IMPORT_POLL_TIMEOUT}s — verifica manualmente",
+    })
 
 
 async def _do_action(
@@ -1356,7 +1510,7 @@ async def _do_action(
             "detail": "preparando copia...",
         }
         # Lanzar la copia en background
-        asyncio.create_task(_run_copy_background(task_id, output_path, root, service, source))
+        asyncio.create_task(_run_copy_background(task_id, output_path, root, service, source, ids))
         return {"ok": True, "needs_polling": True, "task_id": task_id, "src_path": output_path, "dst_path": dst_path}
 
     else:

@@ -155,9 +155,24 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
         }
         setCopyTask((prev) => prev ? { ...prev, ...data } : null)
         if (data.status === 'done') {
+          // Copia completada, esperando verificación de import...
+          // No cerramos el modal, el backend sigue verificando
+        } else if (data.status === 'importing') {
+          // Import en progreso, seguir polleando
+        } else if (data.status === 'imported') {
           if (pollRef.current) clearInterval(pollRef.current)
           setCopyTask(null)
           setResult({ ok: true, steps: [{ target: 'filesystem', ok: true, detail: data.detail }] })
+          onDone()
+        } else if (data.status === 'renamed_needed') {
+          if (pollRef.current) clearInterval(pollRef.current)
+          setCopyTask(null)
+          setResult({ ok: true, steps: [{ target: 'filesystem', ok: true, detail: data.detail }] })
+          onDone()
+        } else if (data.status === 'import_timeout') {
+          if (pollRef.current) clearInterval(pollRef.current)
+          setCopyTask(null)
+          setResult({ ok: false, error: data.detail })
           onDone()
         } else if (data.status === 'error') {
           if (pollRef.current) clearInterval(pollRef.current)
@@ -316,7 +331,13 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
       {copyTask && (
         <div className="modal-backdrop">
           <div className="modal copy-progress-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Copiar archivos</h3>
+            <h3>
+              {copyTask.status === 'importing' ? 'Verificando import...' :
+               copyTask.status === 'imported' ? 'Importado correctamente' :
+               copyTask.status === 'renamed_needed' ? 'Importado — renombrado pendiente' :
+               copyTask.status === 'import_timeout' ? 'Timeout de import' :
+               'Copiar archivos'}
+            </h3>
 
             <div className="copy-paths">
               <div className="copy-path-row">
@@ -329,18 +350,27 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
               </div>
             </div>
 
-            <div className="copy-bar-container">
-              <div className="copy-bar" style={{ width: `${progressPct}%` }} />
-            </div>
+            {copyTask.status !== 'importing' && (
+              <>
+                <div className="copy-bar-container">
+                  <div className="copy-bar" style={{ width: `${progressPct}%` }} />
+                </div>
+                <div className="copy-stats">
+                  <span>{formatBytes(copyTask.copied_bytes)} / {formatBytes(copyTask.total_bytes)}</span>
+                  <span>{progressPct}%</span>
+                </div>
+                {copyTask.files_total > 0 && (
+                  <div className="copy-files-count">
+                    {copyTask.files_done} / {copyTask.files_total} archivos
+                  </div>
+                )}
+              </>
+            )}
 
-            <div className="copy-stats">
-              <span>{formatBytes(copyTask.copied_bytes)} / {formatBytes(copyTask.total_bytes)}</span>
-              <span>{progressPct}%</span>
-            </div>
-
-            {copyTask.files_total > 0 && (
-              <div className="copy-files-count">
-                {copyTask.files_done} / {copyTask.files_total} archivos
+            {copyTask.status === 'importing' && (
+              <div className="copy-importing">
+                <span className="copy-spinner" />
+                <span>Esperando que Sonarr/Radarr importe y renombre el archivo...</span>
               </div>
             )}
 
