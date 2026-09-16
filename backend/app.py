@@ -3,6 +3,7 @@ import json
 import logging
 import shutil
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -154,6 +155,9 @@ status_cache: dict = {
     "updated_at": 0,
     "checking": False,
 }
+
+# Estado de tareas en background (copy_files con progreso).
+_tasks: dict[str, dict] = {}
 
 # Agrupación de estados qBittorrent en categorías legibles.
 QBIT_DOWNLOADING = {
@@ -571,6 +575,12 @@ async def _build_traces(session: aiohttp.ClientSession) -> list[dict]:
                             torrent.get("save_path", ""),
                             queue_item.get("downloadClient") if queue_item else None,
                         ) if torrent.get("save_path") else None,
+                        "content_path": (
+                            _resolve_current_path(
+                                torrent.get("save_path", ""),
+                                queue_item.get("downloadClient") if queue_item else None,
+                            ) + "/" + torrent.get("name", "")
+                        ) if torrent.get("save_path") and torrent.get("name") else None,
                         "size": torrent.get("size"),
                     } if torrent else None,
                     "expected_category": expected_cat,
@@ -883,7 +893,7 @@ async def _arr_movie_root_folder(
         return ""
 
 
-def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool = False) -> dict:
+def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool = False, task_id: str | None = None) -> dict:
     """Copia archivos desde output_path al root_folder.
 
     ``output_path`` es la ruta completa al archivo (o directorio) reportada
@@ -893,29 +903,51 @@ def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: boo
     Si ``is_host_path`` es True, la ruta ya está traducida al host y no se
     aplica _host_path() de nuevo.
 
+    Si ``task_id`` se proporciona, actualiza el progreso en _tasks.
+
     Devuelve {ok, detail, files_copied}.
     """
     src = Path(output_path if is_host_path else _host_path(output_path))
     dst_dir = Path(root_folder)
     log.info("copy_files: src=%s  dst=%s  is_host_path=%s", src, dst_dir, is_host_path)
 
+    def _update_task(copied_bytes: int, total_bytes: int, files_done: int, files_total: int):
+        if task_id and task_id in _tasks:
+            _tasks[task_id].update({
+                "copied_bytes": copied_bytes,
+                "total_bytes": total_bytes,
+                "files_done": files_done,
+                "files_total": files_total,
+            })
+
     if not src.exists():
         log.error("copy_files: fuente no encontrada: %s", src)
+        if task_id and task_id in _tasks:
+            _tasks[task_id].update({"status": "error", "detail": f"fuente no encontrada: {src}"})
         return {"ok": False, "detail": f"fuente no encontrada: {src}"}
 
     dst_dir.mkdir(parents=True, exist_ok=True)
 
     if src.is_file():
+        total = src.stat().st_size
         dst = dst_dir / src.name
+        _update_task(0, total, 0, 1)
         shutil.copy2(str(src), str(dst))
+        _update_task(total, total, 1, 1)
         return {"ok": True, "detail": f"copiado: {src.name} → {dst_dir}", "files_copied": 1}
 
     if src.is_dir():
+        files = [f for f in src.iterdir() if f.is_file()]
+        total_bytes = sum(f.stat().st_size for f in files)
+        copied_bytes = 0
         count = 0
-        for item in src.iterdir():
-            if item.is_file():
-                shutil.copy2(str(item), str(dst_dir / item.name))
-                count += 1
+        _update_task(0, total_bytes, 0, len(files))
+        for item in files:
+            dst = dst_dir / item.name
+            shutil.copy2(str(item), str(dst))
+            copied_bytes += item.stat().st_size
+            count += 1
+            _update_task(copied_bytes, total_bytes, count, len(files))
         return {"ok": True, "detail": f"copiados {count} archivos a {dst_dir}", "files_copied": count}
 
     return {"ok": False, "detail": f"fuente no es archivo ni directorio: {src}"}
@@ -1053,6 +1085,28 @@ async def _arr_add_remote_path(
             return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+async def _run_copy_background(task_id: str, src_path: str, dst_root: str, service: dict, source: str):
+    """Ejecuta la copia de archivos en background y actualiza el estado de la tarea."""
+    try:
+        _tasks[task_id]["detail"] = "copiando archivos..."
+        result = await asyncio.to_thread(
+            _copy_files_to_root, src_path, dst_root, is_host_path=True, task_id=task_id
+        )
+        _tasks[task_id].update({
+            "status": "done" if result["ok"] else "error",
+            "detail": result.get("detail", ""),
+            "files_copied": result.get("files_copied", 0),
+        })
+        # Reintentar import después de copiar
+        if result["ok"]:
+            async with aiohttp.ClientSession() as session:
+                await _arr_command(session, service, {"name": "ProcessMonitoredDownloads"})
+            _tasks[task_id]["detail"] = result.get("detail", "") + " · import reintentado"
+    except Exception as exc:
+        log.exception("copy_files: error en background task %s", task_id)
+        _tasks[task_id].update({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
 
 
 async def _do_action(
@@ -1215,16 +1269,24 @@ async def _do_action(
         if not root:
             log.error("copy_files: no se pudo obtener root folder para %s (series_id=%s, movie_id=%s)", source, ids.get("series_id"), ids.get("movie_id"))
             return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
-        # Copiar archivos (output_path ya es ruta del host desde el frontend)
-        steps.append({
-            "target": "filesystem",
-            **_copy_files_to_root(output_path, root, is_host_path=True),
-        })
-        # Reintentar import
-        steps.append({
-            "target": source,
-            **await _arr_command(session, service, {"name": "ProcessMonitoredDownloads"}),
-        })
+        # Calcular destino y lanzar copia en background
+        from pathlib import Path as _Path
+        _src_path = _Path(output_path)
+        dst_path = str(_Path(root) / _src_path.name)
+        task_id = str(uuid.uuid4())
+        _tasks[task_id] = {
+            "status": "running",
+            "src_path": output_path,
+            "dst_path": dst_path,
+            "copied_bytes": 0,
+            "total_bytes": 0,
+            "files_done": 0,
+            "files_total": 0,
+            "detail": "preparando copia...",
+        }
+        # Lanzar la copia en background
+        asyncio.create_task(_run_copy_background(task_id, output_path, root, service, source))
+        return {"ok": True, "needs_polling": True, "task_id": task_id, "src_path": output_path, "dst_path": dst_path}
 
     else:
         return {"ok": False, "steps": [{"target": "?", "ok": False, "detail": f"acción desconocida: {action}"}]}
@@ -1271,6 +1333,16 @@ async def run_action(action: str, payload: dict):
         **result,
         "at": int(time.time()),
     }
+
+
+# --- Tasks (progreso de copy_files en background) ---
+@app.get("/api/tasks/{task_id}")
+async def get_task(task_id: str):
+    """Estado de una tarea en background (copy_files con progreso)."""
+    task = _tasks.get(task_id)
+    if not task:
+        return {"ok": False, "error": "tarea no encontrada"}
+    return {"ok": True, **task}
 
 
 # --- Config (Developer mode) ---

@@ -990,6 +990,80 @@ body {
   padding: 7px 16px;
 }
 
+/* ---- Modal de progreso de copia ---- */
+.copy-progress-modal {
+  max-width: 520px;
+}
+
+.copy-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.copy-path-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.copy-path-label {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  min-width: 56px;
+}
+
+.copy-path-value {
+  color: var(--text);
+  font-family: monospace;
+  font-size: 11px;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.copy-bar-container {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.copy-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.copy-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.copy-files-count {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.copy-detail {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
 /* ---- Tabs (Developer mode) — now handled by sidebar ---- */
 .tab-bar {
   display: none;

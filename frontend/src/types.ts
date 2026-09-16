@@ -59,6 +59,7 @@ export interface TraceTorrent {
   category: string | null
   save_path: string | null
   current_path: string | null
+  content_path: string | null
   size: number | null
 }
 

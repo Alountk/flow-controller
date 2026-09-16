@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../types'
 import { runAction, type ActionOptions } from '../api/actions'
 
@@ -14,12 +14,22 @@ interface Pending {
   options: ActionOptions
 }
 
+interface TaskProgress {
+  task_id: string
+  src_path: string
+  dst_path: string
+  status: string
+  copied_bytes: number
+  total_bytes: number
+  files_done: number
+  files_total: number
+  detail: string
+}
+
 function derivePathMapping(trace: Trace) {
   const host = trace.download_client_host || ''
   const output = trace.queue?.output_path || ''
-  // remote_path = directorio del output_path (sin el nombre de archivo)
   const remote_path = output.substring(0, output.lastIndexOf('/')) || ''
-  // local_path: por defecto /downloads/incoming para aMuTorrent
   const local_path = '/downloads/incoming'
   return { host, remote_path, local_path }
 }
@@ -42,7 +52,7 @@ function actionsFor(trace: Trace): ActionKey[] {
     case 'downloaded':
       if (hasHash && trace.category_ok === false) list.push('fix_category')
       list.push('retry_import')
-      if (trace.torrent?.current_path) list.push('copy_files')
+      if (trace.torrent?.content_path) list.push('copy_files')
       if (hasTarget) list.push('research')
       if (hasHash) list.push('delete_torrent')
       break
@@ -71,32 +81,93 @@ function optionsFor(action: ActionKey, trace: Trace): ActionOptions | null {
   if (action === 'delete_torrent') return { delete_files: true }
   if (action === 'fix_path_mapping') return derivePathMapping(trace)
   if (action === 'copy_files') {
-    const src = trace.torrent?.current_path || trace.queue?.output_path || ''
+    const src = trace.torrent?.content_path || trace.torrent?.current_path || trace.queue?.output_path || ''
     return { output_path: src }
   }
   return null
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  const val = bytes / Math.pow(1024, i)
+  return `${val.toFixed(val >= 100 ? 0 : 1)} ${units[i]}`
 }
 
 export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState<ActionKey | null>(null)
   const [result, setResult] = useState<ActionResult | null>(null)
+  const [copyTask, setCopyTask] = useState<TaskProgress | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const keys = actionsFor(trace)
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
 
   async function execute(action: ActionKey, options: ActionOptions) {
     setBusy(action)
     setResult(null)
     try {
       const res = await runAction(action, trace, options)
-      setResult(res)
-      if (res.ok) onDone()
+      if (action === 'copy_files' && res.ok && 'task_id' in res) {
+        const r = res as unknown as { task_id: string; src_path: string; dst_path: string }
+        setCopyTask({
+          task_id: r.task_id,
+          src_path: r.src_path,
+          dst_path: r.dst_path,
+          status: 'running',
+          copied_bytes: 0,
+          total_bytes: 0,
+          files_done: 0,
+          files_total: 0,
+          detail: 'iniciando...',
+        })
+        pollTask(r.task_id)
+      } else {
+        setResult(res)
+        if (res.ok) onDone()
+      }
     } catch (e) {
       setResult({ ok: false, error: (e as Error).message })
     } finally {
       setBusy(null)
       setPending(null)
     }
+  }
+
+  function pollTask(taskId: string) {
+    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`)
+        const data = await res.json() as { ok: boolean } & TaskProgress
+        if (!data.ok) {
+          setCopyTask(null)
+          setResult({ ok: false, error: data.detail || 'Error obteniendo estado de tarea' })
+          if (pollRef.current) clearInterval(pollRef.current)
+          return
+        }
+        setCopyTask((prev) => prev ? { ...prev, ...data } : null)
+        if (data.status === 'done') {
+          if (pollRef.current) clearInterval(pollRef.current)
+          setCopyTask(null)
+          setResult({ ok: true, steps: [{ target: 'filesystem', ok: true, detail: data.detail }] })
+          onDone()
+        } else if (data.status === 'error') {
+          if (pollRef.current) clearInterval(pollRef.current)
+          setCopyTask(null)
+          setResult({ ok: false, error: data.detail })
+        }
+      } catch {
+        // Polling error, will retry
+      }
+    }, 1500)
   }
 
   function handleClick(action: ActionKey) {
@@ -107,6 +178,10 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
       void execute(action, {})
     }
   }
+
+  const progressPct = copyTask && copyTask.total_bytes > 0
+    ? Math.round((copyTask.copied_bytes / copyTask.total_bytes) * 100)
+    : 0
 
   return (
     <div className="trace-actions" onClick={(e) => e.stopPropagation()}>
@@ -119,7 +194,7 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
             key={key}
             className={`action-btn ${m.destructive ? 'destructive' : ''}`}
             title={blocked ? `${m.description} (bloqueada por modo seguro)` : m.description}
-            disabled={busy !== null || blocked}
+            disabled={busy !== null || blocked || copyTask !== null}
             onClick={() => handleClick(key)}
           >
             {busy === key ? '…' : m.label}
@@ -220,6 +295,42 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
                 Confirmar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {copyTask && (
+        <div className="modal-backdrop">
+          <div className="modal copy-progress-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Copiar archivos</h3>
+
+            <div className="copy-paths">
+              <div className="copy-path-row">
+                <span className="copy-path-label">origen:</span>
+                <code className="copy-path-value">{copyTask.src_path}</code>
+              </div>
+              <div className="copy-path-row">
+                <span className="copy-path-label">destino:</span>
+                <code className="copy-path-value">{copyTask.dst_path}</code>
+              </div>
+            </div>
+
+            <div className="copy-bar-container">
+              <div className="copy-bar" style={{ width: `${progressPct}%` }} />
+            </div>
+
+            <div className="copy-stats">
+              <span>{formatBytes(copyTask.copied_bytes)} / {formatBytes(copyTask.total_bytes)}</span>
+              <span>{progressPct}%</span>
+            </div>
+
+            {copyTask.files_total > 0 && (
+              <div className="copy-files-count">
+                {copyTask.files_done} / {copyTask.files_total} archivos
+              </div>
+            )}
+
+            <p className="copy-detail">{copyTask.detail}</p>
           </div>
         </div>
       )}
