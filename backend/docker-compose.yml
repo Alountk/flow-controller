@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  flow-controller:
+    build: ./backend
+    network_mode: "host"
+    ports:
+      - "8000:8000"
+    environment:
+      # Estas vars pueden sobreescribirse desde el host o variables de sistema
+      - RADARR_URL=http://host.docker.internal:7878
+      - SONARR_URL=http://host.docker.internal:8989
+      - AMUTORRENT_URL=http://host.docker.internal:8888
+      # API Keys - en producción deberían venir del host o secret manager
+      - RADARR_API_KEY=${RADARR_API_KEY}
+      - SONARR_API_KEY=${SONARR_API_KEY}
+      - AMUTORRENT_API_KEY=${AMUTORRENT_API_KEY}
+    env_file:
+      - .env  # Solo para desarrollo local con docker-compose up
+    depends_on:
+      - radarr
+      - sonarr
+      - amutorrent
