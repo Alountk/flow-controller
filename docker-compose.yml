@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     network_mode: "host"
     restart: unless-stopped
+    user: "1000:1000"
     environment:
       # Radarr
       - RADARR_URL=${RADARR_URL:-http://localhost:7878}

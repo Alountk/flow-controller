@@ -9,6 +9,7 @@ services:
     container_name: flow-controller
     network_mode: host
     restart: unless-stopped
+    user: "1000:1000"
     environment:
       # Radarr
       - RADARR_URL=${RADARR_URL:-http://localhost:7878}
