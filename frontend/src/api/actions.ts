@@ -6,6 +6,7 @@ export interface ActionOptions {
   host?: string
   remote_path?: string
   local_path?: string
+  output_path?: string
 }
 
 export async function runAction(

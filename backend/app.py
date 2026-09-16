@@ -1,7 +1,9 @@
 import asyncio
 import json
+import shutil
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import aiohttp
 from dotenv import load_dotenv
@@ -100,6 +102,12 @@ ACTIONS: dict[str, dict] = {
     "fix_path_mapping": {
         "label": "Mapear ruta",
         "description": "Crea un remote path mapping en Radarr/Sonarr para que el *arr pueda ver los archivos del cliente de descargas y reintenta el import.",
+        "destructive": False,
+        "scope": "arr",
+    },
+    "copy_files": {
+        "label": "Copiar archivos",
+        "description": "Copia los archivos completados del cliente de descargas al directorio correcto del *arr y reintenta el import.",
         "destructive": False,
         "scope": "arr",
     },
@@ -703,6 +711,98 @@ async def _amu_ws(
             return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
 
+# ---- Path translation helpers ------------------------------------------------
+
+# Mapeo de volúmenes Docker conocidos: container_path → host_path.
+# qBittorrent-novpn monta /mnt/storage:/data, así que /data/X → /mnt/storage/X.
+_VOLUME_MAP = [
+    ("/data/", "/mnt/storage/"),
+]
+
+
+def _host_path(container_path: str) -> str:
+    """Traduce una ruta vista desde un contenedor a la ruta real del host.
+
+    Aplica el mapeo de volúmenes Docker conocido.  Si no hay coincidencia,
+    devuelve la ruta tal cual (asumiendo que ya es una ruta de host).
+    """
+    for prefix, replacement in _VOLUME_MAP:
+        if container_path.startswith(prefix):
+            return replacement + container_path[len(prefix):]
+    return container_path
+
+
+async def _arr_series_root_folder(
+    session: aiohttp.ClientSession, service: dict, series_id: int
+) -> str:
+    """Devuelve el path (root folder) de una serie en Sonarr."""
+    headers = _arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/series/{series_id}",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return ""
+            data = await resp.json(content_type=None)
+            return data.get("path", "")
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return ""
+
+
+async def _arr_movie_root_folder(
+    session: aiohttp.ClientSession, service: dict, movie_id: int
+) -> str:
+    """Devuelve el path (root folder) de una película en Radarr."""
+    headers = _arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/movie/{movie_id}",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return ""
+            data = await resp.json(content_type=None)
+            return data.get("path", "")
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return ""
+
+
+def _copy_files_to_root(output_path: str, root_folder: str) -> dict:
+    """Copia archivos desde output_path al root_folder.
+
+    ``output_path`` es la ruta completa al archivo (o directorio) reportada
+    por el cliente de descargas.  ``root_folder`` es el directorio de la
+    librería del *arr (ej. /mnt/storage-6tb/shared-media/shows/Serie/).
+
+    Devuelve {ok, detail, files_copied}.
+    """
+    src = Path(_host_path(output_path))
+    dst_dir = Path(root_folder)
+
+    if not src.exists():
+        return {"ok": False, "detail": f"fuente no encontrada: {src}"}
+
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    if src.is_file():
+        dst = dst_dir / src.name
+        shutil.copy2(str(src), str(dst))
+        return {"ok": True, "detail": f"copiado: {src.name} → {dst_dir}", "files_copied": 1}
+
+    if src.is_dir():
+        count = 0
+        for item in src.iterdir():
+            if item.is_file():
+                shutil.copy2(str(item), str(dst_dir / item.name))
+                count += 1
+        return {"ok": True, "detail": f"copiados {count} archivos a {dst_dir}", "files_copied": count}
+
+    return {"ok": False, "detail": f"fuente no es archivo ni directorio: {src}"}
+
+
 async def _amu_ws_find_instance(
     matched_hash: str,
     *,
@@ -973,6 +1073,32 @@ async def _do_action(
                 **await _arr_add_remote_path(session, service, host, remote_path, local_path),
             })
         # Tras el mapeo, reintenta el import para que el *arr reencuentre el archivo.
+        steps.append({
+            "target": source,
+            **await _arr_command(session, service, {"name": "ProcessMonitoredDownloads"}),
+        })
+
+    elif action == "copy_files":
+        if not service:
+            return {"ok": False, "steps": [{"target": "arr", "ok": False, "detail": "servicio desconocido"}]}
+        output_path = payload.get("output_path") or ""
+        if not output_path:
+            return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "sin output_path"}]}
+        # Obtener la root folder del *arr
+        if source == "sonarr" and ids.get("series_id"):
+            root = await _arr_series_root_folder(session, service, ids["series_id"])
+        elif source == "radarr" and ids.get("movie_id"):
+            root = await _arr_movie_root_folder(session, service, ids["movie_id"])
+        else:
+            root = ""
+        if not root:
+            return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
+        # Copiar archivos
+        steps.append({
+            "target": "filesystem",
+            **_copy_files_to_root(output_path, root),
+        })
+        # Reintentar import
         steps.append({
             "target": source,
             **await _arr_command(session, service, {"name": "ProcessMonitoredDownloads"}),

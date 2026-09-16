@@ -104,6 +104,7 @@ export type ActionKey =
   | 'remove_queue'
   | 'delete_torrent'
   | 'fix_path_mapping'
+  | 'copy_files'
 
 export interface ActionMeta {
   key: ActionKey

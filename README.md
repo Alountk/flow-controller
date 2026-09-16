@@ -86,6 +86,7 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 |--------|-------------|
 | `fix_category` | Pone la categoría correcta en aMuTorrent y reintenta el import |
 | `fix_path_mapping` | Crea un remote path mapping en Radarr/Sonarr |
+| `copy_files` | Copia archivos del cliente de descargas al directorio correcto del *arr |
 | `retry_import` | Fuerza a Radarr/Sonarr a reprocesar la descarga |
 | `research` | Lanza una búsqueda del episodio/película |
 | `pause` | Pausa la descarga en aMuTorrent |

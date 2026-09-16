@@ -34,6 +34,7 @@ function actionsFor(trace: Trace): ActionKey[] {
     case 'import_blocked':
       if (hasHash && trace.category_ok === false) list.push('fix_category')
       if (queueId) list.push('retry_import')
+      if (trace.queue?.output_path) list.push('copy_files')
       if (trace.queue?.output_path) list.push('fix_path_mapping')
       if (hasTarget) list.push('research')
       if (queueId) list.push('remove_queue')
@@ -68,6 +69,7 @@ function optionsFor(action: ActionKey, trace: Trace): ActionOptions | null {
   if (action === 'remove_queue') return { blocklist: true }
   if (action === 'delete_torrent') return { delete_files: true }
   if (action === 'fix_path_mapping') return derivePathMapping(trace)
+  if (action === 'copy_files') return { output_path: trace.queue?.output_path || '' }
   return null
 }
 
