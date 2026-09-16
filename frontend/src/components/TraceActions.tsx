@@ -163,6 +163,11 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
           if (pollRef.current) clearInterval(pollRef.current)
           setCopyTask(null)
           setResult({ ok: false, error: data.detail })
+        } else if (data.status === 'cancelled') {
+          if (pollRef.current) clearInterval(pollRef.current)
+          setCopyTask(null)
+          setResult({ ok: false, error: data.detail || 'Copia cancelada' })
+          onDone()
         }
       } catch {
         // Polling error, will retry
@@ -176,6 +181,15 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
       setPending({ action, options: opts })
     } else {
       void execute(action, {})
+    }
+  }
+
+  async function cancelTask() {
+    if (!copyTask) return
+    try {
+      await fetch(`/api/tasks/${copyTask.task_id}/cancel`, { method: 'POST' })
+    } catch {
+      // Will be handled by polling
     }
   }
 
@@ -331,6 +345,12 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
             )}
 
             <p className="copy-detail">{copyTask.detail}</p>
+
+            <div className="modal-buttons">
+              <button className="action-btn cancel-btn" onClick={cancelTask}>
+                Cancelar copia
+              </button>
+            </div>
           </div>
         </div>
       )}

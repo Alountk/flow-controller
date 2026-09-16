@@ -893,6 +893,34 @@ async def _arr_movie_root_folder(
         return ""
 
 
+COPY_CHUNK_SIZE = 1024 * 1024  # 1 MB
+
+
+class CopyCancelled(Exception):
+    """Excepción lanzada cuando el usuario cancela una copia."""
+
+
+def _copy_file_chunked(src: Path, dst: Path, task_id: str | None = None, total_bytes: int = 0, copied_bytes: int = 0) -> int:
+    """Copia un archivo en chunks, comprobando cancelación entre cada uno.
+    Devuelve los bytes copiados en esta llamada."""
+    written = 0
+    with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
+        while True:
+            if task_id and task_id in _tasks and _tasks[task_id].get("cancelled"):
+                raise CopyCancelled(f"cancelado durante copia de {src.name}")
+            chunk = fsrc.read(COPY_CHUNK_SIZE)
+            if not chunk:
+                break
+            fdst.write(chunk)
+            written += len(chunk)
+            if task_id and task_id in _tasks:
+                _tasks[task_id].update({
+                    "copied_bytes": copied_bytes + written,
+                    "total_bytes": total_bytes,
+                })
+    return written
+
+
 def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool = False, task_id: str | None = None) -> dict:
     """Copia archivos desde output_path al root_folder.
 
@@ -903,7 +931,8 @@ def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: boo
     Si ``is_host_path`` es True, la ruta ya está traducida al host y no se
     aplica _host_path() de nuevo.
 
-    Si ``task_id`` se proporciona, actualiza el progreso en _tasks.
+    Si ``task_id`` se proporciona, actualiza el progreso en _tasks y
+    comprueba cancelación entre chunks.
 
     Devuelve {ok, detail, files_copied}.
     """
@@ -920,6 +949,9 @@ def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: boo
                 "files_total": files_total,
             })
 
+    def _is_cancelled() -> bool:
+        return bool(task_id and task_id in _tasks and _tasks[task_id].get("cancelled"))
+
     if not src.exists():
         log.error("copy_files: fuente no encontrada: %s", src)
         if task_id and task_id in _tasks:
@@ -932,7 +964,7 @@ def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: boo
         total = src.stat().st_size
         dst = dst_dir / src.name
         _update_task(0, total, 0, 1)
-        shutil.copy2(str(src), str(dst))
+        _copy_file_chunked(src, dst, task_id, total, 0)
         _update_task(total, total, 1, 1)
         return {"ok": True, "detail": f"copiado: {src.name} → {dst_dir}", "files_copied": 1}
 
@@ -943,9 +975,11 @@ def _copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: boo
         count = 0
         _update_task(0, total_bytes, 0, len(files))
         for item in files:
+            if _is_cancelled():
+                return {"ok": False, "detail": f"cancelado por el usuario ({count}/{len(files)} archivos copiados)", "files_copied": count}
             dst = dst_dir / item.name
-            shutil.copy2(str(item), str(dst))
-            copied_bytes += item.stat().st_size
+            written = _copy_file_chunked(item, dst, task_id, total_bytes, copied_bytes)
+            copied_bytes += written
             count += 1
             _update_task(copied_bytes, total_bytes, count, len(files))
         return {"ok": True, "detail": f"copiados {count} archivos a {dst_dir}", "files_copied": count}
@@ -1094,6 +1128,13 @@ async def _run_copy_background(task_id: str, src_path: str, dst_root: str, servi
         result = await asyncio.to_thread(
             _copy_files_to_root, src_path, dst_root, is_host_path=True, task_id=task_id
         )
+        if _tasks[task_id].get("cancelled"):
+            _tasks[task_id].update({
+                "status": "cancelled",
+                "detail": result.get("detail", "cancelado"),
+                "files_copied": result.get("files_copied", 0),
+            })
+            return
         _tasks[task_id].update({
             "status": "done" if result["ok"] else "error",
             "detail": result.get("detail", ""),
@@ -1104,6 +1145,12 @@ async def _run_copy_background(task_id: str, src_path: str, dst_root: str, servi
             async with aiohttp.ClientSession() as session:
                 await _arr_command(session, service, {"name": "ProcessMonitoredDownloads"})
             _tasks[task_id]["detail"] = result.get("detail", "") + " · import reintentado"
+    except CopyCancelled:
+        _tasks[task_id].update({
+            "status": "cancelled",
+            "detail": _tasks[task_id].get("detail", "cancelado por el usuario"),
+            "files_copied": _tasks[task_id].get("files_done", 0),
+        })
     except Exception as exc:
         log.exception("copy_files: error en background task %s", task_id)
         _tasks[task_id].update({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
@@ -1343,6 +1390,20 @@ async def get_task(task_id: str):
     if not task:
         return {"ok": False, "error": "tarea no encontrada"}
     return {"ok": True, **task}
+
+
+@app.post("/api/tasks/{task_id}/cancel")
+async def cancel_task(task_id: str):
+    """Cancela una tarea en background (copy_files)."""
+    task = _tasks.get(task_id)
+    if not task:
+        return {"ok": False, "error": "tarea no encontrada"}
+    if task.get("status") not in ("running", None):
+        return {"ok": False, "error": f"tarea ya en estado: {task['status']}"}
+    task["cancelled"] = True
+    task["detail"] = "cancelación solicitada..."
+    log.info("copy_files: cancelación solicitada para task %s", task_id)
+    return {"ok": True}
 
 
 # --- Config (Developer mode) ---

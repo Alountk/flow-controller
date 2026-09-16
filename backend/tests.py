@@ -13,7 +13,7 @@ os.environ.setdefault("RADARR_URL", "http://localhost:7878")
 os.environ.setdefault("SONARR_URL", "http://localhost:8989")
 os.environ.setdefault("AMUTORRENT_URL", "http://localhost:4000")
 
-from app import _host_path, _resolve_current_path, _copy_files_to_root, _VOLUME_MAP, _tasks
+from app import _host_path, _resolve_current_path, _copy_files_to_root, _VOLUME_MAP, _tasks, CopyCancelled
 
 
 # ── _host_path ──────────────────────────────────────────────────────────────
@@ -202,6 +202,48 @@ class TestCopyFilesToRoot:
         assert task["copied_bytes"] == task["total_bytes"]
 
         del _tasks[task_id]
+
+    def test_cancellation_between_files(self):
+        src_dir = os.path.join(self.tmpdir, "src")
+        dst_dir = os.path.join(self.tmpdir, "dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        for name in ["a.mkv", "b.mkv", "c.mkv"]:
+            Path(os.path.join(src_dir, name)).write_text(f"data {name}")
+
+        task_id = "test-cancel-001"
+        _tasks[task_id] = {
+            "status": "running",
+            "cancelled": True,
+            "copied_bytes": 0,
+            "total_bytes": 0,
+            "files_done": 0,
+            "files_total": 0,
+        }
+
+        result = _copy_files_to_root(src_dir, dst_dir, is_host_path=True, task_id=task_id)
+        assert result["ok"] is False
+        assert "cancelado" in result["detail"]
+
+        del _tasks[task_id]
+
+    def test_copy_chunked_copies_file_content(self):
+        src_dir = os.path.join(self.tmpdir, "src")
+        dst_dir = os.path.join(self.tmpdir, "dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        content = "x" * (1024 * 1024 + 42)  # 1 MB + 42 bytes to test chunking
+        Path(os.path.join(src_dir, "big.mkv")).write_text(content)
+
+        result = _copy_files_to_root(src_dir, dst_dir, is_host_path=True)
+        assert result["ok"] is True
+        assert result["files_copied"] == 1
+
+        dst_file = os.path.join(dst_dir, "big.mkv")
+        assert os.path.exists(dst_file)
+        assert Path(dst_file).read_text() == content
 
 
 # ── _VOLUME_MAP ─────────────────────────────────────────────────────────────

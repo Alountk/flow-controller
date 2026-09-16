@@ -1064,6 +1064,19 @@ body {
   margin: 0;
 }
 
+.cancel-btn {
+  margin-top: 12px;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+}
+
+.cancel-btn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
 /* ---- Tabs (Developer mode) — now handled by sidebar ---- */
 .tab-bar {
   display: none;
