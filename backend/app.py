@@ -32,6 +32,7 @@ from clients import (
     arr_command,
     fetch_wanted_movies,
     fetch_wanted_episodes,
+    fetch_all_movies_detailed,
     arr_search_missing_movies,
     arr_search_missing_episodes,
     arr_search_movie,
@@ -194,6 +195,17 @@ async def get_wanted(page: int = 1, page_size: int = 50):
         "wanted": wanted,
         "updated_at": int(time.time()),
     }
+
+
+@app.get("/api/wanted/all")
+async def get_all_movies():
+    """Todas las películas de Radarr con estado de archivo y ruta."""
+    service = next((s for s in SERVICES if s["key"] == "radarr" and s["kind"] == "arr"), None)
+    if not service:
+        return {"items": [], "total": 0}
+    async with aiohttp.ClientSession() as session:
+        result = await fetch_all_movies_detailed(session, service)
+    return result
 
 
 @app.post("/api/wanted/search")

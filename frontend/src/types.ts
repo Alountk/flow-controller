@@ -188,6 +188,16 @@ export interface WantedMovie {
   altTitles: string[]
 }
 
+export interface AllMovie {
+  id: number
+  title: string
+  year: number | null
+  remotePoster: string
+  has_file: boolean
+  path_exists: boolean
+  monitored: boolean
+}
+
 export interface WantedEpisode {
   id: number
   title: string

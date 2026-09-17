@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult } from '../types'
+import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult, AllMovie } from '../types'
 import { searchWanted, searchWantedItem, scanForMovies } from '../api/wanted'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 
 type Tab = 'movies' | 'episodes' | 'scan'
+type MovieFilter = 'all' | 'missing'
 
 interface ScanItem {
   type: 'movie' | 'series'
@@ -16,6 +17,11 @@ interface ScanItem {
 async function fetchWanted(): Promise<WantedResponse> {
   const res = await fetch('/api/wanted')
   return res.json() as Promise<WantedResponse>
+}
+
+async function fetchAllMovies(): Promise<{ items: AllMovie[]; total: number }> {
+  const res = await fetch('/api/wanted/all')
+  return res.json() as Promise<{ items: AllMovie[]; total: number }>
 }
 
 function FileScanTab({ item, onClear }: { item: ScanItem; onClear: () => void }) {
@@ -255,10 +261,17 @@ export function MissingContent() {
   const [tab, setTab] = useState<Tab>('movies')
   const [searchResult, setSearchResult] = useState<string | null>(null)
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
+  const [movieFilter, setMovieFilter] = useState<MovieFilter>('missing')
 
   const { data, isPending } = useQuery({
     queryKey: ['wanted'],
     queryFn: fetchWanted,
+  })
+
+  const { data: allMoviesData, isPending: allMoviesLoading } = useQuery({
+    queryKey: ['all-movies'],
+    queryFn: fetchAllMovies,
+    enabled: tab === 'movies' && movieFilter === 'all',
   })
 
   const searchAll = useMutation({
@@ -340,6 +353,20 @@ export function MissingContent() {
       ) : tab === 'movies' ? (
         <div className="wanted-content">
           <div className="wanted-actions">
+            <div className="wanted-filter">
+              <button
+                className={`wanted-filter-btn ${movieFilter === 'missing' ? 'active' : ''}`}
+                onClick={() => setMovieFilter('missing')}
+              >
+                Faltantes ({radarrTotal})
+              </button>
+              <button
+                className={`wanted-filter-btn ${movieFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setMovieFilter('all')}
+              >
+                Todas ({allMoviesData?.total ?? '...'})
+              </button>
+            </div>
             <button
               className="action-btn search-all"
               onClick={() => searchAll.mutate('radarr')}
@@ -348,10 +375,52 @@ export function MissingContent() {
               {searchAll.isPending ? 'Buscando...' : '🔍 Buscar todas las faltantes'}
             </button>
           </div>
-          {radarrMovies && radarrMovies.length > 0 ? (
+          {movieFilter === 'missing' ? (
+            radarrMovies && radarrMovies.length > 0 ? (
+              <div className="wanted-grid">
+                {radarrMovies.map((movie) => (
+                  <div key={movie.id} className="wanted-card status-error">
+                    {movie.remotePoster && (
+                      <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
+                    )}
+                    <div className="wanted-info">
+                      <div className="wanted-title">
+                        {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
+                      </div>
+                      {movie.overview && (
+                        <div className="wanted-overview">{movie.overview.slice(0, 120)}...</div>
+                      )}
+                      <div className="wanted-card-actions">
+                        <button
+                          className="action-btn search-item"
+                          onClick={() => searchItem.mutate({ source: 'radarr', ids: { movie_id: movie.id } })}
+                          disabled={searchItem.isPending}
+                        >
+                          🔍 Buscar
+                        </button>
+                        <button
+                          className="action-btn scan-folder-btn"
+                          onClick={() => handleScanForMovie(movie)}
+                        >
+                          📁 En carpeta
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="wanted-empty">No hay películas faltantes</div>
+            )
+          ) : allMoviesLoading ? (
+            <div className="wanted-loading">Cargando catálogo...</div>
+          ) : allMoviesData && allMoviesData.items.length > 0 ? (
             <div className="wanted-grid">
-              {radarrMovies.map((movie) => (
-                <div key={movie.id} className="wanted-card">
+              {allMoviesData.items.map((movie) => (
+                <div
+                  key={movie.id}
+                  className={`wanted-card ${movie.has_file && movie.path_exists ? 'status-ok' : 'status-error'}`}
+                >
                   {movie.remotePoster && (
                     <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
                   )}
@@ -359,9 +428,15 @@ export function MissingContent() {
                     <div className="wanted-title">
                       {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
                     </div>
-                    {movie.overview && (
-                      <div className="wanted-overview">{movie.overview.slice(0, 120)}...</div>
-                    )}
+                    <div className="wanted-status-badge">
+                      {movie.has_file && movie.path_exists ? (
+                        <span className="badge-ok">✓ Configurada</span>
+                      ) : !movie.has_file ? (
+                        <span className="badge-error">✗ Sin archivo</span>
+                      ) : (
+                        <span className="badge-error">✗ Ruta no encontrada</span>
+                      )}
+                    </div>
                     <div className="wanted-card-actions">
                       <button
                         className="action-btn search-item"
@@ -372,7 +447,7 @@ export function MissingContent() {
                       </button>
                       <button
                         className="action-btn scan-folder-btn"
-                        onClick={() => handleScanForMovie(movie)}
+                        onClick={() => handleScanForMovie({ id: movie.id, title: movie.title, year: movie.year, overview: '', remotePoster: movie.remotePoster, has_file: movie.has_file, altTitles: [] })}
                       >
                         📁 En carpeta
                       </button>
@@ -382,7 +457,7 @@ export function MissingContent() {
               ))}
             </div>
           ) : (
-            <div className="wanted-empty">No hay películas faltantes</div>
+            <div className="wanted-empty">No hay películas en el catálogo</div>
           )}
         </div>
       ) : (

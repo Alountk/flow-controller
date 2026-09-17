@@ -673,6 +673,44 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
         return {"items": [], "total": 0}
 
 
+async def fetch_all_movies_detailed(session: aiohttp.ClientSession, service: dict) -> dict:
+    """Devuelve todas las películas de Radarr con estado de archivo y ruta."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/movie",
+            headers=headers,
+            params={"sortKey": "title", "sortDirection": "ascending"},
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return {"items": [], "total": 0}
+            data = await resp.json(content_type=None)
+            items = []
+            for m in data:
+                if "id" not in m:
+                    continue
+                path = m.get("path", "")
+                path_exists = False
+                if path:
+                    try:
+                        path_exists = os.path.isdir(path)
+                    except (OSError, ValueError):
+                        path_exists = False
+                items.append({
+                    "id": m.get("id"),
+                    "title": m.get("title", ""),
+                    "year": m.get("year"),
+                    "remotePoster": m.get("remotePoster", ""),
+                    "has_file": m.get("hasFile", False),
+                    "path_exists": path_exists,
+                    "monitored": m.get("monitored", False),
+                })
+            return {"items": items, "total": len(items)}
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {"items": [], "total": 0}
+
+
 async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
     """Devuelve episodios monitorizados sin archivo (wanted/missing)."""
     headers = arr_headers(service["api_key"])

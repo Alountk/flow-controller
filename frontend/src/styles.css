@@ -1411,6 +1411,61 @@ body {
   border-color: var(--accent);
 }
 
+.wanted-card.status-ok {
+  border-color: var(--ok);
+  border-left-width: 3px;
+}
+
+.wanted-card.status-error {
+  border-color: var(--bad);
+  border-left-width: 3px;
+  opacity: 0.85;
+}
+
+.wanted-status-badge {
+  font-size: 10px;
+}
+
+.badge-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.badge-error {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.wanted-filter {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.wanted-filter-btn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wanted-filter-btn:hover {
+  color: var(--text);
+}
+
+.wanted-filter-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .wanted-poster {
   width: 60px;
   height: 90px;
