@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-export type Page = 'dashboard' | 'trace' | 'prototypes'
+export type Page = 'dashboard' | 'trace' | 'wanted' | 'prototypes'
 
 interface NavItem {
   key: Page
@@ -11,6 +11,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', icon: '📊' },
   { key: 'trace', label: 'Trazabilidad', icon: '🔍' },
+  { key: 'wanted', label: 'Faltantes', icon: '📥' },
 ]
 
 const NAV_SYSTEM: NavItem[] = [

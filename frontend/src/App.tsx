@@ -4,6 +4,7 @@ import { Sidebar, type Page } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
 import { TraceView } from './components/TraceView'
+import { MissingContent } from './components/MissingContent'
 import { Prototypes } from './components/Prototypes'
 import {
   parseStatus,
@@ -24,6 +25,7 @@ const SERVICES: { key: ServiceKey; label: string }[] = [
 const PAGE_TITLES: Record<Page, string> = {
   dashboard: 'Dashboard',
   trace: 'Trazabilidad',
+  wanted: 'Faltantes',
   prototypes: 'Prototipos',
 }
 
@@ -162,6 +164,10 @@ function App() {
               actions={actionsData}
               onActionDone={handleActionDone}
             />
+          )}
+
+          {page === 'wanted' && (
+            <MissingContent />
           )}
 
           {page === 'prototypes' && <Prototypes />}

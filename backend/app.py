@@ -22,7 +22,17 @@ from config import (
     API_KEY,
 )
 from traces import build_traces
-from clients import check_service, check_arr, arr_command
+from clients import (
+    check_service,
+    check_arr,
+    arr_command,
+    fetch_wanted_movies,
+    fetch_wanted_episodes,
+    arr_search_missing_movies,
+    arr_search_missing_episodes,
+    arr_search_movie,
+    arr_search_episode,
+)
 from copy_engine import (
     _tasks,
     cleanup_tasks,
@@ -156,6 +166,67 @@ async def get_trace():
         "indexer": AMUTORRENT_INDEXER,
         "updated_at": int(time.time()),
     }
+
+
+@app.get("/api/wanted")
+async def get_wanted(page: int = 1, page_size: int = 50):
+    """Contenido faltante (wanted/missing) de Radarr y Sonarr."""
+    async with aiohttp.ClientSession() as session:
+        arr_services = [s for s in SERVICES if s["kind"] == "arr"]
+        results = await asyncio.gather(
+            *(
+                fetch_wanted_movies(session, s, page, page_size)
+                if s["key"] == "radarr"
+                else fetch_wanted_episodes(session, s, page, page_size)
+                for s in arr_services
+            )
+        )
+    wanted = {}
+    for service, result in zip(arr_services, results):
+        wanted[service["key"]] = result
+    return {
+        "wanted": wanted,
+        "updated_at": int(time.time()),
+    }
+
+
+@app.post("/api/wanted/search")
+async def search_wanted(req: ActionRequest, _key: str = Depends(verify_api_key)):
+    """Busca contenido faltante en los indexadores."""
+    source = req.source
+    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    if not service:
+        return {"ok": False, "error": "servicio desconocido"}
+
+    async with aiohttp.ClientSession() as session:
+        if source == "radarr":
+            result = await arr_search_missing_movies(session, service)
+        elif source == "sonarr":
+            result = await arr_search_missing_episodes(session, service)
+        else:
+            return {"ok": False, "error": f"servicio no soportado: {source}"}
+
+    return {"ok": result.get("ok", False), "detail": result.get("detail", ""), "source": source}
+
+
+@app.post("/api/wanted/search/item")
+async def search_wanted_item(req: ActionRequest, _key: str = Depends(verify_api_key)):
+    """Busca un item específico en los indexadores."""
+    source = req.source
+    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    if not service:
+        return {"ok": False, "error": "servicio desconocido"}
+
+    ids = req.ids or {}
+    async with aiohttp.ClientSession() as session:
+        if source == "radarr" and ids.get("movie_id"):
+            result = await arr_search_movie(session, service, ids["movie_id"])
+        elif source == "sonarr" and ids.get("episode_id"):
+            result = await arr_search_episode(session, service, ids["episode_id"])
+        else:
+            return {"ok": False, "error": "IDs insuficientes para búsqueda"}
+
+    return {"ok": result.get("ok", False), "detail": result.get("detail", ""), "source": source}
 
 
 @app.get("/api/actions")

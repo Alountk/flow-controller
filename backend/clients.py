@@ -625,3 +625,99 @@ async def fetch_qbit_torrents(session: aiohttp.ClientSession) -> list[dict]:
             return await resp.json(content_type=None)
     except (asyncio.TimeoutError, aiohttp.ClientError):
         return []
+
+
+async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
+    """Devuelve películas monitorizadas sin archivo (wanted/missing)."""
+    headers = arr_headers(service["api_key"])
+    params = {
+        "sortKey": "releaseDate",
+        "sortDirection": "descending",
+        "monitored": "true",
+        "page": str(page),
+        "pageSize": str(page_size),
+    }
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/wanted/missing",
+            headers=headers,
+            params=params,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return {"items": [], "total": 0}
+            data = await resp.json(content_type=None)
+            items = [
+                {
+                    "id": m.get("id"),
+                    "title": m.get("title", ""),
+                    "year": m.get("year"),
+                    "overview": m.get("overview", ""),
+                    "remotePoster": m.get("remotePoster", ""),
+                    "has_file": m.get("hasFile", False),
+                }
+                for m in data.get("records", [])
+            ]
+            return {"items": items, "total": data.get("total", len(items))}
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {"items": [], "total": 0}
+
+
+async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
+    """Devuelve episodios monitorizados sin archivo (wanted/missing)."""
+    headers = arr_headers(service["api_key"])
+    params = {
+        "sortKey": "airDateUtc",
+        "sortDirection": "descending",
+        "monitored": "true",
+        "includeSeries": "true",
+        "page": str(page),
+        "pageSize": str(page_size),
+    }
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/wanted/missing",
+            headers=headers,
+            params=params,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return {"items": [], "total": 0}
+            data = await resp.json(content_type=None)
+            items = [
+                {
+                    "id": ep.get("id"),
+                    "title": ep.get("title", ""),
+                    "series_title": (ep.get("series") or {}).get("title", ""),
+                    "series_id": ep.get("seriesId"),
+                    "season_number": ep.get("seasonNumber"),
+                    "episode_number": ep.get("episodeNumber"),
+                    "air_date": ep.get("airDateUtc", ""),
+                    "overview": ep.get("overview", ""),
+                    "has_file": ep.get("hasFile", False),
+                }
+                for ep in data.get("records", [])
+            ]
+            return {"items": items, "total": data.get("total", len(items))}
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {"items": [], "total": 0}
+
+
+async def arr_search_missing_movies(session: aiohttp.ClientSession, service: dict) -> dict:
+    """Lanza búsqueda masiva de todas las películas faltantes."""
+    return await arr_command(session, service, {"name": "MissingMoviesSearch"})
+
+
+async def arr_search_missing_episodes(session: aiohttp.ClientSession, service: dict) -> dict:
+    """Lanza búsqueda masiva de todos los episodios faltantes."""
+    return await arr_command(session, service, {"name": "MissingEpisodeSearch"})
+
+
+async def arr_search_movie(session: aiohttp.ClientSession, service: dict, movie_id: int) -> dict:
+    """Busca una película específica en los indexadores."""
+    return await arr_command(session, service, {"name": "MoviesSearch", "movieIds": [movie_id]})
+
+
+async def arr_search_episode(session: aiohttp.ClientSession, service: dict, episode_id: int) -> dict:
+    """Busca un episodio específico en los indexadores."""
+    return await arr_command(session, service, {"name": "EpisodeSearch", "episodeIds": [episode_id]})

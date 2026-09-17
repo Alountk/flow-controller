@@ -174,3 +174,39 @@ export interface PrototypeFile {
   name: string
   file: string
 }
+
+/* ---- Wanted / Missing Content ---- */
+
+export interface WantedMovie {
+  id: number
+  title: string
+  year: number | null
+  overview: string
+  remotePoster: string
+  has_file: boolean
+}
+
+export interface WantedEpisode {
+  id: number
+  title: string
+  series_title: string
+  series_id: number | null
+  season_number: number | null
+  episode_number: number | null
+  air_date: string
+  overview: string
+  has_file: boolean
+}
+
+export interface WantedService {
+  items: (WantedMovie | WantedEpisode)[]
+  total: number
+}
+
+export interface WantedResponse {
+  wanted: {
+    radarr?: WantedService
+    sonarr?: WantedService
+  }
+  updated_at: number
+}
