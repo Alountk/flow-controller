@@ -32,7 +32,11 @@ services:
       - CHECK_INTERVAL=${CHECK_INTERVAL:-15}
       - MAX_RETRIES=${MAX_RETRIES:-3}
       - RETRY_DELAY=${RETRY_DELAY:-2}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-5}
       - IMPORT_TIMEOUT=${IMPORT_TIMEOUT:-40}
+      # Trazabilidad
+      - TRACE_LIMIT=${TRACE_LIMIT:-25}
+      - AMUTORRENT_INDEXER=${AMUTORRENT_INDEXER:-}
       # Puerto del servidor
       - PORT=${PORT:-8000}
     volumes:
