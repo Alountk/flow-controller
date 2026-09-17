@@ -613,6 +613,27 @@ body {
   margin-bottom: 14px;
 }
 
+.trace-search {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12px;
+  font-family: monospace;
+  min-width: 240px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.trace-search:focus {
+  border-color: var(--accent);
+}
+
+.trace-search::placeholder {
+  color: var(--text-dim);
+}
+
 .trace-filter {
   display: inline-flex;
   align-items: center;

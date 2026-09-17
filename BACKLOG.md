@@ -2,4 +2,4 @@
 
 ## Features pendientes
 
-- **Configurar import timeout desde UI**: Hacer que `IMPORT_POLL_TIMEOUT` (ahora 40s) sea configurable desde una pestaña de Configuración en el sidebar. Variable de entorno `IMPORT_TIMEOUT` + ajuste en UI que guarde en el backend.
+- **Configurar import timeout desde UI**: Variable de entorno `IMPORT_TIMEOUT` ya implementada. Falta añadir ajuste en UI (pestaña de Configuración en el sidebar) que guarde en el backend.

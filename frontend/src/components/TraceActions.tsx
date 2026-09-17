@@ -118,6 +118,13 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
     }
   }, [])
 
+  // Auto-dismiss action results after 4 seconds
+  useEffect(() => {
+    if (!result) return
+    const t = setTimeout(() => setResult(null), 4000)
+    return () => clearTimeout(t)
+  }, [result])
+
   async function execute(action: ActionKey, options: ActionOptions) {
     setBusy(action)
     setResult(null)

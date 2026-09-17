@@ -175,6 +175,7 @@ function TraceRow({
 
 export function TraceView({ data, loading, actions, onActionDone }: Props) {
   const [filter, setFilter] = useState<'all' | TraceStage>('all')
+  const [search, setSearch] = useState('')
 
   const traces = data?.traces ?? []
   const summary = data?.summary
@@ -186,11 +187,20 @@ export function TraceView({ data, loading, actions, onActionDone }: Props) {
   }, [actions])
 
   const filtered = useMemo(() => {
-    const list = filter === 'all' ? traces : traces.filter((t) => t.stage === filter)
+    let list = filter === 'all' ? traces : traces.filter((t) => t.stage === filter)
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter((t) =>
+        t.title.toLowerCase().includes(q) ||
+        t.download_id.toLowerCase().includes(q) ||
+        (t.indexer || '').toLowerCase().includes(q) ||
+        (t.source || '').toLowerCase().includes(q)
+      )
+    }
     return [...list].sort(
       (a, b) => STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage),
     )
-  }, [traces, filter])
+  }, [traces, filter, search])
 
   if (!data && loading) {
     return <div className="trace-empty">Cargando trazabilidad…</div>
@@ -238,6 +248,13 @@ export function TraceView({ data, loading, actions, onActionDone }: Props) {
       )}
 
       <div className="trace-filters">
+        <input
+          type="text"
+          className="trace-search"
+          placeholder="Buscar por título, ID o indexador..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         {(['all', ...STAGE_ORDER] as const).map((s) => {
           const count = s === 'all' ? traces.length : traces.filter((t) => t.stage === s).length
           return (

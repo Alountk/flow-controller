@@ -192,6 +192,10 @@ _tasks: dict[str, dict] = {}
 _TASK_TTL = 600
 
 
+# Sesión HTTP compartida para requests (se crea en lifespan, se cierra al apagar).
+_http_session: aiohttp.ClientSession | None = None
+
+
 def _cleanup_tasks():
     """Elimina tareas finalizadas que superan el TTL."""
     now = time.time()
@@ -351,6 +355,8 @@ async def background_checker() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    global _http_session
+    _http_session = aiohttp.ClientSession()
     task = asyncio.create_task(background_checker())
     try:
         yield
@@ -360,6 +366,7 @@ async def lifespan(_app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
+        await _http_session.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -1322,7 +1329,7 @@ async def _run_copy_background(task_id: str, src_path: str, dst_root: str, servi
 
 
 IMPORT_POLL_INTERVAL = 5  # segundos entre polls de verificación de import
-IMPORT_POLL_TIMEOUT = 40  # timeout máximo en segundos
+IMPORT_POLL_TIMEOUT = int(os.getenv("IMPORT_TIMEOUT", "40"))  # timeout máximo en segundos
 
 
 async def _verify_import(task_id: str, service: dict, source: str, ids: dict):
@@ -1576,6 +1583,12 @@ async def _do_action(
     return {"ok": all(s["ok"] for s in steps), "steps": steps}
 
 
+@app.get("/api/health")
+async def health():
+    """Health check endpoint para Docker/Kubernetes."""
+    return {"status": "ok"}
+
+
 @app.get("/api/actions")
 async def list_actions():
     """Catálogo de acciones disponibles y si el modo seguro está activo."""
@@ -1606,8 +1619,7 @@ async def run_action(action: str, req: ActionRequest, _key: str = Depends(verify
         }
 
     payload = req.model_dump()
-    async with aiohttp.ClientSession() as session:
-        result = await _do_action(session, action, payload)
+    result = await _do_action(_http_session, action, payload)
 
     return {
         "action": action,
