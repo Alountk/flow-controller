@@ -1515,6 +1515,169 @@ body {
   cursor: not-allowed;
 }
 
+/* ── Scan for misplaced files ──────────────────────────────────────────────── */
+
+.scan-tab {
+  margin-top: 16px;
+}
+
+.scan-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.scan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scan-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.scan-path-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.scan-current-path {
+  padding: 8px 12px;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  position: sticky;
+  top: 0;
+}
+
+.scan-folder-item {
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.scan-folder-item:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.scan-lang-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scan-lang-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.scan-lang-check input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.scan-results {
+  margin-top: 16px;
+}
+
+.scan-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.scan-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scan-match {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.scan-match:hover {
+  border-color: var(--accent);
+}
+
+.scan-match.selected {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.scan-match input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.scan-match-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-match-file {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-match-detail {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.scan-match-detail strong {
+  color: var(--ok);
+}
+
+.scan-match-score {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  font-style: italic;
+}
+
+.scan-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
 /* ── File Manager ──────────────────────────────────────────────────────────── */
 
 .fm {

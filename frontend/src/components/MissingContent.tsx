@@ -1,13 +1,237 @@
-import { useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import type { WantedMovie, WantedEpisode, WantedResponse } from '../types'
-import { searchWanted, searchWantedItem } from '../api/wanted'
+import { useRef, useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult } from '../types'
+import { searchWanted, searchWantedItem, scanForMovies } from '../api/wanted'
+import { fetchRoots, browsePath, queueAdd } from '../api/files'
 
-type Tab = 'movies' | 'episodes'
+type Tab = 'movies' | 'episodes' | 'scan'
+
+const LANG_LABELS: Record<string, string> = {
+  en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch',
+  it: 'Italiano', pt: 'Português', ja: '日本語', ko: '한국어',
+  zh: '中文', ru: 'Русский', pl: 'Polski', nl: 'Nederlands',
+  sv: 'Svenska', da: 'Dansk', no: 'Norsk', fi: 'Suomi',
+  tr: 'Türkçe', ar: 'العربية', hi: 'हिन्दी', th: 'ไทย',
+  cs: 'Čeština', el: 'Ελληνικά', hu: 'Magyar', ro: 'Română',
+  uk: 'Українська', vi: 'Tiếng Việt', id: 'Indonesia',
+}
 
 async function fetchWanted(): Promise<WantedResponse> {
   const res = await fetch('/api/wanted')
   return res.json() as Promise<WantedResponse>
+}
+
+function FileScanTab() {
+  const queryClient = useQueryClient()
+  const [selectedVolume, setSelectedVolume] = useState('')
+  const [currentPath, setCurrentPath] = useState('')
+  const [selectedLangs, setSelectedLangs] = useState<Set<string>>(new Set(['en', 'es']))
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const { data: rootsData } = useQuery({
+    queryKey: ['roots'],
+    queryFn: fetchRoots,
+  })
+
+  const roots = rootsData?.roots ?? []
+
+  const { data: browseData } = useQuery({
+    queryKey: ['scan-browse', currentPath],
+    queryFn: () => browsePath(currentPath),
+    enabled: !!currentPath,
+  })
+
+  const scan = useMutation({
+    mutationFn: () => scanForMovies('radarr', currentPath, Array.from(selectedLangs)),
+    onSuccess: (result) => {
+      setScanResult(result)
+      setSelectedFiles(new Set())
+    },
+  })
+
+  const moveQueue = useMutation({
+    mutationFn: async (matches: ScanMatch[]) => {
+      for (const m of matches) {
+        await queueAdd('move', m.file_path, `${m.movie_title} (${m.movie_year || ''})/${m.file_name}`)
+      }
+      return { ok: true }
+    },
+    onSuccess: () => {
+      setToast(`${selectedFiles.size} archivos encolados`)
+      queryClient.invalidateQueries({ queryKey: ['queue'] })
+      if (toastTimer.current) clearTimeout(toastTimer.current)
+      toastTimer.current = setTimeout(() => setToast(null), 3000)
+    },
+  })
+
+  function handleVolumeChange(volumePath: string) {
+    setSelectedVolume(volumePath)
+    setCurrentPath(volumePath)
+    setScanResult(null)
+    setSelectedFiles(new Set())
+  }
+
+  function navigateTo(p: string) {
+    setCurrentPath(p)
+  }
+
+  function toggleLang(lang: string) {
+    setSelectedLangs((prev) => {
+      const next = new Set(prev)
+      if (next.has(lang)) next.delete(lang)
+      else next.add(lang)
+      return next
+    })
+  }
+
+  function toggleFile(path: string) {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (!scanResult) return
+    if (selectedFiles.size === scanResult.matches.length) {
+      setSelectedFiles(new Set())
+    } else {
+      setSelectedFiles(new Set(scanResult.matches.map((m) => m.file_path)))
+    }
+  }
+
+  const items = browseData?.ok ? browseData.items : []
+  const selectedMatches = scanResult?.matches.filter((m) => selectedFiles.has(m.file_path)) ?? []
+
+  return (
+    <div className="scan-tab">
+      {toast && <div className="fm-toast">{toast}</div>}
+
+      <div className="scan-controls">
+        <div className="scan-row">
+          <label className="scan-label">Carpeta a escanear:</label>
+          <select
+            className="fm-volume-select"
+            value={selectedVolume}
+            onChange={(e) => handleVolumeChange(e.target.value)}
+          >
+            <option value="">Seleccionar volumen...</option>
+            {roots.map((r) => (
+              <option key={r.path} value={r.path}>{r.name}</option>
+            ))}
+          </select>
+          {currentPath && (
+            <button className="fm-nav-btn" onClick={() => {
+              const parts = currentPath.split('/')
+              if (parts.length > 2) {
+                const parent = parts.slice(0, -1).join('/') || selectedVolume
+                if (parent.length >= selectedVolume.length) navigateTo(parent)
+              }
+            }} title="Subir">⬆</button>
+          )}
+        </div>
+
+        {currentPath && (
+          <div className="scan-path-list">
+            <div className="scan-current-path">{currentPath}</div>
+            {items.filter((i) => i.is_dir).map((item) => (
+              <div
+                key={item.path}
+                className="scan-folder-item"
+                onClick={() => navigateTo(item.path)}
+              >
+                📁 {item.name}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="scan-row">
+          <label className="scan-label">Idiomas:</label>
+          <div className="scan-lang-list">
+            {['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ru'].map((lang) => (
+              <label key={lang} className="scan-lang-check">
+                <input
+                  type="checkbox"
+                  checked={selectedLangs.has(lang)}
+                  onChange={() => toggleLang(lang)}
+                />
+                {LANG_LABELS[lang] || lang}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <button
+          className="action-btn search-all"
+          onClick={() => scan.mutate()}
+          disabled={!currentPath || scan.isPending || selectedLangs.size === 0}
+        >
+          {scan.isPending ? 'Escaneando...' : '🔍 Buscar archivos desubicados'}
+        </button>
+      </div>
+
+      {scanResult && (
+        <div className="scan-results">
+          <div className="scan-summary">
+            {scanResult.detail}
+            {scanResult.matches.length > 0 && (
+              <button className="fm-action-btn" onClick={toggleAll}>
+                {selectedFiles.size === scanResult.matches.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+              </button>
+            )}
+          </div>
+
+          {scanResult.matches.length > 0 ? (
+            <div className="scan-match-list">
+              {scanResult.matches.map((m) => (
+                <div
+                  key={m.file_path}
+                  className={`scan-match ${selectedFiles.has(m.file_path) ? 'selected' : ''}`}
+                  onClick={() => toggleFile(m.file_path)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedFiles.has(m.file_path)}
+                    onChange={() => toggleFile(m.file_path)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="scan-match-info">
+                    <div className="scan-match-file">📄 {m.file_name}</div>
+                    <div className="scan-match-detail">
+                      → <strong>{m.movie_title}</strong> {m.movie_year && `(${m.movie_year})`}
+                    </div>
+                    <div className="scan-match-score">
+                      Similitud: {Math.round(m.score * 100)}% · Título: "{m.matched_title}"
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="wanted-empty">No se encontraron archivos desubicados</div>
+          )}
+
+          {selectedMatches.length > 0 && (
+            <div className="scan-actions">
+              <button
+                className="action-btn search-all"
+                onClick={() => moveQueue.mutate(selectedMatches)}
+                disabled={moveQueue.isPending}
+              >
+                {moveQueue.isPending ? 'Encolando...' : `📦 Mover ${selectedMatches.length} archivos a la cola`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function MissingContent() {
@@ -54,6 +278,12 @@ export function MissingContent() {
           >
             Episodios ({sonarrTotal})
           </button>
+          <button
+            className={`wanted-tab ${tab === 'scan' ? 'active' : ''}`}
+            onClick={() => setTab('scan')}
+          >
+            🔍 Buscar Archivos
+          </button>
         </div>
       </div>
 
@@ -61,7 +291,9 @@ export function MissingContent() {
         <div className="wanted-search-result">{searchResult}</div>
       )}
 
-      {isPending ? (
+      {tab === 'scan' ? (
+        <FileScanTab />
+      ) : isPending ? (
         <div className="wanted-loading">Cargando...</div>
       ) : tab === 'movies' ? (
         <div className="wanted-content">

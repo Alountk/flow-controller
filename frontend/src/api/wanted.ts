@@ -1,4 +1,4 @@
-import type { ActionResult } from '../types'
+import type { ActionResult, ScanResult } from '../types'
 import { authHeaders } from './auth'
 
 async function handleResponse(res: Response): Promise<ActionResult> {
@@ -29,4 +29,26 @@ export async function searchWantedItem(
     body: JSON.stringify({ source, ids }),
   })
   return handleResponse(res)
+}
+
+export async function scanForMovies(
+  source: string,
+  folderPath: string,
+  languages: string[],
+): Promise<ScanResult> {
+  const res = await fetch('/api/wanted/scan', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      source,
+      remote_path: folderPath,
+      local_path: languages.join(','),
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    return { ok: false, matches: [], scanned_files: 0, detail: msg }
+  }
+  return (await res.json()) as ScanResult
 }

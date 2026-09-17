@@ -185,6 +185,7 @@ export interface WantedMovie {
   overview: string
   remotePoster: string
   has_file: boolean
+  altTitles: string[]
 }
 
 export interface WantedEpisode {
@@ -210,6 +211,26 @@ export interface WantedResponse {
     sonarr?: WantedService
   }
   updated_at: number
+}
+
+/* ---- Scan for misplaced files ---- */
+
+export interface ScanMatch {
+  file_path: string
+  file_name: string
+  movie_id: number
+  movie_title: string
+  movie_year: number | null
+  score: number
+  matched_title: string
+}
+
+export interface ScanResult {
+  ok: boolean
+  matches: ScanMatch[]
+  scanned_files: number
+  total_wanted?: number
+  detail?: string
 }
 
 /* ---- File Manager ---- */

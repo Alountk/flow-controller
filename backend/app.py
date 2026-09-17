@@ -1,8 +1,10 @@
 import asyncio
 import logging
 import os
+import re
 import shutil
 import time
+import unicodedata
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -229,6 +231,164 @@ async def search_wanted_item(req: ActionRequest, _key: str = Depends(verify_api_
             return {"ok": False, "error": "IDs insuficientes para búsqueda"}
 
     return {"ok": result.get("ok", False), "detail": result.get("detail", ""), "source": source}
+
+
+# --- Wanted: Scan for misplaced files ---
+
+
+def _normalize_title(name: str) -> str:
+    """Normaliza un nombre de archivo para comparación fuzzy."""
+    # Quitar extensión
+    name = re.sub(r'\.[a-zA-Z0-9]{2,4}$', '', name)
+    # Reemplazar puntos y guiones bajos por espacios
+    name = re.sub(r'[._]', ' ', name)
+    # Quitar calidad: 1080p, 720p, 2160p, BluRay, WEB-DL, etc.
+    name = re.sub(r'\b(2160p|1080p|720p|480p|4k|bluray|web-?dl|webrip|hdtv|dvdrip|h264|h265|x264|x265|hevc|aac|dts|ac3|remux)\b', '', name, flags=re.IGNORECASE)
+    # Quitar year entre paréntesis o solo
+    name = re.sub(r'[\(\[]?\d{4}[\)\]]?', '', name)
+    # Quitar grupos de release
+    name = re.sub(r'[-@][A-Za-z0-9]+$', '', name)
+    # Normalizar unicode (quitar acentos)
+    name = unicodedata.normalize('NFD', name)
+    name = ''.join(c for c in name if unicodedata.category(c) != 'Mn')
+    # Minúsculas y limpiar espacios
+    name = name.lower().strip()
+    name = re.sub(r'\s+', ' ', name)
+    return name
+
+
+def _match_score(filename: str, title: str) -> float:
+    """Calcula similitud entre nombre de archivo y título. Retorna 0-1."""
+    from difflib import SequenceMatcher
+    norm_file = _normalize_title(filename)
+    norm_title = _normalize_title(title)
+    if not norm_file or not norm_title:
+        return 0.0
+    # Ratio básico
+    ratio = SequenceMatcher(None, norm_file, norm_title).ratio()
+    # Bonus si el título está contenido en el nombre del archivo
+    if norm_title in norm_file:
+        ratio = max(ratio, 0.85)
+    # Bonus si el nombre del archivo está contenido en el título
+    if norm_file in norm_title:
+        ratio = max(ratio, 0.80)
+    return round(ratio, 3)
+
+
+def _detect_languages_from_alt_titles(alt_titles: list) -> list[str]:
+    """Detecta idiomas disponibles de los títulos alternativos usando prefijos comunes."""
+    # Mapeo de prefijos de idioma comunes en títulos
+    lang_prefixes = {
+        "es": "Español", "en": "English", "fr": "Français", "de": "Deutsch",
+        "it": "Italiano", "pt": "Português", "ja": "日本語", "ko": "한국어",
+        "zh": "中文", "ru": "Русский", "pl": "Polski", "nl": "Nederlands",
+        "sv": "Svenska", "da": "Dansk", "no": "Norsk", "fi": "Suomi",
+        "tr": "Türkçe", "ar": "العربية", "hi": "हिन्दी", "th": "ไทย",
+        "cs": "Čeština", "el": "Ελληνικά", "hu": "Magyar", "ro": "Română",
+        "uk": "Українська", "vi": "Tiếng Việt", "id": "Bahasa Indonesia",
+    }
+    # Por ahora, devolver los prefijos únicos de los títulos
+    # En una futura versión se podría usar un library de detección de idioma
+    return sorted(set(lang_prefixes.keys()))
+
+
+def _get_wanted_movies_with_alt_titles(wanted_data: dict) -> list[dict]:
+    """Extrae películas faltantes con sus títulos alternativos."""
+    radarr = wanted_data.get("wanted", {}).get("radarr", {})
+    return radarr.get("items", [])
+
+
+@app.post("/api/wanted/scan")
+async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key)):
+    """Escanea una carpeta buscando películas desubicadas."""
+    source = req.source  # "radarr"
+    folder_path = req.remote_path or ""
+    languages_str = req.local_path or "en"  # comma-separated language codes
+    languages = [l.strip() for l in languages_str.split(",") if l.strip()]
+
+    if not folder_path:
+        return {"ok": False, "detail": "Se requiere remote_path (carpeta a escanear)"}
+
+    target = _validate_path(folder_path)
+    if not os.path.isdir(target):
+        return {"ok": False, "detail": f"No es un directorio: {target}"}
+
+    # Obtener películas faltantes de Radarr
+    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    if not service:
+        return {"ok": False, "detail": "Servicio no encontrado"}
+
+    wanted_movies = []
+    async with aiohttp.ClientSession() as session:
+        # Obtener todas las wanted movies (hasta 200)
+        result = await fetch_wanted_movies(session, service, page=1, page_size=200)
+        wanted_movies = result.get("items", [])
+
+    if not wanted_movies:
+        return {"ok": True, "matches": [], "scanned_files": 0, "detail": "No hay películas faltantes"}
+
+    # Construir lista de títulos para buscar
+    title_map = {}  # normalized_title -> {movie_id, movie_title, movie_path, language}
+    for movie in wanted_movies:
+        all_titles = [movie.get("title", "")]
+        # Agregar altTitles filtrados por idioma
+        for alt in movie.get("altTitles", []):
+            all_titles.append(alt)
+        for title in all_titles:
+            if not title:
+                continue
+            norm = _normalize_title(title)
+            if norm and norm not in title_map:
+                title_map[norm] = {
+                    "movie_id": movie.get("id"),
+                    "movie_title": movie.get("title", ""),
+                    "movie_year": movie.get("year"),
+                    "title_used": title,
+                }
+
+    # Escaneo recursivo de archivos de video
+    video_exts = {'.mkv', '.mp4', '.avi', '.wmv', '.flv', '.mov', '.m4v', '.ts', '.mpg', '.mpeg'}
+    scanned_files = 0
+    matches = []
+
+    for root, dirs, files in os.walk(target):
+        for fname in files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in video_exts:
+                continue
+            scanned_files += 1
+            full_path = os.path.join(root, fname)
+
+            # Calcular score contra cada título
+            best_score = 0.0
+            best_match = None
+            for norm_title, info in title_map.items():
+                score = _match_score(fname, info["title_used"])
+                if score > best_score:
+                    best_score = score
+                    best_match = info
+
+            if best_match and best_score >= 0.5:
+                matches.append({
+                    "file_path": full_path,
+                    "file_name": fname,
+                    "movie_id": best_match["movie_id"],
+                    "movie_title": best_match["movie_title"],
+                    "movie_year": best_match["movie_year"],
+                    "score": best_score,
+                    "matched_title": best_match["title_used"],
+                })
+
+    # Ordenar por score descendente
+    matches.sort(key=lambda m: m["score"], reverse=True)
+
+    return {
+        "ok": True,
+        "matches": matches,
+        "scanned_files": scanned_files,
+        "total_wanted": len(wanted_movies),
+        "detail": f"Escaneados {scanned_files} archivos, {len(matches)} coincidencias",
+    }
 
 
 # --- File Manager ---

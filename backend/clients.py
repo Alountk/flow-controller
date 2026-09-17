@@ -655,6 +655,10 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
                     "overview": m.get("overview", ""),
                     "remotePoster": m.get("remotePoster", ""),
                     "has_file": m.get("hasFile", False),
+                    "altTitles": [
+                        alt.get("title", "") if isinstance(alt, dict) else str(alt)
+                        for alt in (m.get("altTitles") or [])
+                    ],
                 }
                 for m in data.get("records", [])
             ]
@@ -695,6 +699,7 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
                     "air_date": ep.get("airDateUtc", ""),
                     "overview": ep.get("overview", ""),
                     "has_file": ep.get("hasFile", False),
+                    "alternateTitles": (ep.get("series") or {}).get("alternateTitles", []),
                 }
                 for ep in data.get("records", [])
             ]
