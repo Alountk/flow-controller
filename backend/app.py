@@ -1,8 +1,10 @@
 import asyncio
 import logging
 import os
+import shutil
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import aiohttp
 from fastapi import FastAPI, Header, HTTPException, Depends
@@ -227,6 +229,107 @@ async def search_wanted_item(req: ActionRequest, _key: str = Depends(verify_api_
             return {"ok": False, "error": "IDs insuficientes para búsqueda"}
 
     return {"ok": result.get("ok", False), "detail": result.get("detail", ""), "source": source}
+
+
+# --- File Manager ---
+
+ALLOWED_ROOTS = ["/mnt/storage", "/mnt/storage-6tb"]
+
+
+def _validate_path(path: str) -> str:
+    """Valida que la ruta esté dentro de los volúmenes permitidos."""
+    resolved = os.path.realpath(path)
+    for root in ALLOWED_ROOTS:
+        if resolved == root or resolved.startswith(root + "/"):
+            return resolved
+    raise HTTPException(status_code=403, detail=f"Ruta no permitida: {path}")
+
+
+def _file_entry(p: Path) -> dict:
+    """Construye la información de un archivo/directorio."""
+    stat = p.stat()
+    is_dir = p.is_dir()
+    return {
+        "name": p.name,
+        "path": str(p),
+        "is_dir": is_dir,
+        "size": 0 if is_dir else stat.st_size,
+        "modified": int(stat.st_mtime),
+    }
+
+
+@app.get("/api/files/roots")
+async def file_roots():
+    """Devuelve las raíces de navegación disponibles."""
+    roots = []
+    for root in ALLOWED_ROOTS:
+        if os.path.isdir(root):
+            roots.append({"path": root, "name": os.path.basename(root) or root})
+    return {"roots": roots}
+
+
+@app.get("/api/files/browse")
+async def file_browse(path: str = "/"):
+    """Lista el contenido de un directorio."""
+    target = _validate_path(path)
+    if not os.path.isdir(target):
+        return {"ok": False, "error": "No es un directorio", "items": [], "path": target}
+    try:
+        entries = sorted(Path(target).iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        items = [_file_entry(p) for p in entries]
+        return {"ok": True, "items": items, "path": target}
+    except PermissionError:
+        return {"ok": False, "error": "Sin permisos de lectura", "items": [], "path": target}
+
+
+@app.post("/api/files/mkdir")
+async def file_mkdir(req: ActionRequest):
+    """Crea un directorio."""
+    target = _validate_path(req.remote_path or "")
+    try:
+        Path(target).mkdir(parents=True, exist_ok=True)
+        return {"ok": True, "detail": f"Directorio creado: {target}"}
+    except Exception as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+@app.post("/api/files/rename")
+async def file_rename(req: ActionRequest):
+    """Renombra un archivo o directorio."""
+    src = _validate_path(req.remote_path or "")
+    dst = _validate_path(req.local_path or "")
+    try:
+        os.rename(src, dst)
+        return {"ok": True, "detail": f"Renombrado: {Path(src).name} → {Path(dst).name}"}
+    except Exception as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+@app.post("/api/files/move")
+async def file_move(req: ActionRequest):
+    """Mueve un archivo o directorio."""
+    src = _validate_path(req.remote_path or "")
+    dst = _validate_path(req.local_path or "")
+    try:
+        shutil.move(src, dst)
+        return {"ok": True, "detail": f"Movido: {Path(src).name} → {dst}"}
+    except Exception as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+@app.post("/api/files/delete")
+async def file_delete(req: ActionRequest):
+    """Elimina un archivo o directorio."""
+    target = _validate_path(req.remote_path or "")
+    try:
+        p = Path(target)
+        if p.is_dir():
+            shutil.rmtree(p)
+        else:
+            p.unlink()
+        return {"ok": True, "detail": f"Eliminado: {p.name}"}
+    except Exception as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
 
 @app.get("/api/actions")

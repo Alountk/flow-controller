@@ -5,6 +5,7 @@ import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
 import { TraceView } from './components/TraceView'
 import { MissingContent } from './components/MissingContent'
+import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
 import {
   parseStatus,
@@ -26,6 +27,7 @@ const PAGE_TITLES: Record<Page, string> = {
   dashboard: 'Dashboard',
   trace: 'Trazabilidad',
   wanted: 'Faltantes',
+  files: 'Archivos',
   prototypes: 'Prototipos',
 }
 
@@ -168,6 +170,10 @@ function App() {
 
           {page === 'wanted' && (
             <MissingContent />
+          )}
+
+          {page === 'files' && (
+            <FileManager />
           )}
 
           {page === 'prototypes' && <Prototypes />}

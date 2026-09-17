@@ -210,3 +210,24 @@ export interface WantedResponse {
   }
   updated_at: number
 }
+
+/* ---- File Manager ---- */
+
+export interface FileItem {
+  name: string
+  path: string
+  is_dir: boolean
+  size: number
+  modified: number
+}
+
+export interface BrowseResponse {
+  ok: boolean
+  items: FileItem[]
+  path: string
+  error?: string
+}
+
+export interface RootsResponse {
+  roots: { path: string; name: string }[]
+}
