@@ -13,7 +13,9 @@ os.environ.setdefault("RADARR_URL", "http://localhost:7878")
 os.environ.setdefault("SONARR_URL", "http://localhost:8989")
 os.environ.setdefault("AMUTORRENT_URL", "http://localhost:4000")
 
-from app import _host_path, _resolve_current_path, _copy_files_to_root, _VOLUME_MAP, _tasks, CopyCancelled
+from traces import host_path as _host_path, resolve_current_path as _resolve_current_path
+from config import _VOLUME_MAP
+from copy_engine import copy_files_to_root as _copy_files_to_root, _tasks, CopyCancelled
 
 
 # ── _host_path ──────────────────────────────────────────────────────────────
@@ -254,3 +256,100 @@ class TestVolumeMap:
         idx_incoming = next(i for i, (p, _) in enumerate(_VOLUME_MAP) if p == "/downloads/incoming/")
         idx_downloads = next(i for i, (p, _) in enumerate(_VOLUME_MAP) if p == "/downloads/")
         assert idx_incoming < idx_downloads, "El mapeo /downloads/incoming/ debe ir antes que /downloads/"
+
+
+# ── API endpoint tests ────────────────────────────────────────────────────────
+
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app, raise_server_exceptions=False)
+
+
+class TestHealthEndpoint:
+    def test_health_returns_ok(self):
+        resp = client.get("/api/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+
+class TestConfigEndpoint:
+    def test_config_developer_default(self):
+        resp = client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "developer" in data
+
+
+class TestActionsEndpoint:
+    def test_list_actions(self):
+        resp = client.get("/api/actions")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "actions" in data
+        assert "safe_mode" in data
+        assert isinstance(data["actions"], list)
+        assert len(data["actions"]) > 0
+
+    def test_action_has_required_fields(self):
+        resp = client.get("/api/actions")
+        data = resp.json()
+        for action in data["actions"]:
+            assert "key" in action
+            assert "label" in action
+            assert "destructive" in action
+            assert "scope" in action
+
+
+class TestStatusEndpoint:
+    def test_status_returns_cache(self):
+        resp = client.get("/api/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "radarr" in data
+        assert "sonarr" in data
+        assert "amutorrent" in data
+        assert "flow" in data
+
+
+class TestTasksEndpoint:
+    def test_get_nonexistent_task(self):
+        resp = client.get("/api/tasks/nonexistent-id")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "no encontrada" in data["error"]
+
+    def test_cancel_nonexistent_task(self):
+        resp = client.post("/api/tasks/nonexistent-id/cancel")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+
+
+class TestRunActionValidation:
+    def test_unknown_action(self):
+        resp = client.post(
+            "/api/actions/unknown_action",
+            json={"source": "radarr"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "desconocida" in data["error"]
+
+
+class TestSpaFallback:
+    def test_root_returns_index(self):
+        resp = client.get("/")
+        assert resp.status_code == 200
+
+    def test_api_unknown_returns_not_found(self):
+        resp = client.get("/api/nonexistent")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["detail"] == "Not Found"
+
+    def test_prototypes_unknown_returns_not_found(self):
+        resp = client.get("/prototypes/nonexistent")
+        assert resp.status_code in (200, 404)

@@ -19,7 +19,7 @@ desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 ## Instalación
 
 ```bash
-git clone https://github.com/TU_USUARIO/flow-controller.git
+git clone https://github.com/Alountk/flow-controller.git
 cd flow-controller
 ```
 
@@ -99,9 +99,14 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 ```
 flow-controller/
 ├── backend/
-│   ├── app.py              # FastAPI: status, trace, actions, WS client
+│   ├── config.py           # Environment variables, constants, action catalog
+│   ├── clients.py          # API clients: Radarr, Sonarr, aMuTorrent (WS + REST)
+│   ├── traces.py           # Trace building: path resolution, stage derivation
+│   ├── copy_engine.py      # File copy with progress, cancellation, import verification
+│   ├── app.py              # FastAPI app, lifespan, routes, static files
+│   ├── tests.py            # 36 tests (unit + API endpoint)
 │   ├── requirements.txt
-│   ├── .env.example        # template de variables de entorno
+│   ├── .env.example
 │   └── run_local.sh
 └── frontend/
     └── src/
@@ -109,10 +114,11 @@ flow-controller/
         ├── types.ts
         ├── api/actions.ts
         ├── components/
-        │   ├── PipelineVisual.tsx   # vista visual del pipeline
-        │   ├── ServiceNode.tsx      # nodo de servicio
-        │   ├── TraceView.tsx        # lista de trazas
-        │   └── TraceActions.tsx     # botones de acción por traza
+        │   ├── ErrorBoundary.tsx
+        │   ├── PipelineVisual.tsx
+        │   ├── ServiceNode.tsx
+        │   ├── TraceView.tsx
+        │   └── TraceActions.tsx
         └── hooks/usePolling.ts
 ```
 

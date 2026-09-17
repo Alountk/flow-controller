@@ -1213,3 +1213,85 @@ body {
   border-radius: 4px;
   font-size: 12px;
 }
+
+/* ── Mobile responsive ─────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .topbar {
+    display: flex;
+  }
+
+  .sidebar.open {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 240px;
+    height: 100vh;
+    z-index: 1000;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+  }
+
+  .trace-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .trace-table {
+    min-width: 700px;
+  }
+
+  .trace-filters {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+
+  .trace-search {
+    min-width: 180px;
+    width: 100%;
+  }
+
+  .trace-row-main {
+    font-size: 12px;
+  }
+
+  .summary {
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .summary-box {
+    flex: 1 1 40%;
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .summary-box strong {
+    font-size: 18px;
+  }
+
+  .detail-panel {
+    padding: 12px;
+    font-size: 12px;
+  }
+
+  .action-bar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .action-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+}
