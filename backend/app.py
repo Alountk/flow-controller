@@ -300,11 +300,14 @@ def _get_wanted_movies_with_alt_titles(wanted_data: dict) -> list[dict]:
 
 @app.post("/api/wanted/scan")
 async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key)):
-    """Escanea una carpeta buscando películas desubicadas."""
-    source = req.source  # "radarr"
+    """Escanea una carpeta buscando una película o serie específica desubicada."""
+    source = req.source  # "radarr" o "sonarr"
     folder_path = req.remote_path or ""
-    languages_str = req.local_path or "en"  # comma-separated language codes
+    languages_str = req.local_path or "en"
     languages = [l.strip() for l in languages_str.split(",") if l.strip()]
+    ids = req.ids or {}
+    movie_id = ids.get("movie_id")
+    series_id = ids.get("series_id")
 
     if not folder_path:
         return {"ok": False, "detail": "Se requiere remote_path (carpeta a escanear)"}
@@ -313,38 +316,70 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
     if not os.path.isdir(target):
         return {"ok": False, "detail": f"No es un directorio: {target}"}
 
-    # Obtener películas faltantes de Radarr
     service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
     if not service:
         return {"ok": False, "detail": "Servicio no encontrado"}
 
-    wanted_movies = []
-    async with aiohttp.ClientSession() as session:
-        # Obtener todas las wanted movies (hasta 200)
-        result = await fetch_wanted_movies(session, service, page=1, page_size=200)
-        wanted_movies = result.get("items", [])
+    # Modo selectivo: buscar solo un item específico
+    if movie_id or series_id:
+        async with aiohttp.ClientSession() as session:
+            if movie_id:
+                meta = await arr_movie_metadata(session, service, int(movie_id))
+                if not meta:
+                    return {"ok": False, "detail": "Película no encontrada"}
+                item_title = meta.get("title", "")
+                item_year = meta.get("year")
+                all_titles = [item_title] + [t for t in meta.get("altTitles", []) if t]
+            elif series_id:
+                meta = await arr_series_metadata(session, service, int(series_id))
+                if not meta:
+                    return {"ok": False, "detail": "Serie no encontrada"}
+                item_title = meta.get("title", "")
+                item_year = None
+                all_titles = [item_title] + [t for t in meta.get("alternateTitles", []) if t]
+            else:
+                return {"ok": False, "detail": "IDs insuficientes"}
 
-    if not wanted_movies:
-        return {"ok": True, "matches": [], "scanned_files": 0, "detail": "No hay películas faltantes"}
-
-    # Construir lista de títulos para buscar
-    title_map = {}  # normalized_title -> {movie_id, movie_title, movie_path, language}
-    for movie in wanted_movies:
-        all_titles = [movie.get("title", "")]
-        # Agregar altTitles filtrados por idioma
-        for alt in movie.get("altTitles", []):
-            all_titles.append(alt)
+        # Construir title_map con un solo item
+        title_map = {}
         for title in all_titles:
             if not title:
                 continue
             norm = _normalize_title(title)
             if norm and norm not in title_map:
                 title_map[norm] = {
-                    "movie_id": movie.get("id"),
-                    "movie_title": movie.get("title", ""),
-                    "movie_year": movie.get("year"),
+                    "movie_id": movie_id or series_id,
+                    "movie_title": item_title,
+                    "movie_year": item_year,
                     "title_used": title,
                 }
+    else:
+        # Modo legacy: buscar contra todas las wanted movies
+        async with aiohttp.ClientSession() as session:
+            result = await fetch_wanted_movies(session, service, page=1, page_size=200)
+            wanted_movies = result.get("items", [])
+
+        if not wanted_movies:
+            return {"ok": True, "matches": [], "scanned_files": 0, "detail": "No hay películas faltantes"}
+
+        title_map = {}
+        for movie in wanted_movies:
+            all_titles = [movie.get("title", "")]
+            for alt in movie.get("altTitles", []):
+                all_titles.append(alt)
+            for title in all_titles:
+                if not title:
+                    continue
+                norm = _normalize_title(title)
+                if norm and norm not in title_map:
+                    title_map[norm] = {
+                        "movie_id": movie.get("id"),
+                        "movie_title": movie.get("title", ""),
+                        "movie_year": movie.get("year"),
+                        "title_used": title,
+                    }
+        item_title = f"{len(wanted_movies)} películas faltantes"
+        item_year = None
 
     # Escaneo recursivo de archivos de video
     video_exts = {'.mkv', '.mp4', '.avi', '.wmv', '.flv', '.mov', '.m4v', '.ts', '.mpg', '.mpeg'}
@@ -359,7 +394,6 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
             scanned_files += 1
             full_path = os.path.join(root, fname)
 
-            # Calcular score contra cada título
             best_score = 0.0
             best_match = None
             for norm_title, info in title_map.items():
@@ -379,15 +413,14 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                     "matched_title": best_match["title_used"],
                 })
 
-    # Ordenar por score descendente
     matches.sort(key=lambda m: m["score"], reverse=True)
 
     return {
         "ok": True,
         "matches": matches,
         "scanned_files": scanned_files,
-        "total_wanted": len(wanted_movies),
-        "detail": f"Escaneados {scanned_files} archivos, {len(matches)} coincidencias",
+        "item_title": item_title,
+        "detail": f"Escaneados {scanned_files} archivos contra \"{item_title}\", {len(matches)} coincidencias",
     }
 
 

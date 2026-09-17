@@ -35,19 +35,25 @@ export async function scanForMovies(
   source: string,
   folderPath: string,
   languages: string[],
+  movieId?: number,
+  seriesId?: number,
 ): Promise<ScanResult> {
+  const body: Record<string, unknown> = {
+    source,
+    remote_path: folderPath,
+    local_path: languages.join(','),
+  }
+  if (movieId) body.ids = { movie_id: movieId }
+  if (seriesId) body.ids = { series_id: seriesId }
+
   const res = await fetch('/api/wanted/scan', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({
-      source,
-      remote_path: folderPath,
-      local_path: languages.join(','),
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>
-    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    const resp = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof resp.detail === 'string' ? resp.detail : null) || `HTTP ${res.status}`
     return { ok: false, matches: [], scanned_files: 0, detail: msg }
   }
   return (await res.json()) as ScanResult

@@ -415,7 +415,7 @@ async def arr_episode_metadata(
 async def arr_series_metadata(
     session: aiohttp.ClientSession, service: dict, series_id: int
 ) -> dict:
-    """Devuelve título y path de una serie."""
+    """Devuelve título, path y títulos alternativos de una serie."""
     headers = arr_headers(service["api_key"])
     try:
         async with session.get(
@@ -429,6 +429,7 @@ async def arr_series_metadata(
             return {
                 "title": data.get("title", ""),
                 "path": data.get("path", ""),
+                "alternateTitles": data.get("alternateTitles", []),
             }
     except (asyncio.TimeoutError, aiohttp.ClientError):
         return {}
@@ -437,7 +438,7 @@ async def arr_series_metadata(
 async def arr_movie_metadata(
     session: aiohttp.ClientSession, service: dict, movie_id: int
 ) -> dict:
-    """Devuelve título, año y calidad de una película."""
+    """Devuelve título, año, calidad y títulos alternativos de una película."""
     headers = arr_headers(service["api_key"])
     try:
         async with session.get(
@@ -452,11 +453,16 @@ async def arr_movie_metadata(
             mf = data.get("movieFile") or {}
             q = (mf.get("quality") or {}).get("quality") or {}
             quality = q.get("name", "")
+            alt_titles = [
+                alt.get("title", "") if isinstance(alt, dict) else str(alt)
+                for alt in (data.get("altTitles") or [])
+            ]
             return {
                 "title": data.get("title", ""),
                 "year": data.get("year"),
                 "quality": quality,
                 "path": data.get("path", ""),
+                "altTitles": alt_titles,
             }
     except (asyncio.TimeoutError, aiohttp.ClientError):
         return {}

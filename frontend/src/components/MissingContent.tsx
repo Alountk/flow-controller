@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult } from '../types'
 import { searchWanted, searchWantedItem, scanForMovies } from '../api/wanted'
@@ -6,14 +6,11 @@ import { fetchRoots, browsePath, queueAdd } from '../api/files'
 
 type Tab = 'movies' | 'episodes' | 'scan'
 
-const LANG_LABELS: Record<string, string> = {
-  en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch',
-  it: 'Italiano', pt: 'Português', ja: '日本語', ko: '한국어',
-  zh: '中文', ru: 'Русский', pl: 'Polski', nl: 'Nederlands',
-  sv: 'Svenska', da: 'Dansk', no: 'Norsk', fi: 'Suomi',
-  tr: 'Türkçe', ar: 'العربية', hi: 'हिन्दी', th: 'ไทย',
-  cs: 'Čeština', el: 'Ελληνικά', hu: 'Magyar', ro: 'Română',
-  uk: 'Українська', vi: 'Tiếng Việt', id: 'Indonesia',
+interface ScanItem {
+  type: 'movie' | 'series'
+  id: number
+  title: string
+  source: string
 }
 
 async function fetchWanted(): Promise<WantedResponse> {
@@ -21,7 +18,7 @@ async function fetchWanted(): Promise<WantedResponse> {
   return res.json() as Promise<WantedResponse>
 }
 
-function FileScanTab() {
+function FileScanTab({ item, onClear }: { item: ScanItem; onClear: () => void }) {
   const queryClient = useQueryClient()
   const [selectedVolume, setSelectedVolume] = useState('')
   const [currentPath, setCurrentPath] = useState('')
@@ -44,8 +41,19 @@ function FileScanTab() {
     enabled: !!currentPath,
   })
 
+  useEffect(() => {
+    setScanResult(null)
+    setSelectedFiles(new Set())
+  }, [item])
+
   const scan = useMutation({
-    mutationFn: () => scanForMovies('radarr', currentPath, Array.from(selectedLangs)),
+    mutationFn: () => scanForMovies(
+      item.source,
+      currentPath,
+      Array.from(selectedLangs),
+      item.type === 'movie' ? item.id : undefined,
+      item.type === 'series' ? item.id : undefined,
+    ),
     onSuccess: (result) => {
       setScanResult(result)
       setSelectedFiles(new Set())
@@ -112,6 +120,14 @@ function FileScanTab() {
     <div className="scan-tab">
       {toast && <div className="fm-toast">{toast}</div>}
 
+      <div className="scan-selected-item">
+        <div className="scan-selected-info">
+          <span className="scan-selected-type">{item.type === 'movie' ? '🎬 Película' : '📺 Serie'}:</span>
+          <strong>{item.title}</strong>
+        </div>
+        <button className="scan-clear-btn" onClick={onClear}>×</button>
+      </div>
+
       <div className="scan-controls">
         <div className="scan-row">
           <label className="scan-label">Carpeta a escanear:</label>
@@ -139,13 +155,13 @@ function FileScanTab() {
         {currentPath && (
           <div className="scan-path-list">
             <div className="scan-current-path">{currentPath}</div>
-            {items.filter((i) => i.is_dir).map((item) => (
+            {items.filter((i) => i.is_dir).map((dirItem) => (
               <div
-                key={item.path}
+                key={dirItem.path}
                 className="scan-folder-item"
-                onClick={() => navigateTo(item.path)}
+                onClick={() => navigateTo(dirItem.path)}
               >
-                📁 {item.name}
+                📁 {dirItem.name}
               </div>
             ))}
           </div>
@@ -161,7 +177,7 @@ function FileScanTab() {
                   checked={selectedLangs.has(lang)}
                   onChange={() => toggleLang(lang)}
                 />
-                {LANG_LABELS[lang] || lang}
+                {lang}
               </label>
             ))}
           </div>
@@ -172,7 +188,7 @@ function FileScanTab() {
           onClick={() => scan.mutate()}
           disabled={!currentPath || scan.isPending || selectedLangs.size === 0}
         >
-          {scan.isPending ? 'Escaneando...' : '🔍 Buscar archivos desubicados'}
+          {scan.isPending ? 'Escaneando...' : `🔍 Buscar "${item.title}" en esta carpeta`}
         </button>
       </div>
 
@@ -203,9 +219,6 @@ function FileScanTab() {
                   />
                   <div className="scan-match-info">
                     <div className="scan-match-file">📄 {m.file_name}</div>
-                    <div className="scan-match-detail">
-                      → <strong>{m.movie_title}</strong> {m.movie_year && `(${m.movie_year})`}
-                    </div>
                     <div className="scan-match-score">
                       Similitud: {Math.round(m.score * 100)}% · Título: "{m.matched_title}"
                     </div>
@@ -214,7 +227,7 @@ function FileScanTab() {
               ))}
             </div>
           ) : (
-            <div className="wanted-empty">No se encontraron archivos desubicados</div>
+            <div className="wanted-empty">No se encontraron archivos para "{item.title}"</div>
           )}
 
           {selectedMatches.length > 0 && (
@@ -237,6 +250,7 @@ function FileScanTab() {
 export function MissingContent() {
   const [tab, setTab] = useState<Tab>('movies')
   const [searchResult, setSearchResult] = useState<string | null>(null)
+  const [scanItem, setScanItem] = useState<ScanItem | null>(null)
 
   const { data, isPending } = useQuery({
     queryKey: ['wanted'],
@@ -255,6 +269,22 @@ export function MissingContent() {
     mutationFn: ({ source, ids }: { source: 'radarr' | 'sonarr'; ids: Record<string, number | null> }) =>
       searchWantedItem(source, ids),
   })
+
+  function handleScanForMovie(movie: WantedMovie) {
+    setScanItem({ type: 'movie', id: movie.id, title: movie.title, source: 'radarr' })
+    setTab('scan')
+  }
+
+  function handleScanForSeries(seriesTitle: string, seriesId: number | null) {
+    if (!seriesId) return
+    setScanItem({ type: 'series', id: seriesId, title: seriesTitle, source: 'sonarr' })
+    setTab('scan')
+  }
+
+  function clearScanItem() {
+    setScanItem(null)
+    setTab('movies')
+  }
 
   const radarrMovies = data?.wanted?.radarr?.items as WantedMovie[] | undefined
   const sonarrEpisodes = data?.wanted?.sonarr?.items as WantedEpisode[] | undefined
@@ -292,7 +322,15 @@ export function MissingContent() {
       )}
 
       {tab === 'scan' ? (
-        <FileScanTab />
+        scanItem ? (
+          <FileScanTab item={scanItem} onClear={clearScanItem} />
+        ) : (
+          <div className="scan-empty-state">
+            <p>Selecciona una película o serie de las pestañas anteriores y haz clic en "🔍 Buscar en carpeta".</p>
+            <button className="action-btn" onClick={() => setTab('movies')}>Ver películas</button>
+            <button className="action-btn" onClick={() => setTab('episodes')}>Ver episodios</button>
+          </div>
+        )
       ) : isPending ? (
         <div className="wanted-loading">Cargando...</div>
       ) : tab === 'movies' ? (
@@ -320,13 +358,21 @@ export function MissingContent() {
                     {movie.overview && (
                       <div className="wanted-overview">{movie.overview.slice(0, 120)}...</div>
                     )}
-                    <button
-                      className="action-btn search-item"
-                      onClick={() => searchItem.mutate({ source: 'radarr', ids: { movie_id: movie.id } })}
-                      disabled={searchItem.isPending}
-                    >
-                      🔍 Buscar
-                    </button>
+                    <div className="wanted-card-actions">
+                      <button
+                        className="action-btn search-item"
+                        onClick={() => searchItem.mutate({ source: 'radarr', ids: { movie_id: movie.id } })}
+                        disabled={searchItem.isPending}
+                      >
+                        🔍 Buscar
+                      </button>
+                      <button
+                        className="action-btn scan-folder-btn"
+                        onClick={() => handleScanForMovie(movie)}
+                      >
+                        📁 En carpeta
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -358,13 +404,22 @@ export function MissingContent() {
                     <span className="wanted-ep-title">{ep.title}</span>
                     {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
                   </div>
-                  <button
-                    className="action-btn search-item"
-                    onClick={() => searchItem.mutate({ source: 'sonarr', ids: { episode_id: ep.id, series_id: ep.series_id } })}
-                    disabled={searchItem.isPending}
-                  >
-                    🔍
-                  </button>
+                  <div className="wanted-row-actions">
+                    <button
+                      className="action-btn search-item"
+                      onClick={() => searchItem.mutate({ source: 'sonarr', ids: { episode_id: ep.id, series_id: ep.series_id } })}
+                      disabled={searchItem.isPending}
+                    >
+                      🔍
+                    </button>
+                    <button
+                      className="action-btn scan-folder-btn"
+                      title="Buscar en carpeta"
+                      onClick={() => handleScanForSeries(ep.series_title, ep.series_id)}
+                    >
+                      📁
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
