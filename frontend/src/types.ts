@@ -168,6 +168,7 @@ export const STAGE_LABELS: Record<TraceStage, string> = {
 
 export interface ConfigResponse {
   developer: boolean
+  api_key: string
 }
 
 export interface PrototypeFile {

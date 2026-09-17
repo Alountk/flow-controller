@@ -1,6 +1,5 @@
 import type { ActionResult, ActionKey, Trace } from '../types'
-
-const API_KEY = import.meta.env.VITE_API_KEY || ''
+import { authHeaders } from './auth'
 
 export interface ActionOptions {
   blocklist?: boolean
@@ -9,12 +8,6 @@ export interface ActionOptions {
   remote_path?: string
   local_path?: string
   output_path?: string
-}
-
-function authHeaders(): Record<string, string> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (API_KEY) h['X-Api-Key'] = API_KEY
-  return h
 }
 
 export async function runAction(

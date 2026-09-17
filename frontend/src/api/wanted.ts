@@ -1,12 +1,5 @@
 import type { ActionResult } from '../types'
-
-const API_KEY = import.meta.env.VITE_API_KEY || ''
-
-function authHeaders(): Record<string, string> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (API_KEY) h['X-Api-Key'] = API_KEY
-  return h
-}
+import { authHeaders } from './auth'
 
 async function handleResponse(res: Response): Promise<ActionResult> {
   if (!res.ok) {

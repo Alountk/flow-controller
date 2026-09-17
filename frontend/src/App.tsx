@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePolling } from './hooks/usePolling'
 import { Sidebar, type Page } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
@@ -7,6 +7,7 @@ import { TraceView } from './components/TraceView'
 import { MissingContent } from './components/MissingContent'
 import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
+import { setApiKey } from './api/auth'
 import {
   parseStatus,
   type ActionsResponse,
@@ -57,6 +58,10 @@ function App() {
   const { data: configData } = usePolling<ConfigResponse>('/api/config', {
     intervalMs: 60000,
   })
+
+  useEffect(() => {
+    if (configData?.api_key) setApiKey(configData.api_key)
+  }, [configData])
 
   const [page, setPage] = useState<Page>('dashboard')
 

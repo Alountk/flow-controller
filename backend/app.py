@@ -395,7 +395,7 @@ async def cancel_task(task_id: str, _key: str = Depends(verify_api_key)):
 
 @app.get("/api/config")
 async def config():
-    return {"developer": DEVELOPER}
+    return {"developer": DEVELOPER, "api_key": API_KEY}
 
 
 # --- Prototypes ---

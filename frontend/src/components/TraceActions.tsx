@@ -1,14 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../types'
 import { runAction, type ActionOptions } from '../api/actions'
-
-const API_KEY = import.meta.env.VITE_API_KEY || ''
-
-function authHeaders(): Record<string, string> {
-  const h: Record<string, string> = {}
-  if (API_KEY) h['X-Api-Key'] = API_KEY
-  return h
-}
+import { authHeaders } from '../api/auth'
 
 interface Props {
   trace: Trace
