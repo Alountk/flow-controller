@@ -686,20 +686,14 @@ async def _consume_queue():
                                 log.info("Trying manual import: dst=%s movie_id=%s", dst, movie_id)
                                 result = await arr_manual_import(session, service, dst, int(movie_id))
                                 log.info("Manual import result: %s", result)
-
-                            # Strategy 2: RefreshMovie — always run to scan library folder
-                            if movie_id:
-                                log.info("Running RefreshMovie: movie_id=%s", movie_id)
-                                result = await arr_refresh_movie(session, service, int(movie_id))
-                                log.info("RefreshMovie result: %s", result)
                                 if result.get("ok"):
                                     imported = True
 
-                            # Strategy 3: DownloadedMoviesScan (scan parent folder)
+                            # Strategy 2: DownloadedMoviesScan on the specific movie folder
                             if not imported:
-                                parent_dir = str(Path(dst).parent)
-                                log.info("Trying DownloadedMoviesScan: parent=%s", parent_dir)
-                                result = await arr_downloaded_scan(session, service, parent_dir)
+                                movie_folder = str(Path(dst).parent)
+                                log.info("Trying DownloadedMoviesScan: folder=%s", movie_folder)
+                                result = await arr_downloaded_scan(session, service, movie_folder)
                                 log.info("DownloadedMoviesScan result: %s", result)
                                 if result.get("ok"):
                                     imported = True
