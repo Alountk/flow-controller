@@ -1,0 +1,118 @@
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { queueStatus, queueCancel } from '../api/files'
+import type { QueueOp } from '../api/files'
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+}
+
+function QueueOpItem({ op, onCancel }: { op: QueueOp; onCancel: (id: string) => void }) {
+  const isActive = op.status === 'pending' || op.status === 'running'
+  const isFailed = op.status === 'failed'
+  const isDone = op.status === 'done'
+
+  const icon = isActive ? (op.status === 'running' ? '🔄' : '⏳')
+    : isDone ? '✅'
+    : isFailed ? '❌'
+    : '🚫'
+
+  const typeLabel = op.type === 'copy' ? 'Copiar' : 'Mover'
+
+  return (
+    <div className={`qsidebar-item ${op.status}`}>
+      <div className="qsidebar-item-top">
+        <span className="qsidebar-icon">{icon}</span>
+        <div className="qsidebar-item-info">
+          <div className="qsidebar-item-name" title={op.name}>{op.name}</div>
+          <div className="qsidebar-item-type">{typeLabel}</div>
+        </div>
+        {isActive && (
+          <button className="qsidebar-cancel" onClick={() => onCancel(op.id)} title="Cancelar">×</button>
+        )}
+      </div>
+      {isActive && (
+        <div className="qsidebar-progress">
+          <div className="qsidebar-bar-track">
+            <div className="qsidebar-bar-fill" style={{ width: `${op.progress}%` }} />
+          </div>
+          <div className="qsidebar-progress-text">
+            {op.total_bytes > 0 ? (
+              <>{op.progress}% · {formatBytes(op.copied_bytes)} / {formatBytes(op.total_bytes)}</>
+            ) : op.files_total > 0 ? (
+              <>{op.files_done} / {op.files_total} archivos</>
+            ) : (
+              <>{op.progress}%</>
+            )}
+          </div>
+        </div>
+      )}
+      {!isActive && op.detail && (
+        <div className={`qsidebar-item-detail ${op.status}`}>{op.detail}</div>
+      )}
+    </div>
+  )
+}
+
+export function QueueSidebar() {
+  const [collapsed, setCollapsed] = useState(false)
+  const queryClient = useQueryClient()
+
+  const { data: queueData } = useQuery({
+    queryKey: ['queue'],
+    queryFn: queueStatus,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return (data?.queue?.length ?? 0) > 0 ? 2000 : 10000
+    },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: queueCancel,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['queue'] })
+    },
+  })
+
+  const activeOps = queueData?.queue ?? []
+  const recentDone = (queueData?.completed ?? []).slice(-5).reverse()
+  const hasOps = activeOps.length > 0 || recentDone.length > 0
+
+  if (!hasOps && collapsed) return null
+
+  return (
+    <div className={`qsidebar ${collapsed ? 'collapsed' : ''}`}>
+      <div className="qsidebar-header" onClick={() => setCollapsed(!collapsed)}>
+        <span className="qsidebar-title">
+          Cola de operaciones
+          {activeOps.length > 0 && <span className="qsidebar-count">{activeOps.length}</span>}
+        </span>
+        <span className="qsidebar-toggle">{collapsed ? '◀' : '▶'}</span>
+      </div>
+      {!collapsed && (
+        <div className="qsidebar-body">
+          {activeOps.length === 0 && recentDone.length === 0 ? (
+            <div className="qsidebar-empty">Sin operaciones</div>
+          ) : (
+            <>
+              {activeOps.map((op) => (
+                <QueueOpItem key={op.id} op={op} onCancel={(id) => cancelMutation.mutate(id)} />
+              ))}
+              {recentDone.length > 0 && (
+                <div className="qsidebar-done-section">
+                  <div className="qsidebar-done-label">Recientes</div>
+                  {recentDone.map((op) => (
+                    <QueueOpItem key={op.id} op={op} onCancel={() => {}} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

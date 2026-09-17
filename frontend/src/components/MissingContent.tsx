@@ -222,6 +222,7 @@ function FileScanTab({ item, onClear }: { item: ScanItem; onClear: () => void })
                   />
                   <div className="scan-match-info">
                     <div className="scan-match-file">📄 {m.file_name}</div>
+                    <div className="scan-match-path" title={m.file_path}>{m.file_path}</div>
                     <div className="scan-match-score">
                       Similitud: {Math.round(m.score * 100)}% · Título: "{m.matched_title}"
                     </div>

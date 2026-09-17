@@ -8,7 +8,6 @@ import {
   renameItem,
   deleteItem,
   queueAdd,
-  queueStatus,
 } from '../api/files'
 
 function formatSize(bytes: number): string {
@@ -310,15 +309,6 @@ export function FileManager() {
     queryFn: fetchRoots,
   })
 
-  const { data: queueData } = useQuery({
-    queryKey: ['queue'],
-    queryFn: queueStatus,
-    refetchInterval: (query) => {
-      const data = query.state.data
-      return (data?.queue?.length ?? 0) > 0 ? 2000 : 10000
-    },
-  })
-
   const roots = rootsData?.roots ?? []
 
   const handlePathChange = useCallback((index: number, path: string) => {
@@ -330,47 +320,11 @@ export function FileManager() {
     return panePaths[otherIndex] || roots[otherIndex]?.path || '/'
   }
 
-  const activeOps = queueData?.queue?.filter((o) => o.status === 'pending' || o.status === 'running') ?? []
-  const recentDone = (queueData?.completed ?? []).slice(-5).reverse()
-
   return (
     <section className="fm">
       <div className="fm-header">
         <h2>Explorador de Archivos</h2>
       </div>
-
-      {(activeOps.length > 0 || recentDone.length > 0) && (
-        <div className="fm-status-bar">
-          {activeOps.length > 0 && (
-            <div className="fm-status-active">
-              {activeOps.map((op) => (
-                <div key={op.id} className={`fm-status-op ${op.status}`}>
-                  <span className="fm-status-icon">
-                    {op.status === 'running' ? '🔄' : '⏳'}
-                  </span>
-                  <span className="fm-status-text">
-                    {op.type === 'copy' ? 'Copiando' : 'Moviendo'}: {op.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {recentDone.length > 0 && (
-            <div className="fm-status-done">
-              {recentDone.map((op) => (
-                <div key={op.id} className={`fm-status-op ${op.status}`}>
-                  <span className="fm-status-icon">
-                    {op.status === 'done' ? '✅' : '❌'}
-                  </span>
-                  <span className="fm-status-text">
-                    {op.detail || op.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="fm-dual">
         {roots.length >= 2 && (

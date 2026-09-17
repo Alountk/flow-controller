@@ -557,6 +557,46 @@ _file_queue: list[dict] = []
 _queue_lock = asyncio.Lock()
 _queue_consumer_task: asyncio.Task | None = None
 
+CHUNK_SIZE = 1024 * 1024  # 1MB
+
+
+def _copy_with_progress(src: str, dst: str, op: dict) -> None:
+    """Copia un archivo con progreso, actualizando op en un dict compartido."""
+    src_path = Path(src)
+    if src_path.is_dir():
+        shutil.copytree(src, dst)
+        return
+    total = src_path.stat().st_size
+    op["total_bytes"] = total
+    op["copied_bytes"] = 0
+    with open(src, "rb") as fin, open(dst, "wb") as fout:
+        while True:
+            if op.get("cancelled"):
+                fout.close()
+                os.remove(dst)
+                raise InterruptedError("Cancelado por el usuario")
+            chunk = fin.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            fout.write(chunk)
+            op["copied_bytes"] += len(chunk)
+            op["progress"] = round(op["copied_bytes"] / total * 100) if total else 100
+
+
+def _copytree_with_progress(src: str, dst: str, op: dict) -> None:
+    """Copia un directorio con progreso por archivos."""
+    src_path = Path(src)
+    all_files = [f for f in src_path.rglob("*") if f.is_file()]
+    total_files = len(all_files)
+    op["files_total"] = total_files
+    op["files_done"] = 0
+    op["total_bytes"] = sum(f.stat().st_size for f in all_files)
+    op["copied_bytes"] = 0
+    shutil.copytree(src, dst)
+    op["files_done"] = total_files
+    op["copied_bytes"] = op["total_bytes"]
+    op["progress"] = 100
+
 
 async def _consume_queue():
     """Ejecuta operaciones de la cola secuencialmente."""
@@ -570,6 +610,11 @@ async def _consume_queue():
             op = pending[0]
             op["status"] = "running"
             op["started_at"] = time.time()
+            op["progress"] = 0
+            op["copied_bytes"] = 0
+            op["total_bytes"] = 0
+            op["files_done"] = 0
+            op["files_total"] = 0
 
         try:
             src = op["src"]
@@ -577,14 +622,30 @@ async def _consume_queue():
             if op["type"] == "copy":
                 src_path = Path(src)
                 if src_path.is_dir():
-                    await asyncio.to_thread(shutil.copytree, src, dst)
+                    await asyncio.to_thread(_copytree_with_progress, src, dst, op)
                 else:
-                    await asyncio.to_thread(shutil.copy2, src, dst)
+                    await asyncio.to_thread(_copy_with_progress, src, dst, op)
             else:
-                await asyncio.to_thread(shutil.move, src, dst)
+                # Move: use copy + delete for progress tracking
+                src_path = Path(src)
+                if src_path.is_dir():
+                    await asyncio.to_thread(_copytree_with_progress, src, dst, op)
+                else:
+                    await asyncio.to_thread(_copy_with_progress, src, dst, op)
+                if not op.get("cancelled"):
+                    await asyncio.to_thread(shutil.rmtree if src_path.is_dir() else os.remove, src)
             async with _queue_lock:
-                op["status"] = "done"
-                op["detail"] = f"Completado: {Path(src).name}"
+                if op.get("cancelled"):
+                    op["status"] = "cancelled"
+                    op["detail"] = "Cancelado por el usuario"
+                else:
+                    op["status"] = "done"
+                    op["progress"] = 100
+                    op["detail"] = f"Completado: {Path(src).name}"
+        except InterruptedError:
+            async with _queue_lock:
+                op["status"] = "cancelled"
+                op["detail"] = "Cancelado por el usuario"
         except Exception as exc:
             async with _queue_lock:
                 op["status"] = "failed"
@@ -613,6 +674,12 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
         "created_at": time.time(),
         "started_at": None,
         "detail": None,
+        "progress": 0,
+        "copied_bytes": 0,
+        "total_bytes": 0,
+        "files_done": 0,
+        "files_total": 0,
+        "cancelled": False,
     }
     async with _queue_lock:
         _file_queue.append(op)
@@ -639,6 +706,11 @@ async def queue_status():
                 "dst": o["dst"],
                 "status": o["status"],
                 "detail": o["detail"],
+                "progress": o.get("progress", 0),
+                "copied_bytes": o.get("copied_bytes", 0),
+                "total_bytes": o.get("total_bytes", 0),
+                "files_done": o.get("files_done", 0),
+                "files_total": o.get("files_total", 0),
             }
             for o in _file_queue
             if o["status"] in ("pending", "running")
@@ -650,11 +722,30 @@ async def queue_status():
                 "name": o["name"],
                 "status": o["status"],
                 "detail": o["detail"],
+                "progress": o.get("progress", 0),
             }
             for o in _file_queue
-            if o["status"] in ("done", "failed")
+            if o["status"] in ("done", "failed", "cancelled")
         ]
     return {"queue": ops, "completed": completed[-10:], "running": _queue_consumer_task is not None and not _queue_consumer_task.done()}
+
+
+@app.post("/api/files/queue/cancel/{op_id}")
+async def queue_cancel(op_id: str, _key: str = Depends(verify_api_key)):
+    """Cancela una operación en la cola."""
+    async with _queue_lock:
+        for op in _file_queue:
+            if op["id"] == op_id:
+                if op["status"] == "pending":
+                    op["status"] = "cancelled"
+                    op["detail"] = "Cancelado por el usuario"
+                    return {"ok": True, "detail": "Operación cancelada"}
+                elif op["status"] == "running":
+                    op["cancelled"] = True
+                    return {"ok": True, "detail": "Cancelación en progreso..."}
+                else:
+                    return {"ok": False, "detail": f"Operación en estado: {op['status']}"}
+    return {"ok": False, "detail": "Operación no encontrada"}
 
 
 @app.get("/api/actions")

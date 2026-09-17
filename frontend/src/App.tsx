@@ -7,6 +7,7 @@ import { TraceView } from './components/TraceView'
 import { MissingContent } from './components/MissingContent'
 import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
+import { QueueSidebar } from './components/QueueSidebar'
 import { setApiKey } from './api/auth'
 import {
   parseStatus,
@@ -191,6 +192,8 @@ function App() {
           {page === 'prototypes' && <Prototypes />}
         </div>
       </div>
+
+      <QueueSidebar />
     </div>
   )
 }

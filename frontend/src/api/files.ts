@@ -18,6 +18,11 @@ export interface QueueOp {
   dst: string
   status: string
   detail: string | null
+  progress: number
+  copied_bytes: number
+  total_bytes: number
+  files_done: number
+  files_total: number
 }
 
 export interface QueueStatusResponse {
@@ -93,4 +98,12 @@ export async function queueAdd(type: 'copy' | 'move', src: string, dst: string):
 export async function queueStatus(): Promise<QueueStatusResponse> {
   const res = await fetch('/api/files/queue/status')
   return (await res.json()) as QueueStatusResponse
+}
+
+export async function queueCancel(opId: string): Promise<{ ok: boolean; detail: string }> {
+  const res = await fetch(`/api/files/queue/cancel/${opId}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
 }
