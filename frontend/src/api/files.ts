@@ -10,6 +10,22 @@ async function handleResponse(res: Response): Promise<{ ok: boolean; detail: str
   return (await res.json()) as { ok: boolean; detail: string }
 }
 
+export interface QueueOp {
+  id: string
+  type: string
+  name: string
+  src: string
+  dst: string
+  status: string
+  detail: string | null
+}
+
+export interface QueueStatusResponse {
+  queue: QueueOp[]
+  completed: QueueOp[]
+  running: boolean
+}
+
 export async function fetchRoots(): Promise<RootsResponse> {
   const res = await fetch('/api/files/roots')
   return (await res.json()) as RootsResponse
@@ -54,4 +70,27 @@ export async function deleteItem(path: string): Promise<{ ok: boolean; detail: s
     body: JSON.stringify({ remote_path: path }),
   })
   return handleResponse(res)
+}
+
+export async function copyItem(src: string, dst: string): Promise<{ ok: boolean; detail: string }> {
+  const res = await fetch('/api/files/copy', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ remote_path: src, local_path: dst }),
+  })
+  return handleResponse(res)
+}
+
+export async function queueAdd(type: 'copy' | 'move', src: string, dst: string): Promise<{ ok: boolean; detail: string; op?: QueueOp }> {
+  const res = await fetch('/api/files/queue/add', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ source: type, remote_path: src, local_path: dst }),
+  })
+  return handleResponse(res) as Promise<{ ok: boolean; detail: string; op?: QueueOp }>
+}
+
+export async function queueStatus(): Promise<QueueStatusResponse> {
+  const res = await fetch('/api/files/queue/status')
+  return (await res.json()) as QueueStatusResponse
 }

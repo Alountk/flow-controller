@@ -1546,6 +1546,8 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  max-height: calc(100vh - 200px);
 }
 
 .fm-toolbar {
@@ -1555,6 +1557,10 @@ body {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev-2);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .fm-nav-btn {
@@ -1629,6 +1635,23 @@ body {
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: var(--bad);
   font-size: 11px;
+  cursor: pointer;
+}
+
+.fm-toast {
+  padding: 6px 10px;
+  margin: 6px 8px 0;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--accent);
+  font-size: 11px;
+  animation: fm-fade-in 0.2s ease;
+}
+
+@keyframes fm-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .fm-input-row {
@@ -1752,6 +1775,17 @@ body {
   color: var(--bad);
 }
 
+.fm-sm-btn.accent {
+  border-color: var(--accent);
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+.fm-sm-btn.accent:hover {
+  opacity: 1;
+  background: rgba(99, 102, 241, 0.15);
+}
+
 .fm-rename-input {
   flex: 1;
   padding: 2px 6px;
@@ -1762,6 +1796,61 @@ body {
   font-size: 12px;
   font-family: monospace;
   outline: none;
+}
+
+/* Status bar for queue */
+
+.fm-status-bar {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  overflow: hidden;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.fm-status-active {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fm-status-done {
+  padding: 4px 10px;
+}
+
+.fm-status-op {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.fm-status-op.running {
+  color: var(--text);
+}
+
+.fm-status-op.done {
+  color: var(--ok);
+}
+
+.fm-status-op.failed {
+  color: var(--bad);
+}
+
+.fm-status-icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.fm-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {

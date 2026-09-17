@@ -332,6 +332,129 @@ async def file_delete(req: ActionRequest, _key: str = Depends(verify_api_key)):
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
 
+# --- File Manager: Copy + Queue ---
+
+
+@app.post("/api/files/copy")
+async def file_copy(req: ActionRequest, _key: str = Depends(verify_api_key)):
+    """Copia un archivo o directorio."""
+    src = _validate_path(req.remote_path or "")
+    dst = _validate_path(req.local_path or "")
+    try:
+        src_path = Path(src)
+        if src_path.is_dir():
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
+        return {"ok": True, "detail": f"Copiado: {src_path.name} → {dst}"}
+    except Exception as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+_file_queue: list[dict] = []
+_queue_lock = asyncio.Lock()
+_queue_consumer_task: asyncio.Task | None = None
+
+
+async def _consume_queue():
+    """Ejecuta operaciones de la cola secuencialmente."""
+    global _queue_consumer_task
+    while True:
+        async with _queue_lock:
+            pending = [op for op in _file_queue if op["status"] == "pending"]
+            if not pending:
+                _queue_consumer_task = None
+                return
+            op = pending[0]
+            op["status"] = "running"
+            op["started_at"] = time.time()
+
+        try:
+            src = op["src"]
+            dst = op["dst"]
+            if op["type"] == "copy":
+                src_path = Path(src)
+                if src_path.is_dir():
+                    await asyncio.to_thread(shutil.copytree, src, dst)
+                else:
+                    await asyncio.to_thread(shutil.copy2, src, dst)
+            else:
+                await asyncio.to_thread(shutil.move, src, dst)
+            async with _queue_lock:
+                op["status"] = "done"
+                op["detail"] = f"Completado: {Path(src).name}"
+        except Exception as exc:
+            async with _queue_lock:
+                op["status"] = "failed"
+                op["detail"] = f"{type(exc).__name__}: {exc}"
+
+
+@app.post("/api/files/queue/add")
+async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
+    """Agrega una operación de copy/move a la cola."""
+    global _queue_consumer_task
+    op_type = req.source  # "copy" o "move"
+    if op_type not in ("copy", "move"):
+        return {"ok": False, "detail": "source debe ser 'copy' o 'move'"}
+    src = _validate_path(req.remote_path or "")
+    dst = _validate_path(req.local_path or "")
+    if not src or not dst:
+        return {"ok": False, "detail": "Se requieren remote_path y local_path"}
+
+    op = {
+        "id": str(int(time.time() * 1000)),
+        "type": op_type,
+        "src": src,
+        "dst": dst,
+        "name": Path(src).name,
+        "status": "pending",
+        "created_at": time.time(),
+        "started_at": None,
+        "detail": None,
+    }
+    async with _queue_lock:
+        _file_queue.append(op)
+        # Limpiar operaciones antiguas completadas (>50 en cola)
+        if len(_file_queue) > 50:
+            _file_queue[:] = [o for o in _file_queue if o["status"] in ("pending", "running")]
+
+    if _queue_consumer_task is None or _queue_consumer_task.done():
+        _queue_consumer_task = asyncio.create_task(_consume_queue())
+
+    return {"ok": True, "detail": f"Agregado a la cola: {op['name']}", "op": op}
+
+
+@app.get("/api/files/queue/status")
+async def queue_status():
+    """Estado actual de la cola de operaciones."""
+    async with _queue_lock:
+        ops = [
+            {
+                "id": o["id"],
+                "type": o["type"],
+                "name": o["name"],
+                "src": o["src"],
+                "dst": o["dst"],
+                "status": o["status"],
+                "detail": o["detail"],
+            }
+            for o in _file_queue
+            if o["status"] in ("pending", "running")
+        ]
+        completed = [
+            {
+                "id": o["id"],
+                "type": o["type"],
+                "name": o["name"],
+                "status": o["status"],
+                "detail": o["detail"],
+            }
+            for o in _file_queue
+            if o["status"] in ("done", "failed")
+        ]
+    return {"queue": ops, "completed": completed[-10:], "running": _queue_consumer_task is not None and not _queue_consumer_task.done()}
+
+
 @app.get("/api/actions")
 async def list_actions():
     return {

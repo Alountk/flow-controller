@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FileItem } from '../types'
 import {
   fetchRoots,
@@ -6,6 +6,9 @@ import {
   createDirectory,
   renameItem,
   deleteItem,
+  queueAdd,
+  queueStatus,
+  type QueueOp,
 } from '../api/files'
 
 function formatSize(bytes: number): string {
@@ -26,10 +29,12 @@ function formatDate(ts: number): string {
 
 interface PaneProps {
   root: string
+  otherPath: string
   onAction: () => void
+  onPathChange: (path: string) => void
 }
 
-function FilePane({ root, onAction }: PaneProps) {
+function FilePane({ root, otherPath, onAction, onPathChange }: PaneProps) {
   const [path, setPath] = useState(root)
   const [items, setItems] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,6 +44,8 @@ function FilePane({ root, onAction }: PaneProps) {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const load = useCallback(async (p: string) => {
     setLoading(true)
@@ -48,6 +55,7 @@ function FilePane({ root, onAction }: PaneProps) {
       if (res.ok) {
         setItems(res.items)
         setPath(res.path)
+        onPathChange(res.path)
       } else {
         setError(res.error || 'Error')
         setItems([])
@@ -57,9 +65,15 @@ function FilePane({ root, onAction }: PaneProps) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [onPathChange])
 
   useEffect(() => { load(path) }, [path, load])
+
+  function showToast(msg: string) {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 3000)
+  }
 
   function navigateTo(p: string) {
     setSelected(null)
@@ -67,9 +81,7 @@ function FilePane({ root, onAction }: PaneProps) {
   }
 
   function handleDoubleClick(item: FileItem) {
-    if (item.is_dir) {
-      navigateTo(item.path)
-    }
+    if (item.is_dir) navigateTo(item.path)
   }
 
   function parentDir() {
@@ -80,8 +92,7 @@ function FilePane({ root, onAction }: PaneProps) {
 
   async function handleCreate() {
     if (!newName.trim()) return
-    const fullPath = `${path}/${newName.trim()}`
-    const res = await createDirectory(fullPath)
+    const res = await createDirectory(`${path}/${newName.trim()}`)
     if (res.ok) {
       setCreating(false)
       setNewName('')
@@ -98,8 +109,7 @@ function FilePane({ root, onAction }: PaneProps) {
       return
     }
     const dir = item.path.substring(0, item.path.lastIndexOf('/'))
-    const newPath = `${dir}/${renameValue.trim()}`
-    const res = await renameItem(item.path, newPath)
+    const res = await renameItem(item.path, `${dir}/${renameValue.trim()}`)
     if (res.ok) {
       setRenaming(null)
       load(path)
@@ -120,6 +130,16 @@ function FilePane({ root, onAction }: PaneProps) {
     }
   }
 
+  async function handleQueue(type: 'copy' | 'move', item: FileItem) {
+    const dst = `${otherPath}/${item.name}`
+    const res = await queueAdd(type, item.path, dst)
+    if (res.ok) {
+      showToast(`${type === 'copy' ? 'Copiar' : 'Mover'}: ${item.name} → cola`)
+    } else {
+      setError(res.detail)
+    }
+  }
+
   return (
     <div className="fm-pane">
       <div className="fm-toolbar">
@@ -135,7 +155,8 @@ function FilePane({ root, onAction }: PaneProps) {
         </button>
       </div>
 
-      {error && <div className="fm-error">{error}</div>}
+      {error && <div className="fm-error" onClick={() => setError(null)}>{error}</div>}
+      {toast && <div className="fm-toast">{toast}</div>}
 
       {creating && (
         <div className="fm-input-row">
@@ -185,19 +206,31 @@ function FilePane({ root, onAction }: PaneProps) {
               <span className="fm-size">{item.is_dir ? '—' : formatSize(item.size)}</span>
               <span className="fm-date">{formatDate(item.modified)}</span>
               <div className="fm-item-actions">
-                {!item.is_dir && (
-                  <button
-                    className="fm-sm-btn"
-                    title="Renombrar"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setRenaming(item.path)
-                      setRenameValue(item.name)
-                    }}
-                  >
-                    ✏
-                  </button>
-                )}
+                <button
+                  className="fm-sm-btn accent"
+                  title="Copiar al otro panel"
+                  onClick={(e) => { e.stopPropagation(); handleQueue('copy', item) }}
+                >
+                  ⬎
+                </button>
+                <button
+                  className="fm-sm-btn accent"
+                  title="Mover al otro panel"
+                  onClick={(e) => { e.stopPropagation(); handleQueue('move', item) }}
+                >
+                  ⬏
+                </button>
+                <button
+                  className="fm-sm-btn"
+                  title="Renombrar"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setRenaming(item.path)
+                    setRenameValue(item.name)
+                  }}
+                >
+                  ✏
+                </button>
                 <button
                   className="fm-sm-btn danger"
                   title="Eliminar"
@@ -217,21 +250,93 @@ function FilePane({ root, onAction }: PaneProps) {
 export function FileManager() {
   const [roots, setRoots] = useState<{ path: string; name: string }[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
+  const [panePaths, setPanePaths] = useState<Record<string, string>>({})
+  const [queue, setQueue] = useState<QueueOp[]>([])
+  const [completed, setCompleted] = useState<QueueOp[]>([])
 
   useEffect(() => {
     fetchRoots().then((r) => setRoots(r.roots))
   }, [])
 
-  function refresh() { setRefreshKey((k) => k + 1) }
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), [])
+
+  // Poll queue status
+  useEffect(() => {
+    let active = true
+    async function poll() {
+      try {
+        const res = await queueStatus()
+        if (!active) return
+        setQueue(res.queue)
+        setCompleted(res.completed)
+      } catch { /* ignore */ }
+    }
+    poll()
+    const iv = setInterval(poll, 2000)
+    return () => { active = false; clearInterval(iv) }
+  }, [])
+
+  function handlePathChange(root: string, path: string) {
+    setPanePaths((prev) => ({ ...prev, [root]: path }))
+  }
+
+  function getOtherPath(currentRoot: string): string {
+    const otherRoot = roots.find((r) => r.path !== currentRoot)
+    if (!otherRoot) return '/'
+    return panePaths[otherRoot.path] || otherRoot.path
+  }
+
+  const activeOps = queue.filter((o) => o.status === 'pending' || o.status === 'running')
+  const recentDone = completed.slice(-5).reverse()
 
   return (
     <section className="fm">
       <div className="fm-header">
         <h2>Explorador de Archivos</h2>
       </div>
+
+      {(activeOps.length > 0 || recentDone.length > 0) && (
+        <div className="fm-status-bar">
+          {activeOps.length > 0 && (
+            <div className="fm-status-active">
+              {activeOps.map((op) => (
+                <div key={op.id} className={`fm-status-op ${op.status}`}>
+                  <span className="fm-status-icon">
+                    {op.status === 'running' ? '🔄' : '⏳'}
+                  </span>
+                  <span className="fm-status-text">
+                    {op.type === 'copy' ? 'Copiando' : 'Moviendo'}: {op.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {recentDone.length > 0 && (
+            <div className="fm-status-done">
+              {recentDone.map((op) => (
+                <div key={op.id} className={`fm-status-op ${op.status}`}>
+                  <span className="fm-status-icon">
+                    {op.status === 'done' ? '✅' : '❌'}
+                  </span>
+                  <span className="fm-status-text">
+                    {op.detail || op.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="fm-dual">
         {roots.map((root) => (
-          <FilePane key={`${root.path}-${refreshKey}`} root={root.path} onAction={refresh} />
+          <FilePane
+            key={`${root.path}-${refreshKey}`}
+            root={root.path}
+            otherPath={getOtherPath(root.path)}
+            onAction={refresh}
+            onPathChange={(p) => handlePathChange(root.path, p)}
+          />
         ))}
       </div>
     </section>
