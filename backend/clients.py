@@ -786,9 +786,10 @@ async def arr_manual_import(session: aiohttp.ClientSession, service: dict, file_
             timeout=timeout,
         ) as resp:
             text = await resp.text()
+            log.info("Radarr manualimport response: status=%s body=%s", resp.status, text[:500])
             if resp.status in (200, 201):
-                return {"ok": True, "detail": "Importación manual completada"}
-            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
+                return {"ok": True, "detail": "Importación manual completada", "response": text[:500]}
+            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:300]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
