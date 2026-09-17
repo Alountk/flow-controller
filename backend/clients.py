@@ -770,3 +770,38 @@ async def arr_search_movie(session: aiohttp.ClientSession, service: dict, movie_
 async def arr_search_episode(session: aiohttp.ClientSession, service: dict, episode_id: int) -> dict:
     """Busca un episodio específico en los indexadores."""
     return await arr_command(session, service, {"name": "EpisodeSearch", "episodeIds": [episode_id]})
+
+
+async def arr_manual_import(session: aiohttp.ClientSession, service: dict, file_path: str, movie_id: int) -> dict:
+    """Importa un archivo directamente a una película en Radarr via POST /api/v3/manualimport."""
+    headers = arr_headers(service["api_key"])
+    headers["Content-Type"] = "application/json"
+    body = [{"path": file_path, "movieId": movie_id}]
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    try:
+        async with session.post(
+            f"{service['url']}/api/v3/manualimport",
+            headers=headers,
+            json=body,
+            timeout=timeout,
+        ) as resp:
+            text = await resp.text()
+            if resp.status in (200, 201):
+                return {"ok": True, "detail": "Importación manual completada"}
+            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+async def arr_refresh_movie(session: aiohttp.ClientSession, service: dict, movie_id: int) -> dict:
+    """Refresca metadata y escanea la carpeta de una película en Radarr."""
+    return await arr_command(session, service, {"name": "RefreshMovie", "movieId": movie_id})
+
+
+async def arr_downloaded_scan(session: aiohttp.ClientSession, service: dict, folder_path: str) -> dict:
+    """Escanea una carpeta buscando películas para importar."""
+    return await arr_command(session, service, {
+        "name": "DownloadedMoviesScan",
+        "path": folder_path,
+        "importMode": "Move",
+    })

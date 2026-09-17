@@ -12,10 +12,14 @@ function formatBytes(bytes: number): string {
 
 function QueueOpItem({ op, onCancel }: { op: QueueOp; onCancel: (id: string) => void }) {
   const isActive = op.status === 'pending' || op.status === 'running'
+  const isImporting = op.import_status === 'importing'
   const isFailed = op.status === 'failed'
   const isDone = op.status === 'done'
 
   const icon = isActive ? (op.status === 'running' ? '🔄' : '⏳')
+    : isImporting ? '📥'
+    : isDone && op.import_status === 'imported' ? '✅'
+    : isDone && op.import_status === 'import_failed' ? '⚠️'
     : isDone ? '✅'
     : isFailed ? '❌'
     : '🚫'
@@ -23,14 +27,14 @@ function QueueOpItem({ op, onCancel }: { op: QueueOp; onCancel: (id: string) => 
   const typeLabel = op.type === 'copy' ? 'Copiar' : 'Mover'
 
   return (
-    <div className={`qsidebar-item ${op.status}`}>
+    <div className={`qsidebar-item ${op.status} ${isImporting ? 'importing' : ''}`}>
       <div className="qsidebar-item-top">
         <span className="qsidebar-icon">{icon}</span>
         <div className="qsidebar-item-info">
           <div className="qsidebar-item-name" title={op.name}>{op.name}</div>
           <div className="qsidebar-item-type">{typeLabel}</div>
         </div>
-        {isActive && (
+        {(isActive || isImporting) && (
           <button className="qsidebar-cancel" onClick={() => onCancel(op.id)} title="Cancelar">×</button>
         )}
       </div>
@@ -50,8 +54,15 @@ function QueueOpItem({ op, onCancel }: { op: QueueOp; onCancel: (id: string) => 
           </div>
         </div>
       )}
-      {!isActive && op.detail && (
-        <div className={`qsidebar-item-detail ${op.status}`}>{op.detail}</div>
+      {isImporting && (
+        <div className="qsidebar-import-status">
+          <span className="qsidebar-import-spinner">↻</span> Importando en Radarr...
+        </div>
+      )}
+      {!isActive && !isImporting && op.detail && (
+        <div className={`qsidebar-item-detail ${op.status} ${op.import_status}`}>
+          {op.detail}
+        </div>
       )}
     </div>
   )

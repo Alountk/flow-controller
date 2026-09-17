@@ -2438,6 +2438,31 @@ body {
 .qsidebar-item-detail.done { color: var(--ok); }
 .qsidebar-item-detail.failed { color: var(--bad); }
 .qsidebar-item-detail.cancelled { color: var(--text-dim); }
+.qsidebar-item-detail.done.imported { color: var(--ok); }
+.qsidebar-item-detail.done.import_failed { color: var(--warn); }
+
+.qsidebar-item.importing {
+  border-color: var(--warn);
+}
+
+.qsidebar-import-status {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--warn);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.qsidebar-import-spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 .qsidebar-done-section {
   margin-top: 12px;

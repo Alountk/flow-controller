@@ -23,6 +23,7 @@ export interface QueueOp {
   total_bytes: number
   files_done: number
   files_total: number
+  import_status: string
 }
 
 export interface QueueStatusResponse {

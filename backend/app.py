@@ -39,6 +39,9 @@ from clients import (
     arr_search_episode,
     arr_movie_metadata,
     arr_series_metadata,
+    arr_manual_import,
+    arr_refresh_movie,
+    arr_downloaded_scan,
 )
 from copy_engine import (
     _tasks,
@@ -664,18 +667,47 @@ async def _consume_queue():
                     op["progress"] = 100
                     op["detail"] = f"Completado: {Path(src).name}"
 
-            # Post-move sync: tell Radarr/Sonarr to import the moved file
+            # Post-move import: tell Radarr/Sonarr to import the moved file
             if not op.get("cancelled") and op.get("arr_source"):
                 service = next(
                     (s for s in SERVICES if s["key"] == op["arr_source"] and s["kind"] == "arr"),
                     None,
                 )
                 if service:
+                    async with _queue_lock:
+                        op["import_status"] = "importing"
                     try:
                         async with aiohttp.ClientSession() as session:
-                            await arr_command(session, service, {"name": "ProcessMonitoredDownloads"})
+                            imported = False
+                            # Strategy 1: Manual Import (most reliable, needs movie_id)
+                            movie_id = op.get("movie_id")
+                            if movie_id:
+                                result = await arr_manual_import(session, service, dst, int(movie_id))
+                                if result.get("ok"):
+                                    imported = True
+                                else:
+                                    # Strategy 2: RefreshMovie (scan movie's library folder)
+                                    result = await arr_refresh_movie(session, service, int(movie_id))
+                                    if result.get("ok"):
+                                        imported = True
+
+                            # Strategy 3: DownloadedMoviesScan (scan parent folder)
+                            if not imported:
+                                parent_dir = str(Path(dst).parent)
+                                result = await arr_downloaded_scan(session, service, parent_dir)
+                                if result.get("ok"):
+                                    imported = True
+
+                            async with _queue_lock:
+                                op["import_status"] = "imported" if imported else "import_failed"
+                                op["detail"] = (
+                                    f"Completado + importado: {Path(src).name}"
+                                    if imported
+                                    else f"Movido (import pendiente): {Path(src).name}"
+                                )
                     except Exception:
-                        pass  # Non-critical: sync failure shouldn't fail the op
+                        async with _queue_lock:
+                            op["import_status"] = "import_failed"
         except InterruptedError:
             async with _queue_lock:
                 op["status"] = "cancelled"
@@ -748,6 +780,7 @@ async def queue_status():
                 "total_bytes": o.get("total_bytes", 0),
                 "files_done": o.get("files_done", 0),
                 "files_total": o.get("files_total", 0),
+                "import_status": o.get("import_status", ""),
             }
             for o in _file_queue
             if o["status"] in ("pending", "running")
@@ -760,6 +793,7 @@ async def queue_status():
                 "status": o["status"],
                 "detail": o["detail"],
                 "progress": o.get("progress", 0),
+                "import_status": o.get("import_status", ""),
             }
             for o in _file_queue
             if o["status"] in ("done", "failed", "cancelled")
