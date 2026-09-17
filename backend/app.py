@@ -283,7 +283,7 @@ async def file_browse(path: str = "/"):
 
 
 @app.post("/api/files/mkdir")
-async def file_mkdir(req: ActionRequest):
+async def file_mkdir(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Crea un directorio."""
     target = _validate_path(req.remote_path or "")
     try:
@@ -294,7 +294,7 @@ async def file_mkdir(req: ActionRequest):
 
 
 @app.post("/api/files/rename")
-async def file_rename(req: ActionRequest):
+async def file_rename(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Renombra un archivo o directorio."""
     src = _validate_path(req.remote_path or "")
     dst = _validate_path(req.local_path or "")
@@ -306,7 +306,7 @@ async def file_rename(req: ActionRequest):
 
 
 @app.post("/api/files/move")
-async def file_move(req: ActionRequest):
+async def file_move(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Mueve un archivo o directorio."""
     src = _validate_path(req.remote_path or "")
     dst = _validate_path(req.local_path or "")
@@ -318,7 +318,7 @@ async def file_move(req: ActionRequest):
 
 
 @app.post("/api/files/delete")
-async def file_delete(req: ActionRequest):
+async def file_delete(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Elimina un archivo o directorio."""
     target = _validate_path(req.remote_path or "")
     try:
