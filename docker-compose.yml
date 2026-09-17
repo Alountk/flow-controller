@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - VITE_API_KEY=${VITE_API_KEY:-}
     network_mode: "host"
     restart: unless-stopped
     user: "1000:1000"
@@ -20,6 +22,7 @@ services:
       - AMUTORRENT_PASSWORD=${AMUTORRENT_PASSWORD:-}
       # Seguridad
       - SAFE_MODE=${SAFE_MODE:-true}
+      - API_KEY=${API_KEY:-}
       # Desarrollador
       - DEVELOPER=${DEVELOPER:-false}
       # Rutas de descarga

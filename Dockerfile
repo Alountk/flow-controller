@@ -1,5 +1,7 @@
 # --- Etapa 1: build del frontend React ---
 FROM node:22-alpine AS frontend
+ARG VITE_API_KEY=
+ENV VITE_API_KEY=${VITE_API_KEY}
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install

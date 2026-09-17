@@ -1,5 +1,7 @@
 import type { ActionResult, ActionKey, Trace } from '../types'
 
+const API_KEY = import.meta.env.VITE_API_KEY || ''
+
 export interface ActionOptions {
   blocklist?: boolean
   delete_files?: boolean
@@ -9,6 +11,12 @@ export interface ActionOptions {
   output_path?: string
 }
 
+function authHeaders(): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (API_KEY) h['X-Api-Key'] = API_KEY
+  return h
+}
+
 export async function runAction(
   action: ActionKey,
   trace: Trace,
@@ -16,7 +24,7 @@ export async function runAction(
 ): Promise<ActionResult> {
   const res = await fetch(`/api/actions/${action}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({
       source: trace.source,
       download_id: trace.download_id,

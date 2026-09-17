@@ -2,6 +2,14 @@ import { useState, useEffect, useRef } from 'react'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../types'
 import { runAction, type ActionOptions } from '../api/actions'
 
+const API_KEY = import.meta.env.VITE_API_KEY || ''
+
+function authHeaders(): Record<string, string> {
+  const h: Record<string, string> = {}
+  if (API_KEY) h['X-Api-Key'] = API_KEY
+  return h
+}
+
 interface Props {
   trace: Trace
   meta: Record<ActionKey, ActionMeta>
@@ -145,7 +153,7 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
     if (pollRef.current) clearInterval(pollRef.current)
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/tasks/${taskId}`)
+        const res = await fetch(`/api/tasks/${taskId}`, { headers: authHeaders() })
         const data = await res.json() as { ok: boolean } & TaskProgress
         if (!data.ok) {
           setCopyTask(null)
@@ -202,7 +210,7 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   async function cancelTask() {
     if (!copyTask) return
     try {
-      await fetch(`/api/tasks/${copyTask.task_id}/cancel`, { method: 'POST' })
+      await fetch(`/api/tasks/${copyTask.task_id}/cancel`, { method: 'POST', headers: authHeaders() })
     } catch {
       // Will be handled by polling
     }

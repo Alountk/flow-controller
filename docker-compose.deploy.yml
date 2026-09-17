@@ -24,6 +24,7 @@ services:
       - AMUTORRENT_PASSWORD=${AMUTORRENT_PASSWORD:-}
       # Seguridad
       - SAFE_MODE=${SAFE_MODE:-true}
+      - API_KEY=${API_KEY:-}
       # Desarrollador
       - DEVELOPER=${DEVELOPER:-false}
       # Rutas de descarga

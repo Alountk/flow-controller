@@ -9,9 +9,10 @@ from pathlib import Path
 
 import aiohttp
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 import os
 
@@ -39,6 +40,10 @@ AMUTORRENT_API_KEY = os.getenv("AMUTORRENT_API_KEY", "")
 AMUTORRENT_USER = os.getenv("AMUTORRENT_USER", "admin")
 AMUTORRENT_PASSWORD = os.getenv("AMUTORRENT_PASSWORD", "")
 
+# API key para proteger endpoints de acciones y tareas.
+# Si está vacío, la autenticación se desactiva (solo para desarrollo local).
+API_KEY = os.getenv("API_KEY", "")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIST = os.path.normpath(os.path.join(BASE_DIR, "..", "frontend", "dist"))
 
@@ -53,6 +58,30 @@ TRACE_LIMIT = int(os.getenv("TRACE_LIMIT", "25"))
 
 # Categoría que cada *arr espera en aMuTorrent (según su download client).
 EXPECTED_CATEGORY = {"radarr": "radarr", "sonarr": "tv-sonarr"}
+
+
+async def verify_api_key(x_api_key: str | None = Header(default=None)):
+    """Dependency que verifica la API key en headers protegidos.
+    Si API_KEY no está configurado, la verificación se desactiva."""
+    if not API_KEY:
+        return
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+
+
+class ActionRequest(BaseModel):
+    """Modelo de request para POST /api/actions/{action}."""
+    source: str = ""
+    download_id: str = ""
+    matched_hash: str = ""
+    ids: dict = {}
+    output_path: str = ""
+    blocklist: bool | None = None
+    delete_files: bool | None = None
+    host: str = ""
+    remote_path: str = ""
+    local_path: str = ""
+
 
 # URL del indexador Torznab (puente ED2K) expuesto por aMuTorrent.
 AMUTORRENT_INDEXER = os.getenv(
@@ -158,6 +187,21 @@ status_cache: dict = {
 
 # Estado de tareas en background (copy_files con progreso).
 _tasks: dict[str, dict] = {}
+
+# TTL para tareas completadas en _tasks (segundos). Se limpian tras 10 minutos.
+_TASK_TTL = 600
+
+
+def _cleanup_tasks():
+    """Elimina tareas finalizadas que superan el TTL."""
+    now = time.time()
+    expired = [
+        tid for tid, t in _tasks.items()
+        if t.get("status") not in ("running", "importing")
+        and now - t.get("created_at", 0) > _TASK_TTL
+    ]
+    for tid in expired:
+        del _tasks[tid]
 
 # Agrupación de estados qBittorrent en categorías legibles.
 QBIT_DOWNLOADING = {
@@ -1006,23 +1050,35 @@ class CopyCancelled(Exception):
 
 
 def _copy_file_chunked(src: Path, dst: Path, task_id: str | None = None, total_bytes: int = 0, copied_bytes: int = 0) -> int:
-    """Copia un archivo en chunks, comprobando cancelación entre cada uno.
-    Devuelve los bytes copiados en esta llamada."""
+    """Copia un archivo de forma atómica (temp + rename), comprobando cancelación."""
+    import tempfile
     written = 0
-    with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
-        while True:
-            if task_id and task_id in _tasks and _tasks[task_id].get("cancelled"):
-                raise CopyCancelled(f"cancelado durante copia de {src.name}")
-            chunk = fsrc.read(COPY_CHUNK_SIZE)
-            if not chunk:
-                break
-            fdst.write(chunk)
-            written += len(chunk)
-            if task_id and task_id in _tasks:
-                _tasks[task_id].update({
-                    "copied_bytes": copied_bytes + written,
-                    "total_bytes": total_bytes,
-                })
+    tmp_path = None
+    try:
+        # Escribir a un archivo temporal en el mismo directorio que dst
+        with tempfile.NamedTemporaryFile(dir=dst.parent, delete=False, prefix=".copy_") as fdst:
+            tmp_path = fdst.name
+            with open(src, 'rb') as fsrc:
+                while True:
+                    if task_id and task_id in _tasks and _tasks[task_id].get("cancelled"):
+                        raise CopyCancelled(f"cancelado durante copia de {src.name}")
+                    chunk = fsrc.read(COPY_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    fdst.write(chunk)
+                    written += len(chunk)
+                    if task_id and task_id in _tasks:
+                        _tasks[task_id].update({
+                            "copied_bytes": copied_bytes + written,
+                            "total_bytes": total_bytes,
+                        })
+        # Rename atómico al destino final
+        os.rename(tmp_path, str(dst))
+        tmp_path = None
+    except Exception:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
     return written
 
 
@@ -1501,6 +1557,7 @@ async def _do_action(
         task_id = str(uuid.uuid4())
         _tasks[task_id] = {
             "status": "running",
+            "created_at": time.time(),
             "src_path": output_path,
             "dst_path": dst_path,
             "copied_bytes": 0,
@@ -1532,7 +1589,7 @@ async def list_actions():
 
 
 @app.post("/api/actions/{action}")
-async def run_action(action: str, payload: dict):
+async def run_action(action: str, req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Ejecuta una acción sobre una descarga concreta."""
     if action not in ACTIONS:
         return {"ok": False, "error": f"acción desconocida: {action}"}
@@ -1548,8 +1605,9 @@ async def run_action(action: str, payload: dict):
             "safe_mode": True,
         }
 
+    payload = req.model_dump()
     async with aiohttp.ClientSession() as session:
-        result = await _do_action(session, action, payload or {})
+        result = await _do_action(session, action, payload)
 
     return {
         "action": action,
@@ -1562,8 +1620,9 @@ async def run_action(action: str, payload: dict):
 
 # --- Tasks (progreso de copy_files en background) ---
 @app.get("/api/tasks/{task_id}")
-async def get_task(task_id: str):
+async def get_task(task_id: str, _key: str = Depends(verify_api_key)):
     """Estado de una tarea en background (copy_files con progreso)."""
+    _cleanup_tasks()
     task = _tasks.get(task_id)
     if not task:
         return {"ok": False, "error": "tarea no encontrada"}
@@ -1571,7 +1630,7 @@ async def get_task(task_id: str):
 
 
 @app.post("/api/tasks/{task_id}/cancel")
-async def cancel_task(task_id: str):
+async def cancel_task(task_id: str, _key: str = Depends(verify_api_key)):
     """Cancela una tarea en background (copy_files)."""
     task = _tasks.get(task_id)
     if not task:
@@ -1633,6 +1692,6 @@ async def spa_fallback(full_path: str):
     if full_path.startswith("prototypes/"):
         return {"detail": "Not Found"}
     candidate = os.path.normpath(os.path.join(FRONTEND_DIST, full_path))
-    if FRONTEND_DIST in candidate and os.path.isfile(candidate):
+    if candidate.startswith(FRONTEND_DIST) and os.path.isfile(candidate):
         return FileResponse(candidate)
     return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
