@@ -799,6 +799,11 @@ async def arr_refresh_movie(session: aiohttp.ClientSession, service: dict, movie
     return await arr_command(session, service, {"name": "RefreshMovie", "movieId": movie_id})
 
 
+async def arr_rescan_movie(session: aiohttp.ClientSession, service: dict, movie_id: int) -> dict:
+    """Re-escanea la carpeta de una película en Radarr (sin refrescar metadata)."""
+    return await arr_command(session, service, {"name": "RescanMovie", "movieId": movie_id})
+
+
 async def arr_downloaded_scan(session: aiohttp.ClientSession, service: dict, folder_path: str) -> dict:
     """Escanea una carpeta buscando películas para importar."""
     return await arr_command(session, service, {

@@ -41,6 +41,7 @@ from clients import (
     arr_series_metadata,
     arr_manual_import,
     arr_refresh_movie,
+    arr_rescan_movie,
     arr_downloaded_scan,
 )
 from copy_engine import (
@@ -689,12 +690,11 @@ async def _consume_queue():
                                 if result.get("ok"):
                                     imported = True
 
-                            # Strategy 2: DownloadedMoviesScan on the specific movie folder
-                            if not imported:
-                                movie_folder = str(Path(dst).parent)
-                                log.info("Trying DownloadedMoviesScan: folder=%s", movie_folder)
-                                result = await arr_downloaded_scan(session, service, movie_folder)
-                                log.info("DownloadedMoviesScan result: %s", result)
+                            # Strategy 2: RescanMovie (scan only this movie's folder)
+                            if movie_id:
+                                log.info("Trying RescanMovie: movie_id=%s", movie_id)
+                                result = await arr_rescan_movie(session, service, int(movie_id))
+                                log.info("RescanMovie result: %s", result)
                                 if result.get("ok"):
                                     imported = True
 
