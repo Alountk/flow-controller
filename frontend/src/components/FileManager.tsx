@@ -54,6 +54,8 @@ function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const onPathChangeRef = useRef(onPathChange)
+  onPathChangeRef.current = onPathChange
 
   const load = useCallback(async (p: string) => {
     setLoading(true)
@@ -63,7 +65,7 @@ function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps
       if (res.ok) {
         setItems(res.items)
         setPath(res.path)
-        onPathChange(index, res.path)
+        onPathChangeRef.current(index, res.path)
       } else {
         setError(res.error || 'Error')
         setItems([])
@@ -73,7 +75,7 @@ function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps
     } finally {
       setLoading(false)
     }
-  }, [onPathChange, index])
+  }, [index])
 
   useEffect(() => { load(path) }, [path, load])
 
@@ -307,9 +309,9 @@ export function FileManager() {
     return () => { active = false; clearInterval(iv) }
   }, [])
 
-  function handlePathChange(index: number, path: string) {
+  const handlePathChange = useCallback((index: number, path: string) => {
     setPanePaths((prev) => ({ ...prev, [index]: path }))
-  }
+  }, [])
 
   function getOtherPath(currentIndex: number): string {
     const otherIndex = currentIndex === 0 ? 1 : 0
