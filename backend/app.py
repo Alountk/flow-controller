@@ -36,6 +36,8 @@ from clients import (
     arr_search_missing_episodes,
     arr_search_movie,
     arr_search_episode,
+    arr_movie_metadata,
+    arr_series_metadata,
 )
 from copy_engine import (
     _tasks,
