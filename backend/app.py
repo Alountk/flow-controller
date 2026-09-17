@@ -324,6 +324,7 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
 
     # Modo selectivo: buscar solo un item específico
     if movie_id or series_id:
+        movie_path = ""
         async with aiohttp.ClientSession() as session:
             if movie_id:
                 meta = await arr_movie_metadata(session, service, int(movie_id))
@@ -331,6 +332,7 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                     return {"ok": False, "detail": "Película no encontrada"}
                 item_title = meta.get("title", "")
                 item_year = meta.get("year")
+                movie_path = meta.get("path", "")
                 all_titles = [item_title] + [t for t in meta.get("altTitles", []) if t]
             elif series_id:
                 meta = await arr_series_metadata(session, service, int(series_id))
@@ -338,6 +340,7 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                     return {"ok": False, "detail": "Serie no encontrada"}
                 item_title = meta.get("title", "")
                 item_year = None
+                movie_path = meta.get("path", "")
                 all_titles = [item_title] + [t for t in meta.get("alternateTitles", []) if t]
             else:
                 return {"ok": False, "detail": "IDs insuficientes"}
@@ -353,6 +356,7 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                     "movie_id": movie_id or series_id,
                     "movie_title": item_title,
                     "movie_year": item_year,
+                    "movie_path": movie_path,
                     "title_used": title,
                 }
     else:
@@ -378,6 +382,7 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                         "movie_id": movie.get("id"),
                         "movie_title": movie.get("title", ""),
                         "movie_year": movie.get("year"),
+                        "movie_path": movie.get("path", ""),
                         "title_used": title,
                     }
         item_title = f"{len(wanted_movies)} películas faltantes"
@@ -405,12 +410,14 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                     best_match = info
 
             if best_match and best_score >= 0.5:
+                target_path = best_match.get("movie_path", "")
                 matches.append({
                     "file_path": full_path,
                     "file_name": fname,
                     "movie_id": best_match["movie_id"],
                     "movie_title": best_match["movie_title"],
                     "movie_year": best_match["movie_year"],
+                    "target_path": target_path,
                     "score": best_score,
                     "matched_title": best_match["title_used"],
                 })

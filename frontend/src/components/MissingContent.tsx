@@ -63,7 +63,10 @@ function FileScanTab({ item, onClear }: { item: ScanItem; onClear: () => void })
   const moveQueue = useMutation({
     mutationFn: async (matches: ScanMatch[]) => {
       for (const m of matches) {
-        await queueAdd('move', m.file_path, `${m.movie_title} (${m.movie_year || ''})/${m.file_name}`)
+        const dst = m.target_path
+          ? `${m.target_path}/${m.file_name}`
+          : `${m.movie_title} (${m.movie_year || ''})/${m.file_name}`
+        await queueAdd('move', m.file_path, dst)
       }
       return { ok: true }
     },

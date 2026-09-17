@@ -221,6 +221,7 @@ export interface ScanMatch {
   movie_id: number
   movie_title: string
   movie_year: number | null
+  target_path: string
   score: number
   matched_title: string
 }
