@@ -58,7 +58,7 @@ function QueueOpItem({ op, onCancel }: { op: QueueOp; onCancel: (id: string) => 
 }
 
 export function QueueSidebar() {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const queryClient = useQueryClient()
 
   const { data: queueData } = useQuery({
@@ -79,20 +79,32 @@ export function QueueSidebar() {
 
   const activeOps = queueData?.queue ?? []
   const recentDone = (queueData?.completed ?? []).slice(-5).reverse()
-  const hasOps = activeOps.length > 0 || recentDone.length > 0
-
-  if (!hasOps && collapsed) return null
+  const activeCount = activeOps.length
 
   return (
-    <div className={`qsidebar ${collapsed ? 'collapsed' : ''}`}>
-      <div className="qsidebar-header" onClick={() => setCollapsed(!collapsed)}>
-        <span className="qsidebar-title">
-          Cola de operaciones
-          {activeOps.length > 0 && <span className="qsidebar-count">{activeOps.length}</span>}
-        </span>
-        <span className="qsidebar-toggle">{collapsed ? '◀' : '▶'}</span>
-      </div>
-      {!collapsed && (
+    <>
+      {collapsed && (
+        <button
+          className={`qsidebar-toggle-fixed ${activeCount > 0 ? 'has-ops' : ''}`}
+          onClick={() => setCollapsed(false)}
+          title={`Cola de operaciones${activeCount > 0 ? ` (${activeCount} activas)` : ''}`}
+        >
+          {activeCount > 0 && <span className="qsidebar-toggle-count">{activeCount}</span>}
+          ◀
+        </button>
+      )}
+
+      <div
+        className={`qsidebar ${collapsed ? 'collapsed' : ''}`}
+        style={collapsed ? { transform: 'translateX(100%)' } : undefined}
+      >
+        <div className="qsidebar-header" onClick={() => setCollapsed(true)}>
+          <span className="qsidebar-title">
+            Cola de operaciones
+            {activeCount > 0 && <span className="qsidebar-count">{activeCount}</span>}
+          </span>
+          <span className="qsidebar-toggle">▶</span>
+        </div>
         <div className="qsidebar-body">
           {activeOps.length === 0 && recentDone.length === 0 ? (
             <div className="qsidebar-empty">Sin operaciones</div>
@@ -112,7 +124,7 @@ export function QueueSidebar() {
             </>
           )}
         </div>
-      )}
-    </div>
+      </div>
+    </>
   )
 }
