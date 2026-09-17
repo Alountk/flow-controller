@@ -651,6 +651,19 @@ async def _consume_queue():
                     op["status"] = "done"
                     op["progress"] = 100
                     op["detail"] = f"Completado: {Path(src).name}"
+
+            # Post-move sync: tell Radarr/Sonarr to import the moved file
+            if not op.get("cancelled") and op.get("arr_source"):
+                service = next(
+                    (s for s in SERVICES if s["key"] == op["arr_source"] and s["kind"] == "arr"),
+                    None,
+                )
+                if service:
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            await arr_command(session, service, {"name": "ProcessMonitoredDownloads"})
+                    except Exception:
+                        pass  # Non-critical: sync failure shouldn't fail the op
         except InterruptedError:
             async with _queue_lock:
                 op["status"] = "cancelled"
@@ -689,6 +702,9 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
         "files_done": 0,
         "files_total": 0,
         "cancelled": False,
+        "arr_source": req.host or "",
+        "movie_id": (req.ids or {}).get("movie_id"),
+        "series_id": (req.ids or {}).get("series_id"),
     }
     async with _queue_lock:
         _file_queue.append(op)

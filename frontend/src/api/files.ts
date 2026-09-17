@@ -86,11 +86,26 @@ export async function copyItem(src: string, dst: string): Promise<{ ok: boolean;
   return handleResponse(res)
 }
 
-export async function queueAdd(type: 'copy' | 'move', src: string, dst: string): Promise<{ ok: boolean; detail: string; op?: QueueOp }> {
+export async function queueAdd(
+  type: 'copy' | 'move',
+  src: string,
+  dst: string,
+  arrSource?: string,
+  movieId?: number,
+  seriesId?: number,
+): Promise<{ ok: boolean; detail: string; op?: QueueOp }> {
+  const body: Record<string, unknown> = { source: type, remote_path: src, local_path: dst }
+  if (arrSource) {
+    body.host = arrSource
+    const ids: Record<string, number> = {}
+    if (movieId) ids.movie_id = movieId
+    if (seriesId) ids.series_id = seriesId
+    body.ids = ids
+  }
   const res = await fetch('/api/files/queue/add', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ source: type, remote_path: src, local_path: dst }),
+    body: JSON.stringify(body),
   })
   return handleResponse(res) as Promise<{ ok: boolean; detail: string; op?: QueueOp }>
 }
