@@ -27,15 +27,23 @@ function formatDate(ts: number): string {
   })
 }
 
-interface PaneProps {
-  root: string
-  otherPath: string
-  onAction: () => void
-  onPathChange: (path: string) => void
+interface RootsItem {
+  path: string
+  name: string
 }
 
-function FilePane({ root, otherPath, onAction, onPathChange }: PaneProps) {
-  const [path, setPath] = useState(root)
+interface PaneProps {
+  roots: RootsItem[]
+  index: number
+  otherPath: string
+  onAction: () => void
+  onPathChange: (index: number, path: string) => void
+}
+
+function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps) {
+  const initialRoot = roots[index]?.path || roots[0]?.path || '/'
+  const [selectedRoot, setSelectedRoot] = useState(initialRoot)
+  const [path, setPath] = useState(initialRoot)
   const [items, setItems] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
@@ -55,7 +63,7 @@ function FilePane({ root, otherPath, onAction, onPathChange }: PaneProps) {
       if (res.ok) {
         setItems(res.items)
         setPath(res.path)
-        onPathChange(res.path)
+        onPathChange(index, res.path)
       } else {
         setError(res.error || 'Error')
         setItems([])
@@ -65,7 +73,7 @@ function FilePane({ root, otherPath, onAction, onPathChange }: PaneProps) {
     } finally {
       setLoading(false)
     }
-  }, [onPathChange])
+  }, [onPathChange, index])
 
   useEffect(() => { load(path) }, [path, load])
 
@@ -80,14 +88,24 @@ function FilePane({ root, otherPath, onAction, onPathChange }: PaneProps) {
     setPath(p)
   }
 
+  function handleVolumeChange(newRoot: string) {
+    setSelectedRoot(newRoot)
+    setSelected(null)
+    setPath(newRoot)
+  }
+
   function handleDoubleClick(item: FileItem) {
     if (item.is_dir) navigateTo(item.path)
   }
 
   function parentDir() {
+    if (path === selectedRoot) return selectedRoot
     const parts = path.split('/')
-    if (parts.length <= 2) return '/'
-    return parts.slice(0, -1).join('/') || '/'
+    const parent = parts.slice(0, -1).join('/') || '/'
+    if (parent.length < selectedRoot.length || !parent.startsWith(selectedRoot)) {
+      return selectedRoot
+    }
+    return parent
   }
 
   async function handleCreate() {
@@ -143,7 +161,21 @@ function FilePane({ root, otherPath, onAction, onPathChange }: PaneProps) {
   return (
     <div className="fm-pane">
       <div className="fm-toolbar">
-        <button className="fm-nav-btn" onClick={() => navigateTo(parentDir())} title="Subir">
+        <select
+          className="fm-volume-select"
+          value={selectedRoot}
+          onChange={(e) => handleVolumeChange(e.target.value)}
+        >
+          {roots.map((r) => (
+            <option key={r.path} value={r.path}>{r.name}</option>
+          ))}
+        </select>
+        <button
+          className="fm-nav-btn"
+          onClick={() => navigateTo(parentDir())}
+          title="Subir"
+          disabled={path === selectedRoot}
+        >
           ⬆
         </button>
         <div className="fm-path" title={path}>{path}</div>
@@ -248,9 +280,9 @@ function FilePane({ root, otherPath, onAction, onPathChange }: PaneProps) {
 }
 
 export function FileManager() {
-  const [roots, setRoots] = useState<{ path: string; name: string }[]>([])
+  const [roots, setRoots] = useState<RootsItem[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
-  const [panePaths, setPanePaths] = useState<Record<string, string>>({})
+  const [panePaths, setPanePaths] = useState<Record<number, string>>({})
   const [queue, setQueue] = useState<QueueOp[]>([])
   const [completed, setCompleted] = useState<QueueOp[]>([])
 
@@ -260,7 +292,6 @@ export function FileManager() {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), [])
 
-  // Poll queue status
   useEffect(() => {
     let active = true
     async function poll() {
@@ -276,14 +307,13 @@ export function FileManager() {
     return () => { active = false; clearInterval(iv) }
   }, [])
 
-  function handlePathChange(root: string, path: string) {
-    setPanePaths((prev) => ({ ...prev, [root]: path }))
+  function handlePathChange(index: number, path: string) {
+    setPanePaths((prev) => ({ ...prev, [index]: path }))
   }
 
-  function getOtherPath(currentRoot: string): string {
-    const otherRoot = roots.find((r) => r.path !== currentRoot)
-    if (!otherRoot) return '/'
-    return panePaths[otherRoot.path] || otherRoot.path
+  function getOtherPath(currentIndex: number): string {
+    const otherIndex = currentIndex === 0 ? 1 : 0
+    return panePaths[otherIndex] || roots[otherIndex]?.path || '/'
   }
 
   const activeOps = queue.filter((o) => o.status === 'pending' || o.status === 'running')
@@ -329,15 +359,36 @@ export function FileManager() {
       )}
 
       <div className="fm-dual">
-        {roots.map((root) => (
+        {roots.length >= 2 && (
+          <>
+            <FilePane
+              key={`pane-0-${refreshKey}`}
+              roots={roots}
+              index={0}
+              otherPath={getOtherPath(0)}
+              onAction={refresh}
+              onPathChange={handlePathChange}
+            />
+            <FilePane
+              key={`pane-1-${refreshKey}`}
+              roots={roots}
+              index={1}
+              otherPath={getOtherPath(1)}
+              onAction={refresh}
+              onPathChange={handlePathChange}
+            />
+          </>
+        )}
+        {roots.length === 1 && (
           <FilePane
-            key={`${root.path}-${refreshKey}`}
-            root={root.path}
-            otherPath={getOtherPath(root.path)}
+            key={`pane-0-${refreshKey}`}
+            roots={roots}
+            index={0}
+            otherPath={panePaths[0] || roots[0]?.path || '/'}
             onAction={refresh}
-            onPathChange={(p) => handlePathChange(root.path, p)}
+            onPathChange={handlePathChange}
           />
-        ))}
+        )}
       </div>
     </section>
   )
