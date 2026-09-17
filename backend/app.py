@@ -626,14 +626,23 @@ async def _consume_queue():
                 else:
                     await asyncio.to_thread(_copy_with_progress, src, dst, op)
             else:
-                # Move: use copy + delete for progress tracking
+                # Move: try os.rename first (instant on same filesystem),
+                # fall back to copy + delete for cross-filesystem
                 src_path = Path(src)
-                if src_path.is_dir():
-                    await asyncio.to_thread(_copytree_with_progress, src, dst, op)
-                else:
-                    await asyncio.to_thread(_copy_with_progress, src, dst, op)
-                if not op.get("cancelled"):
-                    await asyncio.to_thread(shutil.rmtree if src_path.is_dir() else os.remove, src)
+                try:
+                    # Ensure parent directory of dst exists
+                    dst_parent = Path(dst).parent
+                    if not dst_parent.exists():
+                        await asyncio.to_thread(dst_parent.mkdir, parents=True, exist_ok=True)
+                    await asyncio.to_thread(os.rename, src, dst)
+                except OSError:
+                    # Cross-filesystem or other OS error: copy + delete
+                    if src_path.is_dir():
+                        await asyncio.to_thread(_copytree_with_progress, src, dst, op)
+                    else:
+                        await asyncio.to_thread(_copy_with_progress, src, dst, op)
+                    if not op.get("cancelled"):
+                        await asyncio.to_thread(shutil.rmtree if src_path.is_dir() else os.remove, src)
             async with _queue_lock:
                 if op.get("cancelled"):
                     op["status"] = "cancelled"
