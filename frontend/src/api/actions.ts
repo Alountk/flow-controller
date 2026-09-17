@@ -33,5 +33,10 @@ export async function runAction(
       ...options,
     }),
   })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    return { ok: false, error: msg }
+  }
   return (await res.json()) as ActionResult
 }

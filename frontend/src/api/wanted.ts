@@ -8,13 +8,22 @@ function authHeaders(): Record<string, string> {
   return h
 }
 
+async function handleResponse(res: Response): Promise<ActionResult> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    return { ok: false, error: msg }
+  }
+  return (await res.json()) as ActionResult
+}
+
 export async function searchWanted(source: string): Promise<ActionResult> {
   const res = await fetch('/api/wanted/search', {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ source }),
   })
-  return (await res.json()) as ActionResult
+  return handleResponse(res)
 }
 
 export async function searchWantedItem(
@@ -26,5 +35,5 @@ export async function searchWantedItem(
     headers: authHeaders(),
     body: JSON.stringify({ source, ids }),
   })
-  return (await res.json()) as ActionResult
+  return handleResponse(res)
 }
