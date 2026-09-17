@@ -16,9 +16,12 @@ from config import (
 )
 from clients import (
     arr_command,
+    arr_episode_metadata,
     arr_episode_season,
     arr_import_status,
+    arr_movie_metadata,
     arr_movie_root_folder,
+    arr_series_metadata,
     arr_series_root_folder,
 )
 from traces import resolve_current_path, host_path
@@ -77,10 +80,10 @@ def copy_file_chunked(src: Path, dst: Path, task_id: str | None = None, total_by
     return written
 
 
-def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool = False, task_id: str | None = None) -> dict:
+def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool = False, task_id: str | None = None, target_name: str | None = None) -> dict:
     src = Path(output_path if is_host_path else host_path(output_path))
     dst_dir = Path(root_folder)
-    log.info("copy_files: src=%s  dst=%s  is_host_path=%s", src, dst_dir, is_host_path)
+    log.info("copy_files: src=%s  dst=%s  is_host_path=%s target_name=%s", src, dst_dir, is_host_path, target_name)
 
     def _update_task(copied_bytes: int, total_bytes: int, files_done: int, files_total: int):
         if task_id and task_id in _tasks:
@@ -104,11 +107,12 @@ def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool
 
     if src.is_file():
         total = src.stat().st_size
-        dst = dst_dir / src.name
+        final_name = target_name if target_name else src.name
+        dst = dst_dir / final_name
         _update_task(0, total, 0, 1)
         copy_file_chunked(src, dst, task_id, total, 0)
         _update_task(total, total, 1, 1)
-        return {"ok": True, "detail": f"copiado: {src.name} → {dst_dir}", "files_copied": 1}
+        return {"ok": True, "detail": f"copiado: {final_name} → {dst_dir}", "files_copied": 1}
 
     if src.is_dir():
         files = [f for f in src.iterdir() if f.is_file()]
@@ -129,12 +133,12 @@ def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool
     return {"ok": False, "detail": f"fuente no es archivo ni directorio: {src}"}
 
 
-async def run_copy_background(task_id: str, src_path: str, dst_root: str, service: dict, source: str, ids: dict | None = None):
+async def run_copy_background(task_id: str, src_path: str, dst_root: str, service: dict, source: str, ids: dict | None = None, target_name: str | None = None):
     ids = ids or {}
     try:
         _tasks[task_id]["detail"] = "copiando archivos..."
         result = await asyncio.to_thread(
-            copy_files_to_root, src_path, dst_root, is_host_path=True, task_id=task_id
+            copy_files_to_root, src_path, dst_root, is_host_path=True, task_id=task_id, target_name=target_name
         )
         if _tasks[task_id].get("cancelled"):
             _tasks[task_id].update({
@@ -386,8 +390,43 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         if not root:
             log.error("copy_files: no se pudo obtener root folder para %s (series_id=%s, movie_id=%s)", source, ids.get("series_id"), ids.get("movie_id"))
             return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
+
+        # --- Smart rename: construir nombre correcto antes de copiar ---
         _src_path = Path(output_path)
-        dst_path = str(Path(root) / _src_path.name)
+        smart_name = _src_path.name  # fallback: nombre original
+        ext = _src_path.suffix
+
+        src_path_obj = Path(output_path if os.path.isabs(output_path) else host_path(output_path))
+        if src_path_obj.is_file():
+            if source == "sonarr" and ids.get("episode_id") and ids.get("series_id"):
+                ep_meta = await arr_episode_metadata(session, service, ids["episode_id"])
+                sr_meta = await arr_series_metadata(session, service, ids["series_id"])
+                series_title = sr_meta.get("title", "")
+                season = ep_meta.get("season_number")
+                episode = ep_meta.get("episode_number")
+                ep_title = ep_meta.get("title", "")
+                if series_title and season is not None and episode is not None:
+                    parts = [f"{series_title} - S{season:02d}E{episode:02d}"]
+                    if ep_title:
+                        parts.append(ep_title)
+                    smart_name = " - ".join(parts) + ext
+                    log.info("copy_files: smart rename (sonarr) → %s", smart_name)
+
+            elif source == "radarr" and ids.get("movie_id"):
+                mv_meta = await arr_movie_metadata(session, service, ids["movie_id"])
+                movie_title = mv_meta.get("title", "")
+                year = mv_meta.get("year")
+                quality = mv_meta.get("quality", "")
+                if movie_title:
+                    name_parts = movie_title
+                    if year:
+                        name_parts += f" ({year})"
+                    if quality:
+                        name_parts += f" {quality}"
+                    smart_name = name_parts + ext
+                    log.info("copy_files: smart rename (radarr) → %s", smart_name)
+
+        dst_path = str(Path(root) / smart_name)
         task_id = str(uuid.uuid4())
         _tasks[task_id] = {
             "status": "running",
@@ -400,7 +439,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
             "files_total": 0,
             "detail": "preparando copia...",
         }
-        asyncio.create_task(run_copy_background(task_id, output_path, root, service, source, ids))
+        asyncio.create_task(run_copy_background(task_id, output_path, root, service, source, ids, target_name=smart_name))
         return {"ok": True, "needs_polling": True, "task_id": task_id, "src_path": output_path, "dst_path": dst_path}
 
     else:

@@ -388,6 +388,80 @@ async def arr_movie_root_folder(session: aiohttp.ClientSession, service: dict, m
         return ""
 
 
+async def arr_episode_metadata(
+    session: aiohttp.ClientSession, service: dict, episode_id: int
+) -> dict:
+    """Devuelve metadatos completos de un episodio: season_number, episode_number, title."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/episode/{episode_id}",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json(content_type=None)
+            return {
+                "season_number": data.get("seasonNumber"),
+                "episode_number": data.get("episodeNumber"),
+                "title": data.get("title", ""),
+                "series_id": data.get("seriesId"),
+            }
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {}
+
+
+async def arr_series_metadata(
+    session: aiohttp.ClientSession, service: dict, series_id: int
+) -> dict:
+    """Devuelve título y path de una serie."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/series/{series_id}",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json(content_type=None)
+            return {
+                "title": data.get("title", ""),
+                "path": data.get("path", ""),
+            }
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {}
+
+
+async def arr_movie_metadata(
+    session: aiohttp.ClientSession, service: dict, movie_id: int
+) -> dict:
+    """Devuelve título, año y calidad de una película."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/movie/{movie_id}",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json(content_type=None)
+            quality = ""
+            mf = data.get("movieFile") or {}
+            q = (mf.get("quality") or {}).get("quality") or {}
+            quality = q.get("name", "")
+            return {
+                "title": data.get("title", ""),
+                "year": data.get("year"),
+                "quality": quality,
+                "path": data.get("path", ""),
+            }
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {}
+
+
 async def arr_import_status(
     session: aiohttp.ClientSession, service: dict, *, series_id: int | None = None, movie_id: int | None = None, season_number: int | None = None
 ) -> dict:

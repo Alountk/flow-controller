@@ -258,6 +258,62 @@ class TestVolumeMap:
         assert idx_incoming < idx_downloads, "El mapeo /downloads/incoming/ debe ir antes que /downloads/"
 
 
+# ── Smart rename tests ──────────────────────────────────────────────────────
+
+from copy_engine import copy_files_to_root
+
+
+class TestCopyWithTargetName:
+    def test_single_file_with_target_name(self, tmp_path):
+        src_dir = tmp_path / "source"
+        src_dir.mkdir()
+        src_file = src_dir / "old-name.mkv"
+        src_file.write_bytes(b"fake video content")
+
+        dst_dir = tmp_path / "dest"
+        dst_dir.mkdir()
+
+        result = copy_files_to_root(
+            str(src_file), str(dst_dir), is_host_path=True, target_name="New.Name.S01E01.mkv"
+        )
+        assert result["ok"] is True
+        assert result["files_copied"] == 1
+        assert (dst_dir / "New.Name.S01E01.mkv").exists()
+        assert not (dst_dir / "old-name.mkv").exists()
+
+    def test_single_file_without_target_name(self, tmp_path):
+        src_dir = tmp_path / "source"
+        src_dir.mkdir()
+        src_file = src_dir / "original.mkv"
+        src_file.write_bytes(b"fake video content")
+
+        dst_dir = tmp_path / "dest"
+        dst_dir.mkdir()
+
+        result = copy_files_to_root(
+            str(src_file), str(dst_dir), is_host_path=True
+        )
+        assert result["ok"] is True
+        assert (dst_dir / "original.mkv").exists()
+
+    def test_directory_copy_ignores_target_name(self, tmp_path):
+        src_dir = tmp_path / "source"
+        src_dir.mkdir()
+        (src_dir / "file1.mkv").write_bytes(b"content1")
+        (src_dir / "file2.mkv").write_bytes(b"content2")
+
+        dst_dir = tmp_path / "dest"
+        dst_dir.mkdir()
+
+        result = copy_files_to_root(
+            str(src_dir), str(dst_dir), is_host_path=True, target_name="should-be-ignored.mkv"
+        )
+        assert result["ok"] is True
+        assert result["files_copied"] == 2
+        assert (dst_dir / "file1.mkv").exists()
+        assert (dst_dir / "file2.mkv").exists()
+
+
 # ── API endpoint tests ────────────────────────────────────────────────────────
 
 from fastapi.testclient import TestClient
