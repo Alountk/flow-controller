@@ -679,21 +679,21 @@ async def _consume_queue():
                     try:
                         async with aiohttp.ClientSession() as session:
                             imported = False
-                            # Strategy 1: Manual Import (most reliable, needs movie_id)
                             movie_id = op.get("movie_id")
+
+                            # Strategy 1: Manual Import (most reliable, needs movie_id)
                             if movie_id:
                                 log.info("Trying manual import: dst=%s movie_id=%s", dst, movie_id)
                                 result = await arr_manual_import(session, service, dst, int(movie_id))
                                 log.info("Manual import result: %s", result)
+
+                            # Strategy 2: RefreshMovie — always run to scan library folder
+                            if movie_id:
+                                log.info("Running RefreshMovie: movie_id=%s", movie_id)
+                                result = await arr_refresh_movie(session, service, int(movie_id))
+                                log.info("RefreshMovie result: %s", result)
                                 if result.get("ok"):
                                     imported = True
-                                else:
-                                    # Strategy 2: RefreshMovie (scan movie's library folder)
-                                    log.info("Trying RefreshMovie: movie_id=%s", movie_id)
-                                    result = await arr_refresh_movie(session, service, int(movie_id))
-                                    log.info("RefreshMovie result: %s", result)
-                                    if result.get("ok"):
-                                        imported = True
 
                             # Strategy 3: DownloadedMoviesScan (scan parent folder)
                             if not imported:
