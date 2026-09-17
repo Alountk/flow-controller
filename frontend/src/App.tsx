@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { usePolling } from './hooks/usePolling'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Sidebar, type Page } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
@@ -18,6 +18,12 @@ import {
   type ConfigResponse,
 } from './types'
 
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json() as Promise<T>
+}
+
 const SERVICES: { key: ServiceKey; label: string }[] = [
   { key: 'radarr', label: 'Radarr' },
   { key: 'amutorrent', label: 'AmuTorrent' },
@@ -33,30 +39,31 @@ const PAGE_TITLES: Record<Page, string> = {
 }
 
 function App() {
-  const {
-    data,
-    error,
-    loading,
-    lastUpdated,
-    refresh: refreshStatus,
-  } = usePolling<StatusResponse>('/api/status', {
-    intervalMs: 5000,
+  const queryClient = useQueryClient()
+
+  const { data, error, isPending } = useQuery<StatusResponse>({
+    queryKey: ['status'],
+    queryFn: () => fetchJson('/api/status'),
+    refetchInterval: 5000,
   })
 
-  const {
-    data: traceData,
-    loading: traceLoading,
-    refresh: refreshTrace,
-  } = usePolling<TraceResponse>('/api/trace', {
-    intervalMs: 15000,
+  const { data: traceData, isPending: traceLoading } = useQuery<TraceResponse>({
+    queryKey: ['trace'],
+    queryFn: () => fetchJson('/api/trace'),
+    refetchInterval: 15000,
   })
 
-  const { data: actionsData } = usePolling<ActionsResponse>('/api/actions', {
-    intervalMs: 60000,
+  const { data: actionsData } = useQuery<ActionsResponse>({
+    queryKey: ['actions'],
+    queryFn: () => fetchJson('/api/actions'),
+    refetchInterval: 60000,
   })
 
-  const { data: configData } = usePolling<ConfigResponse>('/api/config', {
-    intervalMs: 60000,
+  const { data: configData } = useQuery<ConfigResponse>({
+    queryKey: ['config'],
+    queryFn: () => fetchJson('/api/config'),
+    refetchInterval: 60000,
+    staleTime: Infinity,
   })
 
   useEffect(() => {
@@ -68,9 +75,9 @@ function App() {
   const developer = configData?.developer ?? false
 
   const handleActionDone = useCallback(() => {
-    refreshTrace()
-    refreshStatus()
-  }, [refreshTrace, refreshStatus])
+    queryClient.invalidateQueries({ queryKey: ['trace'] })
+    queryClient.invalidateQueries({ queryKey: ['status'] })
+  }, [queryClient])
 
   const services: ServiceStatus[] = useMemo(
     () =>
@@ -98,8 +105,8 @@ function App() {
       <div className="main">
         <Topbar
           title={PAGE_TITLES[page]}
-          loading={loading}
-          lastUpdated={lastUpdated}
+          loading={isPending}
+          lastUpdated={data ? Date.now() : null}
         />
 
         <div className="content">
@@ -112,7 +119,7 @@ function App() {
 
               <PipelineVisual services={services} />
 
-              {error && <div className="error-box">Error de conexión con el backend: {error}</div>}
+              {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
 
               <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
                 <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
@@ -166,9 +173,9 @@ function App() {
 
           {page === 'trace' && (
             <TraceView
-              data={traceData}
+              data={traceData ?? null}
               loading={traceLoading}
-              actions={actionsData}
+              actions={actionsData ?? null}
               onActionDone={handleActionDone}
             />
           )}

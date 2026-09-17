@@ -1,57 +1,36 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import type { WantedMovie, WantedEpisode, WantedResponse } from '../types'
 import { searchWanted, searchWantedItem } from '../api/wanted'
 
 type Tab = 'movies' | 'episodes'
 
+async function fetchWanted(): Promise<WantedResponse> {
+  const res = await fetch('/api/wanted')
+  return res.json() as Promise<WantedResponse>
+}
+
 export function MissingContent() {
-  const [data, setData] = useState<WantedResponse | null>(null)
-  const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('movies')
-  const [searching, setSearching] = useState(false)
   const [searchResult, setSearchResult] = useState<string | null>(null)
 
-  const fetchWanted = useCallback(async () => {
-    setLoading(true)
-    try {
-      const resp = await fetch('/api/wanted')
-      const json = await resp.json()
-      setData(json)
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const { data, isPending } = useQuery({
+    queryKey: ['wanted'],
+    queryFn: fetchWanted,
+  })
 
-  useEffect(() => {
-    fetchWanted()
-  }, [fetchWanted])
-
-  async function handleSearchAll(source: 'radarr' | 'sonarr') {
-    setSearching(true)
-    setSearchResult(null)
-    try {
-      const result = await searchWanted(source)
+  const searchAll = useMutation({
+    mutationFn: (source: 'radarr' | 'sonarr') => searchWanted(source),
+    onSuccess: (result, source) => {
       setSearchResult(result.ok ? `Búsqueda lanzada en ${source}` : `Error: ${result.error || 'desconocido'}`)
-    } catch {
-      setSearchResult('Error de conexión')
-    } finally {
-      setSearching(false)
       setTimeout(() => setSearchResult(null), 4000)
-    }
-  }
+    },
+  })
 
-  async function handleSearchItem(source: 'radarr' | 'sonarr', ids: Record<string, number | null>) {
-    setSearching(true)
-    try {
-      await searchWantedItem(source, ids)
-    } catch {
-      // ignore
-    } finally {
-      setSearching(false)
-    }
-  }
+  const searchItem = useMutation({
+    mutationFn: ({ source, ids }: { source: 'radarr' | 'sonarr'; ids: Record<string, number | null> }) =>
+      searchWantedItem(source, ids),
+  })
 
   const radarrMovies = data?.wanted?.radarr?.items as WantedMovie[] | undefined
   const sonarrEpisodes = data?.wanted?.sonarr?.items as WantedEpisode[] | undefined
@@ -82,17 +61,17 @@ export function MissingContent() {
         <div className="wanted-search-result">{searchResult}</div>
       )}
 
-      {loading ? (
+      {isPending ? (
         <div className="wanted-loading">Cargando...</div>
       ) : tab === 'movies' ? (
         <div className="wanted-content">
           <div className="wanted-actions">
             <button
               className="action-btn search-all"
-              onClick={() => handleSearchAll('radarr')}
-              disabled={searching || radarrTotal === 0}
+              onClick={() => searchAll.mutate('radarr')}
+              disabled={searchAll.isPending || radarrTotal === 0}
             >
-              {searching ? 'Buscando...' : '🔍 Buscar todas las faltantes'}
+              {searchAll.isPending ? 'Buscando...' : '🔍 Buscar todas las faltantes'}
             </button>
           </div>
           {radarrMovies && radarrMovies.length > 0 ? (
@@ -111,8 +90,8 @@ export function MissingContent() {
                     )}
                     <button
                       className="action-btn search-item"
-                      onClick={() => handleSearchItem('radarr', { movie_id: movie.id })}
-                      disabled={searching}
+                      onClick={() => searchItem.mutate({ source: 'radarr', ids: { movie_id: movie.id } })}
+                      disabled={searchItem.isPending}
                     >
                       🔍 Buscar
                     </button>
@@ -129,10 +108,10 @@ export function MissingContent() {
           <div className="wanted-actions">
             <button
               className="action-btn search-all"
-              onClick={() => handleSearchAll('sonarr')}
-              disabled={searching || sonarrTotal === 0}
+              onClick={() => searchAll.mutate('sonarr')}
+              disabled={searchAll.isPending || sonarrTotal === 0}
             >
-              {searching ? 'Buscando...' : '🔍 Buscar todos los faltantes'}
+              {searchAll.isPending ? 'Buscando...' : '🔍 Buscar todos los faltantes'}
             </button>
           </div>
           {sonarrEpisodes && sonarrEpisodes.length > 0 ? (
@@ -149,8 +128,8 @@ export function MissingContent() {
                   </div>
                   <button
                     className="action-btn search-item"
-                    onClick={() => handleSearchItem('sonarr', { episode_id: ep.id, series_id: ep.series_id })}
-                    disabled={searching}
+                    onClick={() => searchItem.mutate({ source: 'sonarr', ids: { episode_id: ep.id, series_id: ep.series_id } })}
+                    disabled={searchItem.isPending}
                   >
                     🔍
                   </button>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FileItem } from '../types'
 import {
   fetchRoots,
@@ -8,7 +9,6 @@ import {
   deleteItem,
   queueAdd,
   queueStatus,
-  type QueueOp,
 } from '../api/files'
 
 function formatSize(bytes: number): string {
@@ -36,16 +36,14 @@ interface PaneProps {
   roots: RootsItem[]
   index: number
   otherPath: string
-  onAction: () => void
   onPathChange: (index: number, path: string) => void
 }
 
-function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps) {
+function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
+  const queryClient = useQueryClient()
   const initialRoot = roots[index]?.path || roots[0]?.path || '/'
   const [selectedRoot, setSelectedRoot] = useState(initialRoot)
   const [path, setPath] = useState(initialRoot)
-  const [items, setItems] = useState<FileItem[]>([])
-  const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -54,30 +52,77 @@ function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const onPathChangeRef = useRef(onPathChange)
+  const onPathChangeRef = useRef<((index: number, path: string) => void) | null>(null)
   onPathChangeRef.current = onPathChange
 
-  const load = useCallback(async (p: string) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await browsePath(p)
-      if (res.ok) {
-        setItems(res.items)
-        setPath(res.path)
-        onPathChangeRef.current(index, res.path)
-      } else {
-        setError(res.error || 'Error')
-        setItems([])
-      }
-    } catch {
-      setError('Error de conexión')
-    } finally {
-      setLoading(false)
-    }
-  }, [index])
+  const { data: browseData, isLoading } = useQuery({
+    queryKey: ['browse', path],
+    queryFn: () => browsePath(path),
+    enabled: !!path,
+  })
 
-  useEffect(() => { load(path) }, [path, load])
+  useEffect(() => {
+    if (browseData?.ok) {
+      setSelected(null)
+      onPathChangeRef.current?.(index, browseData.path)
+    } else if (browseData?.error) {
+      setError(browseData.error)
+    }
+  }, [browseData, index])
+
+  const invalidateBrowse = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['browse', path] })
+  }, [queryClient, path])
+
+  const createDir = useMutation({
+    mutationFn: (fullPath: string) => createDirectory(fullPath),
+    onSuccess: (res) => {
+      if (res.ok) {
+        setCreating(false)
+        setNewName('')
+        invalidateBrowse()
+        showToast('Carpeta creada')
+      } else {
+        setError(res.detail)
+      }
+    },
+  })
+
+  const rename = useMutation({
+    mutationFn: ({ oldPath, newPath }: { oldPath: string; newPath: string }) => renameItem(oldPath, newPath),
+    onSuccess: (res) => {
+      if (res.ok) {
+        setRenaming(null)
+        invalidateBrowse()
+      } else {
+        setError(res.detail)
+      }
+    },
+  })
+
+  const del = useMutation({
+    mutationFn: (p: string) => deleteItem(p),
+    onSuccess: (res) => {
+      if (res.ok) {
+        invalidateBrowse()
+      } else {
+        setError(res.detail)
+      }
+    },
+  })
+
+  const queue = useMutation({
+    mutationFn: ({ type, src, dst }: { type: 'copy' | 'move'; src: string; dst: string }) =>
+      queueAdd(type, src, dst),
+    onSuccess: (res) => {
+      if (res.ok) {
+        showToast(`${res.detail}`)
+        queryClient.invalidateQueries({ queryKey: ['queue'] })
+      } else {
+        setError(res.detail)
+      }
+    },
+  })
 
   function showToast(msg: string) {
     setToast(msg)
@@ -110,55 +155,31 @@ function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps
     return parent
   }
 
-  async function handleCreate() {
+  function handleCreate() {
     if (!newName.trim()) return
-    const res = await createDirectory(`${path}/${newName.trim()}`)
-    if (res.ok) {
-      setCreating(false)
-      setNewName('')
-      load(path)
-      onAction()
-    } else {
-      setError(res.detail)
-    }
+    createDir.mutate(`${path}/${newName.trim()}`)
   }
 
-  async function handleRename(item: FileItem) {
+  function handleRename(item: FileItem) {
     if (!renameValue.trim() || renameValue === item.name) {
       setRenaming(null)
       return
     }
     const dir = item.path.substring(0, item.path.lastIndexOf('/'))
-    const res = await renameItem(item.path, `${dir}/${renameValue.trim()}`)
-    if (res.ok) {
-      setRenaming(null)
-      load(path)
-      onAction()
-    } else {
-      setError(res.detail)
-    }
+    rename.mutate({ oldPath: item.path, newPath: `${dir}/${renameValue.trim()}` })
   }
 
-  async function handleDelete(item: FileItem) {
+  function handleDelete(item: FileItem) {
     if (!confirm(`¿Eliminar ${item.name}?`)) return
-    const res = await deleteItem(item.path)
-    if (res.ok) {
-      load(path)
-      onAction()
-    } else {
-      setError(res.detail)
-    }
+    del.mutate(item.path)
   }
 
-  async function handleQueue(type: 'copy' | 'move', item: FileItem) {
+  function handleQueue(type: 'copy' | 'move', item: FileItem) {
     const dst = `${otherPath}/${item.name}`
-    const res = await queueAdd(type, item.path, dst)
-    if (res.ok) {
-      showToast(`${type === 'copy' ? 'Copiar' : 'Mover'}: ${item.name} → cola`)
-    } else {
-      setError(res.detail)
-    }
+    queue.mutate({ type, src: item.path, dst })
   }
+
+  const items = browseData?.ok ? browseData.items : []
 
   return (
     <div className="fm-pane">
@@ -184,7 +205,7 @@ function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps
         <button className="fm-action-btn" onClick={() => setCreating(true)}>
           + Carpeta
         </button>
-        <button className="fm-action-btn" onClick={() => load(path)}>
+        <button className="fm-action-btn" onClick={invalidateBrowse}>
           ↻
         </button>
       </div>
@@ -207,7 +228,7 @@ function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps
         </div>
       )}
 
-      {loading ? (
+      {isLoading ? (
         <div className="fm-loading">Cargando...</div>
       ) : items.length === 0 ? (
         <div className="fm-empty">Directorio vacío</div>
@@ -282,32 +303,23 @@ function FilePane({ roots, index, otherPath, onAction, onPathChange }: PaneProps
 }
 
 export function FileManager() {
-  const [roots, setRoots] = useState<RootsItem[]>([])
-  const [refreshKey, setRefreshKey] = useState(0)
   const [panePaths, setPanePaths] = useState<Record<number, string>>({})
-  const [queue, setQueue] = useState<QueueOp[]>([])
-  const [completed, setCompleted] = useState<QueueOp[]>([])
 
-  useEffect(() => {
-    fetchRoots().then((r) => setRoots(r.roots))
-  }, [])
+  const { data: rootsData } = useQuery({
+    queryKey: ['roots'],
+    queryFn: fetchRoots,
+  })
 
-  const refresh = useCallback(() => setRefreshKey((k) => k + 1), [])
+  const { data: queueData } = useQuery({
+    queryKey: ['queue'],
+    queryFn: queueStatus,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return (data?.queue?.length ?? 0) > 0 ? 2000 : 10000
+    },
+  })
 
-  useEffect(() => {
-    let active = true
-    async function poll() {
-      try {
-        const res = await queueStatus()
-        if (!active) return
-        setQueue(res.queue)
-        setCompleted(res.completed)
-      } catch { /* ignore */ }
-    }
-    poll()
-    const iv = setInterval(poll, 2000)
-    return () => { active = false; clearInterval(iv) }
-  }, [])
+  const roots = rootsData?.roots ?? []
 
   const handlePathChange = useCallback((index: number, path: string) => {
     setPanePaths((prev) => ({ ...prev, [index]: path }))
@@ -318,8 +330,8 @@ export function FileManager() {
     return panePaths[otherIndex] || roots[otherIndex]?.path || '/'
   }
 
-  const activeOps = queue.filter((o) => o.status === 'pending' || o.status === 'running')
-  const recentDone = completed.slice(-5).reverse()
+  const activeOps = queueData?.queue?.filter((o) => o.status === 'pending' || o.status === 'running') ?? []
+  const recentDone = (queueData?.completed ?? []).slice(-5).reverse()
 
   return (
     <section className="fm">
@@ -364,30 +376,27 @@ export function FileManager() {
         {roots.length >= 2 && (
           <>
             <FilePane
-              key={`pane-0-${refreshKey}`}
+              key="pane-0"
               roots={roots}
               index={0}
               otherPath={getOtherPath(0)}
-              onAction={refresh}
               onPathChange={handlePathChange}
             />
             <FilePane
-              key={`pane-1-${refreshKey}`}
+              key="pane-1"
               roots={roots}
               index={1}
               otherPath={getOtherPath(1)}
-              onAction={refresh}
               onPathChange={handlePathChange}
             />
           </>
         )}
         {roots.length === 1 && (
           <FilePane
-            key={`pane-0-${refreshKey}`}
+            key="pane-0"
             roots={roots}
             index={0}
             otherPath={panePaths[0] || roots[0]?.path || '/'}
-            onAction={refresh}
             onPathChange={handlePathChange}
           />
         )}

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../types'
 import { runAction, type ActionOptions } from '../api/actions'
 import { authHeaders } from '../api/auth'
@@ -96,20 +97,54 @@ function formatBytes(bytes: number): string {
   return `${val.toFixed(val >= 100 ? 0 : 1)} ${units[i]}`
 }
 
+const TERMINAL_STATUSES = ['imported', 'renamed_needed', 'import_timeout', 'error', 'cancelled']
+const ACTIVE_STATUSES = ['running', 'done', 'importing', 'renamed_needed']
+
 export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState<ActionKey | null>(null)
   const [result, setResult] = useState<ActionResult | null>(null)
   const [copyTask, setCopyTask] = useState<TaskProgress | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const keys = actionsFor(trace)
 
+  const { data: taskData } = useQuery({
+    queryKey: ['task', copyTask?.task_id],
+    queryFn: async () => {
+      const res = await fetch(`/api/tasks/${copyTask!.task_id}`, { headers: authHeaders() })
+      return res.json() as Promise<{ ok: boolean } & TaskProgress>
+    },
+    enabled: !!copyTask && ACTIVE_STATUSES.includes(copyTask.status),
+    refetchInterval: (query) => {
+      const data = query.state.data as ({ ok: boolean } & TaskProgress) | undefined
+      if (!data) return 1500
+      if (TERMINAL_STATUSES.includes(data.status)) return false
+      return 1500
+    },
+  })
+
   useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+    if (!taskData || !copyTask) return
+    if (!taskData.ok) {
+      setCopyTask(null)
+      setResult({ ok: false, error: taskData.detail || 'Error obteniendo estado de tarea' })
+      return
     }
-  }, [])
+    setCopyTask((prev) => prev ? { ...prev, ...taskData } : null)
+    if (taskData.status === 'imported' || taskData.status === 'renamed_needed') {
+      setCopyTask(null)
+      setResult({ ok: true, steps: [{ target: 'filesystem', ok: true, detail: taskData.detail }] })
+      onDone()
+    } else if (taskData.status === 'import_timeout' || taskData.status === 'error') {
+      setCopyTask(null)
+      setResult({ ok: false, error: taskData.detail })
+      if (taskData.status === 'import_timeout') onDone()
+    } else if (taskData.status === 'cancelled') {
+      setCopyTask(null)
+      setResult({ ok: false, error: taskData.detail || 'Copia cancelada' })
+      onDone()
+    }
+  }, [taskData, copyTask, onDone])
 
   // Auto-dismiss action results after 4 seconds
   useEffect(() => {
@@ -136,7 +171,6 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
           files_total: 0,
           detail: 'iniciando...',
         })
-        pollTask(r.task_id)
       } else {
         setResult(res)
         if (res.ok) onDone()
@@ -147,55 +181,6 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
       setBusy(null)
       setPending(null)
     }
-  }
-
-  function pollTask(taskId: string) {
-    if (pollRef.current) clearInterval(pollRef.current)
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/tasks/${taskId}`, { headers: authHeaders() })
-        const data = await res.json() as { ok: boolean } & TaskProgress
-        if (!data.ok) {
-          setCopyTask(null)
-          setResult({ ok: false, error: data.detail || 'Error obteniendo estado de tarea' })
-          if (pollRef.current) clearInterval(pollRef.current)
-          return
-        }
-        setCopyTask((prev) => prev ? { ...prev, ...data } : null)
-        if (data.status === 'done') {
-          // Copia completada, esperando verificación de import...
-          // No cerramos el modal, el backend sigue verificando
-        } else if (data.status === 'importing') {
-          // Import en progreso, seguir polleando
-        } else if (data.status === 'imported') {
-          if (pollRef.current) clearInterval(pollRef.current)
-          setCopyTask(null)
-          setResult({ ok: true, steps: [{ target: 'filesystem', ok: true, detail: data.detail }] })
-          onDone()
-        } else if (data.status === 'renamed_needed') {
-          if (pollRef.current) clearInterval(pollRef.current)
-          setCopyTask(null)
-          setResult({ ok: true, steps: [{ target: 'filesystem', ok: true, detail: data.detail }] })
-          onDone()
-        } else if (data.status === 'import_timeout') {
-          if (pollRef.current) clearInterval(pollRef.current)
-          setCopyTask(null)
-          setResult({ ok: false, error: data.detail })
-          onDone()
-        } else if (data.status === 'error') {
-          if (pollRef.current) clearInterval(pollRef.current)
-          setCopyTask(null)
-          setResult({ ok: false, error: data.detail })
-        } else if (data.status === 'cancelled') {
-          if (pollRef.current) clearInterval(pollRef.current)
-          setCopyTask(null)
-          setResult({ ok: false, error: data.detail || 'Copia cancelada' })
-          onDone()
-        }
-      } catch {
-        // Polling error, will retry
-      }
-    }, 1500)
   }
 
   function handleClick(action: ActionKey) {
