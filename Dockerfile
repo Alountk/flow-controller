@@ -13,6 +13,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app.py .
 COPY backend/config.py .
+COPY backend/settings.py .
 COPY backend/clients.py .
 COPY backend/traces.py .
 COPY backend/copy_engine.py .
