@@ -1221,6 +1221,29 @@ async def get_logs(level: str = "all"):
     return {"logs": [e for e in entries if e["level"] == level]}
 
 
+@app.get("/api/debug/indexers")
+async def debug_indexers(source: str = "radarr"):
+    """Debug: respuesta cruda de Radarr/Sonarr indexers."""
+    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    if not service:
+        return {"error": f"Servicio desconocido: {source}"}
+    headers = arr_headers(service["api_key"])
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(
+                f"{service['url']}/api/v3/indexer",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                text = await resp.text()
+                if resp.status != 200:
+                    return {"status": resp.status, "body": text[:500]}
+                data = await resp.json(content_type=None)
+                return {"status": 200, "count": len(data), "raw": data}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+
 @app.get("/api/settings")
 async def get_settings_endpoint(_key: str = Depends(verify_api_key)):
     return _mask_secrets(get_settings())
