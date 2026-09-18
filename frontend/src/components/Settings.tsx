@@ -1,7 +1,90 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Settings, SaveSettingsResponse } from '../types'
 import { authHeaders } from '../api/auth'
+
+interface LogEntry {
+  time: string
+  level: string
+  message: string
+}
+
+function LogsSection() {
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [loading, setLoading] = useState(false)
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  async function fetchLogs() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/logs', { headers: authHeaders() })
+      if (res.ok) {
+        const data = await res.json() as { logs: LogEntry[] }
+        setLogs(data.logs)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchLogs()
+  }, [])
+
+  useEffect(() => {
+    if (autoRefresh) {
+      intervalRef.current = setInterval(fetchLogs, 3000)
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [autoRefresh])
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [logs])
+
+  return (
+    <Section title="Logs del Sistema">
+      <div className="settings-logs-controls">
+        <button className="action-btn" onClick={fetchLogs} disabled={loading}>
+          {loading ? 'Cargando...' : '🔄 Actualizar'}
+        </button>
+        <label className="settings-toggle-label">
+          <button
+            className={`settings-toggle ${autoRefresh ? 'on' : 'off'}`}
+            onClick={() => setAutoRefresh(!autoRefresh)}
+          >
+            {autoRefresh ? 'Sí' : 'No'}
+          </button>
+          Auto-refresh (3s)
+        </label>
+      </div>
+      <div className="settings-logs-scroll" ref={scrollRef}>
+        {logs.length === 0 ? (
+          <div className="settings-logs-empty">No hay logs recientes (solo se muestran WARN+)</div>
+        ) : (
+          logs.map((entry, i) => (
+            <div key={i} className={`settings-log-entry log-${entry.level.toLowerCase()}`}>
+              <span className="log-time">{entry.time}</span>
+              <span className={`log-level log-level-${entry.level.toLowerCase()}`}>{entry.level}</span>
+              <span className="log-message">{entry.message}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </Section>
+  )
+}
 
 async function fetchSettings(): Promise<Settings> {
   const res = await fetch('/api/settings', { headers: authHeaders() })
@@ -189,6 +272,8 @@ export function Settings() {
       <Section title="Servidor">
         <Field label="Puerto" value={form.server.port} onChange={(v) => update('server.port', v)} type="number" restart={isRestarting('server.port')} />
       </Section>
+
+      <LogsSection />
 
       <div className="settings-actions">
         <button

@@ -2744,6 +2744,78 @@ body {
   color: var(--text-dim);
 }
 
+.settings-logs-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.settings-logs-scroll {
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+}
+
+.settings-logs-empty {
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 20px;
+}
+
+.settings-log-entry {
+  display: flex;
+  gap: 8px;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.4;
+}
+
+.settings-log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-time {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.log-level {
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 50px;
+}
+
+.log-level-warning {
+  color: #f59e0b;
+}
+
+.log-level-error {
+  color: #ef4444;
+}
+
+.log-level-critical {
+  color: #dc2626;
+}
+
+.log-message {
+  color: var(--text);
+  word-break: break-word;
+}
+
 .settings-actions {
   display: flex;
   gap: 10px;

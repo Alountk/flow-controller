@@ -70,6 +70,30 @@ logging.basicConfig(
 )
 log = logging.getLogger("flow-controller")
 
+
+# ── In-memory log buffer ─────────────────────────────────────────────────────
+import collections
+
+_LOG_BUFFER: collections.deque[dict] = collections.deque(maxlen=200)
+
+
+class _BufferHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            _LOG_BUFFER.append({
+                "time": self.format(record),
+                "level": record.levelname,
+                "message": record.getMessage(),
+            })
+        except Exception:
+            pass
+
+
+_buf_handler = _BufferHandler()
+_buf_handler.setFormatter(logging.Formatter("%(asctime)s"))
+_buf_handler.setLevel(logging.WARNING)  # Only WARN+ to keep it small
+logging.getLogger("flow-controller").addHandler(_buf_handler)
+
 # Shared mutable state
 status_cache: dict = {
     "radarr": "unknown",
@@ -1185,6 +1209,16 @@ def _mask_secrets(data: dict) -> dict:
     if pw:
         masked["services"]["amutorrent"]["password"] = "****"
     return masked
+
+
+@app.get("/api/logs")
+async def get_logs(level: str = "all"):
+    """Últimos logs del backend (WARNING+ por defecto)."""
+    entries = list(_LOG_BUFFER)
+    if level == "all":
+        return {"logs": entries}
+    level = level.upper()
+    return {"logs": [e for e in entries if e["level"] == level]}
 
 
 @app.get("/api/settings")
