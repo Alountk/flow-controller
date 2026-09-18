@@ -305,3 +305,23 @@ export interface BrowseResponse {
 export interface RootsResponse {
   roots: { path: string; name: string }[]
 }
+
+export interface CalendarItem {
+  type: 'movie' | 'episode'
+  id: number
+  title: string
+  date: string
+  year: number | null
+  has_file: boolean
+  remotePoster: string
+  series_title: string | null
+  season_number: number | null
+  episode_number: number | null
+  source: string
+}
+
+export interface CalendarResponse {
+  items: CalendarItem[]
+  start: string
+  end: string
+}

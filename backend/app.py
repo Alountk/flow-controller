@@ -34,6 +34,8 @@ from clients import (
     fetch_wanted_episodes,
     fetch_all_movies_detailed,
     fetch_all_series_detailed,
+    fetch_radarr_calendar,
+    fetch_sonarr_calendar,
     arr_search_missing_movies,
     arr_search_missing_episodes,
     arr_search_movie,
@@ -222,6 +224,34 @@ async def get_all_series():
     async with aiohttp.ClientSession() as session:
         result = await fetch_all_series_detailed(session, service)
     return result
+
+
+@app.get("/api/calendar")
+async def get_calendar(start: str = "", end: str = ""):
+    """Calendario de próximos episodios y películas."""
+    from datetime import date, timedelta
+    if not start:
+        start = date.today().isoformat()
+    if not end:
+        end = (date.today() + timedelta(days=30)).isoformat()
+
+    radarr = next((s for s in SERVICES if s["key"] == "radarr" and s["kind"] == "arr"), None)
+    sonarr = next((s for s in SERVICES if s["key"] == "sonarr" and s["kind"] == "arr"), None)
+
+    all_items = []
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        if radarr:
+            tasks.append(fetch_radarr_calendar(session, radarr, start, end))
+        if sonarr:
+            tasks.append(fetch_sonarr_calendar(session, sonarr, start, end))
+        if tasks:
+            results = await asyncio.gather(*tasks)
+            for r in results:
+                all_items.extend(r)
+
+    all_items.sort(key=lambda x: x.get("date") or "9999")
+    return {"items": all_items, "start": start, "end": end}
 
 
 @app.post("/api/wanted/search")

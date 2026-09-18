@@ -32,3 +32,5 @@ venv/
 
 # Logs
 *.log
+config/
+.atl/

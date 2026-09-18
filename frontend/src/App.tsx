@@ -9,6 +9,7 @@ import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
 import { QueueSidebar } from './components/QueueSidebar'
 import { Settings } from './components/Settings'
+import { Calendar } from './components/Calendar'
 import { setApiKey } from './api/auth'
 import { usePageRoute } from './hooks/usePageRoute'
 import {
@@ -189,6 +190,8 @@ function App() {
           {page === 'wanted' && (
             <MissingContent />
           )}
+
+          {page === 'calendar' && <Calendar />}
 
           {page === 'files' && (
             <FileManager />

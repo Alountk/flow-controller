@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
 
-type Page = 'dashboard' | 'trace' | 'wanted' | 'files' | 'config' | 'prototypes'
+type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'files' | 'config' | 'prototypes'
 
 const PAGE_PATHS: Record<Page, string> = {
   dashboard: '/dashboard',
   trace: '/trazabilidad',
   wanted: '/faltantes',
+  calendar: '/calendario',
   files: '/archivos',
   config: '/configuracion',
   prototypes: '/prototipos',

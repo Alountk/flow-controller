@@ -853,3 +853,76 @@ async def arr_downloaded_scan(session: aiohttp.ClientSession, service: dict, fol
         "path": folder_path,
         "importMode": "Move",
     })
+
+
+async def fetch_radarr_calendar(session: aiohttp.ClientSession, service: dict, start: str, end: str) -> list[dict]:
+    """Devuelve películas próximas de Radarr entre start y end (YYYY-MM-DD)."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/calendar",
+            headers=headers,
+            params={"start": start, "end": end},
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return []
+            data = await resp.json(content_type=None)
+            items = []
+            for m in data:
+                if "id" not in m:
+                    continue
+                release = m.get("physicalRelease") or m.get("digitalRelease") or m.get("inCinemas") or ""
+                items.append({
+                    "type": "movie",
+                    "id": m.get("id"),
+                    "title": m.get("title", ""),
+                    "date": release[:10] if release else "",
+                    "year": m.get("year"),
+                    "has_file": m.get("hasFile", False),
+                    "remotePoster": (m.get("images") or [{}])[0].get("url", "") if m.get("images") else "",
+                    "series_title": None,
+                    "season_number": None,
+                    "episode_number": None,
+                    "source": "radarr",
+                })
+            return items
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return []
+
+
+async def fetch_sonarr_calendar(session: aiohttp.ClientSession, service: dict, start: str, end: str) -> list[dict]:
+    """Devuelve episodios próximos de Sonarr entre start y end (YYYY-MM-DD)."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/calendar",
+            headers=headers,
+            params={"start": start, "end": end, "includeSeries": "true"},
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return []
+            data = await resp.json(content_type=None)
+            items = []
+            for ep in data:
+                if "id" not in ep:
+                    continue
+                series = ep.get("series", {})
+                air = ep.get("airDate") or ep.get("airDateUtc") or ""
+                items.append({
+                    "type": "episode",
+                    "id": ep.get("id"),
+                    "title": ep.get("title", ""),
+                    "date": air[:10] if air else "",
+                    "year": series.get("year"),
+                    "has_file": ep.get("hasFile", False),
+                    "remotePoster": (series.get("images") or [{}])[0].get("url", "") if series.get("images") else "",
+                    "series_title": series.get("title", ""),
+                    "season_number": ep.get("seasonNumber"),
+                    "episode_number": ep.get("episodeNumber"),
+                    "source": "sonarr",
+                })
+            return items
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return []
