@@ -14,9 +14,6 @@ frontend/dist/
 .env.*.local
 backend/.env
 
-# Persistent config (mounted as Docker volume)
-config/
-
 # IDE
 .vscode/
 .idea/
