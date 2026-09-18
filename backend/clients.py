@@ -651,6 +651,23 @@ async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> list[di
         return []
 
 
+async def arr_root_folders(session: aiohttp.ClientSession, service: dict) -> list[str]:
+    """Obtiene las carpetas raíz configuradas en Radarr/Sonarr."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/rootfolder",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return []
+            data = await resp.json(content_type=None)
+            return [f.get("path", "") for f in data if f.get("path")]
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return []
+
+
 async def fetch_qbit_torrents(session: aiohttp.ClientSession) -> list[dict]:
     headers = qbit_headers(AMUTORRENT_API_KEY)
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 3)

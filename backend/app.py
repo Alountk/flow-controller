@@ -309,12 +309,19 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
         return {"ok": False, "id": None, "detail": f"Servicio desconocido: {req.source}"}
 
     async with aiohttp.ClientSession() as session:
+        # Fetch root folders from the service
+        root_folders = await arr_root_folders(session, service)
+        root_path = root_folders[0] if root_folders else ""
+
+        if not root_path:
+            return {"ok": False, "id": None, "detail": "No hay carpetas raíz configuradas en Radarr/Sonarr"}
+
         if req.type == "movie":
             movie_payload = {
                 "title": req.title,
                 "year": req.year or 0,
                 "qualityProfileId": 1,
-                "rootFolderPath": "/mnt/storage-6tb/shared-downloads/amule",
+                "rootFolderPath": root_path,
                 "monitored": True,
             }
             add_result = await arr_add_movie(session, service, movie_payload)
@@ -332,7 +339,7 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                 "title": req.title,
                 "year": req.year or 0,
                 "qualityProfileId": 1,
-                "rootFolderPath": "/mnt/storage-6tb/shared-downloads/amule",
+                "rootFolderPath": root_path,
                 "monitored": True,
                 "seasonFolder": True,
             }
