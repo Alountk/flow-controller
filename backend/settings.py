@@ -7,7 +7,7 @@ from typing import Any
 
 log = logging.getLogger("settings")
 
-CONFIG_DIR = os.getenv("CONFIG_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config"))
+CONFIG_DIR = os.getenv("CONFIG_DIR", "/app/config")
 SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 
 DEFAULTS: dict[str, Any] = {
@@ -115,19 +115,24 @@ def load_settings() -> dict[str, Any]:
     return _settings
 
 
-def save_settings(data: dict[str, Any]) -> None:
+def save_settings(data: dict[str, Any]) -> bool:
     global _settings
     _settings = _deep_merge(DEFAULTS, data)
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    tmp = SETTINGS_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(_settings, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, SETTINGS_FILE)
     try:
-        os.chmod(SETTINGS_FILE, stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:
-        pass
-    log.info("Settings saved to %s", SETTINGS_FILE)
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        tmp = SETTINGS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_settings, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, SETTINGS_FILE)
+        try:
+            os.chmod(SETTINGS_FILE, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
+        log.info("Settings saved to %s", SETTINGS_FILE)
+        return True
+    except OSError as exc:
+        log.warning("Cannot write settings to %s: %s (using in-memory only)", SETTINGS_FILE, exc)
+        return False
 
 
 def get_settings() -> dict[str, Any]:
@@ -154,10 +159,10 @@ def migrate_env_vars() -> bool:
         env_val = os.getenv(env_key)
         if env_val is not None and env_val != "":
             _set_nested(env_data, path, env_val)
-    if env_data:
-        save_settings(_deep_merge(DEFAULTS, env_data))
+    merged = _deep_merge(DEFAULTS, env_data) if env_data else DEFAULTS
+    saved = save_settings(merged)
+    if saved:
         log.info("Migrated env vars to %s", SETTINGS_FILE)
-        return True
-    save_settings(DEFAULTS)
-    log.info("Created default settings at %s", SETTINGS_FILE)
+    else:
+        log.info("Using in-memory settings (config directory not writable)")
     return True
