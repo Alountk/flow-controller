@@ -44,6 +44,7 @@ from clients import (
     arr_add_series,
     arr_fetch_releases,
     arr_grab_release,
+    arr_indexers,
     arr_movie_metadata,
     arr_series_metadata,
     arr_manual_import,
@@ -377,6 +378,17 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
         result = await arr_grab_release(session, service, req.guid)
 
     return result
+
+
+@app.get("/api/calendar/indexers")
+async def calendar_indexers(source: str = "radarr"):
+    """Lista de indexadores configurados en Radarr/Sonarr."""
+    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    if not service:
+        return {"indexers": []}
+    async with aiohttp.ClientSession() as session:
+        indexers = await arr_indexers(session, service)
+    return {"indexers": indexers}
 
 
 @app.get("/api/disk")

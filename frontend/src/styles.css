@@ -3061,6 +3061,53 @@ body {
   color: var(--ok);
 }
 
+.calendar-indexers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.calendar-indexers-label {
+  color: var(--text-secondary);
+}
+
+.calendar-indexer-badge {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.calendar-modal-info-text {
+  color: var(--ok);
+  font-size: 13px;
+}
+
+.calendar-indexer-group {
+  margin-bottom: 12px;
+}
+
+.calendar-indexer-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.calendar-releases-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
 /* Disk Space */
 
 .disk-space {

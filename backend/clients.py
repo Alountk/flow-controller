@@ -619,6 +619,38 @@ async def arr_download_clients(session: aiohttp.ClientSession, service: dict) ->
         return []
 
 
+async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> list[dict]:
+    """Obtiene la lista de indexadores configurados en Radarr/Sonarr."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/indexer",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return []
+            data = await resp.json(content_type=None)
+            return [
+                {
+                    "id": idx.get("id"),
+                    "name": idx.get("name", ""),
+                    "implementation": idx.get("implementation", ""),
+                    "configFields": [
+                        {"name": f.get("name", ""), "value": f.get("value", "")}
+                        for f in idx.get("configFields", [])
+                        if f.get("name") == "apiUrl"
+                    ],
+                    "enableRss": idx.get("enableRss", False),
+                    "enableSearch": idx.get("enableSearch", False),
+                }
+                for idx in data
+                if idx.get("enableSearch", False)
+            ]
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return []
+
+
 async def fetch_qbit_torrents(session: aiohttp.ClientSession) -> list[dict]:
     headers = qbit_headers(AMUTORRENT_API_KEY)
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 3)
