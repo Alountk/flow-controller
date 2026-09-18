@@ -931,7 +931,6 @@ async def arr_series_lookup(session: aiohttp.ClientSession, service: dict, title
             data = await resp.json(content_type=None)
             if not data:
                 return {}
-            # Return first match
             s = data[0]
             return {
                 "tvdbId": s.get("tvdbId", 0),
@@ -943,6 +942,35 @@ async def arr_series_lookup(session: aiohttp.ClientSession, service: dict, title
             }
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         log.warning("arr_series_lookup %s error: %s", service["key"], exc)
+        return {}
+
+
+async def arr_movie_lookup(session: aiohttp.ClientSession, service: dict, title: str) -> dict:
+    """Busca una película por título en Radarr y devuelve metadata (tmdbId, title, year, etc)."""
+    headers = arr_headers(service["api_key"])
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/movie/lookup",
+            headers=headers,
+            params={"term": title},
+            timeout=timeout,
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json(content_type=None)
+            if not data:
+                return {}
+            m = data[0]
+            return {
+                "tmdbId": m.get("tmdbId", 0),
+                "title": m.get("title", ""),
+                "year": m.get("year"),
+                "qualityProfileId": m.get("qualityProfileId", 1),
+                "path": m.get("path", ""),
+            }
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        log.warning("arr_movie_lookup %s error: %s", service["key"], exc)
         return {}
 
 

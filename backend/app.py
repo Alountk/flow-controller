@@ -46,6 +46,7 @@ from clients import (
     arr_grab_release,
     arr_indexers,
     arr_root_folders,
+    arr_movie_lookup,
     arr_series_lookup,
     arr_movie_metadata,
     arr_series_metadata,
@@ -320,10 +321,17 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                 return {"ok": False, "id": None, "detail": "No hay carpetas raíz configuradas en Radarr/Sonarr. Configúralas en Settings > Media Management."}
 
             if req.type == "movie":
+                # Lookup movie metadata from Radarr (tmdbId is required)
+                lookup = await arr_movie_lookup(session, service, req.title)
+                tmdb_id = lookup.get("tmdbId", 0)
+                if not tmdb_id:
+                    return {"ok": False, "id": None, "detail": f"No se encontró '{req.title}' en Radarr. Verifica el título."}
+
                 movie_payload = {
-                    "title": req.title,
-                    "year": req.year or 0,
-                    "qualityProfileId": 1,
+                    "title": lookup.get("title") or req.title,
+                    "tmdbId": tmdb_id,
+                    "year": lookup.get("year") or req.year or 0,
+                    "qualityProfileId": lookup.get("qualityProfileId", 1),
                     "rootFolderPath": root_path,
                     "monitored": True,
                 }

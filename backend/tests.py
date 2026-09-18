@@ -465,9 +465,11 @@ class TestCalendarSearch:
 class TestCalendarAdd:
     @patch("app.arr_search_movie", new_callable=AsyncMock)
     @patch("app.arr_add_movie", new_callable=AsyncMock)
+    @patch("app.arr_movie_lookup", new_callable=AsyncMock)
     @patch("app.arr_root_folders", new_callable=AsyncMock)
-    def test_add_movie_uses_real_root_folder(self, mock_folders, mock_add, mock_search):
+    def test_add_movie_uses_real_root_folder(self, mock_folders, mock_lookup, mock_add, mock_search):
         mock_folders.return_value = ["/mnt/storage/Movies"]
+        mock_lookup.return_value = {"tmdbId": 550, "title": "Test Movie", "year": 2024, "qualityProfileId": 1}
         mock_add.return_value = {"ok": True, "id": 42, "detail": "OK"}
         mock_search.return_value = {"ok": True, "detail": "queued"}
 
@@ -485,6 +487,22 @@ class TestCalendarAdd:
         payload = mock_add.call_args[0][2]
         assert payload["rootFolderPath"] == "/mnt/storage/Movies"
         assert payload["title"] == "Test Movie"
+        assert payload["tmdbId"] == 550
+
+    @patch("app.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    def test_add_movie_without_tmdb_returns_error(self, mock_folders, mock_lookup):
+        mock_folders.return_value = ["/movies"]
+        mock_lookup.return_value = {}  # Lookup failed
+
+        resp = client.post(
+            "/api/calendar/add",
+            json={"source": "radarr", "type": "movie", "title": "Unknown Movie"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "No se encontró" in data["detail"]
 
     @patch("app.arr_add_series", new_callable=AsyncMock)
     @patch("app.arr_series_lookup", new_callable=AsyncMock)
@@ -536,9 +554,11 @@ class TestCalendarAdd:
 
     @patch("app.arr_search_movie", new_callable=AsyncMock)
     @patch("app.arr_add_movie", new_callable=AsyncMock)
+    @patch("app.arr_movie_lookup", new_callable=AsyncMock)
     @patch("app.arr_root_folders", new_callable=AsyncMock)
-    def test_add_movie_radarr_error_propagates(self, mock_folders, mock_add, mock_search):
+    def test_add_movie_radarr_error_propagates(self, mock_folders, mock_lookup, mock_add, mock_search):
         mock_folders.return_value = ["/movies"]
+        mock_lookup.return_value = {"tmdbId": 550, "title": "Fail Movie", "year": 2024, "qualityProfileId": 1}
         mock_add.return_value = {"ok": False, "id": None, "detail": "HTTP 400: validation error"}
 
         resp = client.post(
