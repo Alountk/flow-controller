@@ -300,8 +300,8 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
 }
 
 export function MissingContent() {
-  const [tab, setTab] = useHashState('wanted', 'tab', 'movies')
-  const [movieFilter, setMovieFilter] = useHashState('wanted', 'filter', 'missing')
+  const [tab, setTab] = useHashState<'movies' | 'episodes'>('wanted', 'tab', 'movies')
+  const [movieFilter, setMovieFilter] = useHashState<'missing' | 'all'>('wanted', 'filter', 'missing')
   const [searchResult, setSearchResult] = useState<string | null>(null)
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
 
