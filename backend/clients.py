@@ -1040,18 +1040,25 @@ async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movi
             data = await resp.json(content_type=None)
             releases = []
             for r in data:
+                # quality comes as {quality: {id, name, source, ...}, revision: {...}}
+                q = r.get("quality", {})
+                if isinstance(q, dict):
+                    inner = q.get("quality", {})
+                    quality_name = inner.get("name", "Unknown") if isinstance(inner, dict) else str(inner)
+                else:
+                    quality_name = str(q) if q else "Unknown"
                 releases.append({
                     "guid": r.get("guid", ""),
                     "title": r.get("title", ""),
                     "size": r.get("size", 0),
-                    "quality": r.get("quality", {}).get("quality", "Unknown"),
+                    "quality": quality_name,
                     "indexer": r.get("indexer", ""),
                     "indexerFlags": r.get("indexerFlags", ""),
                     "seeders": r.get("seeders", 0),
                     "leechers": r.get("leechers", 0),
                     "protocol": r.get("protocol", "torrent"),
                     "releaseGroup": r.get("releaseGroup", ""),
-                    "languages": [l.get("name", "") for l in r.get("languages", [])],
+                    "languages": [l.get("name", "") if isinstance(l, dict) else str(l) for l in r.get("languages", [])],
                 })
             log.info("arr_fetch_releases %s found %d releases", service["key"], len(releases))
             return {"releases": releases, "detail": f"{len(releases)} releases encontrados"}
