@@ -915,6 +915,37 @@ async def arr_add_series(session: aiohttp.ClientSession, service: dict, series_d
         return {"ok": False, "id": None, "detail": f"{type(exc).__name__}: {exc}"}
 
 
+async def arr_series_lookup(session: aiohttp.ClientSession, service: dict, title: str) -> dict:
+    """Busca una serie por título en Sonarr y devuelve metadata (tvdbId, title, year, etc)."""
+    headers = arr_headers(service["api_key"])
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/series/lookup",
+            headers=headers,
+            params={"term": title},
+            timeout=timeout,
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json(content_type=None)
+            if not data:
+                return {}
+            # Return first match
+            s = data[0]
+            return {
+                "tvdbId": s.get("tvdbId", 0),
+                "title": s.get("title", ""),
+                "year": s.get("year"),
+                "seasonFolder": s.get("seasonFolder", True),
+                "qualityProfileId": s.get("qualityProfileId", 1),
+                "path": s.get("path", ""),
+            }
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        log.warning("arr_series_lookup %s error: %s", service["key"], exc)
+        return {}
+
+
 async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movie_id: int = 0, episode_id: int = 0) -> dict:
     """Obtiene releases disponibles de Radarr/Sonarr via GET /api/v3/release."""
     headers = arr_headers(service["api_key"])

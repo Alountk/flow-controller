@@ -46,6 +46,7 @@ from clients import (
     arr_grab_release,
     arr_indexers,
     arr_root_folders,
+    arr_series_lookup,
     arr_movie_metadata,
     arr_series_metadata,
     arr_manual_import,
@@ -337,13 +338,20 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                 return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
 
             elif req.type == "episode":
+                # Lookup series metadata from Sonarr (tvdbId is required)
+                lookup = await arr_series_lookup(session, service, req.title)
+                tvdb_id = lookup.get("tvdbId", 0)
+                if not tvdb_id:
+                    return {"ok": False, "id": None, "detail": f"No se encontró '{req.title}' en Sonarr. Verifica el título."}
+
                 series_payload = {
-                    "title": req.title,
-                    "year": req.year or 0,
-                    "qualityProfileId": 1,
+                    "title": lookup.get("title") or req.title,
+                    "tvdbId": tvdb_id,
+                    "year": lookup.get("year") or req.year or 0,
+                    "qualityProfileId": lookup.get("qualityProfileId", 1),
                     "rootFolderPath": root_path,
                     "monitored": True,
-                    "seasonFolder": True,
+                    "seasonFolder": lookup.get("seasonFolder", True),
                 }
                 add_result = await arr_add_series(session, service, series_payload)
                 if add_result.get("ok") and add_result.get("id"):

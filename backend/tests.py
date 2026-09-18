@@ -487,9 +487,11 @@ class TestCalendarAdd:
         assert payload["title"] == "Test Movie"
 
     @patch("app.arr_add_series", new_callable=AsyncMock)
+    @patch("app.arr_series_lookup", new_callable=AsyncMock)
     @patch("app.arr_root_folders", new_callable=AsyncMock)
-    def test_add_series_uses_real_root_folder(self, mock_folders, mock_add):
+    def test_add_series_uses_real_root_folder(self, mock_folders, mock_lookup, mock_add):
         mock_folders.return_value = ["/mnt/storage-6tb/Series"]
+        mock_lookup.return_value = {"tvdbId": 12345, "title": "Test Show", "year": 2023, "seasonFolder": True, "qualityProfileId": 1}
         mock_add.return_value = {"ok": True, "id": 7, "detail": "OK"}
 
         resp = client.post(
@@ -502,6 +504,22 @@ class TestCalendarAdd:
         assert data["id"] == 7
         payload = mock_add.call_args[0][2]
         assert payload["rootFolderPath"] == "/mnt/storage-6tb/Series"
+        assert payload["tvdbId"] == 12345
+
+    @patch("app.arr_series_lookup", new_callable=AsyncMock)
+    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    def test_add_series_without_tvdb_returns_error(self, mock_folders, mock_lookup):
+        mock_folders.return_value = ["/series"]
+        mock_lookup.return_value = {}  # Lookup failed
+
+        resp = client.post(
+            "/api/calendar/add",
+            json={"source": "sonarr", "type": "episode", "title": "Unknown Show"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "No se encontró" in data["detail"]
 
     @patch("app.arr_root_folders", new_callable=AsyncMock)
     def test_add_without_root_folders_returns_error(self, mock_folders):
