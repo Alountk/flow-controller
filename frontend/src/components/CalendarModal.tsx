@@ -14,7 +14,7 @@ interface Indexer {
   enableSearch: boolean
 }
 
-type ModalStep = 'initial' | 'loading' | 'results' | 'grabbing' | 'done' | 'error'
+type ModalStep = 'initial' | 'searching' | 'adding' | 'results' | 'grabbing' | 'done' | 'error'
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '?'
@@ -42,9 +42,12 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
   const [step, setStep] = useState<ModalStep>('initial')
   const [message, setMessage] = useState('')
   const [indexers, setIndexers] = useState<Indexer[]>([])
+  const [selectedIndexer, setSelectedIndexer] = useState<string>('all')
   const [releases, setReleases] = useState<Release[]>([])
   const [selectedGuid, setSelectedGuid] = useState<string | null>(null)
+  const [elapsed, setElapsed] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) onClose()
@@ -64,9 +67,25 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
       .catch(() => {})
   }, [item.source])
 
+  // Timer for loading state
+  useEffect(() => {
+    if (step === 'searching' || step === 'adding') {
+      setElapsed(0)
+      timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000)
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [step])
+
   async function handleSearch() {
-    setStep('loading')
-    setMessage('Buscando releases en indexadores...')
+    setStep('searching')
+    setMessage(`Buscando releases${selectedIndexer !== 'all' ? ` en ${indexers.find(i => String(i.id) === selectedIndexer)?.name || ''}` : ' en todos los indexadores'}...`)
     try {
       const result = await fetchCalendarReleases(item.source, item.type, item.id)
       if (result.releases.length > 0) {
@@ -83,7 +102,7 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
   }
 
   async function handleAddAndSearch() {
-    setStep('loading')
+    setStep('adding')
     setMessage('Agregando a biblioteca...')
     try {
       const result = await addCalendarItem(
@@ -119,7 +138,13 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
     }
   }
 
-  const isProcessing = step === 'loading' || step === 'grabbing'
+  const isProcessing = step === 'searching' || step === 'adding' || step === 'grabbing'
+  const isSearching = step === 'searching'
+
+  function formatElapsed(s: number): string {
+    if (s < 60) return `${s}s`
+    return `${Math.floor(s / 60)}m ${s % 60}s`
+  }
 
   return (
     <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
@@ -157,18 +182,28 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
             </div>
           </div>
 
-          {/* Indexers list */}
-          {indexers.length > 0 && (
-            <div className="calendar-indexers">
-              <span className="calendar-indexers-label">Indexadores configurados:</span>
-              {indexers.map((idx) => (
-                <span key={idx.id} className="calendar-indexer-badge">{idx.name}</span>
-              ))}
+          {/* Indexer selector — only on initial step */}
+          {step === 'initial' && (
+            <div className="calendar-indexer-select">
+              <label className="calendar-indexer-label">Indexador:</label>
+              <select
+                className="calendar-indexer-dropdown"
+                value={selectedIndexer}
+                onChange={(e) => setSelectedIndexer(e.target.value)}
+              >
+                <option value="all">Todos los indexadores</option>
+                {indexers.map((idx) => (
+                  <option key={idx.id} value={String(idx.id)}>{idx.name}</option>
+                ))}
+              </select>
+              {indexers.length > 0 && (
+                <span className="calendar-indexer-count">{indexers.length} configurados</span>
+              )}
             </div>
           )}
 
           {/* Status message */}
-          {step !== 'initial' && step !== 'results' && (
+          {(step === 'error' || step === 'done' || step === 'adding') && (
             <div className={`calendar-modal-status ${
               step === 'error' ? 'status-error' : step === 'done' ? 'status-ok' : ''
             }`}>
@@ -176,7 +211,7 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
             </div>
           )}
 
-          {/* Step 1: Initial — show search button */}
+          {/* Step: Initial — show buttons */}
           {step === 'initial' && (
             <div className="calendar-modal-actions">
               {item.has_file ? (
@@ -202,9 +237,18 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
             </div>
           )}
 
-          {/* Step: Loading */}
-          {step === 'loading' && (
-            <div className="calendar-modal-loading">Buscando...</div>
+          {/* Step: Searching — show progress */}
+          {isSearching && (
+            <div className="calendar-modal-progress">
+              <div className="progress-spinner"></div>
+              <div className="progress-text">
+                <span>{message}</span>
+                <span className="progress-elapsed">{formatElapsed(elapsed)}</span>
+              </div>
+              <div className="progress-hint">
+                Los indexadores pueden tardar 1-2 minutos. Puedes cerrar este modal y volver a intentar.
+              </div>
+            </div>
           )}
 
           {/* Step: Results — show grouped by indexer */}
