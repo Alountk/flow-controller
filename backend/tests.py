@@ -409,3 +409,220 @@ class TestSpaFallback:
     def test_prototypes_unknown_returns_not_found(self):
         resp = client.get("/prototypes/nonexistent")
         assert resp.status_code in (200, 404)
+
+
+# ── Calendar Endpoints ───────────────────────────────────────────────────────
+
+from unittest.mock import patch, AsyncMock
+
+
+class TestCalendarSearch:
+    @patch("app.arr_search_movie", new_callable=AsyncMock)
+    def test_movie_search_calls_arr(self, mock_search):
+        mock_search.return_value = {"ok": True, "detail": "Command queued"}
+        resp = client.post(
+            "/api/calendar/search",
+            json={"source": "radarr", "type": "movie", "id": 42},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        mock_search.assert_called_once()
+
+    @patch("app.arr_search_episode", new_callable=AsyncMock)
+    def test_episode_search_calls_arr(self, mock_search):
+        mock_search.return_value = {"ok": True, "detail": "Command queued"}
+        resp = client.post(
+            "/api/calendar/search",
+            json={"source": "sonarr", "type": "episode", "id": 99},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        mock_search.assert_called_once()
+
+    def test_unknown_type_returns_error(self):
+        resp = client.post(
+            "/api/calendar/search",
+            json={"source": "radarr", "type": "season", "id": 1},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "desconocido" in data["detail"]
+
+    def test_unknown_source_returns_error(self):
+        resp = client.post(
+            "/api/calendar/search",
+            json={"source": "jackett", "type": "movie", "id": 1},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "desconocido" in data["detail"]
+
+
+class TestCalendarAdd:
+    @patch("app.arr_search_movie", new_callable=AsyncMock)
+    @patch("app.arr_add_movie", new_callable=AsyncMock)
+    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    def test_add_movie_uses_real_root_folder(self, mock_folders, mock_add, mock_search):
+        mock_folders.return_value = ["/mnt/storage/Movies"]
+        mock_add.return_value = {"ok": True, "id": 42, "detail": "OK"}
+        mock_search.return_value = {"ok": True, "detail": "queued"}
+
+        resp = client.post(
+            "/api/calendar/add",
+            json={"source": "radarr", "type": "movie", "title": "Test Movie", "year": 2024},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["id"] == 42
+        # Verify root folder was fetched and used
+        mock_folders.assert_called_once()
+        # arr_add_movie(session, service, payload) — payload is 3rd arg
+        payload = mock_add.call_args[0][2]
+        assert payload["rootFolderPath"] == "/mnt/storage/Movies"
+        assert payload["title"] == "Test Movie"
+
+    @patch("app.arr_add_series", new_callable=AsyncMock)
+    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    def test_add_series_uses_real_root_folder(self, mock_folders, mock_add):
+        mock_folders.return_value = ["/mnt/storage-6tb/Series"]
+        mock_add.return_value = {"ok": True, "id": 7, "detail": "OK"}
+
+        resp = client.post(
+            "/api/calendar/add",
+            json={"source": "sonarr", "type": "episode", "title": "Test Show", "year": 2023},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["id"] == 7
+        payload = mock_add.call_args[0][2]
+        assert payload["rootFolderPath"] == "/mnt/storage-6tb/Series"
+
+    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    def test_add_without_root_folders_returns_error(self, mock_folders):
+        mock_folders.return_value = []
+
+        resp = client.post(
+            "/api/calendar/add",
+            json={"source": "radarr", "type": "movie", "title": "No Root"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "carpetas raíz" in data["detail"]
+
+    @patch("app.arr_search_movie", new_callable=AsyncMock)
+    @patch("app.arr_add_movie", new_callable=AsyncMock)
+    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    def test_add_movie_radarr_error_propagates(self, mock_folders, mock_add, mock_search):
+        mock_folders.return_value = ["/movies"]
+        mock_add.return_value = {"ok": False, "id": None, "detail": "HTTP 400: validation error"}
+
+        resp = client.post(
+            "/api/calendar/add",
+            json={"source": "radarr", "type": "movie", "title": "Fail Movie"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "400" in data["detail"]
+        mock_search.assert_not_called()
+
+    def test_add_unknown_type_returns_error(self):
+        # Root folders are fetched before type check, so mock it
+        with patch("app.arr_root_folders", new_callable=AsyncMock, return_value=["/movies"]):
+            resp = client.post(
+                "/api/calendar/add",
+                json={"source": "radarr", "type": "season", "title": "X"},
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["ok"] is False
+            assert "desconocido" in data["detail"]
+
+
+class TestCalendarReleases:
+    @patch("app.arr_fetch_releases", new_callable=AsyncMock)
+    def test_movie_releases(self, mock_fetch):
+        mock_fetch.return_value = {
+            "releases": [{"guid": "g1", "title": "Rel1", "quality": "1080p", "size": 1_000_000_000, "indexer": "Torznab", "seeders": 10, "leechers": 2, "languages": ["English"]}],
+            "detail": "1 releases",
+        }
+        resp = client.post(
+            "/api/calendar/releases",
+            json={"source": "radarr", "type": "movie", "id": 42},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["releases"]) == 1
+        assert data["releases"][0]["guid"] == "g1"
+
+    @patch("app.arr_fetch_releases", new_callable=AsyncMock)
+    def test_episode_releases(self, mock_fetch):
+        mock_fetch.return_value = {"releases": [], "detail": "0 releases"}
+        resp = client.post(
+            "/api/calendar/releases",
+            json={"source": "sonarr", "type": "episode", "id": 99},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["releases"] == []
+
+    def test_unknown_type_returns_error(self):
+        resp = client.post(
+            "/api/calendar/releases",
+            json={"source": "radarr", "type": "season", "id": 1},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["releases"] == []
+        assert "desconocido" in data["detail"]
+
+
+class TestCalendarGrab:
+    @patch("app.arr_grab_release", new_callable=AsyncMock)
+    def test_grab_ok(self, mock_grab):
+        mock_grab.return_value = {"ok": True, "detail": "Release encolado"}
+        resp = client.post(
+            "/api/calendar/grab",
+            json={"source": "radarr", "guid": "some-guid-123"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        mock_grab.assert_called_once()
+
+    @patch("app.arr_grab_release", new_callable=AsyncMock)
+    def test_grab_error(self, mock_grab):
+        mock_grab.return_value = {"ok": False, "detail": "HTTP 404: not found"}
+        resp = client.post(
+            "/api/calendar/grab",
+            json={"source": "radarr", "guid": "bad-guid"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+
+
+class TestCalendarIndexers:
+    @patch("app.arr_indexers", new_callable=AsyncMock)
+    def test_indexers_returned(self, mock_idx):
+        mock_idx.return_value = [
+            {"id": 1, "name": "Torznab", "implementation": "Torznab", "enableSearch": True},
+        ]
+        resp = client.get("/api/calendar/indexers?source=radarr")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["indexers"]) == 1
+        assert data["indexers"][0]["name"] == "Torznab"
+
+    def test_unknown_source_returns_empty(self):
+        resp = client.get("/api/calendar/indexers?source=jackett")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["indexers"] == []

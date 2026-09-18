@@ -45,6 +45,7 @@ from clients import (
     arr_fetch_releases,
     arr_grab_release,
     arr_indexers,
+    arr_root_folders,
     arr_movie_metadata,
     arr_series_metadata,
     arr_manual_import,
