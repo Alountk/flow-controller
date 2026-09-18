@@ -150,6 +150,11 @@ tab === 'episodes' // OK
 
 **Solución:** Usar doble casting: `as unknown as Record<string, unknown>`.
 
+### ModuleNotFoundError en Docker
+**Causa:** El Dockerfile copia archivos backend uno por uno (`COPY backend/app.py .`). Si se agrega un módulo nuevo (`settings.py`) sin agregarlo al Dockerfile, el contenedor no lo encuentra.
+
+**Solución:** Agregar `COPY backend/settings.py .` al Dockerfile. Considerar cambiar a `COPY backend/ .` para evitar este problema en el futuro.
+
 ## Licencia
 
 MIT
