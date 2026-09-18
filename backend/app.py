@@ -1227,9 +1227,9 @@ async def debug_indexers(source: str = "radarr"):
     service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
     if not service:
         return {"error": f"Servicio desconocido: {source}"}
-    headers = arr_headers(service["api_key"])
-    async with aiohttp.ClientSession() as session:
-        try:
+    try:
+        headers = arr_headers(service["api_key"])
+        async with aiohttp.ClientSession() as session:
             async with session.get(
                 f"{service['url']}/api/v3/indexer",
                 headers=headers,
@@ -1237,11 +1237,12 @@ async def debug_indexers(source: str = "radarr"):
             ) as resp:
                 text = await resp.text()
                 if resp.status != 200:
-                    return {"status": resp.status, "body": text[:500]}
+                    return {"status": resp.status, "body": text[:500], "url": service["url"]}
                 data = await resp.json(content_type=None)
-                return {"status": 200, "count": len(data), "raw": data}
-        except Exception as exc:
-            return {"error": str(exc)}
+                return {"status": 200, "count": len(data), "raw": data, "url": service["url"]}
+    except Exception as exc:
+        import traceback
+        return {"error": str(exc), "type": type(exc).__name__, "url": service.get("url", "?"), "traceback": traceback.format_exc()}
 
 
 @app.get("/api/settings")
