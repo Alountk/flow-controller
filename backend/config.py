@@ -1,31 +1,34 @@
 import os
 
 from dotenv import load_dotenv
+from settings import load_settings, get_setting, migrate_env_vars
 
 load_dotenv()
+migrate_env_vars()
+load_settings()
 
-RADARR_URL = os.getenv("RADARR_URL", "http://localhost:7878")
-SONARR_URL = os.getenv("SONARR_URL", "http://localhost:8989")
-AMUTORRENT_URL = os.getenv("AMUTORRENT_URL", "http://localhost:4000")
+RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
+SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:8989")
+AMUTORRENT_URL = get_setting("services", "amutorrent", "url", default="http://localhost:4000")
 
-RADARR_API_KEY = os.getenv("RADARR_API_KEY", "")
-SONARR_API_KEY = os.getenv("SONARR_API_KEY", "")
-AMUTORRENT_API_KEY = os.getenv("AMUTORRENT_API_KEY", "")
+RADARR_API_KEY = get_setting("services", "radarr", "api_key", default="")
+SONARR_API_KEY = get_setting("services", "sonarr", "api_key", default="")
+AMUTORRENT_API_KEY = get_setting("services", "amutorrent", "api_key", default="")
 
-AMUTORRENT_USER = os.getenv("AMUTORRENT_USER", "admin")
-AMUTORRENT_PASSWORD = os.getenv("AMUTORRENT_PASSWORD", "")
+AMUTORRENT_USER = get_setting("services", "amutorrent", "user", default="admin")
+AMUTORRENT_PASSWORD = get_setting("services", "amutorrent", "password", default="")
 
-API_KEY = os.getenv("API_KEY", "")
+API_KEY = get_setting("security", "api_key", default="")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIST = os.path.normpath(os.path.join(BASE_DIR, "..", "frontend", "dist"))
 
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "15"))
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
-RETRY_DELAY = float(os.getenv("RETRY_DELAY", "2"))
-REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "5"))
+CHECK_INTERVAL = int(get_setting("intervals", "check", default=15))
+MAX_RETRIES = int(get_setting("intervals", "max_retries", default=3))
+RETRY_DELAY = float(get_setting("intervals", "retry_delay", default=2))
+REQUEST_TIMEOUT = float(get_setting("intervals", "request_timeout", default=5))
 
-TRACE_LIMIT = int(os.getenv("TRACE_LIMIT", "25"))
+TRACE_LIMIT = int(get_setting("tracing", "limit", default=25))
 
 EXPECTED_CATEGORY = {"radarr": "radarr", "sonarr": "tv-sonarr"}
 
@@ -33,11 +36,11 @@ AMUTORRENT_INDEXER = os.getenv(
     "AMUTORRENT_INDEXER", f"{AMUTORRENT_URL}/indexer/amule/api"
 )
 
-SAFE_MODE = os.getenv("SAFE_MODE", "true").lower() in ("1", "true", "yes")
-DEVELOPER = os.getenv("DEVELOPER", "false").lower() in ("1", "true", "yes")
+SAFE_MODE = get_setting("security", "safe_mode", default=True)
+DEVELOPER = get_setting("developer", default=False)
 
-FOLDER_DOWNLOAD_AMULE = os.getenv("FOLDER_DOWNLOAD_AMULE", "/mnt/storage-6tb/shared-downloads/amule")
-FOLDER_DOWNLOAD_TORRENT = os.getenv("FOLDER_DOWNLOAD_TORRENT", "/mnt/storage/downloads/qbittorrent/completed")
+FOLDER_DOWNLOAD_AMULE = get_setting("paths", "download_amule", default="/mnt/storage-6tb/shared-downloads/amule")
+FOLDER_DOWNLOAD_TORRENT = get_setting("paths", "download_torrent", default="/mnt/storage/downloads/qbittorrent/completed")
 
 ACTIONS: dict[str, dict] = {
     "fix_category": {
@@ -136,6 +139,6 @@ _DOWNLOAD_CLIENT_PATHS: dict[str, str] = {
 }
 
 IMPORT_POLL_INTERVAL = 5
-IMPORT_POLL_TIMEOUT = int(os.getenv("IMPORT_TIMEOUT", "40"))
+IMPORT_POLL_TIMEOUT = int(get_setting("intervals", "import_timeout", default=40))
 
 _TASK_TTL = 600

@@ -42,5 +42,6 @@ services:
       # Puerto del servidor
       - PORT=${PORT:-8000}
     volumes:
+      - ./config:/app/config
       - /mnt/storage:/mnt/storage:rw
       - /mnt/storage-6tb:/mnt/storage-6tb:rw

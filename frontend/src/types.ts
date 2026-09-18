@@ -171,6 +171,35 @@ export interface ConfigResponse {
   api_key: string
 }
 
+export interface Settings {
+  services: {
+    radarr: { url: string; api_key: string }
+    sonarr: { url: string; api_key: string }
+    amutorrent: { url: string; api_key: string; user: string; password: string }
+  }
+  security: { api_key: string; safe_mode: boolean }
+  developer: boolean
+  paths: {
+    download_amule: string
+    download_torrent: string
+    allowed_roots: string[]
+  }
+  intervals: {
+    check: number
+    max_retries: number
+    retry_delay: number
+    request_timeout: number
+    import_timeout: number
+  }
+  tracing: { limit: number }
+  server: { port: number }
+}
+
+export interface SaveSettingsResponse {
+  ok: boolean
+  restart_required: string[]
+}
+
 export interface PrototypeFile {
   name: string
   file: string

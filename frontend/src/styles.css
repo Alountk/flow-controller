@@ -2633,3 +2633,145 @@ body {
     max-height: 95vh;
   }
 }
+
+/* ── Settings page ──────────────────────────────────────────────── */
+.settings-page {
+  max-width: 720px;
+}
+
+.settings-section {
+  margin-bottom: 28px;
+}
+
+.settings-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-group {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.settings-group h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.settings-field:last-child {
+  margin-bottom: 0;
+}
+
+.settings-label {
+  flex: 0 0 200px;
+  font-size: 13px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settings-restart-badge {
+  font-size: 10px;
+  background: var(--warn);
+  color: #000;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.settings-input {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(120, 180, 255, 0.15);
+}
+
+.settings-toggle {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.settings-toggle.on {
+  background: var(--ok);
+  color: #fff;
+  border-color: var(--ok);
+}
+
+.settings-toggle.off {
+  background: var(--bg);
+  color: var(--text-dim);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ok);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 300;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 640px) {
+  .settings-field {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .settings-label {
+    flex: none;
+  }
+
+  .settings-input {
+    width: 100%;
+  }
+}

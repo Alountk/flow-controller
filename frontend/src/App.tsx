@@ -8,6 +8,7 @@ import { MissingContent } from './components/MissingContent'
 import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
 import { QueueSidebar } from './components/QueueSidebar'
+import { Settings } from './components/Settings'
 import { setApiKey } from './api/auth'
 import { usePageRoute } from './hooks/usePageRoute'
 import {
@@ -38,6 +39,7 @@ const PAGE_TITLES: Record<Page, string> = {
   trace: 'Trazabilidad',
   wanted: 'Faltantes',
   files: 'Archivos',
+  config: 'Configuración',
   prototypes: 'Prototipos',
 }
 
@@ -191,6 +193,8 @@ function App() {
           {page === 'files' && (
             <FileManager />
           )}
+
+          {page === 'config' && <Settings />}
 
           {page === 'prototypes' && <Prototypes />}
           </div>
