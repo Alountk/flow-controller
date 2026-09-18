@@ -42,6 +42,8 @@ from clients import (
     arr_search_episode,
     arr_add_movie,
     arr_add_series,
+    arr_fetch_releases,
+    arr_grab_release,
     arr_movie_metadata,
     arr_series_metadata,
     arr_manual_import,
@@ -106,6 +108,17 @@ class CalendarAddRequest(BaseModel):
     type: str  # "movie" or "episode"
     title: str
     year: int | None = None
+
+
+class CalendarReleasesRequest(BaseModel):
+    source: str  # "radarr" or "sonarr"
+    type: str  # "movie" or "episode"
+    id: int  # Radarr movie ID or Sonarr episode ID
+
+
+class CalendarGrabRequest(BaseModel):
+    source: str  # "radarr" or "sonarr"
+    guid: str
 
 
 async def check_all(session: aiohttp.ClientSession) -> None:
@@ -333,6 +346,37 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
 
         else:
             return {"ok": False, "id": None, "detail": f"Tipo desconocido: {req.type}"}
+
+
+@app.post("/api/calendar/releases")
+async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(verify_api_key)):
+    """Obtiene releases disponibles para un movie/episode."""
+    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    if not service:
+        return {"releases": [], "detail": f"Servicio desconocido: {req.source}"}
+
+    async with aiohttp.ClientSession() as session:
+        if req.type == "movie":
+            result = await arr_fetch_releases(session, service, movie_id=req.id)
+        elif req.type == "episode":
+            result = await arr_fetch_releases(session, service, episode_id=req.id)
+        else:
+            return {"releases": [], "detail": f"Tipo desconocido: {req.type}"}
+
+    return result
+
+
+@app.post("/api/calendar/grab")
+async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api_key)):
+    """Descarga un release específico."""
+    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    if not service:
+        return {"ok": False, "detail": f"Servicio desconocido: {req.source}"}
+
+    async with aiohttp.ClientSession() as session:
+        result = await arr_grab_release(session, service, req.guid)
+
+    return result
 
 
 @app.get("/api/disk")

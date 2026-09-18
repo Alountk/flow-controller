@@ -864,6 +864,68 @@ async def arr_add_series(session: aiohttp.ClientSession, service: dict, series_d
         return {"ok": False, "id": None, "detail": f"{type(exc).__name__}: {exc}"}
 
 
+async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movie_id: int = 0, episode_id: int = 0) -> dict:
+    """Obtiene releases disponibles de Radarr/Sonarr via GET /api/v3/release."""
+    headers = arr_headers(service["api_key"])
+    params: dict[str, int] = {}
+    if movie_id:
+        params["movieId"] = movie_id
+    elif episode_id:
+        params["episodeId"] = episode_id
+    else:
+        return {"releases": [], "detail": "Se requiere movieId o episodeId"}
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 3)
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/release",
+            headers=headers,
+            params=params,
+            timeout=timeout,
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                return {"releases": [], "detail": f"HTTP {resp.status}: {text[:200]}"}
+            data = await resp.json(content_type=None)
+            releases = []
+            for r in data:
+                releases.append({
+                    "guid": r.get("guid", ""),
+                    "title": r.get("title", ""),
+                    "size": r.get("size", 0),
+                    "quality": r.get("quality", {}).get("quality", "Unknown"),
+                    "indexer": r.get("indexer", ""),
+                    "indexerFlags": r.get("indexerFlags", ""),
+                    "seeders": r.get("seeders", 0),
+                    "leechers": r.get("leechers", 0),
+                    "protocol": r.get("protocol", "torrent"),
+                    "releaseGroup": r.get("releaseGroup", ""),
+                    "languages": [l.get("name", "") for l in r.get("languages", [])],
+                })
+            return {"releases": releases, "detail": f"{len(releases)} releases encontrados"}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"releases": [], "detail": f"{type(exc).__name__}: {exc}"}
+
+
+async def arr_grab_release(session: aiohttp.ClientSession, service: dict, guid: str) -> dict:
+    """Descarga un release específico via POST /api/v3/release/pick."""
+    headers = arr_headers(service["api_key"])
+    headers["Content-Type"] = "application/json"
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    try:
+        async with session.post(
+            f"{service['url']}/api/v3/release/pick",
+            headers=headers,
+            json={"guid": guid},
+            timeout=timeout,
+        ) as resp:
+            text = await resp.text()
+            if resp.status in (200, 201):
+                return {"ok": True, "detail": "Release encolado para descarga"}
+            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
 async def arr_manual_import(session: aiohttp.ClientSession, service: dict, file_path: str, movie_id: int) -> dict:
     """Importa un archivo directamente a una película en Radarr via POST /api/v3/manualimport."""
     headers = arr_headers(service["api_key"])

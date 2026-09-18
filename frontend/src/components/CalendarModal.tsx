@@ -1,8 +1,20 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import type { CalendarItem } from '../types'
-import { searchCalendarItem, addCalendarItem } from '../api/calendar'
+import {
+  addCalendarItem,
+  fetchCalendarReleases,
+  grabCalendarRelease,
+  type Release,
+} from '../api/calendar'
 
-type ModalStatus = 'idle' | 'searching' | 'adding' | 'done' | 'error'
+type ModalStatus = 'idle' | 'loading' | 'error' | 'results' | 'grabbing' | 'done'
+
+function formatSize(bytes: number): string {
+  if (bytes === 0) return '?'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+}
 
 interface CalendarModalProps {
   item: CalendarItem
@@ -12,6 +24,9 @@ interface CalendarModalProps {
 export function CalendarModal({ item, onClose }: CalendarModalProps) {
   const [status, setStatus] = useState<ModalStatus>('idle')
   const [message, setMessage] = useState('')
+  const [releases, setReleases] = useState<Release[]>([])
+  const [selectedGuid, setSelectedGuid] = useState<string | null>(null)
+  const [libraryId, setLibraryId] = useState<number | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
@@ -24,21 +39,29 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  async function handleSearch() {
-    setStatus('searching')
-    setMessage('Buscando en indexadores...')
-    const result = await searchCalendarItem(item.source, item.type, item.id)
-    if (result.ok) {
-      setStatus('done')
-      setMessage('Búsqueda completada. El download empezará automáticamente si se encuentra contenido.')
+  // If item is already in library (has an ID from Radarr/Sonarr), fetch releases immediately
+  useEffect(() => {
+    if (item.id && !item.has_file) {
+      handleFetchReleases(item.id)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleFetchReleases(id: number) {
+    setStatus('loading')
+    setMessage('Buscando releases disponibles...')
+    const result = await fetchCalendarReleases(item.source, item.type, id)
+    if (result.releases.length > 0) {
+      setReleases(result.releases)
+      setStatus('results')
+      setMessage(`${result.releases.length} releases encontrados`)
     } else {
       setStatus('error')
-      setMessage(result.detail)
+      setMessage(result.detail || 'No se encontraron releases')
     }
   }
 
   async function handleAddAndSearch() {
-    setStatus('adding')
+    setStatus('loading')
     setMessage('Agregando a biblioteca...')
     const result = await addCalendarItem(
       item.source,
@@ -46,28 +69,35 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
       item.series_title || item.title,
       item.year ?? undefined,
     )
-    if (result.ok) {
-      setStatus('searching')
-      setMessage('Agregado. Buscando en indexadores...')
-      const searchResult = await searchCalendarItem(item.source, item.type, result.id || item.id)
-      if (searchResult.ok) {
-        setStatus('done')
-        setMessage('Agregado y búsqueda lanzada. El download empezará automáticamente.')
-      } else {
-        setStatus('error')
-        setMessage(`Agregado pero búsqueda falló: ${searchResult.detail}`)
-      }
+    if (result.ok && result.id) {
+      setLibraryId(result.id)
+      handleFetchReleases(result.id)
     } else {
       setStatus('error')
       setMessage(result.detail)
     }
   }
 
-  const isSearching = status === 'searching' || status === 'adding'
+  async function handleGrab(guid: string) {
+    setSelectedGuid(guid)
+    setStatus('grabbing')
+    setMessage('Descargando...')
+    const result = await grabCalendarRelease(item.source, guid)
+    if (result.ok) {
+      setStatus('done')
+      setMessage('Descarga iniciada. Aparecerá en la cola de descargas.')
+    } else {
+      setStatus('error')
+      setMessage(result.detail)
+      setSelectedGuid(null)
+    }
+  }
+
+  const isProcessing = status === 'loading' || status === 'grabbing'
 
   return (
     <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
-      <div className="scan-modal" ref={modalRef}>
+      <div className="scan-modal scan-modal-wide" ref={modalRef}>
         <div className="scan-modal-header">
           <div className="scan-selected-info">
             <span className="scan-selected-type">{item.type === 'movie' ? '🎬' : '📺'}</span>
@@ -77,6 +107,7 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
         </div>
 
         <div className="scan-modal-body">
+          {/* Item details */}
           <div className="calendar-modal-details">
             {item.remotePoster && (
               <img className="calendar-modal-poster" src={item.remotePoster} alt={item.title} />
@@ -90,43 +121,80 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
                   </div>
                 </>
               ) : (
-                <>
-                  <div className="calendar-modal-title">
-                    {item.title} {item.year && <span className="wanted-year">({item.year})</span>}
-                  </div>
-                </>
+                <div className="calendar-modal-title">
+                  {item.title} {item.year && <span className="wanted-year">({item.year})</span>}
+                </div>
               )}
               <div className="calendar-modal-date">
                 {item.type === 'movie' ? '🗓️ Estreno' : '🗓️ Emisión'}: {item.date || 'Desconocida'}
               </div>
-              <div className="calendar-modal-badge">
-                {item.type === 'movie' ? '🎬 Película' : '📺 Episodio'}
-              </div>
             </div>
           </div>
 
-          {status !== 'idle' && (
+          {/* Status message */}
+          {status !== 'idle' && status !== 'results' && (
             <div className={`calendar-modal-status ${status === 'error' ? 'status-error' : status === 'done' ? 'status-ok' : ''}`}>
               {message}
             </div>
           )}
 
-          <div className="calendar-modal-actions">
-            <button
-              className="action-btn search-all"
-              onClick={handleSearch}
-              disabled={isSearching}
-            >
-              {isSearching ? 'Procesando...' : '🔍 Buscar'}
-            </button>
-            <button
-              className="action-btn scan-folder-btn"
-              onClick={handleAddAndSearch}
-              disabled={isSearching}
-            >
-              {isSearching ? 'Procesando...' : '➕ Agregar y Buscar'}
-            </button>
-          </div>
+          {/* Initial actions — show when no releases loaded yet */}
+          {status === 'idle' && (
+            <div className="calendar-modal-actions">
+              <button
+                className="action-btn scan-folder-btn"
+                onClick={handleAddAndSearch}
+                disabled={isProcessing}
+              >
+                ➕ Agregar y Buscar Releases
+              </button>
+            </div>
+          )}
+
+          {/* Loading */}
+          {status === 'loading' && (
+            <div className="calendar-modal-loading">Buscando...</div>
+          )}
+
+          {/* Releases list */}
+          {status === 'results' && (
+            <div className="calendar-releases">
+              <div className="calendar-releases-header">
+                <span className="calendar-releases-count">{releases.length} releases encontrados</span>
+              </div>
+              <div className="calendar-releases-list">
+                {releases.map((r) => (
+                  <div
+                    key={r.guid}
+                    className={`calendar-release ${selectedGuid === r.guid ? 'selected' : ''}`}
+                    onClick={() => handleGrab(r.guid)}
+                  >
+                    <div className="release-title">{r.title}</div>
+                    <div className="release-meta">
+                      <span className="release-quality">{r.quality}</span>
+                      <span className="release-size">{formatSize(r.size)}</span>
+                      <span className="release-indexer">{r.indexer}</span>
+                      {r.seeders > 0 && (
+                        <span className="release-seeders">
+                          ⬆ {r.seeders} / ⬇ {r.leechers}
+                        </span>
+                      )}
+                      <span className="release-protocol">{r.protocol}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Done */}
+          {status === 'done' && (
+            <div className="calendar-modal-actions">
+              <button className="action-btn search-all" onClick={onClose}>
+                Cerrar
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
