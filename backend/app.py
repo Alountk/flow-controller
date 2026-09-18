@@ -40,6 +40,8 @@ from clients import (
     arr_search_missing_episodes,
     arr_search_movie,
     arr_search_episode,
+    arr_add_movie,
+    arr_add_series,
     arr_movie_metadata,
     arr_series_metadata,
     arr_manual_import,
@@ -91,6 +93,19 @@ class ActionRequest(BaseModel):
     host: str = ""
     remote_path: str = ""
     local_path: str = ""
+
+
+class CalendarSearchRequest(BaseModel):
+    source: str  # "radarr" or "sonarr"
+    type: str  # "movie" or "episode"
+    id: int  # Radarr movie ID or Sonarr episode ID
+
+
+class CalendarAddRequest(BaseModel):
+    source: str  # "radarr" or "sonarr"
+    type: str  # "movie" or "episode"
+    title: str
+    year: int | None = None
 
 
 async def check_all(session: aiohttp.ClientSession) -> None:
@@ -252,6 +267,72 @@ async def get_calendar(start: str = "", end: str = ""):
 
     all_items.sort(key=lambda x: x.get("date") or "9999")
     return {"items": all_items, "start": start, "end": end}
+
+
+@app.post("/api/calendar/search")
+async def calendar_search(req: CalendarSearchRequest, _key: str = Depends(verify_api_key)):
+    """Busca contenido en los indexadores de Radarr/Sonarr."""
+    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    if not service:
+        return {"ok": False, "detail": f"Servicio desconocido: {req.source}"}
+
+    async with aiohttp.ClientSession() as session:
+        if req.type == "movie":
+            result = await arr_search_movie(session, service, req.id)
+        elif req.type == "episode":
+            result = await arr_search_episode(session, service, req.id)
+        else:
+            return {"ok": False, "detail": f"Tipo desconocido: {req.type}"}
+
+    return {"ok": result.get("ok", False), "detail": result.get("detail", "")}
+
+
+@app.post("/api/calendar/add")
+async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_key)):
+    """Agrega una película/serie a Radarr/Sonarr y lanza búsqueda."""
+    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    if not service:
+        return {"ok": False, "id": None, "detail": f"Servicio desconocido: {req.source}"}
+
+    async with aiohttp.ClientSession() as session:
+        if req.type == "movie":
+            movie_payload = {
+                "title": req.title,
+                "year": req.year or 0,
+                "qualityProfileId": 1,
+                "rootFolderPath": "/mnt/storage-6tb/shared-downloads/amule",
+                "monitored": True,
+            }
+            add_result = await arr_add_movie(session, service, movie_payload)
+            if add_result.get("ok") and add_result.get("id"):
+                search_result = await arr_search_movie(session, service, add_result["id"])
+                return {
+                    "ok": True,
+                    "id": add_result["id"],
+                    "detail": f"Película agregada y búsqueda lanzada",
+                }
+            return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
+
+        elif req.type == "episode":
+            series_payload = {
+                "title": req.title,
+                "year": req.year or 0,
+                "qualityProfileId": 1,
+                "rootFolderPath": "/mnt/storage-6tb/shared-downloads/amule",
+                "monitored": True,
+                "seasonFolder": True,
+            }
+            add_result = await arr_add_series(session, service, series_payload)
+            if add_result.get("ok") and add_result.get("id"):
+                return {
+                    "ok": True,
+                    "id": add_result["id"],
+                    "detail": f"Serie agregada a Sonarr",
+                }
+            return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
+
+        else:
+            return {"ok": False, "id": None, "detail": f"Tipo desconocido: {req.type}"}
 
 
 @app.get("/api/disk")

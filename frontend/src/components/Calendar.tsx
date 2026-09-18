@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { CalendarItem, CalendarResponse } from '../types'
+import { CalendarModal } from './CalendarModal'
 
 async function fetchCalendar(start: string, end: string): Promise<CalendarResponse> {
   const res = await fetch(`/api/calendar?start=${start}&end=${end}`)
@@ -33,6 +34,7 @@ export function Calendar() {
       end: end.toISOString().slice(0, 10),
     }
   })
+  const [scanItem, setScanItem] = useState<CalendarItem | null>(null)
 
   const { data, isPending } = useQuery({
     queryKey: ['calendar', range.start, range.end],
@@ -84,6 +86,8 @@ export function Calendar() {
                   <div
                     key={`${item.source}-${item.id}`}
                     className={`calendar-card ${item.has_file ? 'status-ok' : 'status-pending'}`}
+                    onClick={() => !item.has_file && setScanItem(item)}
+                    style={!item.has_file ? { cursor: 'pointer' } : undefined}
                   >
                     {item.remotePoster && (
                       <img className="calendar-poster" src={item.remotePoster} alt={item.title} />
@@ -117,6 +121,8 @@ export function Calendar() {
       ) : (
         <div className="wanted-empty">No hay contenido programado en este rango</div>
       )}
+
+      {scanItem && <CalendarModal item={scanItem} onClose={() => setScanItem(null)} />}
     </section>
   )
 }

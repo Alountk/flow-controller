@@ -814,6 +814,56 @@ async def arr_search_episode(session: aiohttp.ClientSession, service: dict, epis
     return await arr_command(session, service, {"name": "EpisodeSearch", "episodeIds": [episode_id]})
 
 
+async def arr_add_movie(session: aiohttp.ClientSession, service: dict, movie_data: dict) -> dict:
+    """Agrega una película a la biblioteca de Radarr via POST /api/v3/movie."""
+    headers = arr_headers(service["api_key"])
+    headers["Content-Type"] = "application/json"
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    try:
+        async with session.post(
+            f"{service['url']}/api/v3/movie",
+            headers=headers,
+            json=movie_data,
+            timeout=timeout,
+        ) as resp:
+            text = await resp.text()
+            if resp.status in (200, 201):
+                try:
+                    data = await resp.json(content_type=None)
+                    movie_id = data.get("id")
+                except Exception:
+                    movie_id = None
+                return {"ok": True, "id": movie_id, "detail": "Película agregada a Radarr"}
+            return {"ok": False, "id": None, "detail": f"HTTP {resp.status}: {text[:200]}"}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"ok": False, "id": None, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+async def arr_add_series(session: aiohttp.ClientSession, service: dict, series_data: dict) -> dict:
+    """Agrega una serie a la biblioteca de Sonarr via POST /api/v3/series."""
+    headers = arr_headers(service["api_key"])
+    headers["Content-Type"] = "application/json"
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    try:
+        async with session.post(
+            f"{service['url']}/api/v3/series",
+            headers=headers,
+            json=series_data,
+            timeout=timeout,
+        ) as resp:
+            text = await resp.text()
+            if resp.status in (200, 201):
+                try:
+                    data = await resp.json(content_type=None)
+                    series_id = data.get("id")
+                except Exception:
+                    series_id = None
+                return {"ok": True, "id": series_id, "detail": "Serie agregada a Sonarr"}
+            return {"ok": False, "id": None, "detail": f"HTTP {resp.status}: {text[:200]}"}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"ok": False, "id": None, "detail": f"{type(exc).__name__}: {exc}"}
+
+
 async def arr_manual_import(session: aiohttp.ClientSession, service: dict, file_path: str, movie_id: int) -> dict:
     """Importa un archivo directamente a una película en Radarr via POST /api/v3/manualimport."""
     headers = arr_headers(service["api_key"])
