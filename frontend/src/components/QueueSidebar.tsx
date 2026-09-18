@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queueStatus, queueCancel } from '../api/files'
 import type { QueueOp } from '../api/files'
@@ -91,6 +91,26 @@ export function QueueSidebar() {
   const activeOps = queueData?.queue ?? []
   const recentDone = (queueData?.completed ?? []).slice(-5).reverse()
   const activeCount = activeOps.length
+
+  const importedIdsRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const completed = queueData?.completed ?? []
+    let shouldRefresh = false
+    for (const op of completed) {
+      if (
+        !importedIdsRef.current.has(op.id)
+        && (op.import_status === 'imported' || op.import_status === 'import_failed')
+      ) {
+        importedIdsRef.current.add(op.id)
+        shouldRefresh = true
+      }
+    }
+    if (shouldRefresh) {
+      queryClient.invalidateQueries({ queryKey: ['wanted'] })
+      queryClient.invalidateQueries({ queryKey: ['all-movies'] })
+    }
+  }, [queueData, queryClient])
 
   return (
     <>

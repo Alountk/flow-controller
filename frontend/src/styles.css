@@ -46,6 +46,15 @@ body {
 .content {
   flex: 1;
   padding: 28px 32px 48px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.content-and-queue {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .content-header {

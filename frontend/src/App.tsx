@@ -112,44 +112,45 @@ function App() {
           lastUpdated={data ? Date.now() : null}
         />
 
-        <div className="content">
-          {page === 'dashboard' && (
-            <>
-              <div className="content-header">
-                <h1>Resumen del sistema</h1>
-                <p>Estado actual del pipeline de media y actividad reciente</p>
-              </div>
+        <div className="content-and-queue">
+          <div className="content">
+            {page === 'dashboard' && (
+              <>
+                <div className="content-header">
+                  <h1>Resumen del sistema</h1>
+                  <p>Estado actual del pipeline de media y actividad reciente</p>
+                </div>
 
-              <PipelineVisual services={services} />
+                <PipelineVisual services={services} />
 
-              {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
+                {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
 
-              <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
-                <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
-                <div>
-                  <div className="flow-title">
-                    {allOnline
-                      ? 'Flujo operativo'
-                      : anyOffline
-                        ? `Flujo cortado en ${broken?.label ?? 'servicio'}`
-                        : 'Comprobando servicios…'}
-                  </div>
-                  <div className="flow-desc">
-                    {allOnline
-                      ? 'Radarr, AmuTorrent y Sonarr responden correctamente.'
-                      : anyOffline
-                        ? broken?.reason
-                        : 'Esperando la primera comprobación.'}
+                <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
+                  <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
+                  <div>
+                    <div className="flow-title">
+                      {allOnline
+                        ? 'Flujo operativo'
+                        : anyOffline
+                          ? `Flujo cortado en ${broken?.label ?? 'servicio'}`
+                          : 'Comprobando servicios…'}
+                    </div>
+                    <div className="flow-desc">
+                      {allOnline
+                        ? 'Radarr, AmuTorrent y Sonarr responden correctamente.'
+                        : anyOffline
+                          ? broken?.reason
+                          : 'Esperando la primera comprobación.'}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="dashboard-grid">
-                <div className="dash-card">
-                  <span className="dash-label">Descargando</span>
-                  <span className="dash-value accent">{downloading}</span>
-                  <span className="dash-sub">activas</span>
-                </div>
+                <div className="dashboard-grid">
+                  <div className="dash-card">
+                    <span className="dash-label">Descargando</span>
+                    <span className="dash-value accent">{downloading}</span>
+                    <span className="dash-sub">activas</span>
+                  </div>
                 <div className="dash-card">
                   <span className="dash-label">Stuck</span>
                   <span className="dash-value warn">{importBlocked}</span>
@@ -192,10 +193,11 @@ function App() {
           )}
 
           {page === 'prototypes' && <Prototypes />}
+          </div>
+
+          <QueueSidebar />
         </div>
       </div>
-
-      <QueueSidebar />
     </div>
   )
 }

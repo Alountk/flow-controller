@@ -89,8 +89,6 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
     onSuccess: () => {
       setToast(`${selectedFiles.size} archivos encolados`)
       queryClient.invalidateQueries({ queryKey: ['queue'] })
-      queryClient.invalidateQueries({ queryKey: ['wanted'] })
-      queryClient.invalidateQueries({ queryKey: ['all-movies'] })
       if (toastTimer.current) clearTimeout(toastTimer.current)
       toastTimer.current = setTimeout(() => setToast(null), 3000)
     },
