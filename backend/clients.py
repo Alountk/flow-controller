@@ -630,12 +630,11 @@ async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> list[di
                 log.warning("arr_indexers %s status=%d body=%s", service["key"], resp.status, text[:200])
                 return []
             data = await resp.json(content_type=None)
-            log.info("arr_indexers %s raw count=%d", service["key"], len(data))
-            # Show all indexers for debugging
+            log.warning("arr_indexers %s raw=%d", service["key"], len(data))
             for idx in data:
-                log.info("arr_indexers %s -> id=%s name=%s enableSearch=%s implementation=%s",
-                    service["key"], idx.get("id"), idx.get("name"), idx.get("enableSearch"), idx.get("implementation"))
-            # Filter: only searchables
+                log.warning("arr_indexers %s -> id=%s name=%s enableSearch=%s",
+                    service["key"], idx.get("id"), idx.get("name"), idx.get("enableSearch"))
+            # Return ALL indexers — let frontend show them
             result = [
                 {
                     "id": idx.get("id"),
@@ -645,9 +644,8 @@ async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> list[di
                     "enableSearch": idx.get("enableSearch", False),
                 }
                 for idx in data
-                if idx.get("enableSearch", False)
             ]
-            log.info("arr_indexers %s filtered=%d", service["key"], len(result))
+            log.warning("arr_indexers %s returning=%d", service["key"], len(result))
             return result
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         log.warning("arr_indexers %s error: %s", service["key"], exc)
