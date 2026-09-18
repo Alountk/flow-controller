@@ -2218,15 +2218,14 @@ body {
 /* Floating toggle when collapsed */
 .qsidebar-toggle-fixed {
   position: fixed;
-  right: 0;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  width: 32px;
-  height: 48px;
+  width: 36px;
+  height: 52px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-right: none;
-  border-radius: 8px 0 0 8px;
+  border-radius: 8px;
   cursor: pointer;
   z-index: 101;
   display: flex;
@@ -2235,6 +2234,7 @@ body {
   font-size: 12px;
   color: var(--text-dim);
   transition: all 0.15s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .qsidebar-toggle-fixed:hover {
@@ -2513,10 +2513,10 @@ body {
 
   .qsidebar-toggle-fixed {
     top: auto;
-    bottom: 0;
-    right: 0;
+    bottom: 12px;
+    right: 12px;
     transform: none;
-    border-radius: 8px 0 0 0;
+    border-radius: 8px;
   }
 }
 

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Sidebar, type Page } from './components/Sidebar'
+import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
 import { TraceView } from './components/TraceView'
@@ -9,6 +9,7 @@ import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
 import { QueueSidebar } from './components/QueueSidebar'
 import { setApiKey } from './api/auth'
+import { usePageRoute } from './hooks/usePageRoute'
 import {
   parseStatus,
   type ActionsResponse,
@@ -18,6 +19,7 @@ import {
   type TraceResponse,
   type ConfigResponse,
 } from './types'
+import type { Page } from './components/Sidebar'
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -71,7 +73,7 @@ function App() {
     if (configData?.api_key) setApiKey(configData.api_key)
   }, [configData])
 
-  const [page, setPage] = useState<Page>('dashboard')
+  const [page, setPage] = usePageRoute()
 
   const developer = configData?.developer ?? false
 

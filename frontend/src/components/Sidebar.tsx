@@ -2,6 +2,14 @@ import type { ReactNode } from 'react'
 
 export type Page = 'dashboard' | 'trace' | 'wanted' | 'files' | 'prototypes'
 
+const PAGE_PATHS: Record<Page, string> = {
+  dashboard: '/dashboard',
+  trace: '/trazabilidad',
+  wanted: '/faltantes',
+  files: '/archivos',
+  prototypes: '/prototipos',
+}
+
 interface NavItem {
   key: Page
   label: string
@@ -39,7 +47,7 @@ export function Sidebar({ active, onNavigate, developer }: Props) {
         {NAV_ITEMS.map((item) => (
           <a
             key={item.key}
-            href="#"
+            href={PAGE_PATHS[item.key]}
             className={`sb-link ${active === item.key ? 'active' : ''}`}
             onClick={(e) => { e.preventDefault(); onNavigate(item.key) }}
           >
@@ -54,7 +62,7 @@ export function Sidebar({ active, onNavigate, developer }: Props) {
             {NAV_SYSTEM.map((item) => (
               <a
                 key={item.key}
-                href="#"
+                href={PAGE_PATHS[item.key]}
                 className={`sb-link ${active === item.key ? 'active' : ''}`}
                 onClick={(e) => { e.preventDefault(); onNavigate(item.key) }}
               >

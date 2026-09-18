@@ -69,7 +69,7 @@ function QueueOpItem({ op, onCancel }: { op: QueueOp; onCancel: (id: string) => 
 }
 
 export function QueueSidebar() {
-  const [collapsed, setCollapsed] = useState(true)
+  const [collapsed, setCollapsed] = useState(false)
   const queryClient = useQueryClient()
 
   const { data: queueData } = useQuery({
