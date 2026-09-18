@@ -37,14 +37,20 @@ export async function scanForMovies(
   languages: string[],
   movieId?: number,
   seriesId?: number,
+  customTitle?: string,
 ): Promise<ScanResult> {
   const body: Record<string, unknown> = {
     source,
     remote_path: folderPath,
     local_path: languages.join(','),
   }
-  if (movieId) body.ids = { movie_id: movieId }
-  if (seriesId) body.ids = { series_id: seriesId }
+  if (movieId || seriesId || customTitle) {
+    body.ids = {
+      ...(movieId ? { movie_id: movieId } : {}),
+      ...(seriesId ? { series_id: seriesId } : {}),
+      ...(customTitle ? { custom_title: customTitle } : {}),
+    }
+  }
 
   const res = await fetch('/api/wanted/scan', {
     method: 'POST',

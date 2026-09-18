@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult, AllMovie } from '../types'
 import { searchWanted, searchWantedItem, scanForMovies } from '../api/wanted'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
+import { useHashState } from '../hooks/useHashState'
 
-type Tab = 'movies' | 'episodes' | 'scan'
-type MovieFilter = 'all' | 'missing'
+const LANG_LIST = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ru', 'manual'] as const
+const LANG_LABELS: Record<string, string> = {
+  en: 'Inglés', es: 'Español', fr: 'Francés', de: 'Alemán', it: 'Italiano',
+  pt: 'Portugués', ja: 'Japonés', ko: 'Coreano', zh: 'Chino', ru: 'Ruso', manual: 'Manual...',
+}
 
 interface ScanItem {
   type: 'movie' | 'series'
@@ -24,15 +28,20 @@ async function fetchAllMovies(): Promise<{ items: AllMovie[]; total: number }> {
   return res.json() as Promise<{ items: AllMovie[]; total: number }>
 }
 
-function FileScanTab({ item, onClear }: { item: ScanItem; onClear: () => void }) {
+function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
   const queryClient = useQueryClient()
   const [selectedVolume, setSelectedVolume] = useState('')
   const [currentPath, setCurrentPath] = useState('')
   const [selectedLangs, setSelectedLangs] = useState<Set<string>>(new Set(['en', 'es']))
+  const [customTitle, setCustomTitle] = useState('')
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [toast, setToast] = useState<string | null>(null)
+  const modalRef = useRef<HTMLDivElement>(null)
+
+  const isManual = selectedLangs.has('manual')
+  const langsForScan = Array.from(selectedLangs).filter((l) => l !== 'manual')
 
   const { data: rootsData } = useQuery({
     queryKey: ['roots'],
@@ -56,9 +65,10 @@ function FileScanTab({ item, onClear }: { item: ScanItem; onClear: () => void })
     mutationFn: () => scanForMovies(
       item.source,
       currentPath,
-      Array.from(selectedLangs),
+      isManual && customTitle ? [] : langsForScan,
       item.type === 'movie' ? item.id : undefined,
       item.type === 'series' ? item.id : undefined,
+      isManual ? customTitle : undefined,
     ),
     onSuccess: (result) => {
       setScanResult(result)
@@ -83,6 +93,16 @@ function FileScanTab({ item, onClear }: { item: ScanItem; onClear: () => void })
       toastTimer.current = setTimeout(() => setToast(null), 3000)
     },
   })
+
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) onClose()
+  }, [onClose])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   function handleVolumeChange(volumePath: string) {
     setSelectedVolume(volumePath)
@@ -126,142 +146,164 @@ function FileScanTab({ item, onClear }: { item: ScanItem; onClear: () => void })
   const selectedMatches = scanResult?.matches.filter((m) => selectedFiles.has(m.file_path)) ?? []
 
   return (
-    <div className="scan-tab">
-      {toast && <div className="fm-toast">{toast}</div>}
+    <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
+      <div className="scan-modal" ref={modalRef}>
+        {toast && <div className="fm-toast">{toast}</div>}
 
-      <div className="scan-selected-item">
-        <div className="scan-selected-info">
-          <span className="scan-selected-type">{item.type === 'movie' ? '🎬 Película' : '📺 Serie'}:</span>
-          <strong>{item.title}</strong>
-        </div>
-        <button className="scan-clear-btn" onClick={onClear}>×</button>
-      </div>
-
-      <div className="scan-controls">
-        <div className="scan-row">
-          <label className="scan-label">Carpeta a escanear:</label>
-          <select
-            className="fm-volume-select"
-            value={selectedVolume}
-            onChange={(e) => handleVolumeChange(e.target.value)}
-          >
-            <option value="">Seleccionar volumen...</option>
-            {roots.map((r) => (
-              <option key={r.path} value={r.path}>{r.name}</option>
-            ))}
-          </select>
-          {currentPath && (
-            <button className="fm-nav-btn" onClick={() => {
-              const parts = currentPath.split('/')
-              if (parts.length > 2) {
-                const parent = parts.slice(0, -1).join('/') || selectedVolume
-                if (parent.length >= selectedVolume.length) navigateTo(parent)
-              }
-            }} title="Subir">⬆</button>
-          )}
+        <div className="scan-modal-header">
+          <div className="scan-selected-info">
+            <span className="scan-selected-type">{item.type === 'movie' ? '🎬' : '📺'}</span>
+            <strong>{item.title}</strong>
+          </div>
+          <button className="scan-modal-close" onClick={onClose}>×</button>
         </div>
 
-        {currentPath && (
-          <div className="scan-path-list">
-            <div className="scan-current-path">{currentPath}</div>
-            {items.filter((i) => i.is_dir).map((dirItem) => (
-              <div
-                key={dirItem.path}
-                className="scan-folder-item"
-                onClick={() => navigateTo(dirItem.path)}
+        <div className="scan-modal-body">
+          <div className="scan-controls">
+            <div className="scan-row">
+              <label className="scan-label">Carpeta a escanear:</label>
+              <select
+                className="fm-volume-select"
+                value={selectedVolume}
+                onChange={(e) => handleVolumeChange(e.target.value)}
               >
-                📁 {dirItem.name}
-              </div>
-            ))}
-          </div>
-        )}
+                <option value="">Seleccionar volumen...</option>
+                {roots.map((r) => (
+                  <option key={r.path} value={r.path}>{r.name}</option>
+                ))}
+              </select>
+              {currentPath && (
+                <button className="fm-nav-btn" onClick={() => {
+                  const parts = currentPath.split('/')
+                  if (parts.length > 2) {
+                    const parent = parts.slice(0, -1).join('/') || selectedVolume
+                    if (parent.length >= selectedVolume.length) navigateTo(parent)
+                  }
+                }} title="Subir">⬆</button>
+              )}
+            </div>
 
-        <div className="scan-row">
-          <label className="scan-label">Idiomas:</label>
-          <div className="scan-lang-list">
-            {['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ru'].map((lang) => (
-              <label key={lang} className="scan-lang-check">
-                <input
-                  type="checkbox"
-                  checked={selectedLangs.has(lang)}
-                  onChange={() => toggleLang(lang)}
-                />
-                {lang}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <button
-          className="action-btn search-all"
-          onClick={() => scan.mutate()}
-          disabled={!currentPath || scan.isPending || selectedLangs.size === 0}
-        >
-          {scan.isPending ? 'Escaneando...' : `🔍 Buscar "${item.title}" en esta carpeta`}
-        </button>
-      </div>
-
-      {scanResult && (
-        <div className="scan-results">
-          <div className="scan-summary">
-            {scanResult.detail}
-            {scanResult.matches.length > 0 && (
-              <button className="fm-action-btn" onClick={toggleAll}>
-                {selectedFiles.size === scanResult.matches.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
-              </button>
-            )}
-          </div>
-
-          {scanResult.matches.length > 0 ? (
-            <div className="scan-match-list">
-              {scanResult.matches.map((m) => (
-                <div
-                  key={m.file_path}
-                  className={`scan-match ${selectedFiles.has(m.file_path) ? 'selected' : ''}`}
-                  onClick={() => toggleFile(m.file_path)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedFiles.has(m.file_path)}
-                    onChange={() => toggleFile(m.file_path)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <div className="scan-match-info">
-                    <div className="scan-match-file">📄 {m.file_name}</div>
-                    <div className="scan-match-path" title={m.file_path}>{m.file_path}</div>
-                    <div className="scan-match-score">
-                      Similitud: {Math.round(m.score * 100)}% · Título: "{m.matched_title}"
-                    </div>
+            {currentPath && (
+              <div className="scan-path-list">
+                <div className="scan-current-path">{currentPath}</div>
+                {items.filter((i) => i.is_dir).map((dirItem) => (
+                  <div
+                    key={dirItem.path}
+                    className="scan-folder-item"
+                    onClick={() => navigateTo(dirItem.path)}
+                  >
+                    📁 {dirItem.name}
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="wanted-empty">No se encontraron archivos para "{item.title}"</div>
-          )}
+                ))}
+              </div>
+            )}
 
-          {selectedMatches.length > 0 && (
-            <div className="scan-actions">
-              <button
-                className="action-btn search-all"
-                onClick={() => moveQueue.mutate(selectedMatches)}
-                disabled={moveQueue.isPending}
-              >
-                {moveQueue.isPending ? 'Encolando...' : `📦 Mover ${selectedMatches.length} archivos a la cola`}
-              </button>
+            <div className="scan-row">
+              <label className="scan-label">Idiomas:</label>
+              <div className="scan-lang-list">
+                {LANG_LIST.map((lang) => (
+                  <label key={lang} className={`scan-lang-check ${lang === 'manual' ? 'scan-lang-manual' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={selectedLangs.has(lang)}
+                      onChange={() => toggleLang(lang)}
+                    />
+                    {LANG_LABELS[lang]}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {isManual && (
+              <div className="scan-row">
+                <label className="scan-label">Título a buscar:</label>
+                <input
+                  type="text"
+                  className="scan-custom-input"
+                  placeholder="Escribe el título manualmente..."
+                  value={customTitle}
+                  onChange={(e) => setCustomTitle(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            <button
+              className="action-btn search-all"
+              onClick={() => scan.mutate()}
+              disabled={
+                !currentPath
+                || scan.isPending
+                || (isManual ? !customTitle.trim() : selectedLangs.size === 0)
+              }
+            >
+              {scan.isPending ? 'Escaneando...' : `🔍 Buscar "${item.title}" en esta carpeta`}
+            </button>
+          </div>
+
+          {scanResult && (
+            <div className="scan-results">
+              <div className="scan-summary">
+                {scanResult.detail}
+                {scanResult.matches.length > 0 && (
+                  <button className="fm-action-btn" onClick={toggleAll}>
+                    {selectedFiles.size === scanResult.matches.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                  </button>
+                )}
+              </div>
+
+              {scanResult.matches.length > 0 ? (
+                <div className="scan-match-list">
+                  {scanResult.matches.map((m) => (
+                    <div
+                      key={m.file_path}
+                      className={`scan-match ${selectedFiles.has(m.file_path) ? 'selected' : ''}`}
+                      onClick={() => toggleFile(m.file_path)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedFiles.has(m.file_path)}
+                        onChange={() => toggleFile(m.file_path)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div className="scan-match-info">
+                        <div className="scan-match-file">📄 {m.file_name}</div>
+                        <div className="scan-match-path" title={m.file_path}>{m.file_path}</div>
+                        <div className="scan-match-score">
+                          Similitud: {Math.round(m.score * 100)}% · Título: "{m.matched_title}"
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="wanted-empty">No se encontraron archivos para "{item.title}"</div>
+              )}
+
+              {selectedMatches.length > 0 && (
+                <div className="scan-actions">
+                  <button
+                    className="action-btn search-all"
+                    onClick={() => moveQueue.mutate(selectedMatches)}
+                    disabled={moveQueue.isPending}
+                  >
+                    {moveQueue.isPending ? 'Encolando...' : `📦 Mover ${selectedMatches.length} archivos a la cola`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
 
 export function MissingContent() {
-  const [tab, setTab] = useState<Tab>('movies')
+  const [tab, setTab] = useHashState('wanted', 'tab', 'movies')
+  const [movieFilter, setMovieFilter] = useHashState('wanted', 'filter', 'missing')
   const [searchResult, setSearchResult] = useState<string | null>(null)
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
-  const [movieFilter, setMovieFilter] = useState<MovieFilter>('missing')
 
   const { data, isPending } = useQuery({
     queryKey: ['wanted'],
@@ -289,18 +331,11 @@ export function MissingContent() {
 
   function handleScanForMovie(movie: WantedMovie) {
     setScanItem({ type: 'movie', id: movie.id, title: movie.title, source: 'radarr' })
-    setTab('scan')
   }
 
   function handleScanForSeries(seriesTitle: string, seriesId: number | null) {
     if (!seriesId) return
     setScanItem({ type: 'series', id: seriesId, title: seriesTitle, source: 'sonarr' })
-    setTab('scan')
-  }
-
-  function clearScanItem() {
-    setScanItem(null)
-    setTab('movies')
   }
 
   const radarrMovies = data?.wanted?.radarr?.items as WantedMovie[] | undefined
@@ -325,12 +360,6 @@ export function MissingContent() {
           >
             Episodios ({sonarrTotal})
           </button>
-          <button
-            className={`wanted-tab ${tab === 'scan' ? 'active' : ''}`}
-            onClick={() => setTab('scan')}
-          >
-            🔍 Buscar Archivos
-          </button>
         </div>
       </div>
 
@@ -338,17 +367,7 @@ export function MissingContent() {
         <div className="wanted-search-result">{searchResult}</div>
       )}
 
-      {tab === 'scan' ? (
-        scanItem ? (
-          <FileScanTab item={scanItem} onClear={clearScanItem} />
-        ) : (
-          <div className="scan-empty-state">
-            <p>Selecciona una película o serie de las pestañas anteriores y haz clic en "🔍 Buscar en carpeta".</p>
-            <button className="action-btn" onClick={() => setTab('movies')}>Ver películas</button>
-            <button className="action-btn" onClick={() => setTab('episodes')}>Ver episodios</button>
-          </div>
-        )
-      ) : isPending ? (
+      {isPending ? (
         <div className="wanted-loading">Cargando...</div>
       ) : tab === 'movies' ? (
         <div className="wanted-content">
@@ -507,6 +526,8 @@ export function MissingContent() {
           )}
         </div>
       )}
+
+      {scanItem && <ScanModal item={scanItem} onClose={() => setScanItem(null)} />}
     </section>
   )
 }

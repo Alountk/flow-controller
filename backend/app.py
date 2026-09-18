@@ -327,6 +327,8 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
     movie_id = ids.get("movie_id")
     series_id = ids.get("series_id")
 
+    custom_title = ids.get("custom_title", "").strip()
+
     if not folder_path:
         return {"ok": False, "detail": "Se requiere remote_path (carpeta a escanear)"}
 
@@ -360,6 +362,10 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                 all_titles = [item_title] + [t for t in meta.get("alternateTitles", []) if t]
             else:
                 return {"ok": False, "detail": "IDs insuficientes"}
+
+        # Si el usuario puso un título manual, usarlo como primer candidato
+        if custom_title:
+            all_titles.insert(0, custom_title)
 
         # Construir title_map con un solo item
         title_map = {}
