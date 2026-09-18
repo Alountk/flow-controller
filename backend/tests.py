@@ -465,11 +465,13 @@ class TestCalendarSearch:
 class TestCalendarAdd:
     @patch("app.arr_search_movie", new_callable=AsyncMock)
     @patch("app.arr_add_movie", new_callable=AsyncMock)
+    @patch("app.arr_movie_exists", new_callable=AsyncMock)
     @patch("app.arr_movie_lookup", new_callable=AsyncMock)
     @patch("app.arr_root_folders", new_callable=AsyncMock)
-    def test_add_movie_uses_real_root_folder(self, mock_folders, mock_lookup, mock_add, mock_search):
+    def test_add_movie_uses_real_root_folder(self, mock_folders, mock_lookup, mock_exists, mock_add, mock_search):
         mock_folders.return_value = ["/mnt/storage/Movies"]
         mock_lookup.return_value = {"tmdbId": 550, "title": "Test Movie", "year": 2024, "qualityProfileId": 1}
+        mock_exists.return_value = None  # Not in library yet
         mock_add.return_value = {"ok": True, "id": 42, "detail": "OK"}
         mock_search.return_value = {"ok": True, "detail": "queued"}
 
@@ -505,11 +507,13 @@ class TestCalendarAdd:
         assert "No se encontró" in data["detail"]
 
     @patch("app.arr_add_series", new_callable=AsyncMock)
+    @patch("app.arr_series_exists", new_callable=AsyncMock)
     @patch("app.arr_series_lookup", new_callable=AsyncMock)
     @patch("app.arr_root_folders", new_callable=AsyncMock)
-    def test_add_series_uses_real_root_folder(self, mock_folders, mock_lookup, mock_add):
+    def test_add_series_uses_real_root_folder(self, mock_folders, mock_lookup, mock_exists, mock_add):
         mock_folders.return_value = ["/mnt/storage-6tb/Series"]
         mock_lookup.return_value = {"tvdbId": 12345, "title": "Test Show", "year": 2023, "seasonFolder": True, "qualityProfileId": 1}
+        mock_exists.return_value = None  # Not in library yet
         mock_add.return_value = {"ok": True, "id": 7, "detail": "OK"}
 
         resp = client.post(
@@ -539,6 +543,45 @@ class TestCalendarAdd:
         assert data["ok"] is False
         assert "No se encontró" in data["detail"]
 
+    @patch("app.arr_search_movie", new_callable=AsyncMock)
+    @patch("app.arr_movie_exists", new_callable=AsyncMock)
+    @patch("app.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    def test_add_movie_already_exists_searches_directly(self, mock_folders, mock_lookup, mock_exists, mock_search):
+        mock_folders.return_value = ["/movies"]
+        mock_lookup.return_value = {"tmdbId": 550, "title": "Fight Club", "year": 1999, "qualityProfileId": 1}
+        mock_exists.return_value = 99  # Already in Radarr with ID 99
+        mock_search.return_value = {"ok": True, "detail": "queued"}
+
+        resp = client.post(
+            "/api/calendar/add",
+            json={"source": "radarr", "type": "movie", "title": "Fight Club"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["id"] == 99
+        assert "ya está" in data["detail"]
+        mock_search.assert_called_once()
+
+    @patch("app.arr_series_exists", new_callable=AsyncMock)
+    @patch("app.arr_series_lookup", new_callable=AsyncMock)
+    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    def test_add_series_already_exists_returns_info(self, mock_folders, mock_lookup, mock_exists):
+        mock_folders.return_value = ["/series"]
+        mock_lookup.return_value = {"tvdbId": 12345, "title": "Breaking Bad", "year": 2008, "seasonFolder": True, "qualityProfileId": 1}
+        mock_exists.return_value = 55  # Already in Sonarr with ID 55
+
+        resp = client.post(
+            "/api/calendar/add",
+            json={"source": "sonarr", "type": "episode", "title": "Breaking Bad"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["id"] == 55
+        assert "ya está" in data["detail"]
+
     @patch("app.arr_root_folders", new_callable=AsyncMock)
     def test_add_without_root_folders_returns_error(self, mock_folders):
         mock_folders.return_value = []
@@ -554,11 +597,13 @@ class TestCalendarAdd:
 
     @patch("app.arr_search_movie", new_callable=AsyncMock)
     @patch("app.arr_add_movie", new_callable=AsyncMock)
+    @patch("app.arr_movie_exists", new_callable=AsyncMock)
     @patch("app.arr_movie_lookup", new_callable=AsyncMock)
     @patch("app.arr_root_folders", new_callable=AsyncMock)
-    def test_add_movie_radarr_error_propagates(self, mock_folders, mock_lookup, mock_add, mock_search):
+    def test_add_movie_radarr_error_propagates(self, mock_folders, mock_lookup, mock_exists, mock_add, mock_search):
         mock_folders.return_value = ["/movies"]
         mock_lookup.return_value = {"tmdbId": 550, "title": "Fail Movie", "year": 2024, "qualityProfileId": 1}
+        mock_exists.return_value = None
         mock_add.return_value = {"ok": False, "id": None, "detail": "HTTP 400: validation error"}
 
         resp = client.post(

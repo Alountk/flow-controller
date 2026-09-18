@@ -48,6 +48,8 @@ from clients import (
     arr_root_folders,
     arr_movie_lookup,
     arr_series_lookup,
+    arr_movie_exists,
+    arr_series_exists,
     arr_movie_metadata,
     arr_series_metadata,
     arr_manual_import,
@@ -327,6 +329,16 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                 if not tmdb_id:
                     return {"ok": False, "id": None, "detail": f"No se encontró '{req.title}' en Radarr. Verifica el título."}
 
+                # Check if movie already exists in Radarr
+                existing_id = await arr_movie_exists(session, service, tmdb_id)
+                if existing_id:
+                    search_result = await arr_search_movie(session, service, existing_id)
+                    return {
+                        "ok": True,
+                        "id": existing_id,
+                        "detail": f"Película ya está en Radarr. Búsqueda lanzada.",
+                    }
+
                 movie_payload = {
                     "title": lookup.get("title") or req.title,
                     "tmdbId": tmdb_id,
@@ -351,6 +363,15 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                 tvdb_id = lookup.get("tvdbId", 0)
                 if not tvdb_id:
                     return {"ok": False, "id": None, "detail": f"No se encontró '{req.title}' en Sonarr. Verifica el título."}
+
+                # Check if series already exists in Sonarr
+                existing_id = await arr_series_exists(session, service, tvdb_id)
+                if existing_id:
+                    return {
+                        "ok": True,
+                        "id": existing_id,
+                        "detail": f"Serie ya está en Sonarr. Puedes buscar releases directamente.",
+                    }
 
                 series_payload = {
                     "title": lookup.get("title") or req.title,
