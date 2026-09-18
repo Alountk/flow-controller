@@ -56,17 +56,29 @@ export async function fetchCalendarReleases(
   type: string,
   id: number,
 ): Promise<{ releases: Release[]; detail: string }> {
-  const res = await fetch('/api/calendar/releases', {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ source, type, id }),
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>
-    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
-    return { releases: [], detail: msg }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
+  try {
+    const res = await fetch('/api/calendar/releases', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ source, type, id }),
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+      return { releases: [], detail: msg }
+    }
+    return res.json() as Promise<{ releases: Release[]; detail: string }>
+  } catch (err) {
+    clearTimeout(timeout)
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { releases: [], detail: 'Timeout: Radarr/Sonarr no respondió. Verifica que el servicio esté activo.' }
+    }
+    return { releases: [], detail: `Error de conexión: ${err}` }
   }
-  return res.json() as Promise<{ releases: Release[]; detail: string }>
 }
 
 export async function grabCalendarRelease(

@@ -67,30 +67,40 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
   async function handleSearch() {
     setStep('loading')
     setMessage('Buscando releases en indexadores...')
-    const result = await fetchCalendarReleases(item.source, item.type, item.id)
-    if (result.releases.length > 0) {
-      setReleases(result.releases)
-      setStep('results')
-    } else {
+    try {
+      const result = await fetchCalendarReleases(item.source, item.type, item.id)
+      if (result.releases.length > 0) {
+        setReleases(result.releases)
+        setStep('results')
+      } else {
+        setStep('error')
+        setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
+      }
+    } catch (err) {
       setStep('error')
-      setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
+      setMessage(`Error inesperado: ${err}`)
     }
   }
 
   async function handleAddAndSearch() {
     setStep('loading')
     setMessage('Agregando a biblioteca...')
-    const result = await addCalendarItem(
-      item.source,
-      item.type,
-      item.series_title || item.title,
-      item.year ?? undefined,
-    )
-    if (result.ok && result.id) {
-      handleSearch()
-    } else {
+    try {
+      const result = await addCalendarItem(
+        item.source,
+        item.type,
+        item.series_title || item.title,
+        item.year ?? undefined,
+      )
+      if (result.ok && result.id) {
+        handleSearch()
+      } else {
+        setStep('error')
+        setMessage(result.detail)
+      }
+    } catch (err) {
       setStep('error')
-      setMessage(result.detail)
+      setMessage(`Error inesperado: ${err}`)
     }
   }
 
