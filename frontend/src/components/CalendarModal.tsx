@@ -26,7 +26,6 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
   const [message, setMessage] = useState('')
   const [releases, setReleases] = useState<Release[]>([])
   const [selectedGuid, setSelectedGuid] = useState<string | null>(null)
-  const [libraryId, setLibraryId] = useState<number | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
@@ -70,7 +69,6 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
       item.year ?? undefined,
     )
     if (result.ok && result.id) {
-      setLibraryId(result.id)
       handleFetchReleases(result.id)
     } else {
       setStatus('error')
