@@ -308,52 +308,56 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
     if not service:
         return {"ok": False, "id": None, "detail": f"Servicio desconocido: {req.source}"}
 
-    async with aiohttp.ClientSession() as session:
-        # Fetch root folders from the service
-        root_folders = await arr_root_folders(session, service)
-        root_path = root_folders[0] if root_folders else ""
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Fetch root folders from the service
+            root_folders = await arr_root_folders(session, service)
+            root_path = root_folders[0] if root_folders else ""
 
-        if not root_path:
-            return {"ok": False, "id": None, "detail": "No hay carpetas raíz configuradas en Radarr/Sonarr"}
+            if not root_path:
+                return {"ok": False, "id": None, "detail": "No hay carpetas raíz configuradas en Radarr/Sonarr. Configúralas en Settings > Media Management."}
 
-        if req.type == "movie":
-            movie_payload = {
-                "title": req.title,
-                "year": req.year or 0,
-                "qualityProfileId": 1,
-                "rootFolderPath": root_path,
-                "monitored": True,
-            }
-            add_result = await arr_add_movie(session, service, movie_payload)
-            if add_result.get("ok") and add_result.get("id"):
-                search_result = await arr_search_movie(session, service, add_result["id"])
-                return {
-                    "ok": True,
-                    "id": add_result["id"],
-                    "detail": f"Película agregada y búsqueda lanzada",
+            if req.type == "movie":
+                movie_payload = {
+                    "title": req.title,
+                    "year": req.year or 0,
+                    "qualityProfileId": 1,
+                    "rootFolderPath": root_path,
+                    "monitored": True,
                 }
-            return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
+                add_result = await arr_add_movie(session, service, movie_payload)
+                if add_result.get("ok") and add_result.get("id"):
+                    search_result = await arr_search_movie(session, service, add_result["id"])
+                    return {
+                        "ok": True,
+                        "id": add_result["id"],
+                        "detail": f"Película agregada y búsqueda lanzada",
+                    }
+                return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
 
-        elif req.type == "episode":
-            series_payload = {
-                "title": req.title,
-                "year": req.year or 0,
-                "qualityProfileId": 1,
-                "rootFolderPath": root_path,
-                "monitored": True,
-                "seasonFolder": True,
-            }
-            add_result = await arr_add_series(session, service, series_payload)
-            if add_result.get("ok") and add_result.get("id"):
-                return {
-                    "ok": True,
-                    "id": add_result["id"],
-                    "detail": f"Serie agregada a Sonarr",
+            elif req.type == "episode":
+                series_payload = {
+                    "title": req.title,
+                    "year": req.year or 0,
+                    "qualityProfileId": 1,
+                    "rootFolderPath": root_path,
+                    "monitored": True,
+                    "seasonFolder": True,
                 }
-            return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
+                add_result = await arr_add_series(session, service, series_payload)
+                if add_result.get("ok") and add_result.get("id"):
+                    return {
+                        "ok": True,
+                        "id": add_result["id"],
+                        "detail": f"Serie agregada a Sonarr",
+                    }
+                return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
 
-        else:
-            return {"ok": False, "id": None, "detail": f"Tipo desconocido: {req.type}"}
+            else:
+                return {"ok": False, "id": None, "detail": f"Tipo desconocido: {req.type}"}
+    except Exception as exc:
+        log.exception("calendar_add error: %s", exc)
+        return {"ok": False, "id": None, "detail": f"Error interno: {exc}"}
 
 
 @app.post("/api/calendar/releases")
@@ -363,15 +367,18 @@ async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(ve
     if not service:
         return {"releases": [], "detail": f"Servicio desconocido: {req.source}"}
 
-    async with aiohttp.ClientSession() as session:
-        if req.type == "movie":
-            result = await arr_fetch_releases(session, service, movie_id=req.id)
-        elif req.type == "episode":
-            result = await arr_fetch_releases(session, service, episode_id=req.id)
-        else:
-            return {"releases": [], "detail": f"Tipo desconocido: {req.type}"}
-
-    return result
+    try:
+        async with aiohttp.ClientSession() as session:
+            if req.type == "movie":
+                result = await arr_fetch_releases(session, service, movie_id=req.id)
+            elif req.type == "episode":
+                result = await arr_fetch_releases(session, service, episode_id=req.id)
+            else:
+                return {"releases": [], "detail": f"Tipo desconocido: {req.type}"}
+        return result
+    except Exception as exc:
+        log.exception("calendar_releases error: %s", exc)
+        return {"releases": [], "detail": f"Error interno: {exc}"}
 
 
 @app.post("/api/calendar/grab")
@@ -381,10 +388,13 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
     if not service:
         return {"ok": False, "detail": f"Servicio desconocido: {req.source}"}
 
-    async with aiohttp.ClientSession() as session:
-        result = await arr_grab_release(session, service, req.guid)
-
-    return result
+    try:
+        async with aiohttp.ClientSession() as session:
+            result = await arr_grab_release(session, service, req.guid)
+        return result
+    except Exception as exc:
+        log.exception("calendar_grab error: %s", exc)
+        return {"ok": False, "detail": f"Error interno: {exc}"}
 
 
 @app.get("/api/calendar/indexers")

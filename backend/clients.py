@@ -654,17 +654,19 @@ async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> list[di
 async def arr_root_folders(session: aiohttp.ClientSession, service: dict) -> list[str]:
     """Obtiene las carpetas raíz configuradas en Radarr/Sonarr."""
     headers = arr_headers(service["api_key"])
+    url = f"{service['url']}/api/v3/rootfolder"
     try:
-        async with session.get(
-            f"{service['url']}/api/v3/rootfolder",
-            headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
-        ) as resp:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)) as resp:
+            text = await resp.text()
             if resp.status != 200:
+                log.warning("arr_root_folders %s status=%d body=%s", service["key"], resp.status, text[:200])
                 return []
             data = await resp.json(content_type=None)
-            return [f.get("path", "") for f in data if f.get("path")]
-    except (asyncio.TimeoutError, aiohttp.ClientError):
+            paths = [f.get("path", "") for f in data if f.get("path")]
+            log.info("arr_root_folders %s found: %s", service["key"], paths)
+            return paths
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        log.warning("arr_root_folders %s error: %s", service["key"], exc)
         return []
 
 
@@ -868,13 +870,10 @@ async def arr_add_movie(session: aiohttp.ClientSession, service: dict, movie_dat
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    url = f"{service['url']}/api/v3/movie"
+    log.info("arr_add_movie %s payload=%s", service["key"], {k: v for k, v in movie_data.items() if k != "images"})
     try:
-        async with session.post(
-            f"{service['url']}/api/v3/movie",
-            headers=headers,
-            json=movie_data,
-            timeout=timeout,
-        ) as resp:
+        async with session.post(url, headers=headers, json=movie_data, timeout=timeout) as resp:
             text = await resp.text()
             if resp.status in (200, 201):
                 try:
@@ -882,9 +881,12 @@ async def arr_add_movie(session: aiohttp.ClientSession, service: dict, movie_dat
                     movie_id = data.get("id")
                 except Exception:
                     movie_id = None
+                log.info("arr_add_movie %s OK id=%s", service["key"], movie_id)
                 return {"ok": True, "id": movie_id, "detail": "Película agregada a Radarr"}
-            return {"ok": False, "id": None, "detail": f"HTTP {resp.status}: {text[:200]}"}
+            log.warning("arr_add_movie %s status=%d body=%s", service["key"], resp.status, text[:300])
+            return {"ok": False, "id": None, "detail": f"HTTP {resp.status}: {text[:300]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        log.warning("arr_add_movie %s error: %s", service["key"], exc)
         return {"ok": False, "id": None, "detail": f"{type(exc).__name__}: {exc}"}
 
 
@@ -893,13 +895,10 @@ async def arr_add_series(session: aiohttp.ClientSession, service: dict, series_d
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    url = f"{service['url']}/api/v3/series"
+    log.info("arr_add_series %s payload=%s", service["key"], {k: v for k, v in series_data.items() if k != "images"})
     try:
-        async with session.post(
-            f"{service['url']}/api/v3/series",
-            headers=headers,
-            json=series_data,
-            timeout=timeout,
-        ) as resp:
+        async with session.post(url, headers=headers, json=series_data, timeout=timeout) as resp:
             text = await resp.text()
             if resp.status in (200, 201):
                 try:
@@ -907,9 +906,12 @@ async def arr_add_series(session: aiohttp.ClientSession, service: dict, series_d
                     series_id = data.get("id")
                 except Exception:
                     series_id = None
+                log.info("arr_add_series %s OK id=%s", service["key"], series_id)
                 return {"ok": True, "id": series_id, "detail": "Serie agregada a Sonarr"}
-            return {"ok": False, "id": None, "detail": f"HTTP {resp.status}: {text[:200]}"}
+            log.warning("arr_add_series %s status=%d body=%s", service["key"], resp.status, text[:300])
+            return {"ok": False, "id": None, "detail": f"HTTP {resp.status}: {text[:300]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        log.warning("arr_add_series %s error: %s", service["key"], exc)
         return {"ok": False, "id": None, "detail": f"{type(exc).__name__}: {exc}"}
 
 
