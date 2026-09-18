@@ -122,6 +122,34 @@ flow-controller/
         └── hooks/usePolling.ts
 ```
 
+## Postmortem: Errores recurrentes de TypeScript build
+
+### TS2367: Comparación con tipos incompatibles
+**Causa:** Cuando se usa `useState<Tab>('movies')`, TypeScript infiere el tipo como el literal `'movies'`, no la unión completa `'movies' | 'episodes'`. Comparaciones como `tab === 'episodes'` fallan.
+
+**Solución:** Tipar explícitamente el genérico: `useState<'movies' | 'episodes'>('movies')`.
+
+**Ejemplo:**
+```tsx
+// ❌ Error
+const [tab, setTab] = useState('movies')
+tab === 'episodes' // TS2367
+
+// ✅ Correcto
+const [tab, setTab] = useState<'movies' | 'episodes'>('movies')
+tab === 'episodes' // OK
+```
+
+### TS2322: Tipos de parámetros incompatibles entre módulos
+**Causa:** Dos archivos definen el mismo tipo `Page` con valores diferentes. Si un hook (`usePageRoute`) retorna un tipo `Page` que no incluye un valor nuevo (`'config'`), el componente que lo consume no puede asignarlo al tipo `Page` del Sidebar.
+
+**Solución:** Mantener una sola definición de `Page` (en `Sidebar.tsx`) e importarla en todos los módulos. Actualizar todos los tipos cuando se agrega un valor.
+
+### TS2352: Casting de interfaces a `Record<string, unknown>`
+**Causa:** TypeScript no permite casting directo de una interfaz a `Record<string, unknown>` porque la interfaz no tiene index signature.
+
+**Solución:** Usar doble casting: `as unknown as Record<string, unknown>`.
+
 ## Licencia
 
 MIT
