@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import re
@@ -30,6 +31,7 @@ from clients import (
     check_service,
     check_arr,
     arr_command,
+    arr_headers,
     fetch_wanted_movies,
     fetch_wanted_episodes,
     fetch_all_movies_detailed,
@@ -71,20 +73,40 @@ logging.basicConfig(
 log = logging.getLogger("flow-controller")
 
 
-# ── In-memory log buffer ─────────────────────────────────────────────────────
+# ── In-memory log buffer + file persistence ───────────────────────────────────
 import collections
+from pathlib import Path
 
 _LOG_BUFFER: collections.deque[dict] = collections.deque(maxlen=200)
+_LOG_FILE = Path(os.environ.get("CONFIG_DIR", "/app/config")) / "logs.json"
 
 
 class _BufferHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            _LOG_BUFFER.append({
+            entry = {
                 "time": self.format(record),
                 "level": record.levelname,
                 "message": record.getMessage(),
-            })
+            }
+            _LOG_BUFFER.append(entry)
+            self._persist(entry)
+        except Exception:
+            pass
+
+    def _persist(self, entry: dict) -> None:
+        try:
+            _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            # Read existing, append, keep last 200
+            existing = []
+            if _LOG_FILE.exists():
+                try:
+                    existing = json.loads(_LOG_FILE.read_text())
+                except Exception:
+                    existing = []
+            existing.append(entry)
+            existing = existing[-200:]
+            _LOG_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=None))
         except Exception:
             pass
 
@@ -93,6 +115,20 @@ _buf_handler = _BufferHandler()
 _buf_handler.setFormatter(logging.Formatter("%(asctime)s"))
 _buf_handler.setLevel(logging.WARNING)  # Only WARN+ to keep it small
 logging.getLogger("flow-controller").addHandler(_buf_handler)
+
+
+def _load_log_file() -> list[dict]:
+    """Load logs from disk on startup."""
+    try:
+        if _LOG_FILE.exists():
+            return json.loads(_LOG_FILE.read_text())
+    except Exception:
+        pass
+    return []
+
+
+# Pre-load on startup
+_LOG_BUFFER.extend(_load_log_file()[-200:])
 
 # Shared mutable state
 status_cache: dict = {
