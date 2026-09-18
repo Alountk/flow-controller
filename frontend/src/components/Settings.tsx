@@ -106,7 +106,7 @@ export function Settings() {
       if (!prev) return prev
       const next = JSON.parse(JSON.stringify(prev)) as Settings
       const keys = path.split('.')
-      let obj: Record<string, unknown> = next as Record<string, unknown>
+      let obj = next as unknown as Record<string, unknown>
       for (let i = 0; i < keys.length - 1; i++) {
         obj = obj[keys[i]] as Record<string, unknown>
       }
@@ -128,7 +128,7 @@ export function Settings() {
       if (!prev) return prev
       const next = JSON.parse(JSON.stringify(prev)) as Settings
       const keys = path.split('.')
-      let obj: Record<string, unknown> = next as Record<string, unknown>
+      let obj = next as unknown as Record<string, unknown>
       for (let i = 0; i < keys.length - 1; i++) {
         obj = obj[keys[i]] as Record<string, unknown>
       }
