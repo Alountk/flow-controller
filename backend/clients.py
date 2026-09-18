@@ -622,32 +622,35 @@ async def arr_download_clients(session: aiohttp.ClientSession, service: dict) ->
 async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> list[dict]:
     """Obtiene la lista de indexadores configurados en Radarr/Sonarr."""
     headers = arr_headers(service["api_key"])
+    url = f"{service['url']}/api/v3/indexer"
     try:
-        async with session.get(
-            f"{service['url']}/api/v3/indexer",
-            headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
-        ) as resp:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)) as resp:
+            text = await resp.text()
             if resp.status != 200:
+                log.warning("arr_indexers %s status=%d body=%s", service["key"], resp.status, text[:200])
                 return []
             data = await resp.json(content_type=None)
-            return [
+            log.info("arr_indexers %s raw count=%d", service["key"], len(data))
+            # Show all indexers for debugging
+            for idx in data:
+                log.info("arr_indexers %s -> id=%s name=%s enableSearch=%s implementation=%s",
+                    service["key"], idx.get("id"), idx.get("name"), idx.get("enableSearch"), idx.get("implementation"))
+            # Filter: only searchables
+            result = [
                 {
                     "id": idx.get("id"),
                     "name": idx.get("name", ""),
                     "implementation": idx.get("implementation", ""),
-                    "configFields": [
-                        {"name": f.get("name", ""), "value": f.get("value", "")}
-                        for f in idx.get("configFields", [])
-                        if f.get("name") == "apiUrl"
-                    ],
                     "enableRss": idx.get("enableRss", False),
                     "enableSearch": idx.get("enableSearch", False),
                 }
                 for idx in data
                 if idx.get("enableSearch", False)
             ]
-    except (asyncio.TimeoutError, aiohttp.ClientError):
+            log.info("arr_indexers %s filtered=%d", service["key"], len(result))
+            return result
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        log.warning("arr_indexers %s error: %s", service["key"], exc)
         return []
 
 
