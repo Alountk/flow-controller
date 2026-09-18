@@ -325,3 +325,17 @@ export interface CalendarResponse {
   start: string
   end: string
 }
+
+export interface DiskVolume {
+  name: string
+  path: string
+  total_bytes: number
+  used_bytes: number
+  free_bytes: number
+  percent: number
+  error?: string
+}
+
+export interface DiskResponse {
+  volumes: DiskVolume[]
+}

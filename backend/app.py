@@ -254,6 +254,38 @@ async def get_calendar(start: str = "", end: str = ""):
     return {"items": all_items, "start": start, "end": end}
 
 
+@app.get("/api/disk")
+async def get_disk_usage():
+    """Uso de disco de cada volumen configurado."""
+    volumes = [
+        {"name": "Storage (6TB)", "path": "/mnt/storage-6tb"},
+        {"name": "Storage", "path": "/mnt/storage"},
+    ]
+    result = []
+    for vol in volumes:
+        try:
+            usage = shutil.disk_usage(vol["path"])
+            result.append({
+                "name": vol["name"],
+                "path": vol["path"],
+                "total_bytes": usage.total,
+                "used_bytes": usage.used,
+                "free_bytes": usage.free,
+                "percent": round(usage.used / usage.total * 100, 1) if usage.total > 0 else 0,
+            })
+        except (OSError, FileNotFoundError):
+            result.append({
+                "name": vol["name"],
+                "path": vol["path"],
+                "total_bytes": 0,
+                "used_bytes": 0,
+                "free_bytes": 0,
+                "percent": 0,
+                "error": "no disponible",
+            })
+    return {"volumes": result}
+
+
 @app.post("/api/wanted/search")
 async def search_wanted(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Busca contenido faltante en los indexadores."""

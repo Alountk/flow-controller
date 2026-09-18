@@ -10,6 +10,7 @@ import { Prototypes } from './components/Prototypes'
 import { QueueSidebar } from './components/QueueSidebar'
 import { Settings } from './components/Settings'
 import { Calendar } from './components/Calendar'
+import { DiskSpace } from './components/DiskSpace'
 import { setApiKey } from './api/auth'
 import { usePageRoute } from './hooks/usePageRoute'
 import {
@@ -40,6 +41,7 @@ const PAGE_TITLES: Record<Page, string> = {
   trace: 'Trazabilidad',
   wanted: 'Faltantes',
   calendar: 'Calendario',
+  disk: 'Espacio en Disco',
   files: 'Archivos',
   config: 'Configuración',
   prototypes: 'Prototipos',
@@ -193,6 +195,8 @@ function App() {
           )}
 
           {page === 'calendar' && <Calendar />}
+
+          {page === 'disk' && <DiskSpace />}
 
           {page === 'files' && (
             <FileManager />

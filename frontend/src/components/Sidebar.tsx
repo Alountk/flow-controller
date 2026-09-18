@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
 
-export type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'files' | 'config' | 'prototypes'
+export type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'disk' | 'files' | 'config' | 'prototypes'
 
 const PAGE_PATHS: Record<Page, string> = {
   dashboard: '/dashboard',
   trace: '/trazabilidad',
   wanted: '/faltantes',
   calendar: '/calendario',
+  disk: '/disco',
   files: '/archivos',
   config: '/configuracion',
   prototypes: '/prototipos',
@@ -23,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'trace', label: 'Trazabilidad', icon: '🔍' },
   { key: 'wanted', label: 'Faltantes', icon: '📥' },
   { key: 'calendar', label: 'Calendario', icon: '📅' },
+  { key: 'disk', label: 'Disco', icon: '💾' },
   { key: 'files', label: 'Archivos', icon: '📂' },
   { key: 'config', label: 'Configuración', icon: '⚙️' },
 ]
