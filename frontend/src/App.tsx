@@ -39,6 +39,7 @@ const PAGE_TITLES: Record<Page, string> = {
   dashboard: 'Dashboard',
   trace: 'Trazabilidad',
   wanted: 'Faltantes',
+  calendar: 'Calendario',
   files: 'Archivos',
   config: 'Configuración',
   prototypes: 'Prototipos',

@@ -73,7 +73,7 @@ export function Calendar() {
         <div className="wanted-loading">Cargando calendario...</div>
       ) : data && data.items.length > 0 ? (
         <div className="calendar-grid">
-          {Array.from(grouped.entries()).map(([date, items]) => (
+          {Array.from(grouped.entries()).map(([date, items]: [string, CalendarItem[]]) => (
             <div key={date} className="calendar-day">
               <div className="calendar-day-header">
                 <span className="calendar-day-date">{formatDate(date)}</span>
