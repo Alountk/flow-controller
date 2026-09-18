@@ -711,6 +711,48 @@ async def fetch_all_movies_detailed(session: aiohttp.ClientSession, service: dic
         return {"items": [], "total": 0}
 
 
+async def fetch_all_series_detailed(session: aiohttp.ClientSession, service: dict) -> dict:
+    """Devuelve todas las series de Sonarr con estado de archivo y ruta."""
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/series",
+            headers=headers,
+            params={"sortKey": "title", "sortDirection": "ascending"},
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return {"items": [], "total": 0}
+            data = await resp.json(content_type=None)
+            items = []
+            for s in data:
+                if "id" not in s:
+                    continue
+                path = s.get("path", "")
+                path_exists = False
+                if path:
+                    try:
+                        path_exists = os.path.isdir(path)
+                    except (OSError, ValueError):
+                        path_exists = False
+                seasons = s.get("seasons", [])
+                total_episodes = sum(len(sea.get("episodes", [])) for sea in seasons)
+                items.append({
+                    "id": s.get("id"),
+                    "title": s.get("title", ""),
+                    "year": s.get("year"),
+                    "remotePoster": s.get("remotePoster", ""),
+                    "has_file": s.get("statistics", {}).get("episodeFileCount", 0) > 0,
+                    "path_exists": path_exists,
+                    "monitored": s.get("monitored", False),
+                    "episode_count": s.get("statistics", {}).get("episodeCount", 0),
+                    "episode_file_count": s.get("statistics", {}).get("episodeFileCount", 0),
+                })
+            return {"items": items, "total": len(items)}
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {"items": [], "total": 0}
+
+
 async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
     """Devuelve episodios monitorizados sin archivo (wanted/missing)."""
     headers = arr_headers(service["api_key"])

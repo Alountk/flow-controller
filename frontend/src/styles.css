@@ -1447,6 +1447,12 @@ body {
   font-weight: 600;
 }
 
+.wanted-ep-count {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
 .wanted-filter {
   display: flex;
   gap: 4px;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult, AllMovie } from '../types'
+import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult, AllMovie, AllSeries } from '../types'
 import { searchWantedItem, scanForMovies } from '../api/wanted'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
@@ -26,6 +26,11 @@ async function fetchWanted(): Promise<WantedResponse> {
 async function fetchAllMovies(): Promise<{ items: AllMovie[]; total: number }> {
   const res = await fetch('/api/wanted/all')
   return res.json() as Promise<{ items: AllMovie[]; total: number }>
+}
+
+async function fetchAllSeries(): Promise<{ items: AllSeries[]; total: number }> {
+  const res = await fetch('/api/wanted/series/all')
+  return res.json() as Promise<{ items: AllSeries[]; total: number }>
 }
 
 function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
@@ -302,6 +307,7 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
 export function MissingContent() {
   const [tab, setTab] = useHashState<'movies' | 'episodes'>('wanted', 'tab', 'movies')
   const [movieFilter, setMovieFilter] = useHashState<'missing' | 'all'>('wanted', 'filter', 'missing')
+  const [seriesFilter, setSeriesFilter] = useHashState<'missing' | 'all'>('wanted', 'seriesFilter', 'missing')
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
 
   const { data, isPending } = useQuery({
@@ -313,6 +319,12 @@ export function MissingContent() {
     queryKey: ['all-movies'],
     queryFn: fetchAllMovies,
     enabled: tab === 'movies' && movieFilter === 'all',
+  })
+
+  const { data: allSeriesData, isPending: allSeriesLoading } = useQuery({
+    queryKey: ['all-series'],
+    queryFn: fetchAllSeries,
+    enabled: tab === 'episodes' && seriesFilter === 'all',
   })
 
   const searchItem = useMutation({
@@ -461,39 +473,108 @@ export function MissingContent() {
         </div>
       ) : (
         <div className="wanted-content">
-          {sonarrEpisodes && sonarrEpisodes.length > 0 ? (
-            <div className="wanted-list">
-              {sonarrEpisodes.map((ep) => (
-                <div key={ep.id} className="wanted-row">
-                  <div className="wanted-row-info">
-                    <span className="wanted-series">{ep.series_title}</span>
-                    <span className="wanted-ep">
-                      S{String(ep.season_number ?? 0).padStart(2, '0')}E{String(ep.episode_number ?? 0).padStart(2, '0')}
-                    </span>
-                    <span className="wanted-ep-title">{ep.title}</span>
-                    {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
+          <div className="wanted-actions">
+            <div className="wanted-filter">
+              <button
+                className={`wanted-filter-btn ${seriesFilter === 'missing' ? 'active' : ''}`}
+                onClick={() => setSeriesFilter('missing')}
+              >
+                Faltantes ({sonarrTotal})
+              </button>
+              <button
+                className={`wanted-filter-btn ${seriesFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setSeriesFilter('all')}
+              >
+                Todas ({allSeriesData?.total ?? '...'})
+              </button>
+            </div>
+          </div>
+          {seriesFilter === 'missing' ? (
+            sonarrEpisodes && sonarrEpisodes.length > 0 ? (
+              <div className="wanted-list">
+                {sonarrEpisodes.map((ep) => (
+                  <div key={ep.id} className="wanted-row">
+                    <div className="wanted-row-info">
+                      <span className="wanted-series">{ep.series_title}</span>
+                      <span className="wanted-ep">
+                        S{String(ep.season_number ?? 0).padStart(2, '0')}E{String(ep.episode_number ?? 0).padStart(2, '0')}
+                      </span>
+                      <span className="wanted-ep-title">{ep.title}</span>
+                      {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
+                    </div>
+                    <div className="wanted-row-actions">
+                      <button
+                        className="action-btn search-item"
+                        onClick={() => searchItem.mutate({ source: 'sonarr', ids: { episode_id: ep.id, series_id: ep.series_id } })}
+                        disabled={searchItem.isPending}
+                      >
+                        🔍
+                      </button>
+                      <button
+                        className="action-btn scan-folder-btn"
+                        title="Buscar en carpeta"
+                        onClick={() => handleScanForSeries(ep.series_title, ep.series_id)}
+                      >
+                        📁
+                      </button>
+                    </div>
                   </div>
-                  <div className="wanted-row-actions">
-                    <button
-                      className="action-btn search-item"
-                      onClick={() => searchItem.mutate({ source: 'sonarr', ids: { episode_id: ep.id, series_id: ep.series_id } })}
-                      disabled={searchItem.isPending}
-                    >
-                      🔍
-                    </button>
-                    <button
-                      className="action-btn scan-folder-btn"
-                      title="Buscar en carpeta"
-                      onClick={() => handleScanForSeries(ep.series_title, ep.series_id)}
-                    >
-                      📁
-                    </button>
+                ))}
+              </div>
+            ) : (
+              <div className="wanted-empty">No hay episodios faltantes</div>
+            )
+          ) : allSeriesLoading ? (
+            <div className="wanted-loading">Cargando catálogo...</div>
+          ) : allSeriesData && allSeriesData.items.length > 0 ? (
+            <div className="wanted-grid">
+              {allSeriesData.items.map((series) => (
+                <div
+                  key={series.id}
+                  className={`wanted-card ${series.has_file && series.path_exists ? 'status-ok' : 'status-error'}`}
+                >
+                  {series.remotePoster && (
+                    <img className="wanted-poster" src={series.remotePoster} alt={series.title} />
+                  )}
+                  <div className="wanted-info">
+                    <div className="wanted-title">
+                      {series.title} {series.year && <span className="wanted-year">({series.year})</span>}
+                    </div>
+                    <div className="wanted-status-badge">
+                      {series.has_file && series.path_exists ? (
+                        <span className="badge-ok">✓ Configurada</span>
+                      ) : !series.has_file ? (
+                        <span className="badge-error">✗ Sin archivos</span>
+                      ) : (
+                        <span className="badge-error">✗ Ruta no encontrada</span>
+                      )}
+                    </div>
+                    {series.episode_count > 0 && (
+                      <div className="wanted-ep-count">
+                        {series.episode_file_count}/{series.episode_count} episodios
+                      </div>
+                    )}
+                    <div className="wanted-card-actions">
+                      <button
+                        className="action-btn search-item"
+                        onClick={() => searchItem.mutate({ source: 'sonarr', ids: { series_id: series.id } })}
+                        disabled={searchItem.isPending}
+                      >
+                        🔍 Buscar
+                      </button>
+                      <button
+                        className="action-btn scan-folder-btn"
+                        onClick={() => handleScanForSeries(series.title, series.id)}
+                      >
+                        📁 En carpeta
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="wanted-empty">No hay episodios faltantes</div>
+            <div className="wanted-empty">No hay series en el catálogo</div>
           )}
         </div>
       )}

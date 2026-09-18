@@ -227,6 +227,18 @@ export interface AllMovie {
   monitored: boolean
 }
 
+export interface AllSeries {
+  id: number
+  title: string
+  year: number | null
+  remotePoster: string
+  has_file: boolean
+  path_exists: boolean
+  monitored: boolean
+  episode_count: number
+  episode_file_count: number
+}
+
 export interface WantedEpisode {
   id: number
   title: string

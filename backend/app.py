@@ -33,6 +33,7 @@ from clients import (
     fetch_wanted_movies,
     fetch_wanted_episodes,
     fetch_all_movies_detailed,
+    fetch_all_series_detailed,
     arr_search_missing_movies,
     arr_search_missing_episodes,
     arr_search_movie,
@@ -209,6 +210,17 @@ async def get_all_movies():
         return {"items": [], "total": 0}
     async with aiohttp.ClientSession() as session:
         result = await fetch_all_movies_detailed(session, service)
+    return result
+
+
+@app.get("/api/wanted/series/all")
+async def get_all_series():
+    """Todas las series de Sonarr con estado de archivo y ruta."""
+    service = next((s for s in SERVICES if s["key"] == "sonarr" and s["kind"] == "arr"), None)
+    if not service:
+        return {"items": [], "total": 0}
+    async with aiohttp.ClientSession() as session:
+        result = await fetch_all_series_detailed(session, service)
     return result
 
 
