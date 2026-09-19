@@ -140,7 +140,8 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
   async function handleGrab(guid: string) {
     setStep('grabbing')
     setMessage('Descargando...')
-    const result = await grabCalendarRelease(item.source, guid)
+    const release = releases.find(r => r.guid === guid)
+    const result = await grabCalendarRelease(item.source, guid, release?.indexerId || 0, item.type === 'movie' ? item.id : 0, item.type === 'episode' ? item.id : 0)
     if (result.ok) {
       setStep('done')
       setMessage('Descarga iniciada. Revisa la cola de descargas.')
@@ -175,7 +176,8 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
     setStep('grabbing')
     setMessage(`Descargando ${selectedGuids.size} releases...`)
     const guids = Array.from(selectedGuids)
-    const result = await grabCalendarReleaseBatch(item.source, guids)
+    const indexerIds = guids.map(g => releases.find(r => r.guid === g)?.indexerId || 0)
+    const result = await grabCalendarReleaseBatch(item.source, guids, indexerIds, item.type === 'movie' ? item.id : 0, item.type === 'episode' ? item.id : 0)
     if (result.ok) {
       setStep('done')
       setMessage(result.detail)

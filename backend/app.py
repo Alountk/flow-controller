@@ -185,11 +185,17 @@ class CalendarReleasesRequest(BaseModel):
 class CalendarGrabRequest(BaseModel):
     source: str  # "radarr" or "sonarr"
     guid: str
+    indexerId: int = 0
+    movieId: int = 0
+    episodeId: int = 0
 
 
 class CalendarGrabBatchRequest(BaseModel):
     source: str  # "radarr" or "sonarr"
     guids: list[str]
+    indexerIds: list[int] = []
+    movieId: int = 0
+    episodeId: int = 0
 
 
 async def check_all(session: aiohttp.ClientSession) -> None:
@@ -493,7 +499,7 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
 
     try:
         async with aiohttp.ClientSession() as session:
-            result = await arr_grab_release(session, service, req.guid)
+            result = await arr_grab_release(session, service, req.guid, req.indexerId, req.movieId, req.episodeId)
         return result
     except Exception as exc:
         log.exception("calendar_grab error: %s", exc)
@@ -510,9 +516,10 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
     results = []
     errors = []
     async with aiohttp.ClientSession() as session:
-        for guid in req.guids:
+        for i, guid in enumerate(req.guids):
+            idx_id = req.indexerIds[i] if i < len(req.indexerIds) else 0
             try:
-                result = await arr_grab_release(session, service, guid)
+                result = await arr_grab_release(session, service, guid, idx_id, req.movieId, req.episodeId)
                 if result.get("ok"):
                     results.append(guid)
                 else:

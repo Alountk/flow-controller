@@ -6,6 +6,7 @@ export interface Release {
   size: number
   quality: string
   indexer: string
+  indexerId: number
   indexerFlags: string
   seeders: number
   leechers: number
@@ -84,11 +85,14 @@ export async function fetchCalendarReleases(
 export async function grabCalendarRelease(
   source: string,
   guid: string,
+  indexerId: number = 0,
+  movieId: number = 0,
+  episodeId: number = 0,
 ): Promise<{ ok: boolean; detail: string }> {
   const res = await fetch('/api/calendar/grab', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ source, guid }),
+    body: JSON.stringify({ source, guid, indexerId, movieId, episodeId }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>
@@ -101,11 +105,14 @@ export async function grabCalendarRelease(
 export async function grabCalendarReleaseBatch(
   source: string,
   guids: string[],
+  indexerIds: number[] = [],
+  movieId: number = 0,
+  episodeId: number = 0,
 ): Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }> {
   const res = await fetch('/api/calendar/grab-batch', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ source, guids }),
+    body: JSON.stringify({ source, guids, indexerIds, movieId, episodeId }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>

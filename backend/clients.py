@@ -1079,6 +1079,7 @@ async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movi
                 "size": r.get("size", 0),
                 "quality": quality_name,
                 "indexer": r.get("indexer", ""),
+                "indexerId": r.get("indexerId", 0),
                 "indexerFlags": r.get("indexerFlags", ""),
                 "seeders": r.get("seeders", 0),
                 "leechers": r.get("leechers", 0),
@@ -1096,21 +1097,30 @@ async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movi
         return {"releases": [], "detail": f"Error de conexión: {exc}"}
 
 
-async def arr_grab_release(session: aiohttp.ClientSession, service: dict, guid: str) -> dict:
-    """Descarga un release específico via POST /api/v3/release/pick."""
+async def arr_grab_release(session: aiohttp.ClientSession, service: dict, guid: str, indexer_id: int = 0, movie_id: int = 0, episode_id: int = 0) -> dict:
+    """Descarga un release específico via POST /api/v3/release."""
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    body = {"guid": guid}
+    if indexer_id:
+        body["indexerId"] = indexer_id
+    if movie_id:
+        body["movieId"] = movie_id
+    elif episode_id:
+        body["episodeId"] = episode_id
+    log.info("arr_grab_release %s guid=%s body=%s", service["key"], guid[:32], body)
     try:
         async with session.post(
-            f"{service['url']}/api/v3/release/pick",
+            f"{service['url']}/api/v3/release",
             headers=headers,
-            json={"guid": guid},
+            json=body,
             timeout=timeout,
         ) as resp:
             text = await resp.text()
             if resp.status in (200, 201):
                 return {"ok": True, "detail": "Release encolado para descarga"}
+            log.warning("arr_grab_release %s status=%d body=%s", service["key"], resp.status, text[:200])
             return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
