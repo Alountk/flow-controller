@@ -1120,8 +1120,21 @@ async def arr_grab_release(session: aiohttp.ClientSession, service: dict, guid: 
             text = await resp.text()
             if resp.status in (200, 201):
                 return {"ok": True, "detail": "Release encolado para descarga"}
-            log.warning("arr_grab_release %s status=%d body=%s", service["key"], resp.status, text[:200])
-            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
+            log.warning("arr_grab_release %s status=%d body=%s", service["key"], resp.status, text[:500])
+            # Try to parse Radarr/Sonarr JSON error for human-readable message
+            try:
+                import json as _json
+                err_data = _json.loads(text)
+                if isinstance(err_data, list) and err_data:
+                    messages = [e.get("errorMessage", str(e)) for e in err_data if isinstance(e, dict)]
+                    detail = "; ".join(messages) if messages else f"HTTP {resp.status}"
+                elif isinstance(err_data, dict):
+                    detail = err_data.get("message", err_data.get("detail", f"HTTP {resp.status}"))
+                else:
+                    detail = f"HTTP {resp.status}: {text[:200]}"
+            except (ValueError, TypeError):
+                detail = f"HTTP {resp.status}: {text[:200]}"
+            return {"ok": False, "detail": detail}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 

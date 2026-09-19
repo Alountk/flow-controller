@@ -484,6 +484,13 @@ async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(ve
                 result = await arr_fetch_releases(session, service, episode_id=req.id)
             else:
                 return {"releases": [], "detail": f"Tipo desconocido: {req.type}"}
+            # Enrich releases with indexerId by matching indexer name → id
+            if result.get("releases"):
+                indexers = await arr_indexers(session, service)
+                name_to_id = {idx["name"]: idx["id"] for idx in indexers if idx.get("name")}
+                for r in result["releases"]:
+                    if not r.get("indexerId"):
+                        r["indexerId"] = name_to_id.get(r.get("indexer", ""), 0)
         return result
     except Exception as exc:
         log.exception("calendar_releases error: %s", exc)
