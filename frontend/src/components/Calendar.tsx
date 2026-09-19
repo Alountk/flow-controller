@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { CalendarItem, CalendarResponse } from '../types'
-import { CalendarModal } from './CalendarModal'
+import { ReleaseSearchModal } from './ReleaseSearchModal'
 
 async function fetchCalendar(start: string, end: string): Promise<CalendarResponse> {
   const res = await fetch(`/api/calendar?start=${start}&end=${end}`)
@@ -122,7 +122,7 @@ export function Calendar() {
         <div className="wanted-empty">No hay contenido programado en este rango</div>
       )}
 
-      {scanItem && <CalendarModal item={scanItem} onClose={() => setScanItem(null)} />}
+      {scanItem && <ReleaseSearchModal item={scanItem} onClose={() => setScanItem(null)} />}
     </section>
   )
 }

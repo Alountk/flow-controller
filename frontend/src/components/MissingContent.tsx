@@ -4,6 +4,7 @@ import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult,
 import { searchWantedItem, scanForMovies } from '../api/wanted'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
+import { ReleaseSearchModal, type ReleaseSearchItem } from './ReleaseSearchModal'
 
 const LANG_LIST = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ru', 'manual'] as const
 const LANG_LABELS: Record<string, string> = {
@@ -316,6 +317,7 @@ export function MissingContent() {
   const [movieFilter, setMovieFilter] = useHashState<'missing' | 'all'>('wanted', 'filter', 'missing')
   const [seriesFilter, setSeriesFilter] = useHashState<'missing' | 'all'>('wanted', 'seriesFilter', 'missing')
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
+  const [releaseSearchItem, setReleaseSearchItem] = useState<ReleaseSearchItem | null>(null)
 
   const { data, isPending } = useQuery({
     queryKey: ['wanted'],
@@ -411,8 +413,15 @@ export function MissingContent() {
                       <div className="wanted-card-actions">
                         <button
                           className="action-btn search-item"
-                          onClick={() => searchItem.mutate({ source: 'radarr', ids: { movie_id: movie.id } })}
-                          disabled={searchItem.isPending}
+                          onClick={() => setReleaseSearchItem({
+                            type: 'movie',
+                            id: movie.id,
+                            title: movie.title,
+                            year: movie.year,
+                            source: 'radarr',
+                            remotePoster: movie.remotePoster,
+                            has_file: movie.has_file,
+                          })}
                         >
                           🔍 Buscar
                         </button>
@@ -458,8 +467,15 @@ export function MissingContent() {
                     <div className="wanted-card-actions">
                       <button
                         className="action-btn search-item"
-                        onClick={() => searchItem.mutate({ source: 'radarr', ids: { movie_id: movie.id } })}
-                        disabled={searchItem.isPending}
+                        onClick={() => setReleaseSearchItem({
+                          type: 'movie',
+                          id: movie.id,
+                          title: movie.title,
+                          year: movie.year,
+                          source: 'radarr',
+                          remotePoster: movie.remotePoster,
+                          has_file: movie.has_file,
+                        })}
                       >
                         🔍 Buscar
                       </button>
@@ -512,8 +528,18 @@ export function MissingContent() {
                     <div className="wanted-row-actions">
                       <button
                         className="action-btn search-item"
-                        onClick={() => searchItem.mutate({ source: 'sonarr', ids: { episode_id: ep.id, series_id: ep.series_id } })}
-                        disabled={searchItem.isPending}
+                        title="Buscar releases"
+                        onClick={() => setReleaseSearchItem({
+                          type: 'episode',
+                          id: ep.id,
+                          title: ep.title,
+                          series_title: ep.series_title,
+                          season_number: ep.season_number,
+                          episode_number: ep.episode_number,
+                          date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
+                          source: 'sonarr',
+                          has_file: false,
+                        })}
                       >
                         🔍
                       </button>
@@ -587,6 +613,7 @@ export function MissingContent() {
       )}
 
       {scanItem && <ScanModal item={scanItem} onClose={() => setScanItem(null)} />}
+      {releaseSearchItem && <ReleaseSearchModal item={releaseSearchItem} onClose={() => setReleaseSearchItem(null)} />}
     </section>
   )
 }
