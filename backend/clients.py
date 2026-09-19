@@ -720,13 +720,16 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
                 }
                 for m in data.get("records", [])
             ]
-            return {"items": items, "total": data.get("total", len(items))}
+            total = data.get("totalRecords") or data.get("total", len(items))
+            return {"items": items, "total": total, "page": page, "page_size": page_size}
     except (asyncio.TimeoutError, aiohttp.ClientError):
-        return {"items": [], "total": 0}
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
 
-async def fetch_all_movies_detailed(session: aiohttp.ClientSession, service: dict) -> dict:
-    """Devuelve todas las películas de Radarr con estado de archivo y ruta."""
+async def fetch_all_movies_detailed(
+    session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50
+) -> dict:
+    """Devuelve todas las películas de Radarr con estado de archivo y ruta (paginado)."""
     headers = arr_headers(service["api_key"])
     try:
         async with session.get(
@@ -736,12 +739,20 @@ async def fetch_all_movies_detailed(session: aiohttp.ClientSession, service: dic
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
-                return {"items": [], "total": 0}
+                return {"items": [], "total": 0, "page": page, "page_size": page_size}
             data = await resp.json(content_type=None)
+            valid_movies = [m for m in data if isinstance(m, dict) and "id" in m]
+            total = len(valid_movies)
+
+            if page_size > 0:
+                start = (page - 1) * page_size
+                end = start + page_size
+                sliced = valid_movies[start:end]
+            else:
+                sliced = valid_movies
+
             items = []
-            for m in data:
-                if "id" not in m:
-                    continue
+            for m in sliced:
                 path = m.get("path", "")
                 path_exists = False
                 if path:
@@ -758,13 +769,15 @@ async def fetch_all_movies_detailed(session: aiohttp.ClientSession, service: dic
                     "path_exists": path_exists,
                     "monitored": m.get("monitored", False),
                 })
-            return {"items": items, "total": len(items)}
+            return {"items": items, "total": total, "page": page, "page_size": page_size}
     except (asyncio.TimeoutError, aiohttp.ClientError):
-        return {"items": [], "total": 0}
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
 
-async def fetch_all_series_detailed(session: aiohttp.ClientSession, service: dict) -> dict:
-    """Devuelve todas las series de Sonarr con estado de archivo y ruta."""
+async def fetch_all_series_detailed(
+    session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50
+) -> dict:
+    """Devuelve todas las series de Sonarr con estado de archivo y ruta (paginado)."""
     headers = arr_headers(service["api_key"])
     try:
         async with session.get(
@@ -774,12 +787,20 @@ async def fetch_all_series_detailed(session: aiohttp.ClientSession, service: dic
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
-                return {"items": [], "total": 0}
+                return {"items": [], "total": 0, "page": page, "page_size": page_size}
             data = await resp.json(content_type=None)
+            valid_series = [s for s in data if isinstance(s, dict) and "id" in s]
+            total = len(valid_series)
+
+            if page_size > 0:
+                start = (page - 1) * page_size
+                end = start + page_size
+                sliced = valid_series[start:end]
+            else:
+                sliced = valid_series
+
             items = []
-            for s in data:
-                if "id" not in s:
-                    continue
+            for s in sliced:
                 path = s.get("path", "")
                 path_exists = False
                 if path:
@@ -788,7 +809,6 @@ async def fetch_all_series_detailed(session: aiohttp.ClientSession, service: dic
                     except (OSError, ValueError):
                         path_exists = False
                 seasons = s.get("seasons", [])
-                total_episodes = sum(len(sea.get("episodes", [])) for sea in seasons)
                 items.append({
                     "id": s.get("id"),
                     "title": s.get("title", ""),
@@ -800,9 +820,9 @@ async def fetch_all_series_detailed(session: aiohttp.ClientSession, service: dic
                     "episode_count": s.get("statistics", {}).get("episodeCount", 0),
                     "episode_file_count": s.get("statistics", {}).get("episodeFileCount", 0),
                 })
-            return {"items": items, "total": len(items)}
+            return {"items": items, "total": total, "page": page, "page_size": page_size}
     except (asyncio.TimeoutError, aiohttp.ClientError):
-        return {"items": [], "total": 0}
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
 
 async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
@@ -824,7 +844,7 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
-                return {"items": [], "total": 0}
+                return {"items": [], "total": 0, "page": page, "page_size": page_size}
             data = await resp.json(content_type=None)
             items = [
                 {
@@ -841,7 +861,10 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
                 }
                 for ep in data.get("records", [])
             ]
-            return {"items": items, "total": data.get("total", len(items))}
+            total = data.get("totalRecords") or data.get("total", len(items))
+            return {"items": items, "total": total, "page": page, "page_size": page_size}
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
     except (asyncio.TimeoutError, aiohttp.ClientError):
         return {"items": [], "total": 0}
 

@@ -254,6 +254,15 @@ export interface WantedEpisode {
 export interface WantedService {
   items: (WantedMovie | WantedEpisode)[]
   total: number
+  page?: number
+  page_size?: number
+}
+
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page?: number
+  page_size?: number
 }
 
 export interface WantedResponse {

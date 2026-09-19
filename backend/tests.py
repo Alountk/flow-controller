@@ -749,3 +749,26 @@ class TestQueueAddSeries:
         assert data["op"]["series_id"] == 99
         assert data["op"]["arr_source"] == "sonarr"
 
+
+class TestPaginatedWantedEndpoints:
+    @patch("app.fetch_all_movies_detailed", new_callable=AsyncMock)
+    def test_all_movies_pagination_params(self, mock_fetch):
+        mock_fetch.return_value = {"items": [{"id": 1, "title": "M1"}], "total": 100, "page": 2, "page_size": 10}
+        resp = client.get("/api/wanted/all?page=2&page_size=10")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 100
+        assert data["page"] == 2
+        assert data["page_size"] == 10
+
+    @patch("app.fetch_all_series_detailed", new_callable=AsyncMock)
+    def test_all_series_pagination_params(self, mock_fetch):
+        mock_fetch.return_value = {"items": [{"id": 1, "title": "S1"}], "total": 50, "page": 1, "page_size": 25}
+        resp = client.get("/api/wanted/series/all?page=1&page_size=25")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 50
+        assert data["page"] == 1
+        assert data["page_size"] == 25
+
+

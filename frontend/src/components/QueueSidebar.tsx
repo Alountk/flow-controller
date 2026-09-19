@@ -107,6 +107,10 @@ export function QueueSidebar() {
       }
     }
     if (shouldRefresh) {
+      queryClient.invalidateQueries({ queryKey: ['wanted-movies-infinite'] })
+      queryClient.invalidateQueries({ queryKey: ['wanted-episodes-infinite'] })
+      queryClient.invalidateQueries({ queryKey: ['all-movies-infinite'] })
+      queryClient.invalidateQueries({ queryKey: ['all-series-infinite'] })
       queryClient.invalidateQueries({ queryKey: ['wanted'] })
       queryClient.invalidateQueries({ queryKey: ['all-movies'] })
     }

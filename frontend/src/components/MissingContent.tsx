@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { WantedMovie, WantedEpisode, WantedResponse, ScanMatch, ScanResult, AllMovie, AllSeries } from '../types'
-import { searchWantedItem, scanForMovies } from '../api/wanted'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { WantedMovie, ScanMatch, ScanResult } from '../types'
+import {
+  fetchWantedMovies,
+  fetchWantedEpisodes,
+  fetchAllMovies,
+  fetchAllSeries,
+  scanForMovies,
+} from '../api/wanted'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
 import { ReleaseSearchModal, type ReleaseSearchItem } from './ReleaseSearchModal'
+
+const PAGE_SIZE = 50
 
 const LANG_LIST = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ru', 'manual'] as const
 const LANG_LABELS: Record<string, string> = {
@@ -17,21 +25,6 @@ interface ScanItem {
   id: number
   title: string
   source: string
-}
-
-async function fetchWanted(): Promise<WantedResponse> {
-  const res = await fetch('/api/wanted')
-  return res.json() as Promise<WantedResponse>
-}
-
-async function fetchAllMovies(): Promise<{ items: AllMovie[]; total: number }> {
-  const res = await fetch('/api/wanted/all')
-  return res.json() as Promise<{ items: AllMovie[]; total: number }>
-}
-
-async function fetchAllSeries(): Promise<{ items: AllSeries[]; total: number }> {
-  const res = await fetch('/api/wanted/series/all')
-  return res.json() as Promise<{ items: AllSeries[]; total: number }>
 }
 
 function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
@@ -181,7 +174,7 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
                 onChange={(e) => handleVolumeChange(e.target.value)}
               >
                 <option value="">Seleccionar volumen...</option>
-                {roots.map((r) => (
+                {roots.map((r: { path: string; name: string }) => (
                   <option key={r.path} value={r.path}>{r.name}</option>
                 ))}
               </select>
@@ -197,32 +190,40 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
             </div>
 
             {currentPath && (
-              <div className="scan-path-list">
-                <div className="scan-current-path">{currentPath}</div>
-                {items.filter((i) => i.is_dir).map((dirItem) => (
-                  <div
-                    key={dirItem.path}
-                    className="scan-folder-item"
-                    onClick={() => navigateTo(dirItem.path)}
-                  >
-                    📁 {dirItem.name}
+              <div className="scan-browse-section">
+                <div className="scan-current-path">
+                  <span>📂 {currentPath}</span>
+                </div>
+                {browseData?.ok && items.length > 0 && (
+                  <div className="scan-folder-list">
+                    {items.filter((i: { is_dir: boolean }) => i.is_dir).map((dir: { path: string; name: string }) => (
+                      <button
+                        key={dir.path}
+                        className="scan-folder-item"
+                        onClick={() => navigateTo(dir.path)}
+                      >
+                        📁 {dir.name}
+                      </button>
+                    ))}
+                    {items.filter((i: { is_dir: boolean }) => i.is_dir).length === 0 && (
+                      <span className="scan-no-subfolders">Sin subcarpetas</span>
+                    )}
                   </div>
-                ))}
+                )}
               </div>
             )}
 
             <div className="scan-row">
-              <label className="scan-label">Idiomas:</label>
-              <div className="scan-lang-list">
+              <label className="scan-label">Idiomas / Alias:</label>
+              <div className="scan-lang-chips">
                 {LANG_LIST.map((lang) => (
-                  <label key={lang} className={`scan-lang-check ${lang === 'manual' ? 'scan-lang-manual' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={selectedLangs.has(lang)}
-                      onChange={() => toggleLang(lang)}
-                    />
+                  <button
+                    key={lang}
+                    className={`scan-lang-chip ${selectedLangs.has(lang) ? 'active' : ''}`}
+                    onClick={() => toggleLang(lang)}
+                  >
                     {LANG_LABELS[lang]}
-                  </label>
+                  </button>
                 ))}
               </div>
             </div>
@@ -232,71 +233,84 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
                 <label className="scan-label">Título a buscar:</label>
                 <input
                   type="text"
-                  className="scan-custom-input"
-                  placeholder="Escribe el título manualmente..."
+                  className="fm-input"
+                  placeholder="Ej: Star Wars, Breaking Bad..."
                   value={customTitle}
                   onChange={(e) => setCustomTitle(e.target.value)}
-                  autoFocus
                 />
               </div>
             )}
 
-            <button
-              className="action-btn search-all"
-              onClick={() => scan.mutate()}
-              disabled={
-                !currentPath
-                || scan.isPending
-                || (isManual ? !customTitle.trim() : selectedLangs.size === 0)
-              }
-            >
-              {scan.isPending ? 'Escaneando...' : `🔍 Buscar "${item.title}" en esta carpeta`}
-            </button>
+            <div className="scan-actions">
+              <button
+                className="action-btn scan-start-btn"
+                onClick={() => scan.mutate()}
+                disabled={!currentPath || scan.isPending}
+              >
+                {scan.isPending ? 'Escaneando...' : '🔍 Escanear'}
+              </button>
+            </div>
           </div>
+
+          {scan.isPending && (
+            <div className="scan-loading">Escaneando archivos recursivamente...</div>
+          )}
 
           {scanResult && (
             <div className="scan-results">
               <div className="scan-summary">
-                {scanResult.detail}
-                {scanResult.matches.length > 0 && (
-                  <button className="fm-action-btn" onClick={toggleAll}>
-                    {selectedFiles.size === scanResult.matches.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
-                  </button>
-                )}
+                <span>{scanResult.detail}</span>
               </div>
 
-              {scanResult.matches.length > 0 ? (
-                <div className="scan-match-list">
-                  {scanResult.matches.map((m) => (
-                    <div
-                      key={m.file_path}
-                      className={`scan-match ${selectedFiles.has(m.file_path) ? 'selected' : ''}`}
-                      onClick={() => toggleFile(m.file_path)}
-                    >
+              {scanResult.matches.length > 0 && (
+                <>
+                  <div className="scan-table-header">
+                    <label className="scan-checkbox-label">
                       <input
                         type="checkbox"
-                        checked={selectedFiles.has(m.file_path)}
-                        onChange={() => toggleFile(m.file_path)}
-                        onClick={(e) => e.stopPropagation()}
+                        checked={selectedFiles.size === scanResult.matches.length && scanResult.matches.length > 0}
+                        onChange={toggleAll}
                       />
-                      <div className="scan-match-info">
-                        <div className="scan-match-file">📄 {m.file_name}</div>
-                        <div className="scan-match-path" title={m.file_path}>{m.file_path}</div>
-                        <div className="scan-match-score">
-                          Similitud: {Math.round(m.score * 100)}% · Título: "{m.matched_title}"
+                      <span>Seleccionar todos ({selectedFiles.size}/{scanResult.matches.length})</span>
+                    </label>
+                  </div>
+
+                  <div className="scan-match-list">
+                    {scanResult.matches.map((m) => (
+                      <div
+                        key={m.file_path}
+                        className={`scan-match-item ${selectedFiles.has(m.file_path) ? 'selected' : ''}`}
+                        onClick={() => toggleFile(m.file_path)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedFiles.has(m.file_path)}
+                          onChange={() => {}}
+                        />
+                        <div className="scan-match-info">
+                          <div className="scan-match-filename">🎬 {m.file_name}</div>
+                          <div className="scan-match-meta">
+                            <span className="scan-match-title">→ {m.movie_title}</span>
+                            <span className="scan-match-score">({Math.round(m.score * 100)}% coincidencia con "{m.matched_title}")</span>
+                          </div>
+                          <div className="scan-match-path">{m.file_path}</div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {scanResult.matches.length === 0 && !scan.isPending && (
+                <div className="scan-no-matches">
+                  No se encontraron archivos que coincidan en esta carpeta.
                 </div>
-              ) : (
-                <div className="wanted-empty">No se encontraron archivos para "{item.title}"</div>
               )}
 
               {selectedMatches.length > 0 && (
-                <div className="scan-actions">
+                <div className="scan-footer-actions">
                   <button
-                    className="action-btn search-all"
+                    className="action-btn scan-move-btn"
                     onClick={() => moveQueue.mutate(selectedMatches)}
                     disabled={moveQueue.isPending}
                   >
@@ -319,27 +333,82 @@ export function MissingContent() {
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
   const [releaseSearchItem, setReleaseSearchItem] = useState<ReleaseSearchItem | null>(null)
 
-  const { data, isPending } = useQuery({
-    queryKey: ['wanted'],
-    queryFn: fetchWanted,
+  // Sentinel ref for infinite scroll intersection observer
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+
+  // 1. Wanted Movies Infinite Query
+  const wantedMoviesQuery = useInfiniteQuery({
+    queryKey: ['wanted-movies-infinite'],
+    queryFn: ({ pageParam = 1 }) => fetchWantedMovies(pageParam, PAGE_SIZE),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
+      return currentFetched < lastPage.total ? (lastPage.page ?? 1) + 1 : undefined
+    },
+    enabled: tab === 'movies' && movieFilter === 'missing',
   })
 
-  const { data: allMoviesData, isPending: allMoviesLoading } = useQuery({
-    queryKey: ['all-movies'],
-    queryFn: fetchAllMovies,
+  // 2. All Movies Infinite Query
+  const allMoviesQuery = useInfiniteQuery({
+    queryKey: ['all-movies-infinite'],
+    queryFn: ({ pageParam = 1 }) => fetchAllMovies(pageParam, PAGE_SIZE),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
+      return currentFetched < lastPage.total ? (lastPage.page ?? 1) + 1 : undefined
+    },
     enabled: tab === 'movies' && movieFilter === 'all',
   })
 
-  const { data: allSeriesData, isPending: allSeriesLoading } = useQuery({
-    queryKey: ['all-series'],
-    queryFn: fetchAllSeries,
+  // 3. Wanted Episodes Infinite Query
+  const wantedEpisodesQuery = useInfiniteQuery({
+    queryKey: ['wanted-episodes-infinite'],
+    queryFn: ({ pageParam = 1 }) => fetchWantedEpisodes(pageParam, PAGE_SIZE),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
+      return currentFetched < lastPage.total ? (lastPage.page ?? 1) + 1 : undefined
+    },
+    enabled: tab === 'episodes' && seriesFilter === 'missing',
+  })
+
+  // 4. All Series Infinite Query
+  const allSeriesQuery = useInfiniteQuery({
+    queryKey: ['all-series-infinite'],
+    queryFn: ({ pageParam = 1 }) => fetchAllSeries(pageParam, PAGE_SIZE),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
+      return currentFetched < lastPage.total ? (lastPage.page ?? 1) + 1 : undefined
+    },
     enabled: tab === 'episodes' && seriesFilter === 'all',
   })
 
-  const searchItem = useMutation({
-    mutationFn: ({ source, ids }: { source: 'radarr' | 'sonarr'; ids: Record<string, number | null> }) =>
-      searchWantedItem(source, ids),
-  })
+  // Active query based on current view
+  const activeQuery =
+    tab === 'movies'
+      ? (movieFilter === 'missing' ? wantedMoviesQuery : allMoviesQuery)
+      : (seriesFilter === 'missing' ? wantedEpisodesQuery : allSeriesQuery)
+
+  const { fetchNextPage, hasNextPage, isFetchingNextPage, isPending } = activeQuery
+
+  // IntersectionObserver for auto-loading next page on scroll
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el || !hasNextPage || isFetchingNextPage) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchNextPage()
+        }
+      },
+      { rootMargin: '300px' },
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   function handleScanForMovie(movie: WantedMovie) {
     setScanItem({ type: 'movie', id: movie.id, title: movie.title, source: 'radarr' })
@@ -350,10 +419,15 @@ export function MissingContent() {
     setScanItem({ type: 'series', id: seriesId, title: seriesTitle, source: 'sonarr' })
   }
 
-  const radarrMovies = data?.wanted?.radarr?.items as WantedMovie[] | undefined
-  const sonarrEpisodes = data?.wanted?.sonarr?.items as WantedEpisode[] | undefined
-  const radarrTotal = data?.wanted?.radarr?.total ?? 0
-  const sonarrTotal = data?.wanted?.sonarr?.total ?? 0
+  const radarrWantedTotal = wantedMoviesQuery.data?.pages[0]?.total ?? 0
+  const radarrAllTotal = allMoviesQuery.data?.pages[0]?.total ?? 0
+  const sonarrWantedTotal = wantedEpisodesQuery.data?.pages[0]?.total ?? 0
+  const sonarrAllTotal = allSeriesQuery.data?.pages[0]?.total ?? 0
+
+  const allWantedMovies = wantedMoviesQuery.data?.pages.flatMap((p) => p.items) ?? []
+  const allCatalogMovies = allMoviesQuery.data?.pages.flatMap((p) => p.items) ?? []
+  const allWantedEpisodes = wantedEpisodesQuery.data?.pages.flatMap((p) => p.items) ?? []
+  const allCatalogSeries = allSeriesQuery.data?.pages.flatMap((p) => p.items) ?? []
 
   return (
     <section className="wanted">
@@ -364,20 +438,18 @@ export function MissingContent() {
             className={`wanted-tab ${tab === 'movies' ? 'active' : ''}`}
             onClick={() => setTab('movies')}
           >
-            Películas ({radarrTotal})
+            Películas ({radarrWantedTotal || '...'})
           </button>
           <button
             className={`wanted-tab ${tab === 'episodes' ? 'active' : ''}`}
             onClick={() => setTab('episodes')}
           >
-            Episodios ({sonarrTotal})
+            Episodios ({sonarrWantedTotal || '...'})
           </button>
         </div>
       </div>
 
-      {isPending ? (
-        <div className="wanted-loading">Cargando...</div>
-      ) : tab === 'movies' ? (
+      {tab === 'movies' ? (
         <div className="wanted-content">
           <div className="wanted-actions">
             <div className="wanted-filter">
@@ -385,21 +457,78 @@ export function MissingContent() {
                 className={`wanted-filter-btn ${movieFilter === 'missing' ? 'active' : ''}`}
                 onClick={() => setMovieFilter('missing')}
               >
-                Faltantes ({radarrTotal})
+                Faltantes ({radarrWantedTotal})
               </button>
               <button
                 className={`wanted-filter-btn ${movieFilter === 'all' ? 'active' : ''}`}
                 onClick={() => setMovieFilter('all')}
               >
-                Todas ({allMoviesData?.total ?? '...'})
+                Todas ({radarrAllTotal || '...'})
               </button>
             </div>
           </div>
+
           {movieFilter === 'missing' ? (
-            radarrMovies && radarrMovies.length > 0 ? (
+            isPending ? (
+              <div className="wanted-loading">Cargando películas faltantes...</div>
+            ) : allWantedMovies.length > 0 ? (
+              <>
+                <div className="wanted-grid">
+                  {allWantedMovies.map((movie) => (
+                    <div key={movie.id} className="wanted-card status-error">
+                      {movie.remotePoster && (
+                        <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
+                      )}
+                      <div className="wanted-info">
+                        <div className="wanted-title">
+                          {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
+                        </div>
+                        {movie.overview && (
+                          <div className="wanted-overview">{movie.overview.slice(0, 120)}...</div>
+                        )}
+                        <div className="wanted-card-actions">
+                          <button
+                            className="action-btn search-item"
+                            onClick={() => setReleaseSearchItem({
+                              type: 'movie',
+                              id: movie.id,
+                              title: movie.title,
+                              year: movie.year,
+                              source: 'radarr',
+                              remotePoster: movie.remotePoster,
+                              has_file: movie.has_file,
+                            })}
+                          >
+                            🔍 Buscar
+                          </button>
+                          <button
+                            className="action-btn scan-folder-btn"
+                            onClick={() => handleScanForMovie(movie)}
+                          >
+                            📁 En carpeta
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div ref={loadMoreRef} className="wanted-infinite-sentinel">
+                  {isFetchingNextPage && <div className="wanted-loading-more">Cargando más películas...</div>}
+                </div>
+              </>
+            ) : (
+              <div className="wanted-empty">No hay películas faltantes</div>
+            )
+          ) : isPending ? (
+            <div className="wanted-loading">Cargando catálogo de películas...</div>
+          ) : allCatalogMovies.length > 0 ? (
+            <>
               <div className="wanted-grid">
-                {radarrMovies.map((movie) => (
-                  <div key={movie.id} className="wanted-card status-error">
+                {allCatalogMovies.map((movie) => (
+                  <div
+                    key={movie.id}
+                    className={`wanted-card ${movie.has_file && movie.path_exists ? 'status-ok' : 'status-error'}`}
+                  >
                     {movie.remotePoster && (
                       <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
                     )}
@@ -407,9 +536,15 @@ export function MissingContent() {
                       <div className="wanted-title">
                         {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
                       </div>
-                      {movie.overview && (
-                        <div className="wanted-overview">{movie.overview.slice(0, 120)}...</div>
-                      )}
+                      <div className="wanted-status-badge">
+                        {movie.has_file && movie.path_exists ? (
+                          <span className="badge-ok">✓ Configurada</span>
+                        ) : !movie.has_file ? (
+                          <span className="badge-error">✗ Sin archivo</span>
+                        ) : (
+                          <span className="badge-error">✗ Ruta no encontrada</span>
+                        )}
+                      </div>
                       <div className="wanted-card-actions">
                         <button
                           className="action-btn search-item"
@@ -427,7 +562,7 @@ export function MissingContent() {
                         </button>
                         <button
                           className="action-btn scan-folder-btn"
-                          onClick={() => handleScanForMovie(movie)}
+                          onClick={() => handleScanForMovie({ id: movie.id, title: movie.title, year: movie.year, overview: '', remotePoster: movie.remotePoster, has_file: movie.has_file, altTitles: [] })}
                         >
                           📁 En carpeta
                         </button>
@@ -436,60 +571,10 @@ export function MissingContent() {
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="wanted-empty">No hay películas faltantes</div>
-            )
-          ) : allMoviesLoading ? (
-            <div className="wanted-loading">Cargando catálogo...</div>
-          ) : allMoviesData && allMoviesData.items.length > 0 ? (
-            <div className="wanted-grid">
-              {allMoviesData.items.map((movie) => (
-                <div
-                  key={movie.id}
-                  className={`wanted-card ${movie.has_file && movie.path_exists ? 'status-ok' : 'status-error'}`}
-                >
-                  {movie.remotePoster && (
-                    <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
-                  )}
-                  <div className="wanted-info">
-                    <div className="wanted-title">
-                      {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
-                    </div>
-                    <div className="wanted-status-badge">
-                      {movie.has_file && movie.path_exists ? (
-                        <span className="badge-ok">✓ Configurada</span>
-                      ) : !movie.has_file ? (
-                        <span className="badge-error">✗ Sin archivo</span>
-                      ) : (
-                        <span className="badge-error">✗ Ruta no encontrada</span>
-                      )}
-                    </div>
-                    <div className="wanted-card-actions">
-                      <button
-                        className="action-btn search-item"
-                        onClick={() => setReleaseSearchItem({
-                          type: 'movie',
-                          id: movie.id,
-                          title: movie.title,
-                          year: movie.year,
-                          source: 'radarr',
-                          remotePoster: movie.remotePoster,
-                          has_file: movie.has_file,
-                        })}
-                      >
-                        🔍 Buscar
-                      </button>
-                      <button
-                        className="action-btn scan-folder-btn"
-                        onClick={() => handleScanForMovie({ id: movie.id, title: movie.title, year: movie.year, overview: '', remotePoster: movie.remotePoster, has_file: movie.has_file, altTitles: [] })}
-                      >
-                        📁 En carpeta
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+              <div ref={loadMoreRef} className="wanted-infinite-sentinel">
+                {isFetchingNextPage && <div className="wanted-loading-more">Cargando más películas...</div>}
+              </div>
+            </>
           ) : (
             <div className="wanted-empty">No hay películas en el catálogo</div>
           )}
@@ -502,110 +587,131 @@ export function MissingContent() {
                 className={`wanted-filter-btn ${seriesFilter === 'missing' ? 'active' : ''}`}
                 onClick={() => setSeriesFilter('missing')}
               >
-                Faltantes ({sonarrTotal})
+                Faltantes ({sonarrWantedTotal})
               </button>
               <button
                 className={`wanted-filter-btn ${seriesFilter === 'all' ? 'active' : ''}`}
                 onClick={() => setSeriesFilter('all')}
               >
-                Todas ({allSeriesData?.total ?? '...'})
+                Todas ({sonarrAllTotal || '...'})
               </button>
             </div>
           </div>
+
           {seriesFilter === 'missing' ? (
-            sonarrEpisodes && sonarrEpisodes.length > 0 ? (
-              <div className="wanted-list">
-                {sonarrEpisodes.map((ep) => (
-                  <div key={ep.id} className="wanted-row">
-                    <div className="wanted-row-info">
-                      <span className="wanted-series">{ep.series_title}</span>
-                      <span className="wanted-ep">
-                        S{String(ep.season_number ?? 0).padStart(2, '0')}E{String(ep.episode_number ?? 0).padStart(2, '0')}
-                      </span>
-                      <span className="wanted-ep-title">{ep.title}</span>
-                      {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
+            isPending ? (
+              <div className="wanted-loading">Cargando episodios faltantes...</div>
+            ) : allWantedEpisodes.length > 0 ? (
+              <>
+                <div className="wanted-list">
+                  {allWantedEpisodes.map((ep) => (
+                    <div key={ep.id} className="wanted-row">
+                      <div className="wanted-row-info">
+                        <span className="wanted-series">{ep.series_title}</span>
+                        <span className="wanted-ep">
+                          S{String(ep.season_number ?? 0).padStart(2, '0')}E{String(ep.episode_number ?? 0).padStart(2, '0')}
+                        </span>
+                        <span className="wanted-ep-title">{ep.title}</span>
+                        {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
+                      </div>
+                      <div className="wanted-row-actions">
+                        <button
+                          className="action-btn search-item"
+                          title="Buscar releases"
+                          onClick={() => setReleaseSearchItem({
+                            type: 'episode',
+                            id: ep.id,
+                            title: ep.title,
+                            series_title: ep.series_title,
+                            season_number: ep.season_number,
+                            episode_number: ep.episode_number,
+                            date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
+                            source: 'sonarr',
+                            has_file: false,
+                          })}
+                        >
+                          🔍
+                        </button>
+                        <button
+                          className="action-btn scan-folder-btn"
+                          title="Buscar en carpeta"
+                          onClick={() => handleScanForSeries(ep.series_title, ep.series_id)}
+                        >
+                          📁
+                        </button>
+                      </div>
                     </div>
-                    <div className="wanted-row-actions">
-                      <button
-                        className="action-btn search-item"
-                        title="Buscar releases"
-                        onClick={() => setReleaseSearchItem({
-                          type: 'episode',
-                          id: ep.id,
-                          title: ep.title,
-                          series_title: ep.series_title,
-                          season_number: ep.season_number,
-                          episode_number: ep.episode_number,
-                          date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
-                          source: 'sonarr',
-                          has_file: false,
-                        })}
-                      >
-                        🔍
-                      </button>
-                      <button
-                        className="action-btn scan-folder-btn"
-                        title="Buscar en carpeta"
-                        onClick={() => handleScanForSeries(ep.series_title, ep.series_id)}
-                      >
-                        📁
-                      </button>
+                  ))}
+                </div>
+                <div ref={loadMoreRef} className="wanted-infinite-sentinel">
+                  {isFetchingNextPage && <div className="wanted-loading-more">Cargando más episodios...</div>}
+                </div>
+              </>
+            ) : (
+              <div className="wanted-empty">No hay episodios faltantes</div>
+            )
+          ) : isPending ? (
+            <div className="wanted-loading">Cargando catálogo de series...</div>
+          ) : allCatalogSeries.length > 0 ? (
+            <>
+              <div className="wanted-grid">
+                {allCatalogSeries.map((series) => (
+                  <div
+                    key={series.id}
+                    className={`wanted-card ${series.has_file && series.path_exists ? 'status-ok' : 'status-error'}`}
+                  >
+                    {series.remotePoster && (
+                      <img className="wanted-poster" src={series.remotePoster} alt={series.title} />
+                    )}
+                    <div className="wanted-info">
+                      <div className="wanted-title">
+                        {series.title} {series.year && <span className="wanted-year">({series.year})</span>}
+                      </div>
+                      <div className="wanted-status-badge">
+                        {series.has_file && series.path_exists ? (
+                          <span className="badge-ok">✓ Configurada</span>
+                        ) : !series.has_file ? (
+                          <span className="badge-error">✗ Sin archivos</span>
+                        ) : (
+                          <span className="badge-error">✗ Ruta no encontrada</span>
+                        )}
+                      </div>
+                      {series.episode_count > 0 && (
+                        <div className="wanted-ep-count">
+                          {series.episode_file_count}/{series.episode_count} episodios
+                        </div>
+                      )}
+                      <div className="wanted-card-actions">
+                        <button
+                          className="action-btn search-item"
+                          onClick={() => setReleaseSearchItem({
+                            type: 'episode',
+                            id: series.id,
+                            title: series.title,
+                            series_title: series.title,
+                            year: series.year,
+                            source: 'sonarr',
+                            remotePoster: series.remotePoster,
+                            has_file: series.has_file,
+                          })}
+                        >
+                          🔍 Buscar
+                        </button>
+                        <button
+                          className="action-btn scan-folder-btn"
+                          onClick={() => handleScanForSeries(series.title, series.id)}
+                        >
+                          📁 En carpeta
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="wanted-empty">No hay episodios faltantes</div>
-            )
-          ) : allSeriesLoading ? (
-            <div className="wanted-loading">Cargando catálogo...</div>
-          ) : allSeriesData && allSeriesData.items.length > 0 ? (
-            <div className="wanted-grid">
-              {allSeriesData.items.map((series) => (
-                <div
-                  key={series.id}
-                  className={`wanted-card ${series.has_file && series.path_exists ? 'status-ok' : 'status-error'}`}
-                >
-                  {series.remotePoster && (
-                    <img className="wanted-poster" src={series.remotePoster} alt={series.title} />
-                  )}
-                  <div className="wanted-info">
-                    <div className="wanted-title">
-                      {series.title} {series.year && <span className="wanted-year">({series.year})</span>}
-                    </div>
-                    <div className="wanted-status-badge">
-                      {series.has_file && series.path_exists ? (
-                        <span className="badge-ok">✓ Configurada</span>
-                      ) : !series.has_file ? (
-                        <span className="badge-error">✗ Sin archivos</span>
-                      ) : (
-                        <span className="badge-error">✗ Ruta no encontrada</span>
-                      )}
-                    </div>
-                    {series.episode_count > 0 && (
-                      <div className="wanted-ep-count">
-                        {series.episode_file_count}/{series.episode_count} episodios
-                      </div>
-                    )}
-                    <div className="wanted-card-actions">
-                      <button
-                        className="action-btn search-item"
-                        onClick={() => searchItem.mutate({ source: 'sonarr', ids: { series_id: series.id } })}
-                        disabled={searchItem.isPending}
-                      >
-                        🔍 Buscar
-                      </button>
-                      <button
-                        className="action-btn scan-folder-btn"
-                        onClick={() => handleScanForSeries(series.title, series.id)}
-                      >
-                        📁 En carpeta
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+              <div ref={loadMoreRef} className="wanted-infinite-sentinel">
+                {isFetchingNextPage && <div className="wanted-loading-more">Cargando más series...</div>}
+              </div>
+            </>
           ) : (
             <div className="wanted-empty">No hay series en el catálogo</div>
           )}

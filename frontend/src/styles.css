@@ -1377,6 +1377,22 @@ body {
   border-radius: 12px;
 }
 
+.wanted-infinite-sentinel {
+  padding: 24px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.wanted-loading-more {
+  color: var(--accent);
+  font-size: 13px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+}
+
 .wanted-actions {
   margin-bottom: 16px;
 }

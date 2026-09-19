@@ -290,10 +290,12 @@ async def get_trace():
 
 
 @app.get("/api/wanted")
-async def get_wanted(page: int = 1, page_size: int = 50):
+async def get_wanted(page: int = 1, page_size: int = 50, source: str = ""):
     """Contenido faltante (wanted/missing) de Radarr y Sonarr."""
     async with aiohttp.ClientSession() as session:
         arr_services = [s for s in SERVICES if s["kind"] == "arr"]
+        if source:
+            arr_services = [s for s in arr_services if s["key"] == source]
         results = await asyncio.gather(
             *(
                 fetch_wanted_movies(session, s, page, page_size)
@@ -312,24 +314,24 @@ async def get_wanted(page: int = 1, page_size: int = 50):
 
 
 @app.get("/api/wanted/all")
-async def get_all_movies():
-    """Todas las películas de Radarr con estado de archivo y ruta."""
+async def get_all_movies(page: int = 1, page_size: int = 50):
+    """Todas las películas de Radarr con estado de archivo y ruta (paginado)."""
     service = next((s for s in SERVICES if s["key"] == "radarr" and s["kind"] == "arr"), None)
     if not service:
-        return {"items": [], "total": 0}
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
     async with aiohttp.ClientSession() as session:
-        result = await fetch_all_movies_detailed(session, service)
+        result = await fetch_all_movies_detailed(session, service, page, page_size)
     return result
 
 
 @app.get("/api/wanted/series/all")
-async def get_all_series():
-    """Todas las series de Sonarr con estado de archivo y ruta."""
+async def get_all_series(page: int = 1, page_size: int = 50):
+    """Todas las series de Sonarr con estado de archivo y ruta (paginado)."""
     service = next((s for s in SERVICES if s["key"] == "sonarr" and s["kind"] == "arr"), None)
     if not service:
-        return {"items": [], "total": 0}
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
     async with aiohttp.ClientSession() as session:
-        result = await fetch_all_series_detailed(session, service)
+        result = await fetch_all_series_detailed(session, service, page, page_size)
     return result
 
 
