@@ -190,40 +190,35 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
             </div>
 
             {currentPath && (
-              <div className="scan-browse-section">
-                <div className="scan-current-path">
-                  <span>📂 {currentPath}</span>
-                </div>
-                {browseData?.ok && items.length > 0 && (
-                  <div className="scan-folder-list">
-                    {items.filter((i: { is_dir: boolean }) => i.is_dir).map((dir: { path: string; name: string }) => (
-                      <button
-                        key={dir.path}
-                        className="scan-folder-item"
-                        onClick={() => navigateTo(dir.path)}
-                      >
-                        📁 {dir.name}
-                      </button>
-                    ))}
-                    {items.filter((i: { is_dir: boolean }) => i.is_dir).length === 0 && (
-                      <span className="scan-no-subfolders">Sin subcarpetas</span>
-                    )}
+              <div className="scan-path-list">
+                <div className="scan-current-path">{currentPath}</div>
+                {items.filter((i: { is_dir: boolean }) => i.is_dir).map((dirItem: { path: string; name: string }) => (
+                  <div
+                    key={dirItem.path}
+                    className="scan-folder-item"
+                    onClick={() => navigateTo(dirItem.path)}
+                  >
+                    📁 {dirItem.name}
                   </div>
+                ))}
+                {items.filter((i: { is_dir: boolean }) => i.is_dir).length === 0 && (
+                  <div className="scan-no-subfolders">Sin subcarpetas</div>
                 )}
               </div>
             )}
 
             <div className="scan-row">
-              <label className="scan-label">Idiomas / Alias:</label>
-              <div className="scan-lang-chips">
+              <label className="scan-label">Idiomas:</label>
+              <div className="scan-lang-list">
                 {LANG_LIST.map((lang) => (
-                  <button
-                    key={lang}
-                    className={`scan-lang-chip ${selectedLangs.has(lang) ? 'active' : ''}`}
-                    onClick={() => toggleLang(lang)}
-                  >
+                  <label key={lang} className={`scan-lang-check ${lang === 'manual' ? 'scan-lang-manual' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={selectedLangs.has(lang)}
+                      onChange={() => toggleLang(lang)}
+                    />
                     {LANG_LABELS[lang]}
-                  </button>
+                  </label>
                 ))}
               </div>
             </div>
@@ -233,84 +228,71 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
                 <label className="scan-label">Título a buscar:</label>
                 <input
                   type="text"
-                  className="fm-input"
-                  placeholder="Ej: Star Wars, Breaking Bad..."
+                  className="scan-custom-input"
+                  placeholder="Escribe el título manualmente..."
                   value={customTitle}
                   onChange={(e) => setCustomTitle(e.target.value)}
+                  autoFocus
                 />
               </div>
             )}
 
-            <div className="scan-actions">
-              <button
-                className="action-btn scan-start-btn"
-                onClick={() => scan.mutate()}
-                disabled={!currentPath || scan.isPending}
-              >
-                {scan.isPending ? 'Escaneando...' : '🔍 Escanear'}
-              </button>
-            </div>
+            <button
+              className="action-btn search-all"
+              onClick={() => scan.mutate()}
+              disabled={
+                !currentPath
+                || scan.isPending
+                || (isManual ? !customTitle.trim() : selectedLangs.size === 0)
+              }
+            >
+              {scan.isPending ? 'Escaneando...' : `🔍 Buscar "${item.title}" en esta carpeta`}
+            </button>
           </div>
-
-          {scan.isPending && (
-            <div className="scan-loading">Escaneando archivos recursivamente...</div>
-          )}
 
           {scanResult && (
             <div className="scan-results">
               <div className="scan-summary">
-                <span>{scanResult.detail}</span>
+                {scanResult.detail}
+                {scanResult.matches.length > 0 && (
+                  <button className="fm-action-btn" onClick={toggleAll}>
+                    {selectedFiles.size === scanResult.matches.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                  </button>
+                )}
               </div>
 
-              {scanResult.matches.length > 0 && (
-                <>
-                  <div className="scan-table-header">
-                    <label className="scan-checkbox-label">
+              {scanResult.matches.length > 0 ? (
+                <div className="scan-match-list">
+                  {scanResult.matches.map((m) => (
+                    <div
+                      key={m.file_path}
+                      className={`scan-match ${selectedFiles.has(m.file_path) ? 'selected' : ''}`}
+                      onClick={() => toggleFile(m.file_path)}
+                    >
                       <input
                         type="checkbox"
-                        checked={selectedFiles.size === scanResult.matches.length && scanResult.matches.length > 0}
-                        onChange={toggleAll}
+                        checked={selectedFiles.has(m.file_path)}
+                        onChange={() => toggleFile(m.file_path)}
+                        onClick={(e) => e.stopPropagation()}
                       />
-                      <span>Seleccionar todos ({selectedFiles.size}/{scanResult.matches.length})</span>
-                    </label>
-                  </div>
-
-                  <div className="scan-match-list">
-                    {scanResult.matches.map((m) => (
-                      <div
-                        key={m.file_path}
-                        className={`scan-match-item ${selectedFiles.has(m.file_path) ? 'selected' : ''}`}
-                        onClick={() => toggleFile(m.file_path)}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedFiles.has(m.file_path)}
-                          onChange={() => {}}
-                        />
-                        <div className="scan-match-info">
-                          <div className="scan-match-filename">🎬 {m.file_name}</div>
-                          <div className="scan-match-meta">
-                            <span className="scan-match-title">→ {m.movie_title}</span>
-                            <span className="scan-match-score">({Math.round(m.score * 100)}% coincidencia con "{m.matched_title}")</span>
-                          </div>
-                          <div className="scan-match-path">{m.file_path}</div>
+                      <div className="scan-match-info">
+                        <div className="scan-match-file">📄 {m.file_name}</div>
+                        <div className="scan-match-path" title={m.file_path}>{m.file_path}</div>
+                        <div className="scan-match-score">
+                          Similitud: {Math.round(m.score * 100)}% · Título: "{m.matched_title}"
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {scanResult.matches.length === 0 && !scan.isPending && (
-                <div className="scan-no-matches">
-                  No se encontraron archivos que coincidan en esta carpeta.
+                    </div>
+                  ))}
                 </div>
+              ) : (
+                <div className="wanted-empty">No se encontraron archivos para "{item.title}"</div>
               )}
 
               {selectedMatches.length > 0 && (
-                <div className="scan-footer-actions">
+                <div className="scan-actions">
                   <button
-                    className="action-btn scan-move-btn"
+                    className="action-btn search-all"
                     onClick={() => moveQueue.mutate(selectedMatches)}
                     disabled={moveQueue.isPending}
                   >

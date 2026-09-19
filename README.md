@@ -179,6 +179,24 @@ flow-controller/
 
 **Fix:** Extraer `t.get("title") if isinstance(t, dict) else t` en los 3 puntos donde se procesa `altTitles`.
 
+### 6. ScanModal perdió estilos — carpetas se ven como botones nativos
+**Error:** En el modal de "En carpeta" (Contenido Faltante), las subcarpetas se renderizan con borde, fondo y estilo de botón HTML nativo, no como lista navegable limpia. Los chips de idioma también cambiaron de checkboxes a botones.
+
+**Causa:** En el commit `b846400` (infinite scroll), al editar `MissingContent.tsx` se reescribió el JSX interno de `ScanModal` sin verificar el CSS existente. Se sustituyeron:
+- `<div className="scan-path-list">` + `<div className="scan-folder-item">` por `<button className="scan-folder-item">`
+- `<label className="scan-lang-check"><input type="checkbox">` por `<button className="scan-lang-chip">`
+- Clases CSS nuevas sin definición: `.scan-browse-section`, `.scan-folder-list`, `.scan-lang-chip`
+
+Los botones nativos heredan `border`, `background-color` y `outline` del navegador, rompiendo la apariencia visual.
+
+**Fix:** Restaurar el JSX original de `ScanModal` alineado con el CSS preexistente (líneas 1608–1850 de `styles.css`):
+- Carpetas: `<div className="scan-path-list">` con `<div className="scan-folder-item" onClick=...>`
+- Idiomas: `<div className="scan-lang-list">` con `<label className="scan-lang-check"><input type="checkbox">`
+- Botón de escaneo: `<button className="action-btn search-all">`
+- Resultados: `<div className="scan-match">` con `.scan-match-file`, `.scan-match-path`, `.scan-match-score`
+
+**Lección:** Al refactorizar un componente, verificar que las clases CSS usadas en el JSX existan en el stylesheet. Los `<button>` nativos siempre necesitan reset explícito (`border: none`, `background: transparent`) si se usan como elementos de lista.
+
 ## Postmortem: Errores recurrentes de TypeScript build
 
 ### TS2367: Comparación con tipos incompatibles

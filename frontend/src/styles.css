@@ -1649,34 +1649,11 @@ body {
   top: 0;
 }
 
-.scan-browse-section {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 12px;
-}
-
-.scan-folder-list {
-  max-height: 200px;
-  overflow-y: auto;
-}
-
 .scan-folder-item {
-  display: block;
-  width: 100%;
   padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s;
-  text-align: left;
-  color: var(--text);
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-}
-
-.scan-folder-item:last-child {
-  border-bottom: none;
 }
 
 .scan-folder-item:hover {
