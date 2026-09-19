@@ -45,7 +45,6 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
   const [indexers, setIndexers] = useState<Indexer[]>([])
   const [selectedIndexer, setSelectedIndexer] = useState<string>('all')
   const [releases, setReleases] = useState<Release[]>([])
-  const [selectedGuid, setSelectedGuid] = useState<string | null>(null)
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
   const [elapsed, setElapsed] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -129,7 +128,6 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
   }
 
   async function handleGrab(guid: string) {
-    setSelectedGuid(guid)
     setStep('grabbing')
     setMessage('Descargando...')
     const result = await grabCalendarRelease(item.source, guid)
@@ -139,7 +137,6 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
     } else {
       setStep('error')
       setMessage(result.detail)
-      setSelectedGuid(null)
     }
   }
 
