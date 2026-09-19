@@ -4,10 +4,12 @@ Panel de control para el flujo de descargas **Radarr → aMuTorrent → Sonarr**
 Detecta dónde se rompe el pipeline y ofrece acciones de remediación directas
 desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 
+**Version**: 1.2.0 (ver `VERSION`)
+
 ## Stack
 
-- **Backend**: Python 3.12 / FastAPI / aiohttp (async)
-- **Frontend**: React 19 / TypeScript / Vite
+- **Backend**: Python 3.11 / FastAPI / aiohttp (async)
+- **Frontend**: React 19 / TypeScript / Vite 7 / @tanstack/react-query
 - **Control aMuTorrent**: WebSocket nativo (`ws://host:4000/ws`)
 
 ## Requisitos
@@ -79,6 +81,15 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/trace` | GET | Trazabilidad: correla grabs ↔ torrents ↔ cola |
 | `/api/actions` | GET | Catálogo de acciones disponibles |
 | `/api/actions/{action}` | POST | Ejecuta una acción sobre una descarga |
+| `/api/calendar` | GET | Calendario de próximos episodios/películas |
+| `/api/calendar/releases` | POST | Busca releases disponibles para un item |
+| `/api/calendar/indexers` | GET | Lista de indexadores configurados |
+| `/api/calendar/grab` | POST | Descarga un release específico |
+| `/api/calendar/grab-batch` | POST | Descarga múltiples releases en lote |
+| `/api/wanted` | GET | Contenido faltante (wanted/missing) |
+| `/api/wanted/scan` | POST | Escanea carpeta buscando contenido desubicado |
+| `/api/disk` | GET | Uso de disco en volúmenes |
+| `/api/settings` | GET/POST | Configuración persistente |
 
 ### Acciones disponibles
 
@@ -98,29 +109,75 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 
 ```
 flow-controller/
+├── VERSION                    # Semantic version
 ├── backend/
-│   ├── config.py           # Environment variables, constants, action catalog
-│   ├── clients.py          # API clients: Radarr, Sonarr, aMuTorrent (WS + REST)
-│   ├── traces.py           # Trace building: path resolution, stage derivation
-│   ├── copy_engine.py      # File copy with progress, cancellation, import verification
-│   ├── app.py              # FastAPI app, lifespan, routes, static files
-│   ├── tests.py            # 36 tests (unit + API endpoint)
+│   ├── config.py              # Environment variables, constants, action catalog
+│   ├── settings.py            # Persistent JSON config (settings.json)
+│   ├── clients.py             # API clients: Radarr, Sonarr, aMuTorrent (WS + REST)
+│   ├── traces.py              # Trace building: path resolution, stage derivation
+│   ├── copy_engine.py         # File copy with progress, cancellation, import verification
+│   ├── app.py                 # FastAPI app, lifespan, routes, static files
+│   ├── tests.py               # 59 tests (unit + API endpoint)
 │   ├── requirements.txt
 │   ├── .env.example
 │   └── run_local.sh
+├── scripts/
+│   ├── verify.sh              # Pre-push verification (TypeScript build + backend tests)
+│   └── test-calendar-grab.sh  # Playwright headless test for calendar flow
 └── frontend/
     └── src/
         ├── App.tsx
         ├── types.ts
-        ├── api/actions.ts
+        ├── api/
+        │   ├── auth.ts
+        │   ├── calendar.ts    # Calendar API: search, releases, grab
+        │   ├── wanted.ts      # Wanted/missing content API
+        │   └── files.ts       # File manager API
         ├── components/
-        │   ├── ErrorBoundary.tsx
-        │   ├── PipelineVisual.tsx
-        │   ├── ServiceNode.tsx
-        │   ├── TraceView.tsx
-        │   └── TraceActions.tsx
+        │   ├── CalendarModal.tsx    # Calendar search/download modal
+        │   ├── MissingContent.tsx   # Wanted/missing content viewer
+        │   ├── DiskSpace.tsx        # Disk usage visualization
+        │   ├── Settings.tsx         # Persistent settings UI
+        │   └── ...
         └── hooks/usePolling.ts
 ```
+
+## Postmortem: Calendar Flow — Bugs encontrados y corregidos (v1.2.0)
+
+### 1. Release filter por indexador nunca funcionaba
+**Error:** Usuario selecciona un indexador específico → 0 resultados aunque hay releases totales.
+
+**Causa:** El dropdown usaba `String(idx.id)` como value, pero `r.indexer` contenía el nombre (`"Torznab"`). El filtro comparaba `"1" === "Torznab"` — nunca matcheaba.
+
+**Fix:** Resolver el ID a nombre antes de filtrar: `indexers.find(i => String(i.id) === selectedIndexer)?.name`
+
+### 2. Releases de AMULE/aMuleTorrent nunca aparecían
+**Error:** En Sonarr se ven releases de AMULE, pero en nuestro flow nunca salen.
+
+**Causa:** Usábamos `GET /api/v3/release` que solo devuelve releases **cacheadas** (RSS). Radarr necesita `POST /api/v3/release/search` para lanzar búsqueda real en TODOS los indexadores.
+
+**Fix:** Cambiar a `POST /api/v3/release/search` con `movieIds: [id]`.
+
+### 3. Grab devolvía 405 Method Not Allowed
+**Error:** Al hacer click en "Descargar", Radarr respondía 405.
+
+**Causa:** Usábamos `POST /api/v3/release/pick` (endpoint inexistente) y solo mandábamos `{guid}`. Radarr necesita `POST /api/v3/release` con `{guid, indexerId, movieId}`.
+
+**Fix:** Cambiar endpoint y añadir campos requeridos.
+
+### 4. IndexerId siempre era 0
+**Error:** `"IndexerId must be greater than 0"` al hacer grab.
+
+**Causa:** La respuesta de Radarr (`POST /api/v3/release/search`) devuelve `indexer` (nombre) pero NO `indexerId`. Nosotros pasábamos 0.
+
+**Fix:** Después de buscar releases, llamar a `arr_indexers` y construir mapa `nombre → id` para enriquecer cada release.
+
+### 5. Error 500 en `/api/wanted/scan`
+**Error:** `TypeError: expected string or bytes-like object, got 'dict'` en `_normalize_title`.
+
+**Causa:** `alternateTitles` de Sonarr devuelve `[{title: "...", sceneSeasonNumber: ...}]` no strings. El código hacía `all_titles.append(alt)` con un dict.
+
+**Fix:** Extraer `t.get("title") if isinstance(t, dict) else t` en los 3 puntos donde se procesa `altTitles`.
 
 ## Postmortem: Errores recurrentes de TypeScript build
 

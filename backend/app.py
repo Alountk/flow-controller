@@ -626,6 +626,10 @@ async def search_wanted_item(req: ActionRequest, _key: str = Depends(verify_api_
 
 def _normalize_title(name: str) -> str:
     """Normaliza un nombre de archivo para comparación fuzzy."""
+    if not isinstance(name, str):
+        name = str(name) if name else ""
+    if not name:
+        return ""
     # Quitar extensión
     name = re.sub(r'\.[a-zA-Z0-9]{2,4}$', '', name)
     # Reemplazar puntos y guiones bajos por espacios
@@ -689,6 +693,15 @@ def _get_wanted_movies_with_alt_titles(wanted_data: dict) -> list[dict]:
 @app.post("/api/wanted/scan")
 async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Escanea una carpeta buscando una película o serie específica desubicada."""
+    try:
+        return await _scan_for_movies_inner(req)
+    except Exception as exc:
+        log.exception("scan_for_movies error: %s", exc)
+        return {"ok": False, "detail": f"Error interno: {exc}", "matches": [], "scanned_files": 0}
+
+
+async def _scan_for_movies_inner(req: ActionRequest) -> dict:
+    """Lógica interna de escaneo de contenido faltante."""
     source = req.source  # "radarr" o "sonarr"
     folder_path = req.remote_path or ""
     languages_str = req.local_path or "en"
@@ -721,7 +734,11 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                 item_title = meta.get("title", "")
                 item_year = meta.get("year")
                 movie_path = meta.get("path", "")
-                all_titles = [item_title] + [t for t in meta.get("altTitles", []) if t]
+                all_titles = [item_title] + [
+                    (t.get("title") if isinstance(t, dict) else t)
+                    for t in meta.get("altTitles", [])
+                    if t
+                ]
             elif series_id:
                 meta = await arr_series_metadata(session, service, int(series_id))
                 if not meta:
@@ -729,7 +746,11 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
                 item_title = meta.get("title", "")
                 item_year = None
                 movie_path = meta.get("path", "")
-                all_titles = [item_title] + [t for t in meta.get("alternateTitles", []) if t]
+                all_titles = [item_title] + [
+                    (t.get("title") if isinstance(t, dict) else t)
+                    for t in meta.get("alternateTitles", [])
+                    if t
+                ]
             else:
                 return {"ok": False, "detail": "IDs insuficientes"}
 
@@ -764,7 +785,9 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
         for movie in wanted_movies:
             all_titles = [movie.get("title", "")]
             for alt in movie.get("altTitles", []):
-                all_titles.append(alt)
+                t = alt.get("title") if isinstance(alt, dict) else alt
+                if t:
+                    all_titles.append(t)
             for title in all_titles:
                 if not title:
                     continue
