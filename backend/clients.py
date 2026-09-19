@@ -1016,10 +1016,10 @@ async def arr_series_exists(session: aiohttp.ClientSession, service: dict, tvdb_
 
 
 async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movie_id: int = 0, episode_id: int = 0) -> dict:
-    """Lanza búsqueda REAL de releases en Radarr/Sonarr.
+    """Lanza búsqueda de releases en Radarr/Sonarr via GET /api/v3/release.
     
-    Radarr: POST /api/v3/release/search (lanza búsqueda en todos los indexadores).
-    Sonarr: GET /api/v3/release?episodeId=X (lanza búsqueda, puede ser lento con indexadores Torznab).
+    Radarr: GET /api/v3/release?movieId=X (lanza búsqueda en todos los indexadores).
+    Sonarr: GET /api/v3/release?episodeId=X (lanza búsqueda en todos los indexadores).
     """
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
@@ -1028,42 +1028,24 @@ async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movi
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 48)  # 5*48=240s=4min (aMuleTorrent puede ser lento)
     log.info("arr_fetch_releases %s movieId=%s episodeId=%s", service["key"], movie_id or "-", episode_id or "-")
     try:
-        if service["key"] == "radarr" and movie_id:
-            # Radarr: POST /api/v3/release/search triggers real search on ALL indexers
-            url = f"{service['url']}/api/v3/release/search"
-            body = [movie_id]
-            log.info("arr_fetch_releases %s POST %s body=%s", service["key"], url, body)
-            async with session.post(
-                url,
-                headers=headers,
-                json=body,
-                timeout=timeout,
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    log.warning("arr_fetch_releases %s status=%d body=%s", service["key"], resp.status, text[:200])
-                    return {"releases": [], "detail": f"HTTP {resp.status}: {text[:200]}"}
-                data = await resp.json(content_type=None)
-        else:
-            # Sonarr: GET /api/v3/release?episodeId=X triggers search
-            params: dict[str, int] = {}
-            if episode_id:
-                params["episodeId"] = episode_id
-            elif movie_id:
-                params["movieId"] = movie_id
-            url = f"{service['url']}/api/v3/release"
-            log.info("arr_fetch_releases %s GET %s params=%s", service["key"], url, params)
-            async with session.get(
-                url,
-                headers=headers,
-                params=params,
-                timeout=timeout,
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    log.warning("arr_fetch_releases %s status=%d body=%s", service["key"], resp.status, text[:200])
-                    return {"releases": [], "detail": f"HTTP {resp.status}: {text[:200]}"}
-                data = await resp.json(content_type=None)
+        params: dict[str, int] = {}
+        if movie_id:
+            params["movieId"] = movie_id
+        elif episode_id:
+            params["episodeId"] = episode_id
+        url = f"{service['url']}/api/v3/release"
+        log.info("arr_fetch_releases %s GET %s params=%s", service["key"], url, params)
+        async with session.get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=timeout,
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                log.warning("arr_fetch_releases %s status=%d body=%s", service["key"], resp.status, text[:200])
+                return {"releases": [], "detail": f"HTTP {resp.status}: {text[:200]}"}
+            data = await resp.json(content_type=None)
         releases = []
         for r in data:
             # quality comes as {quality: {id, name, source, ...}, revision: {...}}
