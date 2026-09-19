@@ -87,7 +87,14 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
         const dst = m.target_path
           ? `${m.target_path}/${m.file_name}`
           : `${m.movie_title} (${m.movie_year || ''})/${m.file_name}`
-        await queueAdd('move', m.file_path, dst, item.source, m.movie_id)
+        await queueAdd(
+          'move',
+          m.file_path,
+          dst,
+          item.source,
+          item.type === 'movie' ? m.movie_id : undefined,
+          item.type === 'series' ? m.movie_id : undefined,
+        )
       }
       return { ok: true }
     },

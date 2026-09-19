@@ -57,6 +57,8 @@ from clients import (
     arr_manual_import,
     arr_refresh_movie,
     arr_rescan_movie,
+    arr_rescan_series,
+    arr_refresh_series,
     arr_downloaded_scan,
 )
 from copy_engine import (
@@ -1079,23 +1081,41 @@ async def _consume_queue():
                     try:
                         async with aiohttp.ClientSession() as session:
                             imported = False
-                            movie_id = op.get("movie_id")
+                            if service["key"] == "radarr":
+                                movie_id = op.get("movie_id")
+                                # Strategy 1: Manual Import (most reliable, needs movie_id)
+                                if movie_id:
+                                    log.info("Trying Radarr manual import: dst=%s movie_id=%s", dst, movie_id)
+                                    result = await arr_manual_import(session, service, dst, int(movie_id))
+                                    log.info("Radarr manual import result: %s", result)
+                                    if result.get("ok"):
+                                        imported = True
 
-                            # Strategy 1: Manual Import (most reliable, needs movie_id)
-                            if movie_id:
-                                log.info("Trying manual import: dst=%s movie_id=%s", dst, movie_id)
-                                result = await arr_manual_import(session, service, dst, int(movie_id))
-                                log.info("Manual import result: %s", result)
-                                if result.get("ok"):
-                                    imported = True
+                                # Strategy 2: RescanMovie (scan only this movie's folder)
+                                if movie_id and not imported:
+                                    log.info("Trying RescanMovie: movie_id=%s", movie_id)
+                                    result = await arr_rescan_movie(session, service, int(movie_id))
+                                    log.info("RescanMovie result: %s", result)
+                                    if result.get("ok"):
+                                        imported = True
 
-                            # Strategy 2: RescanMovie (scan only this movie's folder)
-                            if movie_id:
-                                log.info("Trying RescanMovie: movie_id=%s", movie_id)
-                                result = await arr_rescan_movie(session, service, int(movie_id))
-                                log.info("RescanMovie result: %s", result)
-                                if result.get("ok"):
-                                    imported = True
+                            elif service["key"] == "sonarr":
+                                series_id = op.get("series_id") or op.get("movie_id")
+                                # Strategy 1: RescanSeries (Sonarr scans series folder on disk & auto-maps episodes)
+                                if series_id:
+                                    log.info("Trying Sonarr RescanSeries: series_id=%s", series_id)
+                                    result = await arr_rescan_series(session, service, int(series_id))
+                                    log.info("Sonarr RescanSeries result: %s", result)
+                                    if result.get("ok"):
+                                        imported = True
+
+                                # Strategy 2: RefreshSeries (refreshes metadata + scans folder)
+                                if series_id and not imported:
+                                    log.info("Trying Sonarr RefreshSeries: series_id=%s", series_id)
+                                    result = await arr_refresh_series(session, service, int(series_id))
+                                    log.info("Sonarr RefreshSeries result: %s", result)
+                                    if result.get("ok"):
+                                        imported = True
 
                             async with _queue_lock:
                                 op["import_status"] = "imported" if imported else "import_failed"

@@ -709,3 +709,43 @@ class TestCalendarIndexers:
         assert resp.status_code == 200
         data = resp.json()
         assert data["indexers"] == []
+
+
+class TestSonarrSeriesCommands:
+    def test_arr_rescan_series(self):
+        import asyncio
+        from clients import arr_rescan_series
+        with patch("clients.arr_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = {"ok": True, "detail": "RescanSeries command queued"}
+            res = asyncio.run(arr_rescan_series(None, {"url": "http://sonarr:8989", "api_key": "abc"}, 10))
+            assert res["ok"] is True
+            mock_cmd.assert_called_once_with(None, {"url": "http://sonarr:8989", "api_key": "abc"}, {"name": "RescanSeries", "seriesId": 10})
+
+    def test_arr_refresh_series(self):
+        import asyncio
+        from clients import arr_refresh_series
+        with patch("clients.arr_command", new_callable=AsyncMock) as mock_cmd:
+            mock_cmd.return_value = {"ok": True, "detail": "RefreshSeries command queued"}
+            res = asyncio.run(arr_refresh_series(None, {"url": "http://sonarr:8989", "api_key": "abc"}, 10))
+            assert res["ok"] is True
+            mock_cmd.assert_called_once_with(None, {"url": "http://sonarr:8989", "api_key": "abc"}, {"name": "RefreshSeries", "seriesId": 10})
+
+
+class TestQueueAddSeries:
+    def test_queue_add_with_series_id(self):
+        resp = client.post(
+            "/api/files/queue/add",
+            json={
+                "source": "move",
+                "remote_path": "/mnt/storage/downloads/ep.mkv",
+                "local_path": "/mnt/storage/Series/Show/ep.mkv",
+                "host": "sonarr",
+                "ids": {"series_id": 99},
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["op"]["series_id"] == 99
+        assert data["op"]["arr_source"] == "sonarr"
+

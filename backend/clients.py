@@ -1171,6 +1171,16 @@ async def arr_rescan_movie(session: aiohttp.ClientSession, service: dict, movie_
     return await arr_command(session, service, {"name": "RescanMovie", "movieId": movie_id})
 
 
+async def arr_rescan_series(session: aiohttp.ClientSession, service: dict, series_id: int) -> dict:
+    """Re-escanea la carpeta de una serie en Sonarr para detectar e importar nuevos episodios."""
+    return await arr_command(session, service, {"name": "RescanSeries", "seriesId": series_id})
+
+
+async def arr_refresh_series(session: aiohttp.ClientSession, service: dict, series_id: int) -> dict:
+    """Refresca metadata y re-escanea la serie en Sonarr."""
+    return await arr_command(session, service, {"name": "RefreshSeries", "seriesId": series_id})
+
+
 async def arr_downloaded_scan(session: aiohttp.ClientSession, service: dict, folder_path: str) -> dict:
     """Escanea una carpeta buscando películas para importar."""
     return await arr_command(session, service, {
