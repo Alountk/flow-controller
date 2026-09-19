@@ -4,6 +4,7 @@ import {
   addCalendarItem,
   fetchCalendarReleases,
   grabCalendarRelease,
+  grabCalendarReleaseBatch,
   type Release,
 } from '../api/calendar'
 
@@ -45,6 +46,7 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
   const [selectedIndexer, setSelectedIndexer] = useState<string>('all')
   const [releases, setReleases] = useState<Release[]>([])
   const [selectedGuid, setSelectedGuid] = useState<string | null>(null)
+  const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
   const [elapsed, setElapsed] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -138,6 +140,42 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
       setStep('error')
       setMessage(result.detail)
       setSelectedGuid(null)
+    }
+  }
+
+  function toggleGuid(guid: string) {
+    setSelectedGuids(prev => {
+      const next = new Set(prev)
+      if (next.has(guid)) {
+        next.delete(guid)
+      } else {
+        next.add(guid)
+      }
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (selectedGuids.size === releases.length) {
+      setSelectedGuids(new Set())
+    } else {
+      setSelectedGuids(new Set(releases.map(r => r.guid)))
+    }
+  }
+
+  async function handleGrabBatch() {
+    if (selectedGuids.size === 0) return
+    setStep('grabbing')
+    setMessage(`Descargando ${selectedGuids.size} releases...`)
+    const guids = Array.from(selectedGuids)
+    const result = await grabCalendarReleaseBatch(item.source, guids)
+    if (result.ok) {
+      setStep('done')
+      setMessage(result.detail)
+      setSelectedGuids(new Set())
+    } else {
+      setStep('error')
+      setMessage(result.detail)
     }
   }
 
@@ -258,10 +296,24 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
           {step === 'results' && (
             <div className="calendar-releases">
               <div className="calendar-releases-header">
-                <span>{releases.length} releases encontrados</span>
-                <button className="action-btn" onClick={handleSearch} disabled={isProcessing}>
-                  🔄 Refrescar
-                </button>
+                <label className="release-checkbox-all">
+                  <input
+                    type="checkbox"
+                    checked={selectedGuids.size === releases.length && releases.length > 0}
+                    onChange={toggleAll}
+                  />
+                  <span>{releases.length} releases encontrados</span>
+                </label>
+                <div className="calendar-releases-actions">
+                  {selectedGuids.size > 0 && (
+                    <button className="action-btn grab-selected" onClick={handleGrabBatch} disabled={isProcessing}>
+                      ⬇️ Descargar ({selectedGuids.size})
+                    </button>
+                  )}
+                  <button className="action-btn" onClick={handleSearch} disabled={isProcessing}>
+                    🔄 Refrescar
+                  </button>
+                </div>
               </div>
               {Array.from(groupByIndexer(releases).entries()).map(([indexer, items]) => (
                 <div key={indexer} className="calendar-indexer-group">
@@ -270,19 +322,27 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
                     {items.map((r) => (
                       <div
                         key={r.guid}
-                        className={`calendar-release ${selectedGuid === r.guid ? 'selected' : ''}`}
-                        onClick={() => handleGrab(r.guid)}
+                        className={`calendar-release ${selectedGuids.has(r.guid) ? 'selected' : ''}`}
                       >
-                        <div className="release-title">{r.title}</div>
-                        <div className="release-meta">
-                          <span className="release-quality">{r.quality}</span>
-                          <span className="release-size">{formatSize(r.size)}</span>
-                          {r.seeders > 0 && (
-                            <span className="release-seeders">⬆ {r.seeders} / ⬇ {r.leechers}</span>
-                          )}
-                          {r.languages.length > 0 && (
-                            <span className="release-lang">{r.languages.join(', ')}</span>
-                          )}
+                        <label className="release-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={selectedGuids.has(r.guid)}
+                            onChange={() => toggleGuid(r.guid)}
+                          />
+                        </label>
+                        <div className="release-content" onClick={() => handleGrab(r.guid)}>
+                          <div className="release-title">{r.title}</div>
+                          <div className="release-meta">
+                            <span className="release-quality">{r.quality}</span>
+                            <span className="release-size">{formatSize(r.size)}</span>
+                            {r.seeders > 0 && (
+                              <span className="release-seeders">⬆ {r.seeders} / ⬇ {r.leechers}</span>
+                            )}
+                            {r.languages.length > 0 && (
+                              <span className="release-lang">{r.languages.join(', ')}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}

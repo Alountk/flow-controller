@@ -187,6 +187,11 @@ class CalendarGrabRequest(BaseModel):
     guid: str
 
 
+class CalendarGrabBatchRequest(BaseModel):
+    source: str  # "radarr" or "sonarr"
+    guids: list[str]
+
+
 async def check_all(session: aiohttp.ClientSession) -> None:
     status_cache["checking"] = True
     try:
@@ -493,6 +498,31 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
     except Exception as exc:
         log.exception("calendar_grab error: %s", exc)
         return {"ok": False, "detail": f"Error interno: {exc}"}
+
+
+@app.post("/api/calendar/grab-batch")
+async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends(verify_api_key)):
+    """Descarga múltiples releases en lote."""
+    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    if not service:
+        return {"ok": False, "detail": f"Servicio desconocido: {req.source}"}
+
+    results = []
+    errors = []
+    async with aiohttp.ClientSession() as session:
+        for guid in req.guids:
+            try:
+                result = await arr_grab_release(session, service, guid)
+                if result.get("ok"):
+                    results.append(guid)
+                else:
+                    errors.append({"guid": guid, "detail": result.get("detail", "Error desconocido")})
+            except Exception as exc:
+                errors.append({"guid": guid, "detail": str(exc)})
+
+    ok = len(errors) == 0
+    detail = f"{len(results)} descargados" if ok else f"{len(results)} OK, {len(errors)} errores"
+    return {"ok": ok, "detail": detail, "downloaded": results, "errors": errors}
 
 
 @app.get("/api/calendar/indexers")

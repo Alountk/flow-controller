@@ -97,3 +97,20 @@ export async function grabCalendarRelease(
   }
   return res.json() as Promise<{ ok: boolean; detail: string }>
 }
+
+export async function grabCalendarReleaseBatch(
+  source: string,
+  guids: string[],
+): Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }> {
+  const res = await fetch('/api/calendar/grab-batch', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ source, guids }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    return { ok: false, detail: msg, downloaded: [], errors: [] }
+  }
+  return res.json() as Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }>
+}
