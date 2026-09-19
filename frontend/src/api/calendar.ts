@@ -57,7 +57,7 @@ export async function fetchCalendarReleases(
   id: number,
 ): Promise<{ releases: Release[]; detail: string }> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 65000) // 65s timeout (backend is 60s)
+  const timeout = setTimeout(() => controller.abort(), 245000) // 245s timeout (backend is 240s)
   try {
     const res = await fetch('/api/calendar/releases', {
       method: 'POST',

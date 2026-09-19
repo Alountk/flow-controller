@@ -1025,7 +1025,7 @@ async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movi
     headers["Content-Type"] = "application/json"
     if not movie_id and not episode_id:
         return {"releases": [], "detail": "Se requiere movieId o episodeId"}
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 12)
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 48)  # 5*48=240s=4min (aMuleTorrent puede ser lento)
     log.info("arr_fetch_releases %s movieId=%s episodeId=%s", service["key"], movie_id or "-", episode_id or "-")
     try:
         if service["key"] == "radarr" and movie_id:

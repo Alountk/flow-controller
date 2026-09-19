@@ -3152,6 +3152,22 @@ body {
   max-width: 400px;
 }
 
+.progress-bar-container {
+  width: 100%;
+  max-width: 400px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+
 .calendar-releases {
   display: flex;
   flex-direction: column;

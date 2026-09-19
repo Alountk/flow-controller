@@ -17,6 +17,8 @@ interface Indexer {
 
 type ModalStep = 'initial' | 'searching' | 'adding' | 'results' | 'grabbing' | 'done' | 'error'
 
+const SEARCH_TIMEOUT = 240 // seconds — must match backend REQUEST_TIMEOUT * 48
+
 function formatSize(bytes: number): string {
   if (bytes === 0) return '?'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -291,8 +293,20 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
                 <span>{message}</span>
                 <span className="progress-elapsed">{formatElapsed(elapsed)}</span>
               </div>
+              <div className="progress-bar-container">
+                <div
+                  className="progress-bar"
+                  style={{ width: `${Math.max(0, ((SEARCH_TIMEOUT - elapsed) / SEARCH_TIMEOUT) * 100)}%` }}
+                />
+              </div>
               <div className="progress-hint">
-                Los indexadores pueden tardar 1-2 minutos. Puedes cerrar este modal y volver a intentar.
+                {elapsed < 30
+                  ? 'Los indexadores pueden tardar. Paciencia...'
+                  : elapsed < 120
+                    ? 'Buscando en indexadores lentos (aMuleTorrent puede tardar)...'
+                    : elapsed < 200
+                      ? 'Algunos indexadores son muy lentos. Esperando...'
+                      : 'Casi se acaba el tiempo...'}
               </div>
             </div>
           )}
