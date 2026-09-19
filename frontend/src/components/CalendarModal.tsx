@@ -100,7 +100,12 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
         setStep('results')
       } else {
         setStep('error')
-        setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
+        if (selectedIndexer !== 'all' && result.releases.length > 0) {
+          const idxName = indexers.find(i => String(i.id) === selectedIndexer)?.name || selectedIndexer
+          setMessage(`${idxName}: 0 releases encontrados. Hay ${result.releases.length} releases en total en otros indexadores.`)
+        } else {
+          setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
+        }
       }
     } catch (err) {
       setStep('error')
