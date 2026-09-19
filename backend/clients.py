@@ -1195,6 +1195,15 @@ async def arr_downloaded_scan(session: aiohttp.ClientSession, service: dict, fol
     })
 
 
+async def arr_downloaded_episodes_scan(session: aiohttp.ClientSession, service: dict, folder_path: str) -> dict:
+    """Escanea una carpeta buscando episodios para importar en Sonarr."""
+    return await arr_command(session, service, {
+        "name": "DownloadedEpisodesScan",
+        "path": folder_path,
+        "importMode": "Move",
+    })
+
+
 async def fetch_radarr_calendar(session: aiohttp.ClientSession, service: dict, start: str, end: str) -> list[dict]:
     """Devuelve películas próximas de Radarr entre start y end (YYYY-MM-DD)."""
     headers = arr_headers(service["api_key"])

@@ -26,7 +26,7 @@ from config import (
     SERVICES,
     API_KEY,
 )
-from traces import build_traces
+from traces import build_traces, host_path
 from clients import (
     check_service,
     check_arr,
@@ -60,6 +60,7 @@ from clients import (
     arr_rescan_series,
     arr_refresh_series,
     arr_downloaded_scan,
+    arr_downloaded_episodes_scan,
 )
 from copy_engine import (
     _tasks,
@@ -737,7 +738,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
                     return {"ok": False, "detail": "Película no encontrada"}
                 item_title = meta.get("title", "")
                 item_year = meta.get("year")
-                movie_path = meta.get("path", "")
+                movie_path = host_path(meta.get("path", "")) if meta.get("path") else ""
                 all_titles = [item_title] + [
                     (t.get("title") if isinstance(t, dict) else t)
                     for t in meta.get("altTitles", [])
@@ -749,7 +750,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
                     return {"ok": False, "detail": "Serie no encontrada"}
                 item_title = meta.get("title", "")
                 item_year = None
-                movie_path = meta.get("path", "")
+                movie_path = host_path(meta.get("path", "")) if meta.get("path") else ""
                 all_titles = [item_title] + [
                     (t.get("title") if isinstance(t, dict) else t)
                     for t in meta.get("alternateTitles", [])
@@ -801,7 +802,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
                         "movie_id": movie.get("id"),
                         "movie_title": movie.get("title", ""),
                         "movie_year": movie.get("year"),
-                        "movie_path": movie.get("path", ""),
+                        "movie_path": host_path(movie.get("path", "")) if movie.get("path") else "",
                         "title_used": title,
                     }
         item_title = f"{len(wanted_movies)} películas faltantes"
@@ -859,7 +860,10 @@ ALLOWED_ROOTS = ["/mnt/storage", "/mnt/storage-6tb"]
 
 def _validate_path(path: str) -> str:
     """Valida que la ruta esté dentro de los volúmenes permitidos."""
-    resolved = os.path.realpath(path)
+    if not path:
+        return ""
+    normalized = host_path(path)
+    resolved = os.path.realpath(normalized)
     for root in ALLOWED_ROOTS:
         if resolved == root or resolved.startswith(root + "/"):
             return resolved
@@ -1085,38 +1089,47 @@ async def _consume_queue():
                             imported = False
                             if service["key"] == "radarr":
                                 movie_id = op.get("movie_id")
-                                # Strategy 1: Manual Import (most reliable, needs movie_id)
                                 if movie_id:
+                                    # 1. Manual Import
                                     log.info("Trying Radarr manual import: dst=%s movie_id=%s", dst, movie_id)
-                                    result = await arr_manual_import(session, service, dst, int(movie_id))
-                                    log.info("Radarr manual import result: %s", result)
-                                    if result.get("ok"):
+                                    res_manual = await arr_manual_import(session, service, dst, int(movie_id))
+                                    log.info("Radarr manual import result: %s", res_manual)
+                                    if res_manual.get("ok"):
                                         imported = True
 
-                                # Strategy 2: RescanMovie (scan only this movie's folder)
-                                if movie_id and not imported:
-                                    log.info("Trying RescanMovie: movie_id=%s", movie_id)
-                                    result = await arr_rescan_movie(session, service, int(movie_id))
-                                    log.info("RescanMovie result: %s", result)
-                                    if result.get("ok"):
+                                    # 2. RescanMovie + RefreshMovie (always trigger to ensure Radarr indexes file on disk)
+                                    log.info("Triggering RescanMovie + RefreshMovie: movie_id=%s", movie_id)
+                                    res_rescan = await arr_rescan_movie(session, service, int(movie_id))
+                                    res_refresh = await arr_refresh_movie(session, service, int(movie_id))
+                                    log.info("Radarr Rescan/Refresh result: rescan=%s refresh=%s", res_rescan, res_refresh)
+                                    if res_rescan.get("ok") or res_refresh.get("ok"):
+                                        imported = True
+                                else:
+                                    # Fallback: scan parent directory for downloaded movies
+                                    parent_dir = str(Path(dst).parent)
+                                    log.info("Triggering DownloadedMoviesScan: path=%s", parent_dir)
+                                    res_scan = await arr_downloaded_scan(session, service, parent_dir)
+                                    log.info("Radarr DownloadedMoviesScan result: %s", res_scan)
+                                    if res_scan.get("ok"):
                                         imported = True
 
                             elif service["key"] == "sonarr":
                                 series_id = op.get("series_id") or op.get("movie_id")
-                                # Strategy 1: RescanSeries (Sonarr scans series folder on disk & auto-maps episodes)
                                 if series_id:
-                                    log.info("Trying Sonarr RescanSeries: series_id=%s", series_id)
-                                    result = await arr_rescan_series(session, service, int(series_id))
-                                    log.info("Sonarr RescanSeries result: %s", result)
-                                    if result.get("ok"):
+                                    # 1. RescanSeries (Sonarr scans series folder on disk & auto-maps SxxExx)
+                                    log.info("Triggering Sonarr RescanSeries + RefreshSeries: series_id=%s", series_id)
+                                    res_rescan = await arr_rescan_series(session, service, int(series_id))
+                                    res_refresh = await arr_refresh_series(session, service, int(series_id))
+                                    log.info("Sonarr Rescan/Refresh result: rescan=%s refresh=%s", res_rescan, res_refresh)
+                                    if res_rescan.get("ok") or res_refresh.get("ok"):
                                         imported = True
-
-                                # Strategy 2: RefreshSeries (refreshes metadata + scans folder)
-                                if series_id and not imported:
-                                    log.info("Trying Sonarr RefreshSeries: series_id=%s", series_id)
-                                    result = await arr_refresh_series(session, service, int(series_id))
-                                    log.info("Sonarr RefreshSeries result: %s", result)
-                                    if result.get("ok"):
+                                else:
+                                    # Fallback: scan parent directory for downloaded episodes
+                                    parent_dir = str(Path(dst).parent)
+                                    log.info("Triggering DownloadedEpisodesScan: path=%s", parent_dir)
+                                    res_scan = await arr_downloaded_episodes_scan(session, service, parent_dir)
+                                    log.info("Sonarr DownloadedEpisodesScan result: %s", res_scan)
+                                    if res_scan.get("ok"):
                                         imported = True
 
                             async with _queue_lock:

@@ -772,3 +772,89 @@ class TestPaginatedWantedEndpoints:
         assert data["page_size"] == 25
 
 
+class TestValidatePathContainerMapping:
+    def test_validate_path_converts_data_to_mnt_storage(self):
+        from app import _validate_path
+        path = _validate_path("/data/shared-media/movies/Test (2024)")
+        assert path == "/mnt/storage/shared-media/movies/Test (2024)"
+
+    def test_validate_path_converts_data_6tb_to_mnt_storage_6tb(self):
+        from app import _validate_path
+        path = _validate_path("/data-6tb/shared-media/series/Test Show")
+        assert path == "/mnt/storage-6tb/shared-media/series/Test Show"
+
+
+class TestConsumeQueuePostMoveImport:
+    @patch("app.arr_refresh_movie", new_callable=AsyncMock)
+    @patch("app.arr_rescan_movie", new_callable=AsyncMock)
+    @patch("app.arr_manual_import", new_callable=AsyncMock)
+    def test_radarr_post_move_triggers_manual_import_and_rescan_and_refresh(
+        self, mock_manual, mock_rescan, mock_refresh, tmp_path
+    ):
+        import asyncio
+        import app
+        mock_manual.return_value = {"ok": True, "detail": "Manual import OK"}
+        mock_rescan.return_value = {"ok": True, "detail": "RescanMovie OK"}
+        mock_refresh.return_value = {"ok": True, "detail": "RefreshMovie OK"}
+
+        src = tmp_path / "src_movie.mkv"
+        src.write_bytes(b"content")
+        dst = tmp_path / "dst_movie.mkv"
+
+        op = {
+            "id": "test-radarr-1",
+            "type": "move",
+            "src": str(src),
+            "dst": str(dst),
+            "name": "src_movie.mkv",
+            "status": "pending",
+            "cancelled": False,
+            "arr_source": "radarr",
+            "movie_id": 42,
+            "series_id": None,
+        }
+        app._file_queue.append(op)
+        asyncio.run(app._consume_queue())
+
+        assert op["status"] == "done"
+        assert op["import_status"] == "imported"
+        mock_manual.assert_called_once()
+        mock_rescan.assert_called_once()
+        mock_refresh.assert_called_once()
+
+    @patch("app.arr_refresh_series", new_callable=AsyncMock)
+    @patch("app.arr_rescan_series", new_callable=AsyncMock)
+    def test_sonarr_post_move_triggers_rescan_and_refresh(
+        self, mock_rescan, mock_refresh, tmp_path
+    ):
+        import asyncio
+        import app
+        mock_rescan.return_value = {"ok": True, "detail": "RescanSeries OK"}
+        mock_refresh.return_value = {"ok": True, "detail": "RefreshSeries OK"}
+
+        src = tmp_path / "src_ep.mkv"
+        src.write_bytes(b"content")
+        dst = tmp_path / "dst_ep.mkv"
+
+        op = {
+            "id": "test-sonarr-1",
+            "type": "move",
+            "src": str(src),
+            "dst": str(dst),
+            "name": "src_ep.mkv",
+            "status": "pending",
+            "cancelled": False,
+            "arr_source": "sonarr",
+            "movie_id": None,
+            "series_id": 88,
+        }
+        app._file_queue.append(op)
+        asyncio.run(app._consume_queue())
+
+        assert op["status"] == "done"
+        assert op["import_status"] == "imported"
+        mock_rescan.assert_called_once()
+        mock_refresh.assert_called_once()
+
+
+
