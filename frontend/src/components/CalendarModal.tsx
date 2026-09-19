@@ -89,9 +89,12 @@ export function CalendarModal({ item, onClose }: CalendarModalProps) {
     setMessage(`Buscando releases${selectedIndexer !== 'all' ? ` en ${indexers.find(i => String(i.id) === selectedIndexer)?.name || ''}` : ' en todos los indexadores'}...`)
     try {
       const result = await fetchCalendarReleases(item.source, item.type, item.id)
+      const selectedName = selectedIndexer === 'all'
+        ? null
+        : indexers.find(i => String(i.id) === selectedIndexer)?.name
       const filtered = selectedIndexer === 'all'
         ? result.releases
-        : result.releases.filter(r => r.indexer === selectedIndexer)
+        : result.releases.filter(r => r.indexer === selectedName)
       if (filtered.length > 0) {
         setReleases(filtered)
         setStep('results')
