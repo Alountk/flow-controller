@@ -57,7 +57,7 @@ export async function fetchCalendarReleases(
   id: number,
 ): Promise<{ releases: Release[]; detail: string }> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
+  const timeout = setTimeout(() => controller.abort(), 65000) // 65s timeout (backend is 60s)
   try {
     const res = await fetch('/api/calendar/releases', {
       method: 'POST',
@@ -75,7 +75,7 @@ export async function fetchCalendarReleases(
   } catch (err) {
     clearTimeout(timeout)
     if (err instanceof DOMException && err.name === 'AbortError') {
-      return { releases: [], detail: 'Timeout: Radarr/Sonarr no respondió. Verifica que el servicio esté activo.' }
+      return { releases: [], detail: 'Timeout: Radarr/Sonarr no respondió en 65s. Verifica que el servicio esté activo y los indexadores respondan.' }
     }
     return { releases: [], detail: `Error de conexión: ${err}` }
   }

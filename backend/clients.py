@@ -1025,7 +1025,7 @@ async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movi
         params["episodeId"] = episode_id
     else:
         return {"releases": [], "detail": "Se requiere movieId o episodeId"}
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 5)
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 12)
     log.info("arr_fetch_releases %s movieId=%s episodeId=%s", service["key"], movie_id or "-", episode_id or "-")
     try:
         async with session.get(
