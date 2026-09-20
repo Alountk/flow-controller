@@ -44,15 +44,9 @@ def _tool_available(module: str) -> bool:
 
 
 def _python_sources() -> list[Path]:
-    """Backend sources for pyflakes.
-
-    `vulture_whitelist.py` is excluded on purpose: a vulture whitelist is Python
-    used purely as configuration, made of deliberately bare name references that
-    pyflakes reports as undefined names. It is not source code.
-    """
+    """Backend sources for pyflakes."""
     sources = sorted(BACKEND_DIR.glob("*.py")) + sorted((BACKEND_DIR / "routes").glob("*.py"))
-    excluded = {"conftest.py", "vulture_whitelist.py"}
-    return [p for p in sources if p.name not in excluded]
+    return [p for p in sources if p.name != "conftest.py"]
 
 
 def test_backend_has_python_sources_to_check():
