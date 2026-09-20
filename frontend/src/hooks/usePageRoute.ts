@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 
-type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'disk' | 'files' | 'config' | 'prototypes'
+type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'disk' | 'files' | 'mixer' | 'config' | 'prototypes'
 
 const PAGE_PATHS: Record<Page, string> = {
   dashboard: '/dashboard',
@@ -9,6 +9,7 @@ const PAGE_PATHS: Record<Page, string> = {
   calendar: '/calendario',
   disk: '/disco',
   files: '/archivos',
+  mixer: '/mixer',
   config: '/configuracion',
   prototypes: '/prototipos',
 }

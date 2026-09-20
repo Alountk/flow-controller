@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-export type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'disk' | 'files' | 'config' | 'prototypes'
+export type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'disk' | 'files' | 'mixer' | 'config' | 'prototypes'
 
 const PAGE_PATHS: Record<Page, string> = {
   dashboard: '/dashboard',
@@ -9,6 +9,7 @@ const PAGE_PATHS: Record<Page, string> = {
   calendar: '/calendario',
   disk: '/disco',
   files: '/archivos',
+  mixer: '/mixer',
   config: '/configuracion',
   prototypes: '/prototipos',
 }
@@ -26,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'calendar', label: 'Calendario', icon: '📅' },
   { key: 'disk', label: 'Disco', icon: '💾' },
   { key: 'files', label: 'Archivos', icon: '📂' },
+  { key: 'mixer', label: 'Media Mixer', icon: '🎬' },
   { key: 'config', label: 'Configuración', icon: '⚙️' },
 ]
 

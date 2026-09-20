@@ -11,6 +11,7 @@ import { QueueSidebar } from './components/QueueSidebar'
 import { Settings } from './components/Settings'
 import { Calendar } from './components/Calendar'
 import { DiskSpace } from './components/DiskSpace'
+import { MediaMixer } from './components/MediaMixer'
 import { setApiKey } from './api/auth'
 import { usePageRoute } from './hooks/usePageRoute'
 import {
@@ -43,6 +44,7 @@ const PAGE_TITLES: Record<Page, string> = {
   calendar: 'Calendario',
   disk: 'Espacio en Disco',
   files: 'Archivos',
+  mixer: 'Media Mixer',
   config: 'Configuración',
   prototypes: 'Prototipos',
 }
@@ -201,6 +203,8 @@ function App() {
           {page === 'files' && (
             <FileManager />
           )}
+
+          {page === 'mixer' && <MediaMixer />}
 
           {page === 'config' && <Settings />}
 

@@ -67,6 +67,7 @@ from copy_engine import (
     cleanup_tasks,
     do_action,
 )
+from routes_mixer import router as mixer_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -247,6 +248,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(mixer_router)
 
 
 # --- API Routes ---

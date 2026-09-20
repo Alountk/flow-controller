@@ -21,6 +21,7 @@ DEFAULTS: dict[str, Any] = {
     "paths": {
         "download_amule": "/mnt/storage-6tb/shared-downloads/amule",
         "download_torrent": "/mnt/storage/downloads/qbittorrent/completed",
+        "output_mixed": "/mnt/storage/mixed",
         "allowed_roots": ["/mnt/storage", "/mnt/storage-6tb"],
     },
     "intervals": {
@@ -48,6 +49,7 @@ _env_to_settings: dict[str, tuple[str, ...]] = {
     "DEVELOPER": ("developer",),
     "FOLDER_DOWNLOAD_AMULE": ("paths", "download_amule"),
     "FOLDER_DOWNLOAD_TORRENT": ("paths", "download_torrent"),
+    "FOLDER_OUTPUT_MIXED": ("paths", "output_mixed"),
     "CHECK_INTERVAL": ("intervals", "check"),
     "MAX_RETRIES": ("intervals", "max_retries"),
     "RETRY_DELAY": ("intervals", "retry_delay"),
