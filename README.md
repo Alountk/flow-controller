@@ -304,7 +304,7 @@ tab === 'episodes' // OK
 | 7 | Extraer post-move import a servicio compartido | ✅ | `backend/import_service.py` |
 | 8 | CSS Modules o Tailwind (66KB monolítico) | ✅ | Modularizado por componente (`components/*.css` + `styles/global.css`) |
 | 9 | Tests de componentes React (0 actualmente) | ✅ | `frontend/src/__tests__/*.test.tsx` (39 tests) |
-| 19 | **Poder filtrar los faltantes** (idioma / título / año) | ⬜ | Backend + Frontend — ver detalle abajo |
+| 19 | **Filtrar los faltantes** (títulos alternativos + filtro de resultados) | ✅ | `clients.py`, `MissingContent.tsx`, `utils/scanResults.ts` |
 
 ### 🔵 Largas (1-2 semanas)
 
@@ -327,34 +327,35 @@ tab === 'episodes' // OK
 
 ### 🔎 #19 — Filtrar los faltantes
 
-Hoy el filtrado por idioma **existe en la UI pero el backend lo ignora por completo**:
+Arrancó de un hallazgo: el filtrado por idioma **existía en la UI y el backend lo ignoraba por
+completo** — checkboxes que bloqueaban el botón de escaneo mientras `routes/wanted.py` no leía
+`req.local_path` en ningún punto. Al verificarlo contra la API real apareció además un bug mayor.
 
-- `MissingContent.tsx` tiene el selector "Idiomas:" con checkboxes (`LANG_LIST`, `selectedLangs`)
-  y **bloquea el botón de escaneo** si no eliges ninguno.
-- `scanForMovies()` lo envía en `local_path` (`languages.join(',')`).
-- `routes/wanted.py` recibía `req.local_path`, lo parseaba y **nunca lo usaba** (parsing muerto
-  eliminado en el PR de limpieza pyflakes). `req.local_path` ya no se referencia en ningún punto
-  del scan.
+**Hecho ✅**
 
-Además, el propio scan arrastra dos helpers **muertos que nunca se llaman** — `pyflakes` no los
-detecta porque no analiza funciones no usadas:
+1. **Los títulos alternativos ya se usan.** `clients.py` leía `altTitles`, pero Radarr devuelve
+   `alternateTitles` — el campo estaba siempre vacío, así que el escaneo solo comparaba contra el
+   título principal. Un archivo llamado `Ton Nom (2016).mkv` era invisible. Sonarr ya usaba el
+   nombre correcto.
+2. **Filtro manual en los resultados del escaneo** (`utils/scanResults.ts`). Sustituye al selector
+   de idiomas, que prometía algo que el backend nunca hizo.
+3. **"Seleccionar todo" solo afecta a lo visible**, nunca a lo oculto por el filtro.
 
-- `_detect_languages_from_alt_titles(alt_titles)` — ignora su argumento y devuelve **todos** los
-  idiomas: es un stub.
-- `_get_wanted_movies_with_alt_titles(wanted_data)` — nunca se invoca.
+**Aparcado (probablemente no se haga)**
 
-**Qué falta para cerrar la feature:**
-
-1. Definir qué significa "idioma" en el match: ¿filtrar los `altTitles` considerados, o el idioma
-   de la release? `_match_score` hoy compara **solo título** contra todos los `altTitles`.
-2. Implementar el filtro real en `routes/wanted.py` usando la lista de idiomas que ya llega.
-3. Decidir si el filtro aplica también al **listado** de faltantes (`GET /api/wanted` hoy solo
-   filtra por `source`), no únicamente al scan de archivos desubicados.
-4. Tests: hoy `tests_routes.py` cubre el contrato de `/api/wanted` pero **no** el filtrado por
-   idioma del scan; hay que cubrirlo para que no vuelva a quedar a medias.
+- **Etiquetar cada título con su idioma vía TMDB.** Es viable: tenemos `tmdbId` y TMDB expone
+  `GET /3/movie/{id}/translations` con `iso_639_1` + `data.title`. **Pero no merece la pena**:
+  los títulos alternativos **ya se usan todos**, así que esto añadiría *precisión* (poder excluir
+  idiomas), no *cobertura* — no encontraría ningún archivo que no encuentre ya. A cambio exige
+  API key de TMDB, salida a internet desde el contenedor y una llamada por película (con caché
+  obligatoria). Solo tendría sentido si aparecen falsos positivos por títulos cortos.
+- **Filtro de idioma en el listado.** La misma trampa: el listado está paginado (50 por página,
+  1981 episodios) y Radarr/Sonarr no ofrecen búsqueda por texto ni por idioma, así que un filtro
+  en cliente solo miraría lo ya cargado. En el **escaneo** sí es honesto porque devuelve todos los
+  resultados de una vez.
 
 > **Ojo:** `pyflakes` no detecta funciones ni clases muertas — solo imports y variables locales.
-> Este caso demuestra que un backend "pyflakes-clean" todavía puede esconder features a medias.
+> Este caso lo demuestra, y por eso el proyecto usa **vulture** además de pyflakes.
 
 ---
 

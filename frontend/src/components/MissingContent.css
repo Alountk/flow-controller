@@ -358,27 +358,22 @@
   font-style: italic;
 }
 
-.scan-lang-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.scan-lang-check {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.scan-lang-check input[type="checkbox"] {
-  accent-color: var(--accent);
-}
-
 .scan-results {
   margin-top: 16px;
+}
+
+.scan-result-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.scan-result-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .scan-summary {
@@ -665,13 +660,7 @@
   flex: 1;
 }
 
-/* ── Manual title input ─────────────────────────────────────────── */
-.scan-lang-manual {
-  border-left: 1px solid var(--border);
-  padding-left: 10px;
-  margin-left: 4px;
-}
-
+/* ── Additional title input + result filter ─────────────────────── */
 .scan-custom-input {
   flex: 1;
   padding: 8px 12px;
