@@ -276,10 +276,10 @@ tab === 'episodes' // OK
 
 | # | Mejora | Estado | Archivos |
 |---|--------|--------|----------|
-| 1 | Eliminar dead code (`clients.py:868` except duplicado) | ⬜ | `backend/clients.py` |
+| 1 | Eliminar dead code (`clients.py:868` except duplicado) | ✅ | `backend/clients.py` |
 | 2 | Health check en Dockerfile | ✅ | `Dockerfile` |
-| 3 | Límites de recursos (RAM/CPU) en docker-compose | ⬜ | `docker-compose.yml` |
-| 4 | Fix API key expuesta en `/api/config` | ⬜ | `app.py` + frontend |
+| 3 | Límites de recursos (RAM/CPU) en docker-compose | ✅ | `docker-compose.yml` |
+| 4 | Fix API key expuesta en `/api/config` | ⚠️ | `app.py` + frontend — aceptable para tool local, requiere refactor si se expone a internet |
 
 ### 🟡 Medianas (1-3 días)
 
