@@ -1,0 +1,126 @@
+name: CI — Build, Test & Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # ── Backend tests ──────────────────────────────────────────────
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run all backend tests
+        run: |
+          cd backend
+          python -m pytest tests.py tests_mixer.py tests_mixer_api.py -v --tb=short
+
+  # ── Frontend build ─────────────────────────────────────────────
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: TypeScript check + Vite build
+        run: |
+          cd frontend
+          npm run build
+
+  # ── Docker build + health check ────────────────────────────────
+  docker-verify:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker compose build --no-cache
+
+      - name: Start container
+        run: |
+          docker compose up -d
+          sleep 15
+
+      - name: Health check
+        run: |
+          # Backend must respond on port 8001
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/api/status 2>/dev/null || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Backend healthy (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "⏳ Attempt $i: HTTP $STATUS — retrying in 3s..."
+            sleep 3
+          done
+          echo "❌ Backend did not start within 45s"
+          docker compose logs --tail=50
+          exit 1
+
+      - name: Frontend served by backend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/ 2>/dev/null || true)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Frontend served (HTTP $STATUS)"
+          else
+            echo "❌ Frontend not served (HTTP $STATUS)"
+            exit 1
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
+
+  # ── Push Docker image (only on main branch push) ───────────────
+  docker-push:
+    runs-on: ubuntu-latest
+    needs: [docker-verify]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        run: |
+          docker compose build --no-cache
+          docker push ghcr.io/${{ github.repository }}:latest
+          echo "✅ Image pushed to ghcr.io/${{ github.repository }}:latest"

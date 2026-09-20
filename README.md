@@ -56,6 +56,38 @@ cd ../backend && ./run_local.sh
 docker compose up -d --build
 ```
 
+## Workflow de verificación (ANTES de cada push)
+
+**NUNCA hacer push sin verificar que el sistema arranca.** Pasos obligatorios:
+
+```bash
+# 1. Tests backend
+cd backend && python -m pytest tests.py tests_mixer.py tests_mixer_api.py -q
+
+# 2. Build frontend
+cd frontend && npm run build
+
+# 3. Docker build + start
+docker compose build && docker compose up -d
+
+# 4. Health check (esperar ~15s)
+curl http://localhost:8001/api/status
+
+# 5. Solo si todo OK → push
+git push origin main
+```
+
+### CI Pipeline (GitHub Actions)
+
+El workflow `.github/workflows/ci.yml` ejecuta automáticamente:
+
+1. **Backend tests** — pytest con todos los suites
+2. **Frontend build** — TypeScript + Vite
+3. **Docker verify** — Build imagen, arrancar contenedor, health check en `/api/status`
+4. **Docker push** — Solo si todo pasa y es push a `main`
+
+**Si el health check falla, el pipeline para y NO crea la imagen Docker.**
+
 ## Variables de entorno
 
 Copia `backend/.env.example` a `backend/.env` y rellena:
