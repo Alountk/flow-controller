@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import './Sidebar.css'
 
 export type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'disk' | 'files' | 'mixer' | 'config' | 'prototypes'
 

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queueStatus, queueCancel } from '../api/files'
 import type { QueueOp } from '../api/files'
+import './QueueSidebar.css'
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'

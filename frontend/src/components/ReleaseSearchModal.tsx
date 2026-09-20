@@ -6,6 +6,7 @@ import {
   grabCalendarReleaseBatch,
   type Release,
 } from '../api/calendar'
+import './CalendarModal.css'
 
 interface Indexer {
   id: number

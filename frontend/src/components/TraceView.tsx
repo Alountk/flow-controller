@@ -9,6 +9,7 @@ import type {
 } from '../types'
 import { STAGE_LABELS } from '../types'
 import { TraceActions } from './TraceActions'
+import './TraceView.css'
 
 interface Props {
   data: TraceResponse | null

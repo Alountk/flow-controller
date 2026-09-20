@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { DiskResponse } from '../types'
+import './DiskSpace.css'
 
 async function fetchDisk(): Promise<DiskResponse> {
   const res = await fetch('/api/disk')
