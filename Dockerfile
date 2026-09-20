@@ -22,6 +22,8 @@ COPY backend/media_mixer.py .
 COPY backend/routes_mixer.py .
 COPY backend/models.py .
 COPY backend/state.py .
+COPY backend/task_manager.py .
+COPY backend/import_service.py .
 COPY backend/routes/ /app/routes/
 COPY --from=frontend /frontend/dist /frontend/dist
 COPY prototypes/ /app/prototypes/

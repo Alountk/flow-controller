@@ -15,9 +15,10 @@ log = logging.getLogger("flow-controller")
 class TaskManager:
     """Thread-safe task registry for background operations."""
 
-    def __init__(self):
+    def __init__(self, ttl: float = 600):
         self._tasks: dict[str, dict] = {}
         self._lock = asyncio.Lock()
+        self._ttl = ttl
 
     def create(self, task_id: str, **kwargs) -> dict:
         """Create a new task entry."""
@@ -49,7 +50,7 @@ class TaskManager:
         task = self._tasks.get(task_id)
         if not task:
             return {"ok": False, "error": "tarea no encontrada"}
-        if task.get("status") not in ("running", "pending", None):
+        if task.get("status") not in ("running", "pending", "paused", None):
             return {"ok": False, "error": f"tarea ya en estado: {task['status']}"}
         task["cancelled"] = True
         task["detail"] = "cancelación solicitada..."
@@ -61,14 +62,14 @@ class TaskManager:
         task = self._tasks.get(task_id)
         return bool(task and task.get("cancelled"))
 
-    def cleanup(self, max_age: float = 3600) -> int:
-        """Remove completed tasks older than max_age seconds. Returns count removed."""
+    def cleanup(self) -> int:
+        """Remove completed tasks older than TTL. Returns count removed."""
         now = time.time()
         to_remove = []
         for tid, t in self._tasks.items():
-            if t.get("status") in ("done", "error", "cancelled"):
+            if t.get("status") in ("done", "error", "cancelled", "imported", "import_timeout", "renamed_needed"):
                 created = t.get("created_at", 0)
-                if now - created > max_age:
+                if now - created > self._ttl:
                     to_remove.append(tid)
         for tid in to_remove:
             del self._tasks[tid]
@@ -78,3 +79,8 @@ class TaskManager:
         """Return all active tasks."""
         self.cleanup()
         return dict(self._tasks)
+
+
+# Shared instances — one for copy operations, one for mux operations
+copy_tasks = TaskManager(ttl=600)
+mux_tasks = TaskManager(ttl=600)

@@ -25,14 +25,11 @@ from clients import (
     arr_series_root_folder,
 )
 from traces import resolve_current_path, host_path
+from task_manager import copy_tasks
 
 log = logging.getLogger("flow-controller")
 
 COPY_CHUNK_SIZE = 1024 * 1024  # 1 MB
-
-# Shared mutable state for background tasks.
-_tasks: dict[str, dict] = {}
-_task_lock = asyncio.Lock()
 
 
 class CopyCancelled(Exception):
@@ -41,14 +38,7 @@ class CopyCancelled(Exception):
 
 def cleanup_tasks():
     """Elimina tareas finalizadas que superan el TTL."""
-    now = time.time()
-    expired = [
-        tid for tid, t in _tasks.items()
-        if t.get("status") not in ("running", "importing")
-        and now - t.get("created_at", 0) > 600
-    ]
-    for tid in expired:
-        del _tasks[tid]
+    copy_tasks.cleanup()
 
 
 def copy_file_chunked(src: Path, dst: Path, task_id: str | None = None, total_bytes: int = 0, copied_bytes: int = 0) -> int:
@@ -59,18 +49,15 @@ def copy_file_chunked(src: Path, dst: Path, task_id: str | None = None, total_by
             tmp_path = fdst.name
             with open(src, 'rb') as fsrc:
                 while True:
-                    if task_id and task_id in _tasks and _tasks[task_id].get("cancelled"):
+                    if task_id and copy_tasks.is_cancelled(task_id):
                         raise CopyCancelled(f"cancelado durante copia de {src.name}")
                     chunk = fsrc.read(COPY_CHUNK_SIZE)
                     if not chunk:
                         break
                     fdst.write(chunk)
                     written += len(chunk)
-                    if task_id and task_id in _tasks:
-                        _tasks[task_id].update({
-                            "copied_bytes": copied_bytes + written,
-                            "total_bytes": total_bytes,
-                        })
+                    if task_id:
+                        copy_tasks.update(task_id, copied_bytes=copied_bytes + written, total_bytes=total_bytes)
         os.rename(tmp_path, str(dst))
         tmp_path = None
     except Exception:
@@ -86,21 +73,16 @@ def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool
     log.info("copy_files: src=%s  dst=%s  is_host_path=%s target_name=%s", src, dst_dir, is_host_path, target_name)
 
     def _update_task(copied_bytes: int, total_bytes: int, files_done: int, files_total: int):
-        if task_id and task_id in _tasks:
-            _tasks[task_id].update({
-                "copied_bytes": copied_bytes,
-                "total_bytes": total_bytes,
-                "files_done": files_done,
-                "files_total": files_total,
-            })
+        if task_id:
+            copy_tasks.update(task_id, copied_bytes=copied_bytes, total_bytes=total_bytes, files_done=files_done, files_total=files_total)
 
     def _is_cancelled() -> bool:
-        return bool(task_id and task_id in _tasks and _tasks[task_id].get("cancelled"))
+        return bool(task_id and copy_tasks.is_cancelled(task_id))
 
     if not src.exists():
         log.error("copy_files: fuente no encontrada: %s", src)
-        if task_id and task_id in _tasks:
-            _tasks[task_id].update({"status": "error", "detail": f"fuente no encontrada: {src}"})
+        if task_id:
+            copy_tasks.update(task_id, status="error", detail=f"fuente no encontrada: {src}")
         return {"ok": False, "detail": f"fuente no encontrada: {src}"}
 
     dst_dir.mkdir(parents=True, exist_ok=True)
@@ -136,44 +118,44 @@ def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool
 async def run_copy_background(task_id: str, src_path: str, dst_root: str, service: dict, source: str, ids: dict | None = None, target_name: str | None = None):
     ids = ids or {}
     try:
-        _tasks[task_id]["detail"] = "copiando archivos..."
+        copy_tasks.update(task_id, detail="copiando archivos...")
         result = await asyncio.to_thread(
             copy_files_to_root, src_path, dst_root, is_host_path=True, task_id=task_id, target_name=target_name
         )
-        if _tasks[task_id].get("cancelled"):
-            _tasks[task_id].update({
-                "status": "cancelled",
-                "detail": result.get("detail", "cancelado"),
-                "files_copied": result.get("files_copied", 0),
-            })
+        if copy_tasks.is_cancelled(task_id):
+            copy_tasks.update(task_id,
+                status="cancelled",
+                detail=result.get("detail", "cancelado"),
+                files_copied=result.get("files_copied", 0),
+            )
             return
-        _tasks[task_id].update({
-            "status": "done" if result["ok"] else "error",
-            "detail": result.get("detail", ""),
-            "files_copied": result.get("files_copied", 0),
-        })
+        copy_tasks.update(task_id,
+            status="done" if result["ok"] else "error",
+            detail=result.get("detail", ""),
+            files_copied=result.get("files_copied", 0),
+        )
         if result["ok"]:
-            _tasks[task_id]["detail"] = "importando..."
-            _tasks[task_id]["status"] = "importing"
+            copy_tasks.update(task_id, detail="importando...", status="importing")
             async with aiohttp.ClientSession() as session:
                 await arr_command(session, service, {"name": "ProcessMonitoredDownloads"})
             await verify_import(task_id, service, source, ids)
     except CopyCancelled:
-        _tasks[task_id].update({
-            "status": "cancelled",
-            "detail": _tasks[task_id].get("detail", "cancelado por el usuario"),
-            "files_copied": _tasks[task_id].get("files_done", 0),
-        })
+        task = copy_tasks.get(task_id) or {}
+        copy_tasks.update(task_id,
+            status="cancelled",
+            detail=task.get("detail", "cancelado por el usuario"),
+            files_copied=task.get("files_done", 0),
+        )
     except Exception as exc:
         log.exception("copy_files: error en background task %s", task_id)
-        _tasks[task_id].update({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
+        copy_tasks.update(task_id, status="error", detail=f"{type(exc).__name__}: {exc}")
 
 
 async def verify_import(task_id: str, service: dict, source: str, ids: dict):
     start = time.time()
     async with aiohttp.ClientSession() as session:
         while time.time() - start < IMPORT_POLL_TIMEOUT:
-            if _tasks[task_id].get("cancelled"):
+            if copy_tasks.is_cancelled(task_id):
                 return
 
             kwargs: dict = {}
@@ -187,40 +169,28 @@ async def verify_import(task_id: str, service: dict, source: str, ids: dict):
                         kwargs["season_number"] = season
 
             if not kwargs:
-                _tasks[task_id].update({"status": "done", "detail": "copia completada (sin verificación)"})
+                copy_tasks.update(task_id, status="done", detail="copia completada (sin verificación)")
                 return
 
             status = await arr_import_status(session, service, **kwargs)
 
             if not status["has_file"]:
                 elapsed = int(time.time() - start)
-                _tasks[task_id]["detail"] = f"esperando import... ({elapsed}s)"
+                copy_tasks.update(task_id, detail=f"esperando import... ({elapsed}s)")
                 await asyncio.sleep(IMPORT_POLL_INTERVAL)
                 continue
 
             if status["needs_rename"] is False:
-                _tasks[task_id].update({
-                    "status": "imported",
-                    "detail": "importado y renombrado correctamente",
-                })
+                copy_tasks.update(task_id, status="imported", detail="importado y renombrado correctamente")
                 return
             elif status["needs_rename"] is True:
-                _tasks[task_id].update({
-                    "status": "renamed_needed",
-                    "detail": status.get("detail", "importado — necesita renombrado manual"),
-                })
+                copy_tasks.update(task_id, status="renamed_needed", detail=status.get("detail", "importado — necesita renombrado manual"))
                 return
             else:
-                _tasks[task_id].update({
-                    "status": "imported",
-                    "detail": status.get("detail", "importado correctamente"),
-                })
+                copy_tasks.update(task_id, status="imported", detail=status.get("detail", "importado correctamente"))
                 return
 
-    _tasks[task_id].update({
-        "status": "import_timeout",
-        "detail": f"timeout después de {IMPORT_POLL_TIMEOUT}s — verifica manualmente",
-    })
+    copy_tasks.update(task_id, status="import_timeout", detail=f"timeout después de {IMPORT_POLL_TIMEOUT}s — verifica manualmente")
 
 
 async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) -> dict:
@@ -428,17 +398,16 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
 
         dst_path = str(Path(root) / smart_name)
         task_id = str(uuid.uuid4())
-        _tasks[task_id] = {
-            "status": "running",
-            "created_at": time.time(),
-            "src_path": output_path,
-            "dst_path": dst_path,
-            "copied_bytes": 0,
-            "total_bytes": 0,
-            "files_done": 0,
-            "files_total": 0,
-            "detail": "preparando copia...",
-        }
+        copy_tasks.create(task_id,
+            status="running",
+            src_path=output_path,
+            dst_path=dst_path,
+            copied_bytes=0,
+            total_bytes=0,
+            files_done=0,
+            files_total=0,
+            detail="preparando copia...",
+        )
         asyncio.create_task(run_copy_background(task_id, output_path, root, service, source, ids, target_name=smart_name))
         return {"ok": True, "needs_polling": True, "task_id": task_id, "src_path": output_path, "dst_path": dst_path}
 

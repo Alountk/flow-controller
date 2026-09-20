@@ -15,7 +15,7 @@ os.environ.setdefault("AMUTORRENT_URL", "http://localhost:4000")
 
 from traces import host_path as _host_path, resolve_current_path as _resolve_current_path
 from config import _VOLUME_MAP
-from copy_engine import copy_files_to_root as _copy_files_to_root, _tasks, CopyCancelled
+from copy_engine import copy_files_to_root as _copy_files_to_root, copy_tasks, CopyCancelled
 
 
 # ── _host_path ──────────────────────────────────────────────────────────────
@@ -155,26 +155,26 @@ class TestCopyFilesToRoot:
             Path(os.path.join(src_dir, name)).write_text(f"data {name}")
 
         task_id = "test-task-001"
-        _tasks[task_id] = {
-            "status": "running",
-            "copied_bytes": 0,
-            "total_bytes": 0,
-            "files_done": 0,
-            "files_total": 0,
-        }
+        copy_tasks.create(task_id,
+            status="running",
+            copied_bytes=0,
+            total_bytes=0,
+            files_done=0,
+            files_total=0,
+        )
 
         result = _copy_files_to_root(src_dir, dst_dir, is_host_path=True, task_id=task_id)
         assert result["ok"] is True
         assert result["files_copied"] == 3
 
-        task = _tasks[task_id]
+        task = copy_tasks.get(task_id)
         assert task["status"] == "running"
         assert task["files_done"] == 3
         assert task["files_total"] == 3
         assert task["total_bytes"] > 0
         assert task["copied_bytes"] == task["total_bytes"]
 
-        del _tasks[task_id]
+        del copy_tasks._tasks[task_id]
 
     def test_copy_single_file_with_task_id(self):
         src_dir = os.path.join(self.tmpdir, "src")
@@ -184,13 +184,13 @@ class TestCopyFilesToRoot:
         Path(os.path.join(src_dir, "movie.mkv")).write_text("fake video data")
 
         task_id = "test-task-002"
-        _tasks[task_id] = {
-            "status": "running",
-            "copied_bytes": 0,
-            "total_bytes": 0,
-            "files_done": 0,
-            "files_total": 0,
-        }
+        copy_tasks.create(task_id,
+            status="running",
+            copied_bytes=0,
+            total_bytes=0,
+            files_done=0,
+            files_total=0,
+        )
 
         result = _copy_files_to_root(
             os.path.join(src_dir, "movie.mkv"), dst_dir, is_host_path=True, task_id=task_id
@@ -198,12 +198,12 @@ class TestCopyFilesToRoot:
         assert result["ok"] is True
         assert result["files_copied"] == 1
 
-        task = _tasks[task_id]
+        task = copy_tasks.get(task_id)
         assert task["files_done"] == 1
         assert task["files_total"] == 1
         assert task["copied_bytes"] == task["total_bytes"]
 
-        del _tasks[task_id]
+        del copy_tasks._tasks[task_id]
 
     def test_cancellation_between_files(self):
         src_dir = os.path.join(self.tmpdir, "src")
@@ -215,20 +215,20 @@ class TestCopyFilesToRoot:
             Path(os.path.join(src_dir, name)).write_text(f"data {name}")
 
         task_id = "test-cancel-001"
-        _tasks[task_id] = {
-            "status": "running",
-            "cancelled": True,
-            "copied_bytes": 0,
-            "total_bytes": 0,
-            "files_done": 0,
-            "files_total": 0,
-        }
+        copy_tasks.create(task_id,
+            status="running",
+            cancelled=True,
+            copied_bytes=0,
+            total_bytes=0,
+            files_done=0,
+            files_total=0,
+        )
 
         result = _copy_files_to_root(src_dir, dst_dir, is_host_path=True, task_id=task_id)
         assert result["ok"] is False
         assert "cancelado" in result["detail"]
 
-        del _tasks[task_id]
+        del copy_tasks._tasks[task_id]
 
     def test_copy_chunked_copies_file_content(self):
         src_dir = os.path.join(self.tmpdir, "src")
@@ -787,9 +787,9 @@ class TestValidatePathContainerMapping:
 
 
 class TestConsumeQueuePostMoveImport:
-    @patch("routes.files.arr_refresh_movie", new_callable=AsyncMock)
-    @patch("routes.files.arr_rescan_movie", new_callable=AsyncMock)
-    @patch("routes.files.arr_manual_import", new_callable=AsyncMock)
+    @patch("import_service.arr_refresh_movie", new_callable=AsyncMock)
+    @patch("import_service.arr_rescan_movie", new_callable=AsyncMock)
+    @patch("import_service.arr_manual_import", new_callable=AsyncMock)
     def test_radarr_post_move_triggers_manual_import_and_rescan_and_refresh(
         self, mock_manual, mock_rescan, mock_refresh, tmp_path
     ):
@@ -824,8 +824,8 @@ class TestConsumeQueuePostMoveImport:
         mock_rescan.assert_called_once()
         mock_refresh.assert_called_once()
 
-    @patch("routes.files.arr_refresh_series", new_callable=AsyncMock)
-    @patch("routes.files.arr_rescan_series", new_callable=AsyncMock)
+    @patch("import_service.arr_refresh_series", new_callable=AsyncMock)
+    @patch("import_service.arr_rescan_series", new_callable=AsyncMock)
     def test_sonarr_post_move_triggers_rescan_and_refresh(
         self, mock_rescan, mock_refresh, tmp_path
     ):

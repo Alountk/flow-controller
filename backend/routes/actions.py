@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter, Depends
 
 from config import ACTIONS, SAFE_MODE
-from copy_engine import _tasks, cleanup_tasks, do_action
+from copy_engine import copy_tasks, cleanup_tasks, do_action
 from models import ActionRequest
 from routes.status import verify_api_key
 
@@ -58,7 +58,7 @@ async def run_action(action: str, req: ActionRequest, _key: str = Depends(verify
 @router.get("/api/tasks/{task_id}")
 async def get_task(task_id: str, _key: str = Depends(verify_api_key)):
     cleanup_tasks()
-    task = _tasks.get(task_id)
+    task = copy_tasks.get(task_id)
     if not task:
         return {"ok": False, "error": "tarea no encontrada"}
     return {"ok": True, **task}
@@ -66,12 +66,4 @@ async def get_task(task_id: str, _key: str = Depends(verify_api_key)):
 
 @router.post("/api/tasks/{task_id}/cancel")
 async def cancel_task(task_id: str, _key: str = Depends(verify_api_key)):
-    task = _tasks.get(task_id)
-    if not task:
-        return {"ok": False, "error": "tarea no encontrada"}
-    if task.get("status") not in ("running", None):
-        return {"ok": False, "error": f"tarea ya en estado: {task['status']}"}
-    task["cancelled"] = True
-    task["detail"] = "cancelación solicitada..."
-    log.info("copy_files: cancelación solicitada para task %s", task_id)
-    return {"ok": True}
+    return copy_tasks.cancel(task_id)
