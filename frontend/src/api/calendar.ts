@@ -82,6 +82,23 @@ export async function fetchCalendarReleases(
   }
 }
 
+/**
+ * Turn a thrown fetch into something the user can act on.
+ *
+ * `TypeError: Failed to fetch` is what the browser reports for offline, DNS and
+ * CORS problems alike — repeating it verbatim tells the user nothing.
+ */
+function describeFetchFailure(err: unknown): string {
+  if (err instanceof DOMException && err.name === 'AbortError') {
+    return 'La petición tardó demasiado y se canceló'
+  }
+  const name = err instanceof Error ? err.name : ''
+  if (name === 'TypeError') {
+    return 'No se pudo contactar con el servidor. Comprueba la conexión y que el backend siga activo'
+  }
+  return err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+}
+
 export async function grabCalendarRelease(
   source: string,
   guid: string,
@@ -89,11 +106,18 @@ export async function grabCalendarRelease(
   movieId: number = 0,
   episodeId: number = 0,
 ): Promise<{ ok: boolean; detail: string }> {
-  const res = await fetch('/api/calendar/grab', {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ source, guid, indexerId, movieId, episodeId }),
-  })
+  // A rejected fetch (offline, aborted, DNS) must surface as a failed result,
+  // not as an unhandled rejection that leaves the modal stuck on "Descargando".
+  let res: Response
+  try {
+    res = await fetch('/api/calendar/grab', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ source, guid, indexerId, movieId, episodeId }),
+    })
+  } catch (err) {
+    return { ok: false, detail: describeFetchFailure(err) }
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>
     const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
@@ -109,11 +133,16 @@ export async function grabCalendarReleaseBatch(
   movieId: number = 0,
   episodeId: number = 0,
 ): Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }> {
-  const res = await fetch('/api/calendar/grab-batch', {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ source, guids, indexerIds, movieId, episodeId }),
-  })
+  let res: Response
+  try {
+    res = await fetch('/api/calendar/grab-batch', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ source, guids, indexerIds, movieId, episodeId }),
+    })
+  } catch (err) {
+    return { ok: false, detail: describeFetchFailure(err), downloaded: [], errors: [] }
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>
     const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
