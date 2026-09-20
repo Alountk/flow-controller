@@ -1,13 +1,5 @@
 import type { ScanMatch } from '../types'
-
-/** Case- and accent-insensitive compare, so "Seu Nome" matches "seu nome". */
-export function normalizeForFilter(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-}
+import { textIncludes } from './text'
 
 /** Fields a filter query is matched against. */
 function searchableFields(match: ScanMatch): string[] {
@@ -21,44 +13,13 @@ function searchableFields(match: ScanMatch): string[] {
  * so filtering here cannot hide matches the user has not loaded yet.
  */
 export function filterScanMatches(matches: ScanMatch[], query: string): ScanMatch[] {
-  const needle = normalizeForFilter(query)
-  if (!needle) return matches
+  if (!query.trim()) return matches
 
   return matches.filter((match) =>
-    searchableFields(match).some((field) => normalizeForFilter(field ?? '').includes(needle))
+    searchableFields(match).some((field) => textIncludes(field, query))
   )
 }
 
-/**
- * Whether every currently visible match is selected.
- *
- * `visible.length === 0` is never "all selected": with nothing on screen the
- * select-all control is hidden and offering to deselect nothing is meaningless.
- */
-export function areAllVisibleSelected(
-  selected: ReadonlySet<string>,
-  visible: ScanMatch[],
-): boolean {
-  return visible.length > 0 && visible.every((match) => selected.has(match.file_path))
-}
+/** Selection key for scan matches: the file path. */
+export const scanMatchKey = (match: ScanMatch): string => match.file_path
 
-/**
- * Compute the next selection when the select-all control is toggled.
- *
- * Only touches visible matches. Acting on filter-hidden rows would move files
- * the user cannot see, which is exactly the bug this guards against.
- */
-export function toggleVisibleSelection(
-  selected: ReadonlySet<string>,
-  visible: ScanMatch[],
-): Set<string> {
-  const next = new Set(selected)
-  const allSelected = areAllVisibleSelected(selected, visible)
-
-  for (const match of visible) {
-    if (allSelected) next.delete(match.file_path)
-    else next.add(match.file_path)
-  }
-
-  return next
-}

@@ -183,6 +183,107 @@
   color: var(--text-secondary);
 }
 
+/* ── Result filters ─────────────────────────────────────────────── */
+.release-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+
+.release-filter-text {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.release-filter-text:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.release-filter-seeders {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.release-filter-seeders input {
+  width: 70px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.release-filter-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.release-filter-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 48px;
+}
+
+.release-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.release-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.release-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.release-chip.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.release-filter-clear {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.release-filter-clear:hover {
+  color: var(--text);
+  border-color: var(--bad);
+}
+
 .calendar-releases-list {
   display: flex;
   flex-direction: column;

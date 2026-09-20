@@ -305,6 +305,7 @@ tab === 'episodes' // OK
 | 8 | CSS Modules o Tailwind (66KB monolítico) | ✅ | Modularizado por componente (`components/*.css` + `styles/global.css`) |
 | 9 | Tests de componentes React (0 actualmente) | ✅ | `frontend/src/__tests__/*.test.tsx` (39 tests) |
 | 19 | **Filtrar los faltantes** (títulos alternativos + filtro de resultados) | ✅ | `clients.py`, `MissingContent.tsx`, `utils/scanResults.ts` |
+| 20 | **Filtros en los resultados de los indexadores** | ✅ | `ReleaseSearchModal.tsx`, `utils/releaseFilters.ts`, `utils/selection.ts` |
 
 ### 🔵 Largas (1-2 semanas)
 
@@ -356,6 +357,36 @@ completo** — checkboxes que bloqueaban el botón de escaneo mientras `routes/w
 
 > **Ojo:** `pyflakes` no detecta funciones ni clases muertas — solo imports y variables locales.
 > Este caso lo demuestra, y por eso el proyecto usa **vulture** además de pyflakes.
+
+### 🌐 #20 — Filtros en los resultados de los indexadores
+
+La búsqueda en indexadores devuelve **todo de una vez**, agrupado por indexador y sin filtro.
+Medido en vivo: **403 releases** para una sola película. Con scroll, eso no es una lista, es
+una aguja en un pajar.
+
+**Hecho ✅** — barra de filtros combinables (AND entre ejes, OR dentro de cada multiselección):
+
+| Filtro | Datos reales medidos |
+| --- | --- |
+| Texto libre (título) | — |
+| Calidad (multiselección) | Bluray-1080p 59 · WEBDL-1080p 56 · WEBDL-720p 45 · SDTV 28 |
+| Idioma (multiselección) | English 223 · Italian+English 31 · Unknown 31 · Spanish 26 |
+| Seeders mínimos | mediana **1**; 35 releases con 0 |
+
+Detalles que importan:
+
+- **Aquí el filtro de idioma sí es posible**, al contrario que en los faltantes: los releases
+  traen `languages` etiquetado. Además **0 releases traen la lista vacía** (siempre hay al menos
+  `Unknown`), así que el filtro nunca oculta nada por falta de datos.
+- Las opciones de calidad e idioma se calculan del conjunto **completo**, no del filtrado, para
+  que no desaparezcan mientras filtras.
+- **"Seleccionar todo" solo afecta a lo visible**, y los grupos de indexador vacíos no se pintan.
+- **No se duplica el filtro de indexador**: el desplegable "Indexador:" del paso inicial ya
+  filtra por indexador.
+
+La regla de "seleccionar todo solo sobre lo visible" vive en **una única implementación**
+compartida (`utils/selection.ts`), usada por el escaneo y por los indexadores: dos copias son
+dos ocasiones de divergir, y la divergencia es silenciosa.
 
 ---
 

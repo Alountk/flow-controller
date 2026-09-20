@@ -6,6 +6,17 @@ import {
   grabCalendarReleaseBatch,
   type Release,
 } from '../api/calendar'
+import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
+import {
+  NO_RELEASE_FILTERS,
+  collectLanguages,
+  collectQualities,
+  filterReleases,
+  hasActiveFilters,
+  releaseKey,
+  toggleInSet,
+  type ReleaseFilters,
+} from '../utils/releaseFilters'
 import './CalendarModal.css'
 
 interface Indexer {
@@ -62,6 +73,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   const [selectedIndexer, setSelectedIndexer] = useState<string>('all')
   const [releases, setReleases] = useState<Release[]>([])
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
+  const [filters, setFilters] = useState<ReleaseFilters>(NO_RELEASE_FILTERS)
   const [elapsed, setElapsed] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -186,11 +198,9 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   }
 
   function toggleAll() {
-    if (selectedGuids.size === releases.length) {
-      setSelectedGuids(new Set())
-    } else {
-      setSelectedGuids(new Set(releases.map(r => r.guid)))
-    }
+    // Only touches what the filter is showing: acting on hidden rows would
+    // download releases the user never looked at.
+    setSelectedGuids((prev) => toggleVisibleSelection(prev, visibleReleases, releaseKey))
   }
 
   async function handleGrabBatch() {
@@ -217,6 +227,13 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   }
 
   const isProcessing = step === 'searching' || step === 'adding' || step === 'grabbing'
+
+  // Options come from the FULL result set, so they do not vanish as you filter.
+  const qualityOptions = collectQualities(releases)
+  const languageOptions = collectLanguages(releases)
+  const visibleReleases = filterReleases(releases, filters)
+  const filtersActive = hasActiveFilters(filters)
+  const allVisibleSelected = areAllVisibleSelected(selectedGuids, visibleReleases, releaseKey)
   const isSearching = step === 'searching'
 
   function formatElapsed(s: number): string {
@@ -352,10 +369,15 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
                 <label className="release-checkbox-all">
                   <input
                     type="checkbox"
-                    checked={selectedGuids.size === releases.length && releases.length > 0}
+                    checked={allVisibleSelected}
                     onChange={toggleAll}
+                    disabled={visibleReleases.length === 0}
                   />
-                  <span>{releases.length} releases encontrados</span>
+                  <span>
+                    {filtersActive
+                      ? `${visibleReleases.length} de ${releases.length} releases`
+                      : `${releases.length} releases encontrados`}
+                  </span>
                 </label>
                 <div className="calendar-releases-actions">
                   {selectedGuids.size > 0 && (
@@ -368,7 +390,87 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
                   </button>
                 </div>
               </div>
-              {Array.from(groupByIndexer(releases).entries()).map(([indexer, items]) => (
+
+              <div className="release-filters">
+                <input
+                  type="text"
+                  className="release-filter-text"
+                  placeholder="Filtrar por título..."
+                  value={filters.text}
+                  onChange={(e) => setFilters((f) => ({ ...f, text: e.target.value }))}
+                />
+
+                <label className="release-filter-seeders">
+                  Seeders mín.
+                  <input
+                    type="number"
+                    min={0}
+                    value={filters.minSeeders || ''}
+                    placeholder="0"
+                    onChange={(e) =>
+                      setFilters((f) => ({
+                        ...f,
+                        minSeeders: Math.max(0, Number(e.target.value) || 0),
+                      }))
+                    }
+                  />
+                </label>
+
+                {qualityOptions.length > 0 && (
+                  <div className="release-filter-group">
+                    <span className="release-filter-label">Calidad</span>
+                    <div className="release-filter-chips">
+                      {qualityOptions.map((quality) => (
+                        <button
+                          key={quality}
+                          type="button"
+                          className={`release-chip ${filters.qualities.has(quality) ? 'active' : ''}`}
+                          onClick={() =>
+                            setFilters((f) => ({ ...f, qualities: toggleInSet(f.qualities, quality) }))
+                          }
+                        >
+                          {quality}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {languageOptions.length > 0 && (
+                  <div className="release-filter-group">
+                    <span className="release-filter-label">Idioma</span>
+                    <div className="release-filter-chips">
+                      {languageOptions.map((language) => (
+                        <button
+                          key={language}
+                          type="button"
+                          className={`release-chip ${filters.languages.has(language) ? 'active' : ''}`}
+                          onClick={() =>
+                            setFilters((f) => ({ ...f, languages: toggleInSet(f.languages, language) }))
+                          }
+                        >
+                          {language}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {filtersActive && (
+                  <button
+                    type="button"
+                    className="release-filter-clear"
+                    onClick={() => setFilters(NO_RELEASE_FILTERS)}
+                  >
+                    ✕ Limpiar filtros
+                  </button>
+                )}
+              </div>
+
+              {visibleReleases.length === 0 ? (
+                <div className="wanted-empty">Ningún release coincide con los filtros</div>
+              ) : (
+                Array.from(groupByIndexer(visibleReleases).entries()).map(([indexer, items]) => (
                 <div key={indexer} className="calendar-indexer-group">
                   <div className="calendar-indexer-name">🌐 {indexer}</div>
                   <div className="calendar-releases-list">
@@ -401,7 +503,8 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
                     ))}
                   </div>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           )}
 
