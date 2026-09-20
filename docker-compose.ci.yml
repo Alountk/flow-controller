@@ -1,6 +1,7 @@
 # CI override — no host mounts, no network_mode
 services:
   flow-controller:
+    image: ghcr.io/alountk/flow-controller:latest
     network_mode: null
     ports:
       - "8000:8000"
