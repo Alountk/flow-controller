@@ -61,8 +61,8 @@ docker compose up -d --build
 **NUNCA hacer push sin verificar que el sistema arranca.** Pasos obligatorios:
 
 ```bash
-# 1. Tests backend
-cd backend && python -m pytest tests.py tests_mixer.py tests_mixer_api.py -q
+# 1. Tests backend (incluye guard estático de nombres indefinidos)
+cd backend && pip install -r requirements-dev.txt && python -m pytest -q
 
 # 2. Build frontend
 cd frontend && npm run build
@@ -77,12 +77,17 @@ curl http://localhost:8000/api/status
 git push origin main
 ```
 
+**Nota:** `python -m pytest` descubre automáticamente todos los módulos `tests*.py`
+(config en `backend/pytest.ini`), así que un archivo de tests nuevo no puede quedar
+fuera de CI por olvido. Los tests de rutas (`tests_routes.py`) mockean únicamente
+el transporte HTTP, de modo que el cuerpo real de cada endpoint se ejecuta.
+
 ### CI Pipeline (GitHub Actions)
 
 El workflow `.github/workflows/ci.yml` ejecuta automáticamente:
 
-1. **Backend tests** — pytest con todos los suites
-2. **Frontend build** — TypeScript + Vite
+1. **Backend tests** — pytest con todos los suites (descubrimiento automático) + guard estático
+2. **Frontend tests + build** — Vitest + TypeScript + Vite
 3. **Docker verify** — Build imagen, arrancar contenedor, health check en `/api/status` (puerto 8000)
 4. **Docker push** — Solo si todo pasa y es push a `main`
 
