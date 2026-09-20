@@ -10,11 +10,8 @@ import {
 } from '../api/wanted'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
-import {
-  areAllVisibleSelected,
-  filterScanMatches,
-  toggleVisibleSelection,
-} from '../utils/scanResults'
+import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
+import { filterScanMatches, scanMatchKey } from '../utils/scanResults'
 import { ReleaseSearchModal, type ReleaseSearchItem } from './ReleaseSearchModal'
 import './MissingContent.css'
 
@@ -134,12 +131,12 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
   // in one response, so unlike the paginated listing this cannot hide matches.
   const visibleMatches = filterScanMatches(allMatches, resultFilter)
   const visibleCount = visibleMatches.length
-  const allVisibleSelected = areAllVisibleSelected(selectedFiles, visibleMatches)
+  const allVisibleSelected = areAllVisibleSelected(selectedFiles, visibleMatches, scanMatchKey)
 
   function toggleAll() {
     // Only ever touches what the filter is showing: acting on hidden rows would
     // move files the user cannot see.
-    setSelectedFiles((prev) => toggleVisibleSelection(prev, visibleMatches))
+    setSelectedFiles((prev) => toggleVisibleSelection(prev, visibleMatches, scanMatchKey))
   }
 
   const selectedMatches = allMatches.filter((m) => selectedFiles.has(m.file_path))
