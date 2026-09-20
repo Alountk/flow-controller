@@ -235,7 +235,15 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                 errors.append({"guid": guid, "detail": str(exc)})
 
     ok = len(errors) == 0
-    detail = f"{len(results)} descargados" if ok else f"{len(results)} OK, {len(errors)} errores"
+    if ok:
+        detail = f"{len(results)} descargados"
+    else:
+        # Surface the actual reason, not just a count. "0 OK, 1 errores" tells the
+        # user nothing about what went wrong.
+        first = errors[0].get("detail", "Error desconocido") if errors else "Error desconocido"
+        detail = f"{len(results)} OK, {len(errors)} errores: {first}"
+        if len(errors) > 1:
+            detail += f" (+{len(errors) - 1} más)"
     return {"ok": ok, "detail": detail, "downloaded": results, "errors": errors}
 
 

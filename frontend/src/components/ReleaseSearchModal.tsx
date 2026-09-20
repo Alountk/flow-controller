@@ -74,6 +74,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   const [releases, setReleases] = useState<Release[]>([])
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
   const [filters, setFilters] = useState<ReleaseFilters>(NO_RELEASE_FILTERS)
+  const [grabErrors, setGrabErrors] = useState<{ guid: string; detail: string }[]>([])
   const [elapsed, setElapsed] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -114,6 +115,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
 
   async function handleSearch() {
     setStep('searching')
+    setGrabErrors([])
     const idxName = selectedIndexer !== 'all' ? (indexers.find(i => String(i.id) === selectedIndexer)?.name || '') : ''
     setMessage(`Buscando releases${idxName ? ` en ${idxName}` : ' en todos los indexadores'}...`)
     try {
@@ -167,6 +169,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
 
   async function handleGrab(guid: string) {
     setStep('grabbing')
+    setGrabErrors([])
     setMessage('Descargando...')
     const release = releases.find(r => r.guid === guid)
     const result = await grabCalendarRelease(
@@ -206,6 +209,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   async function handleGrabBatch() {
     if (selectedGuids.size === 0) return
     setStep('grabbing')
+    setGrabErrors([])
     setMessage(`Descargando ${selectedGuids.size} releases...`)
     const guids = Array.from(selectedGuids)
     const indexerIds = guids.map(g => releases.find(r => r.guid === g)?.indexerId || 0)
@@ -216,6 +220,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
       item.type === 'movie' ? item.id : 0,
       item.type === 'episode' ? item.id : 0,
     )
+    setGrabErrors(result.errors ?? [])
     if (result.ok) {
       setStep('done')
       setMessage(result.detail)
@@ -304,7 +309,21 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
             <div className={`calendar-modal-status ${
               step === 'error' ? 'status-error' : step === 'done' ? 'status-ok' : ''
             }`}>
-              {message}
+              <div>{message}</div>
+              {grabErrors.length > 0 && (
+                <ul className="calendar-error-list">
+                  {grabErrors.slice(0, 5).map((err) => (
+                    <li key={err.guid}>
+                      <span className="calendar-error-detail">{err.detail}</span>
+                    </li>
+                  ))}
+                  {grabErrors.length > 5 && (
+                    <li className="calendar-error-more">
+                      …y {grabErrors.length - 5} más
+                    </li>
+                  )}
+                </ul>
+              )}
             </div>
           )}
 
@@ -512,6 +531,26 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
           {step === 'done' && (
             <div className="calendar-modal-actions">
               <button className="action-btn search-all" onClick={onClose}>
+                Cerrar
+              </button>
+            </div>
+          )}
+
+          {/* Step: Error — without this the user is stuck after a failed grab */}
+          {step === 'error' && (
+            <div className="calendar-modal-actions">
+              {releases.length > 0 && (
+                <button
+                  className="action-btn"
+                  onClick={() => {
+                    setMessage('')
+                    setStep('results')
+                  }}
+                >
+                  ← Volver a los resultados
+                </button>
+              )}
+              <button className="action-btn" onClick={onClose}>
                 Cerrar
               </button>
             </div>

@@ -309,3 +309,73 @@ def test_wanted_unknown_source_returns_no_services(offline_network):
 
     assert resp.status_code == 200
     assert resp.json()["wanted"] == {}
+
+
+# ── POST /api/calendar/grab-batch — error reporting ───────────────────────────
+
+
+class TestGrabBatchErrorReporting:
+    """The batch detail must carry the reason, not just a count.
+
+    It used to return "0 OK, 1 errores" while the cause sat in `errors[]`, so a
+    failed grab was undiagnosable from the UI.
+    """
+
+    def _post(self, results):
+        from unittest.mock import AsyncMock
+
+        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
+            return results[guid]
+
+        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
+            return client.post(
+                "/api/calendar/grab-batch",
+                json={"source": "radarr", "guids": list(results), "indexerIds": [1] * len(results), "movieId": 1},
+            )
+
+    def test_success_detail_reports_the_count(self):
+        resp = self._post({"g1": {"ok": True, "detail": "ok"}})
+
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["detail"] == "1 descargados"
+        assert body["errors"] == []
+
+    def test_failure_detail_includes_the_reason(self):
+        reason = "Couldn't find requested release in cache, try searching again"
+        resp = self._post({"g1": {"ok": False, "detail": reason}})
+
+        body = resp.json()
+        assert body["ok"] is False
+        assert reason in body["detail"], "the reason must reach the user, not only errors[]"
+        assert body["errors"] == [{"guid": "g1", "detail": reason}]
+
+    def test_partial_failure_reports_both_counts_and_the_reason(self):
+        resp = self._post({
+            "g1": {"ok": True, "detail": "ok"},
+            "g2": {"ok": False, "detail": "primer fallo"},
+        })
+
+        body = resp.json()
+        assert body["ok"] is False
+        assert "1 OK, 1 errores" in body["detail"]
+        assert "primer fallo" in body["detail"]
+
+    def test_several_failures_summarise_the_rest(self):
+        resp = self._post({
+            "g1": {"ok": False, "detail": "a"},
+            "g2": {"ok": False, "detail": "b"},
+            "g3": {"ok": False, "detail": "c"},
+        })
+
+        body = resp.json()
+        assert "3 errores" in body["detail"]
+        assert "(+2 más)" in body["detail"]
+
+    def test_unknown_service_is_reported(self):
+        resp = client.post(
+            "/api/calendar/grab-batch",
+            json={"source": "nope", "guids": ["g1"], "indexerIds": [1]},
+        )
+
+        assert resp.json()["ok"] is False
