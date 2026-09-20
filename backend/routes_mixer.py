@@ -44,32 +44,10 @@ class ProbeRequest(BaseModel):
     path_b: str
 
 
-class ProbeResponse(BaseModel):
-    file_a: dict
-    file_b: dict
-    compatibility: dict
-
-
 class MuxRequest(BaseModel):
     video_source: dict
     audio_sources: list[dict]
     output_path: str = ""
-
-
-class MuxResponse(BaseModel):
-    ok: bool
-    task_id: str | None = None
-    detail: str = ""
-
-
-class TaskStatusResponse(BaseModel):
-    ok: bool
-    task_id: str | None = None
-    status: str = ""
-    progress: float = 0.0
-    detail: str = ""
-    output_path: str | None = None
-    created_at: float | None = None
 
 
 # ── Path validation ──────────────────────────────────────────────────────────
@@ -200,7 +178,7 @@ async def mixer_list_tasks(_key: str = Depends(verify_api_key)):
     cleanup_tasks()
 
     tasks = []
-    for task_id, task in mux_tasks._tasks.items():
+    for task_id, task in mux_tasks.all_tasks().items():
         tasks.append({
             "task_id": task_id,
             "status": task.get("status", "unknown"),

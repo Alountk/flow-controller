@@ -81,7 +81,7 @@ def hash_matches(download_id: str, amu_hashes: set[str]) -> str | None:
     return None
 
 
-def derive_stage(grabbed: dict, torrent: dict | None, queue_item: dict | None) -> str:
+def derive_stage(torrent: dict | None, queue_item: dict | None) -> str:
     if queue_item:
         state = queue_item.get("trackedDownloadState")
         status = queue_item.get("trackedDownloadStatus")
@@ -173,7 +173,7 @@ async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
                     ),
                     "download_id": download_id,
                     "matched_hash": matched,
-                    "stage": derive_stage(record, torrent, queue_item),
+                    "stage": derive_stage(torrent, queue_item),
                     "torrent": {
                         "state": torrent.get("state"),
                         "progress": round(torrent.get("progress", 0) * 100, 1),
