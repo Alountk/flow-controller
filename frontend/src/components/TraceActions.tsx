@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../types'
 import { runAction, type ActionOptions } from '../api/actions'
 import { authHeaders } from '../api/auth'
+import './TraceActions.css'
 
 interface Props {
   trace: Trace

@@ -16,6 +16,7 @@ import {
   resumeTask,
 } from '../api/mixer'
 import { browsePath, fetchRoots } from '../api/files'
+import './MediaMixer.css'
 
 /* ── Helpers ───────────────────────────────────────────────────────────────── */
 

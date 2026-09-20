@@ -1,0 +1,329 @@
+/* Calendar Modal */
+
+.calendar-modal-details {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.calendar-modal-poster {
+  width: 80px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.calendar-modal-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calendar-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.calendar-modal-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.calendar-modal-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.calendar-modal-badge {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.calendar-modal-status {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.calendar-modal-status.status-error {
+  color: var(--bad);
+}
+
+.calendar-modal-status.status-ok {
+  color: var(--ok);
+}
+
+.calendar-modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.calendar-modal-actions .action-btn {
+  flex: 1;
+}
+
+.scan-modal-wide {
+  max-width: 700px;
+}
+
+.calendar-modal-loading {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+}
+
+.calendar-indexer-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.calendar-indexer-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.calendar-indexer-dropdown {
+  flex: 1;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.calendar-indexer-dropdown:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.calendar-indexer-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.calendar-modal-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 16px;
+}
+
+.progress-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.progress-text {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.progress-elapsed {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 400px;
+}
+
+.progress-bar-container {
+  width: 100%;
+  max-width: 400px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+
+.calendar-releases {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calendar-releases-header {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.calendar-releases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.calendar-release {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.calendar-release:hover {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.calendar-release.selected {
+  border-color: var(--ok);
+  background: var(--accent-bg);
+}
+
+.release-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.release-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.release-quality {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.release-seeders {
+  color: var(--ok);
+}
+
+.calendar-indexers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.calendar-indexers-label {
+  color: var(--text-secondary);
+}
+
+.calendar-indexer-badge {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.calendar-modal-info-text {
+  color: var(--ok);
+  font-size: 13px;
+}
+
+.calendar-indexer-group {
+  margin-bottom: 12px;
+}
+
+.calendar-indexer-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.calendar-releases-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.calendar-releases-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.release-checkbox-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.release-checkbox-all input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.release-checkbox {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.release-checkbox input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.release-content {
+  flex: 1;
+  cursor: pointer;
+}
+
+.grab-selected {
+  background: var(--accent) !important;
+  color: white !important;
+  font-weight: 500;
+}
+

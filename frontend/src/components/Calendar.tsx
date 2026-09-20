@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { CalendarItem, CalendarResponse } from '../types'
 import { ReleaseSearchModal } from './ReleaseSearchModal'
+import './Calendar.css'
 
 async function fetchCalendar(start: string, end: string): Promise<CalendarResponse> {
   const res = await fetch(`/api/calendar?start=${start}&end=${end}`)

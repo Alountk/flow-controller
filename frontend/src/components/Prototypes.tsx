@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PrototypeFile } from '../types'
+import './Prototypes.css'
 
 export function Prototypes() {
   const [prototypes, setPrototypes] = useState<PrototypeFile[]>([])

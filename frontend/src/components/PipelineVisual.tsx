@@ -1,6 +1,7 @@
 import type { ServiceStatus } from '../types'
 import { ServiceNode } from './ServiceNode'
 import { Connector } from './Connector'
+import './PipelineVisual.css'
 
 interface Props {
   services: ServiceStatus[]

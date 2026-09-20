@@ -9,6 +9,7 @@ import {
   deleteItem,
   queueAdd,
 } from '../api/files'
+import './FileManager.css'
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '—'

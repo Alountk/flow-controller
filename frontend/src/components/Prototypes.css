@@ -1,0 +1,79 @@
+/* ---- Prototypes ---- */
+.proto {
+  margin-top: 8px;
+}
+
+.proto-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.proto-sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.proto-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+
+.proto-tab {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.proto-tab:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.proto-tab.active {
+  border-color: var(--accent);
+  background: rgba(74, 158, 255, 0.12);
+  color: var(--text);
+}
+
+.proto-frame-wrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-elev);
+}
+
+.proto-frame {
+  width: 100%;
+  height: 70vh;
+  border: none;
+  display: block;
+}
+
+.proto-loading,
+.proto-empty {
+  margin-top: 48px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 32px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.proto-empty code {
+  background: var(--bg-elev-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+

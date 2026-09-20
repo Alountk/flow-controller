@@ -1,0 +1,160 @@
+:root {
+  --bg: #111113;
+  --bg-elev: #18181b;
+  --bg-elev-2: #1c1c21;
+  --border: #27272a;
+  --text: #fafafa;
+  --text-dim: #71717a;
+  --ok: #22c55e;
+  --ok-dim: #15803d;
+  --bad: #ef4444;
+  --bad-dim: #991b1b;
+  --warn: #eab308;
+  --accent: #6366f1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ---- Layout ---- */
+.layout {
+  display: flex;
+  height: 100vh;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin-left: 240px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.content {
+  flex: 1;
+  padding: 28px 32px 48px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.content-and-queue {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content-header {
+  margin-bottom: 28px;
+}
+
+.content-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.content-header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* ── Mobile responsive ─────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .topbar {
+    display: flex;
+  }
+
+  .sidebar.open {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 240px;
+    height: 100vh;
+    z-index: 1000;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+  }
+
+  .trace-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .trace-table {
+    min-width: 700px;
+  }
+
+  .trace-filters {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+
+  .trace-search {
+    min-width: 180px;
+    width: 100%;
+  }
+
+  .trace-row-main {
+    font-size: 12px;
+  }
+
+  .summary {
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .summary-box {
+    flex: 1 1 40%;
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .summary-box strong {
+    font-size: 18px;
+  }
+
+  .detail-panel {
+    padding: 12px;
+    font-size: 12px;
+  }
+
+  .action-bar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .action-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+}
+

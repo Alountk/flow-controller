@@ -11,6 +11,7 @@ import {
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
 import { ReleaseSearchModal, type ReleaseSearchItem } from './ReleaseSearchModal'
+import './MissingContent.css'
 
 const PAGE_SIZE = 50
 
