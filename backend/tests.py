@@ -318,6 +318,8 @@ class TestCopyWithTargetName:
 
 from fastapi.testclient import TestClient
 from app import app
+from state import file_queue
+import routes.files
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -417,7 +419,7 @@ from unittest.mock import patch, AsyncMock
 
 
 class TestCalendarSearch:
-    @patch("app.arr_search_movie", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_search_movie", new_callable=AsyncMock)
     def test_movie_search_calls_arr(self, mock_search):
         mock_search.return_value = {"ok": True, "detail": "Command queued"}
         resp = client.post(
@@ -429,7 +431,7 @@ class TestCalendarSearch:
         assert data["ok"] is True
         mock_search.assert_called_once()
 
-    @patch("app.arr_search_episode", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_search_episode", new_callable=AsyncMock)
     def test_episode_search_calls_arr(self, mock_search):
         mock_search.return_value = {"ok": True, "detail": "Command queued"}
         resp = client.post(
@@ -463,11 +465,11 @@ class TestCalendarSearch:
 
 
 class TestCalendarAdd:
-    @patch("app.arr_search_movie", new_callable=AsyncMock)
-    @patch("app.arr_add_movie", new_callable=AsyncMock)
-    @patch("app.arr_movie_exists", new_callable=AsyncMock)
-    @patch("app.arr_movie_lookup", new_callable=AsyncMock)
-    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_search_movie", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_add_movie", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_movie_exists", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_movie_uses_real_root_folder(self, mock_folders, mock_lookup, mock_exists, mock_add, mock_search):
         mock_folders.return_value = ["/mnt/storage/Movies"]
         mock_lookup.return_value = {"tmdbId": 550, "title": "Test Movie", "year": 2024, "qualityProfileId": 1}
@@ -491,8 +493,8 @@ class TestCalendarAdd:
         assert payload["title"] == "Test Movie"
         assert payload["tmdbId"] == 550
 
-    @patch("app.arr_movie_lookup", new_callable=AsyncMock)
-    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_movie_without_tmdb_returns_error(self, mock_folders, mock_lookup):
         mock_folders.return_value = ["/movies"]
         mock_lookup.return_value = {}  # Lookup failed
@@ -506,10 +508,10 @@ class TestCalendarAdd:
         assert data["ok"] is False
         assert "No se encontró" in data["detail"]
 
-    @patch("app.arr_add_series", new_callable=AsyncMock)
-    @patch("app.arr_series_exists", new_callable=AsyncMock)
-    @patch("app.arr_series_lookup", new_callable=AsyncMock)
-    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_add_series", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_series_exists", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_series_lookup", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_series_uses_real_root_folder(self, mock_folders, mock_lookup, mock_exists, mock_add):
         mock_folders.return_value = ["/mnt/storage-6tb/Series"]
         mock_lookup.return_value = {"tvdbId": 12345, "title": "Test Show", "year": 2023, "seasonFolder": True, "qualityProfileId": 1}
@@ -528,8 +530,8 @@ class TestCalendarAdd:
         assert payload["rootFolderPath"] == "/mnt/storage-6tb/Series"
         assert payload["tvdbId"] == 12345
 
-    @patch("app.arr_series_lookup", new_callable=AsyncMock)
-    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_series_lookup", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_series_without_tvdb_returns_error(self, mock_folders, mock_lookup):
         mock_folders.return_value = ["/series"]
         mock_lookup.return_value = {}  # Lookup failed
@@ -543,10 +545,10 @@ class TestCalendarAdd:
         assert data["ok"] is False
         assert "No se encontró" in data["detail"]
 
-    @patch("app.arr_search_movie", new_callable=AsyncMock)
-    @patch("app.arr_movie_exists", new_callable=AsyncMock)
-    @patch("app.arr_movie_lookup", new_callable=AsyncMock)
-    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_search_movie", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_movie_exists", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_movie_already_exists_searches_directly(self, mock_folders, mock_lookup, mock_exists, mock_search):
         mock_folders.return_value = ["/movies"]
         mock_lookup.return_value = {"tmdbId": 550, "title": "Fight Club", "year": 1999, "qualityProfileId": 1}
@@ -564,9 +566,9 @@ class TestCalendarAdd:
         assert "ya está" in data["detail"]
         mock_search.assert_called_once()
 
-    @patch("app.arr_series_exists", new_callable=AsyncMock)
-    @patch("app.arr_series_lookup", new_callable=AsyncMock)
-    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_series_exists", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_series_lookup", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_series_already_exists_returns_info(self, mock_folders, mock_lookup, mock_exists):
         mock_folders.return_value = ["/series"]
         mock_lookup.return_value = {"tvdbId": 12345, "title": "Breaking Bad", "year": 2008, "seasonFolder": True, "qualityProfileId": 1}
@@ -582,7 +584,7 @@ class TestCalendarAdd:
         assert data["id"] == 55
         assert "ya está" in data["detail"]
 
-    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_without_root_folders_returns_error(self, mock_folders):
         mock_folders.return_value = []
 
@@ -595,11 +597,11 @@ class TestCalendarAdd:
         assert data["ok"] is False
         assert "carpetas raíz" in data["detail"]
 
-    @patch("app.arr_search_movie", new_callable=AsyncMock)
-    @patch("app.arr_add_movie", new_callable=AsyncMock)
-    @patch("app.arr_movie_exists", new_callable=AsyncMock)
-    @patch("app.arr_movie_lookup", new_callable=AsyncMock)
-    @patch("app.arr_root_folders", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_search_movie", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_add_movie", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_movie_exists", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_movie_radarr_error_propagates(self, mock_folders, mock_lookup, mock_exists, mock_add, mock_search):
         mock_folders.return_value = ["/movies"]
         mock_lookup.return_value = {"tmdbId": 550, "title": "Fail Movie", "year": 2024, "qualityProfileId": 1}
@@ -618,7 +620,7 @@ class TestCalendarAdd:
 
     def test_add_unknown_type_returns_error(self):
         # Root folders are fetched before type check, so mock it
-        with patch("app.arr_root_folders", new_callable=AsyncMock, return_value=["/movies"]):
+        with patch("routes.calendar.arr_root_folders", new_callable=AsyncMock, return_value=["/movies"]):
             resp = client.post(
                 "/api/calendar/add",
                 json={"source": "radarr", "type": "season", "title": "X"},
@@ -630,7 +632,7 @@ class TestCalendarAdd:
 
 
 class TestCalendarReleases:
-    @patch("app.arr_fetch_releases", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_fetch_releases", new_callable=AsyncMock)
     def test_movie_releases(self, mock_fetch):
         mock_fetch.return_value = {
             "releases": [{"guid": "g1", "title": "Rel1", "quality": "1080p", "size": 1_000_000_000, "indexer": "Torznab", "seeders": 10, "leechers": 2, "languages": ["English"]}],
@@ -645,7 +647,7 @@ class TestCalendarReleases:
         assert len(data["releases"]) == 1
         assert data["releases"][0]["guid"] == "g1"
 
-    @patch("app.arr_fetch_releases", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_fetch_releases", new_callable=AsyncMock)
     def test_episode_releases(self, mock_fetch):
         mock_fetch.return_value = {"releases": [], "detail": "0 releases"}
         resp = client.post(
@@ -668,7 +670,7 @@ class TestCalendarReleases:
 
 
 class TestCalendarGrab:
-    @patch("app.arr_grab_release", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_grab_release", new_callable=AsyncMock)
     def test_grab_ok(self, mock_grab):
         mock_grab.return_value = {"ok": True, "detail": "Release encolado"}
         resp = client.post(
@@ -680,7 +682,7 @@ class TestCalendarGrab:
         assert data["ok"] is True
         mock_grab.assert_called_once()
 
-    @patch("app.arr_grab_release", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_grab_release", new_callable=AsyncMock)
     def test_grab_error(self, mock_grab):
         mock_grab.return_value = {"ok": False, "detail": "HTTP 404: not found"}
         resp = client.post(
@@ -693,7 +695,7 @@ class TestCalendarGrab:
 
 
 class TestCalendarIndexers:
-    @patch("app.arr_indexers", new_callable=AsyncMock)
+    @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
     def test_indexers_returned(self, mock_idx):
         mock_idx.return_value = [
             {"id": 1, "name": "Torznab", "implementation": "Torznab", "enableSearch": True},
@@ -751,7 +753,7 @@ class TestQueueAddSeries:
 
 
 class TestPaginatedWantedEndpoints:
-    @patch("app.fetch_all_movies_detailed", new_callable=AsyncMock)
+    @patch("routes.wanted.fetch_all_movies_detailed", new_callable=AsyncMock)
     def test_all_movies_pagination_params(self, mock_fetch):
         mock_fetch.return_value = {"items": [{"id": 1, "title": "M1"}], "total": 100, "page": 2, "page_size": 10}
         resp = client.get("/api/wanted/all?page=2&page_size=10")
@@ -761,7 +763,7 @@ class TestPaginatedWantedEndpoints:
         assert data["page"] == 2
         assert data["page_size"] == 10
 
-    @patch("app.fetch_all_series_detailed", new_callable=AsyncMock)
+    @patch("routes.wanted.fetch_all_series_detailed", new_callable=AsyncMock)
     def test_all_series_pagination_params(self, mock_fetch):
         mock_fetch.return_value = {"items": [{"id": 1, "title": "S1"}], "total": 50, "page": 1, "page_size": 25}
         resp = client.get("/api/wanted/series/all?page=1&page_size=25")
@@ -774,20 +776,20 @@ class TestPaginatedWantedEndpoints:
 
 class TestValidatePathContainerMapping:
     def test_validate_path_converts_data_to_mnt_storage(self):
-        from app import _validate_path
+        from routes.files import _validate_path
         path = _validate_path("/data/shared-media/movies/Test (2024)")
         assert path == "/mnt/storage/shared-media/movies/Test (2024)"
 
     def test_validate_path_converts_data_6tb_to_mnt_storage_6tb(self):
-        from app import _validate_path
+        from routes.files import _validate_path
         path = _validate_path("/data-6tb/shared-media/series/Test Show")
         assert path == "/mnt/storage-6tb/shared-media/series/Test Show"
 
 
 class TestConsumeQueuePostMoveImport:
-    @patch("app.arr_refresh_movie", new_callable=AsyncMock)
-    @patch("app.arr_rescan_movie", new_callable=AsyncMock)
-    @patch("app.arr_manual_import", new_callable=AsyncMock)
+    @patch("routes.files.arr_refresh_movie", new_callable=AsyncMock)
+    @patch("routes.files.arr_rescan_movie", new_callable=AsyncMock)
+    @patch("routes.files.arr_manual_import", new_callable=AsyncMock)
     def test_radarr_post_move_triggers_manual_import_and_rescan_and_refresh(
         self, mock_manual, mock_rescan, mock_refresh, tmp_path
     ):
@@ -813,8 +815,8 @@ class TestConsumeQueuePostMoveImport:
             "movie_id": 42,
             "series_id": None,
         }
-        app._file_queue.append(op)
-        asyncio.run(app._consume_queue())
+        file_queue.append(op)
+        asyncio.run(routes.files._consume_queue())
 
         assert op["status"] == "done"
         assert op["import_status"] == "imported"
@@ -822,8 +824,8 @@ class TestConsumeQueuePostMoveImport:
         mock_rescan.assert_called_once()
         mock_refresh.assert_called_once()
 
-    @patch("app.arr_refresh_series", new_callable=AsyncMock)
-    @patch("app.arr_rescan_series", new_callable=AsyncMock)
+    @patch("routes.files.arr_refresh_series", new_callable=AsyncMock)
+    @patch("routes.files.arr_rescan_series", new_callable=AsyncMock)
     def test_sonarr_post_move_triggers_rescan_and_refresh(
         self, mock_rescan, mock_refresh, tmp_path
     ):
@@ -848,8 +850,8 @@ class TestConsumeQueuePostMoveImport:
             "movie_id": None,
             "series_id": 88,
         }
-        app._file_queue.append(op)
-        asyncio.run(app._consume_queue())
+        file_queue.append(op)
+        asyncio.run(routes.files._consume_queue())
 
         assert op["status"] == "done"
         assert op["import_status"] == "imported"

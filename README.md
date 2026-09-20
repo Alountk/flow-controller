@@ -285,7 +285,7 @@ tab === 'episodes' // OK
 
 | # | Mejora | Estado | Archivos |
 |---|--------|--------|----------|
-| 5 | Split `app.py` en módulos de rutas | 🔧 **EN PROCESO** | `app.py` → `routes/*.py` |
+| 5 | Split `app.py` en módulos de rutas | ✅ | `app.py` → `routes/*.py` |
 | 6 | Unificar TaskManager (3 sistemas idénticos) | ⬜ | Nuevo `task_manager.py` |
 | 7 | Extraer post-move import a servicio compartido | ⬜ | Nuevo `import_service.py` |
 | 8 | CSS Modules o Tailwind (66KB monolítico) | ⬜ | Frontend |

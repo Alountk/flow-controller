@@ -20,7 +20,9 @@ COPY backend/traces.py .
 COPY backend/copy_engine.py .
 COPY backend/media_mixer.py .
 COPY backend/routes_mixer.py .
-COPY backend/tests.py .
+COPY backend/models.py .
+COPY backend/state.py .
+COPY backend/routes/ /app/routes/
 COPY --from=frontend /frontend/dist /frontend/dist
 COPY prototypes/ /app/prototypes/
 ENV PORT=8000
