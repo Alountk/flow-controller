@@ -18,6 +18,8 @@ COPY backend/settings.py .
 COPY backend/clients.py .
 COPY backend/traces.py .
 COPY backend/copy_engine.py .
+COPY backend/media_mixer.py .
+COPY backend/routes_mixer.py .
 COPY backend/tests.py .
 COPY --from=frontend /frontend/dist /frontend/dist
 COPY prototypes/ /app/prototypes/
