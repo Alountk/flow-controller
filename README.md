@@ -270,6 +270,48 @@ tab === 'episodes' // OK
 
 **Solución:** Agregar `COPY backend/settings.py .` al Dockerfile. Considerar cambiar a `COPY backend/ .` para evitar este problema en el futuro.
 
+## Backlog de mejoras
+
+### ⚡ Cortas (1-2 horas)
+
+| # | Mejora | Estado | Archivos |
+|---|--------|--------|----------|
+| 1 | Eliminar dead code (`clients.py:868` except duplicado) | ⬜ | `backend/clients.py` |
+| 2 | Health check en Dockerfile | ✅ | `Dockerfile` |
+| 3 | Límites de recursos (RAM/CPU) en docker-compose | ⬜ | `docker-compose.yml` |
+| 4 | Fix API key expuesta en `/api/config` | ⬜ | `app.py` + frontend |
+
+### 🟡 Medianas (1-3 días)
+
+| # | Mejora | Estado | Archivos |
+|---|--------|--------|----------|
+| 5 | Split `app.py` en módulos de rutas | 🔧 **EN PROCESO** | `app.py` → `routes/*.py` |
+| 6 | Unificar TaskManager (3 sistemas idénticos) | ⬜ | Nuevo `task_manager.py` |
+| 7 | Extraer post-move import a servicio compartido | ⬜ | Nuevo `import_service.py` |
+| 8 | CSS Modules o Tailwind (66KB monolítico) | ⬜ | Frontend |
+| 9 | Tests de componentes React (0 actualmente) | ⬜ | `frontend/src/**/*.test.tsx` |
+
+### 🔵 Largas (1-2 semanas)
+
+| # | Mejora | Estado | Archivos |
+|---|--------|--------|----------|
+| 10 | Diseño responsive (móvil/tablet) | ⬜ | Frontend |
+| 11 | Dark mode | ⬜ | Frontend |
+| 12 | E2E tests con Playwright | ⬜ | Nuevo `e2e/` |
+| 13 | Rate limiting middleware | ⬜ | Middleware FastAPI |
+| 14 | Request ID tracking para debugging | ⬜ | Middleware FastAPI |
+
+### 🟣 Superfluas (2-4 semanas)
+
+| # | Mejora | Estado | Archivos |
+|---|--------|--------|----------|
+| 15 | Dependency injection con FastAPI `Depends()` | ⬜ | Backend |
+| 16 | Documentación OpenAPI formal | ⬜ | FastAPI auto-genera |
+| 17 | UI para operaciones por lotes | ⬜ | Frontend |
+| 18 | WebSocket para progreso en tiempo real | ⬜ | Backend + Frontend |
+
+---
+
 ## Licencia
 
 MIT
