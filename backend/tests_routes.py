@@ -208,7 +208,10 @@ RADARR_PAYLOAD = {
             "year": 2020,
             "overview": "A missing film",
             "hasFile": False,
-            "altTitles": [{"title": "Alt Movie"}],
+            # Field name as Radarr actually sends it. The previous fixture used
+            # "altTitles", the same wrong name the code read, so the mock agreed
+            # with the bug and the test stayed green.
+            "alternateTitles": [{"title": "Alt Movie"}],
         }
     ],
     "totalRecords": 1,

@@ -108,6 +108,17 @@ funcionales por tarea, sin exigir RED-first.
     `matched_title: Todo a la vez en todas partes`, score 0.85
 - Barrido de regresión: 12 endpoints GET en HTTP 200.
 
+## Por qué el bug sobrevivió tanto (hallazgo clave)
+
+Al arreglar `clients.py` falló `tests_routes.py::test_wanted_returns_items_for_every_arr_service`.
+El fixture declaraba `"altTitles": [{"title": "Alt Movie"}]` — **el mismo nombre equivocado que
+leía el código**. El mock *estaba de acuerdo con el bug*, así que el test pasaba en verde
+mientras la API real devolvía `alternateTitles`.
+
+Lección: **un mock construido desde una suposición, y no desde una respuesta real capturada,
+no verifica nada** — confirma el error. Los fixtures de `tests_wanted_scan.py` se copiaron de
+respuestas reales de Radarr por ese motivo.
+
 ## Nota sobre el entorno
 
 No se pudo crear un archivo de prueba en el storage: `/mnt/storage` es NFS4 con
