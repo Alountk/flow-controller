@@ -1,5 +1,6 @@
 """Wanted/missing content and scan routes."""
 
+import asyncio
 import os
 import re
 import time
@@ -22,7 +23,6 @@ from clients import (
     arr_search_episode,
     arr_movie_metadata,
     arr_series_metadata,
-    fetch_wanted_movies,
 )
 from models import ActionRequest
 from routes.status import verify_api_key
