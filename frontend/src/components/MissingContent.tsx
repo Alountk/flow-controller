@@ -10,16 +10,15 @@ import {
 } from '../api/wanted'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
+import {
+  areAllVisibleSelected,
+  filterScanMatches,
+  toggleVisibleSelection,
+} from '../utils/scanResults'
 import { ReleaseSearchModal, type ReleaseSearchItem } from './ReleaseSearchModal'
 import './MissingContent.css'
 
 const PAGE_SIZE = 50
-
-const LANG_LIST = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ru', 'manual'] as const
-const LANG_LABELS: Record<string, string> = {
-  en: 'Inglés', es: 'Español', fr: 'Francés', de: 'Alemán', it: 'Italiano',
-  pt: 'Portugués', ja: 'Japonés', ko: 'Coreano', zh: 'Chino', ru: 'Ruso', manual: 'Manual...',
-}
 
 interface ScanItem {
   type: 'movie' | 'series'
@@ -32,16 +31,13 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
   const queryClient = useQueryClient()
   const [selectedVolume, setSelectedVolume] = useState('')
   const [currentPath, setCurrentPath] = useState('')
-  const [selectedLangs, setSelectedLangs] = useState<Set<string>>(new Set(['en', 'es']))
   const [customTitle, setCustomTitle] = useState('')
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
+  const [resultFilter, setResultFilter] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [toast, setToast] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
-
-  const isManual = selectedLangs.has('manual')
-  const langsForScan = Array.from(selectedLangs).filter((l) => l !== 'manual')
 
   const { data: rootsData } = useQuery({
     queryKey: ['roots'],
@@ -59,20 +55,21 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
   useEffect(() => {
     setScanResult(null)
     setSelectedFiles(new Set())
+    setResultFilter('')
   }, [item])
 
   const scan = useMutation({
     mutationFn: () => scanForMovies(
       item.source,
       currentPath,
-      isManual && customTitle ? [] : langsForScan,
       item.type === 'movie' ? item.id : undefined,
       item.type === 'series' ? item.id : undefined,
-      isManual ? customTitle : undefined,
+      customTitle.trim() || undefined,
     ),
     onSuccess: (result) => {
       setScanResult(result)
       setSelectedFiles(new Set())
+      setResultFilter('')
     },
   })
 
@@ -122,15 +119,6 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
     setCurrentPath(p)
   }
 
-  function toggleLang(lang: string) {
-    setSelectedLangs((prev) => {
-      const next = new Set(prev)
-      if (next.has(lang)) next.delete(lang)
-      else next.add(lang)
-      return next
-    })
-  }
-
   function toggleFile(path: string) {
     setSelectedFiles((prev) => {
       const next = new Set(prev)
@@ -140,17 +128,21 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
     })
   }
 
+  const items = browseData?.ok ? browseData.items : []
+  const allMatches = scanResult?.matches ?? []
+  // Filters only what is already on screen: the scan returns its full result set
+  // in one response, so unlike the paginated listing this cannot hide matches.
+  const visibleMatches = filterScanMatches(allMatches, resultFilter)
+  const visibleCount = visibleMatches.length
+  const allVisibleSelected = areAllVisibleSelected(selectedFiles, visibleMatches)
+
   function toggleAll() {
-    if (!scanResult) return
-    if (selectedFiles.size === scanResult.matches.length) {
-      setSelectedFiles(new Set())
-    } else {
-      setSelectedFiles(new Set(scanResult.matches.map((m) => m.file_path)))
-    }
+    // Only ever touches what the filter is showing: acting on hidden rows would
+    // move files the user cannot see.
+    setSelectedFiles((prev) => toggleVisibleSelection(prev, visibleMatches))
   }
 
-  const items = browseData?.ok ? browseData.items : []
-  const selectedMatches = scanResult?.matches.filter((m) => selectedFiles.has(m.file_path)) ?? []
+  const selectedMatches = allMatches.filter((m) => selectedFiles.has(m.file_path))
 
   return (
     <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
@@ -209,43 +201,20 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
             )}
 
             <div className="scan-row">
-              <label className="scan-label">Idiomas:</label>
-              <div className="scan-lang-list">
-                {LANG_LIST.map((lang) => (
-                  <label key={lang} className={`scan-lang-check ${lang === 'manual' ? 'scan-lang-manual' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={selectedLangs.has(lang)}
-                      onChange={() => toggleLang(lang)}
-                    />
-                    {LANG_LABELS[lang]}
-                  </label>
-                ))}
-              </div>
+              <label className="scan-label">Título adicional:</label>
+              <input
+                type="text"
+                className="scan-custom-input"
+                placeholder="Opcional: añade un título para buscar también..."
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+              />
             </div>
-
-            {isManual && (
-              <div className="scan-row">
-                <label className="scan-label">Título a buscar:</label>
-                <input
-                  type="text"
-                  className="scan-custom-input"
-                  placeholder="Escribe el título manualmente..."
-                  value={customTitle}
-                  onChange={(e) => setCustomTitle(e.target.value)}
-                  autoFocus
-                />
-              </div>
-            )}
 
             <button
               className="action-btn search-all"
               onClick={() => scan.mutate()}
-              disabled={
-                !currentPath
-                || scan.isPending
-                || (isManual ? !customTitle.trim() : selectedLangs.size === 0)
-              }
+              disabled={!currentPath || scan.isPending}
             >
               {scan.isPending ? 'Escaneando...' : `🔍 Buscar "${item.title}" en esta carpeta`}
             </button>
@@ -255,16 +224,31 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
             <div className="scan-results">
               <div className="scan-summary">
                 {scanResult.detail}
-                {scanResult.matches.length > 0 && (
+                {visibleCount > 0 && (
                   <button className="fm-action-btn" onClick={toggleAll}>
-                    {selectedFiles.size === scanResult.matches.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                    {allVisibleSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
                   </button>
                 )}
               </div>
 
-              {scanResult.matches.length > 0 ? (
+              {allMatches.length > 0 && (
+                <div className="scan-result-filter">
+                  <input
+                    type="text"
+                    className="scan-custom-input"
+                    placeholder="Filtrar resultados por nombre o título..."
+                    value={resultFilter}
+                    onChange={(e) => setResultFilter(e.target.value)}
+                  />
+                  <span className="scan-result-count">
+                    {visibleCount} de {allMatches.length}
+                  </span>
+                </div>
+              )}
+
+              {visibleCount > 0 ? (
                 <div className="scan-match-list">
-                  {scanResult.matches.map((m) => (
+                  {visibleMatches.map((m) => (
                     <div
                       key={m.file_path}
                       className={`scan-match ${selectedFiles.has(m.file_path) ? 'selected' : ''}`}
@@ -286,6 +270,8 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
                     </div>
                   ))}
                 </div>
+              ) : allMatches.length > 0 ? (
+                <div className="wanted-empty">Ningún resultado coincide con el filtro</div>
               ) : (
                 <div className="wanted-empty">No se encontraron archivos para "{item.title}"</div>
               )}

@@ -68,7 +68,6 @@ export async function searchWantedItem(
 export async function scanForMovies(
   source: string,
   folderPath: string,
-  languages: string[],
   movieId?: number,
   seriesId?: number,
   customTitle?: string,
@@ -76,7 +75,6 @@ export async function scanForMovies(
   const body: Record<string, unknown> = {
     source,
     remote_path: folderPath,
-    local_path: languages.join(','),
   }
   if (movieId || seriesId || customTitle) {
     body.ids = {

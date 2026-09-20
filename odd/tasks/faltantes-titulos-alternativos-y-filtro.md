@@ -55,10 +55,10 @@ Fuera (documentado en el backlog):
 
 - [x] **T1** Arreglar `altTitles` -> `alternateTitles` en `clients.py` (Radarr, 2 sitios)
 - [x] **T2** Test backend de regresión: el escaneo encuentra un archivo por título alternativo
-- [ ] **T3** Frontend: input de filtro manual en los resultados del escaneo
-- [ ] **T4** Frontend: eliminar el selector de idiomas y la validación asociada
-- [ ] **T5** Frontend: conservar "Título a buscar" y dejar de enviar `local_path`
-- [ ] **T6** Tests de frontend: filtrado, contador y "Seleccionar todo" sobre lo visible
+- [x] **T3** Frontend: input de filtro manual en los resultados del escaneo
+- [x] **T4** Frontend: eliminar el selector de idiomas y la validación asociada
+- [x] **T5** Frontend: conservar "Título a buscar" y dejar de enviar `local_path`
+- [x] **T6** Tests de frontend: filtrado, contador y "Seleccionar todo" sobre lo visible
 - [ ] **T7** Verificación en vivo con `curl` del escaneo real
 - [ ] **T8** Backlog: reescribir #19 y aparcar Fase 2 (TMDB)
 
