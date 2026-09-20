@@ -865,8 +865,6 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
             return {"items": items, "total": total, "page": page, "page_size": page_size}
     except (asyncio.TimeoutError, aiohttp.ClientError):
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        return {"items": [], "total": 0}
 
 
 async def arr_search_missing_movies(session: aiohttp.ClientSession, service: dict) -> dict:
