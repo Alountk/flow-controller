@@ -160,26 +160,6 @@ def _match_score(filename: str, title: str) -> float:
     return round(ratio, 3)
 
 
-def _detect_languages_from_alt_titles(alt_titles: list) -> list[str]:
-    """Detecta idiomas disponibles de los títulos alternativos usando prefijos comunes."""
-    lang_prefixes = {
-        "es": "Español", "en": "English", "fr": "Français", "de": "Deutsch",
-        "it": "Italiano", "pt": "Português", "ja": "日本語", "ko": "한국어",
-        "zh": "中文", "ru": "Русский", "pl": "Polski", "nl": "Nederlands",
-        "sv": "Svenska", "da": "Dansk", "no": "Norsk", "fi": "Suomi",
-        "tr": "Türkçe", "ar": "العربية", "hi": "हिन्दी", "th": "ไทย",
-        "cs": "Čeština", "el": "Ελληνικά", "hu": "Magyar", "ro": "Română",
-        "uk": "Українська", "vi": "Tiếng Việt", "id": "Bahasa Indonesia",
-    }
-    return sorted(set(lang_prefixes.keys()))
-
-
-def _get_wanted_movies_with_alt_titles(wanted_data: dict) -> list[dict]:
-    """Extrae películas faltantes con sus títulos alternativos."""
-    radarr = wanted_data.get("wanted", {}).get("radarr", {})
-    return radarr.get("items", [])
-
-
 def _validate_path(path: str) -> str:
     """Valida que la ruta esté dentro de los volúmenes permitidos."""
     if not path:
@@ -312,7 +292,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
     scanned_files = 0
     matches = []
 
-    for root, dirs, files in os.walk(target):
+    for root, _dirs, files in os.walk(target):
         for fname in files:
             ext = os.path.splitext(fname)[1].lower()
             if ext not in video_exts:

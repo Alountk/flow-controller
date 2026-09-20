@@ -129,20 +129,6 @@ async def arr_command(session: aiohttp.ClientSession, service: dict, body: dict)
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
 
-async def qbit_post(session: aiohttp.ClientSession, path: str, data: dict) -> dict:
-    headers = qbit_headers(AMUTORRENT_API_KEY)
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
-    try:
-        async with session.post(
-            f"{AMUTORRENT_URL}{path}", headers=headers, data=data, timeout=timeout
-        ) as resp:
-            if resp.status == 200:
-                return {"ok": True, "detail": f"{path} OK"}
-            return {"ok": False, "detail": f"HTTP {resp.status}"}
-    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
-        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
-
-
 async def amu_ws_login(session: aiohttp.ClientSession) -> tuple[bool, str]:
     if not AMUTORRENT_PASSWORD:
         return False, "faltan credenciales (AMUTORRENT_PASSWORD)"

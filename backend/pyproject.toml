@@ -1,0 +1,11 @@
+[tool.vulture]
+# Dead-code detection. Run with: python -m vulture
+#
+# FastAPI registers route handlers through decorators rather than by calling
+# them, so every `@router.get` handler looks unreferenced. ignore_decorators
+# tells vulture to skip decorated handlers instead of flooding the report with
+# false positives — the whole reason this config exists rather than a bare call.
+paths = [".", "vulture_whitelist.py"]
+exclude = ["*/tests*.py", "*_test.py"]
+ignore_decorators = ["@router.*", "@app.*", "@pytest.*", "@patch.*"]
+min_confidence = 60

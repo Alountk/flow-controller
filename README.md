@@ -61,7 +61,7 @@ docker compose up -d --build
 **NUNCA hacer push sin verificar que el sistema arranca.** Pasos obligatorios:
 
 ```bash
-# 1. Tests backend (incluye linter estático pyflakes)
+# 1. Tests backend (incluye linters estáticos pyflakes + vulture)
 cd backend && pip install -r requirements-dev.txt && python -m pytest -q
 
 # 2. Build frontend
@@ -81,14 +81,21 @@ git push origin main
 (config en `backend/pytest.ini`), así que un archivo de tests nuevo no puede quedar
 fuera de CI por olvido. Los tests de rutas (`tests_routes.py`) mockean únicamente
 el transporte HTTP, de modo que el cuerpo real de cada endpoint se ejecuta.
-El backend se mantiene **100% limpio de pyflakes** (`tests_static.py`); cualquier
-hallazgo falla la suite.
+El backend se mantiene **100% limpio de pyflakes y vulture** (`tests_static.py`);
+cualquier hallazgo falla la suite:
+
+- **pyflakes** — nombres indefinidos (crash en runtime) e imports/variables sin usar.
+- **vulture** — funciones, clases, métodos y atributos muertos. Config en
+  `backend/pyproject.toml`; las excepciones intencionales van en
+  `backend/vulture_whitelist.py`, **cada una con su motivo escrito**.
+  `vulture` necesita `ignore_decorators` para no marcar todos los handlers de
+  FastAPI (se registran por decorador, no por llamada).
 
 ### CI Pipeline (GitHub Actions)
 
 El workflow `.github/workflows/ci.yml` ejecuta automáticamente:
 
-1. **Backend tests** — pytest con todos los suites (descubrimiento automático) + guard estático
+1. **Backend tests** — pytest con todos los suites (descubrimiento automático) + linters (pyflakes + vulture)
 2. **Frontend tests + build** — Vitest + TypeScript + Vite
 3. **Docker verify** — Build imagen, arrancar contenedor, health check en `/api/status` (puerto 8000)
 4. **Docker push** — Solo si todo pasa y es push a `main`
