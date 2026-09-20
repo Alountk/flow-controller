@@ -4,7 +4,7 @@ Panel de control para el flujo de descargas **Radarr → aMuTorrent → Sonarr**
 Detecta dónde se rompe el pipeline y ofrece acciones de remediación directas
 desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 
-**Version**: 1.2.0 (ver `VERSION`)
+**Version**: 1.3.0 (ver `VERSION`)
 
 ## Stack
 
@@ -71,6 +71,7 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `AMUTORRENT_USER` | Usuario de la web UI de aMuTorrent |
 | `AMUTORRENT_PASSWORD` | Contraseña de la web UI (requerida para WebSocket) |
 | `SAFE_MODE` | `true` para bloquear acciones destructivas |
+| `FOLDER_OUTPUT_MIXED` | Ruta de salida para archivos mixeados (default: `/mnt/storage/mixed`) |
 
 ## API
 
@@ -90,6 +91,13 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/wanted/scan` | POST | Escanea carpeta buscando contenido desubicado |
 | `/api/disk` | GET | Uso de disco en volúmenes |
 | `/api/settings` | GET/POST | Configuración persistente |
+| `/api/mixer/probe` | POST | Analiza dos archivos de video (pistas, compatibilidad) |
+| `/api/mixer/mux` | POST | Mezcla pistas de audio seleccionadas |
+| `/api/mixer/tasks` | GET | Lista todas las tareas de mixer |
+| `/api/mixer/tasks/{id}` | GET | Estado de una tarea de mixer |
+| `/api/mixer/tasks/{id}/cancel` | POST | Cancelar tarea |
+| `/api/mixer/tasks/{id}/pause` | POST | Pausar tarea |
+| `/api/mixer/tasks/{id}/resume` | POST | Reanudar tarea |
 
 ### Acciones disponibles
 
