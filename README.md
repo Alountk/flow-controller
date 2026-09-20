@@ -306,6 +306,7 @@ tab === 'episodes' // OK
 | 9 | Tests de componentes React (0 actualmente) | ✅ | `frontend/src/__tests__/*.test.tsx` (39 tests) |
 | 19 | **Filtrar los faltantes** (títulos alternativos + filtro de resultados) | ✅ | `clients.py`, `MissingContent.tsx`, `utils/scanResults.ts` |
 | 20 | **Filtros en los resultados de los indexadores** | ✅ | `ReleaseSearchModal.tsx`, `utils/releaseFilters.ts`, `utils/selection.ts` |
+| 21 | **Feedback de descargas en la cola de operaciones** | 📋 | Backend + Frontend — ver estudio abajo |
 
 ### 🔵 Largas (1-2 semanas)
 
@@ -387,6 +388,71 @@ Detalles que importan:
 La regla de "seleccionar todo solo sobre lo visible" vive en **una única implementación**
 compartida (`utils/selection.ts`), usada por el escaneo y por los indexadores: dos copias son
 dos ocasiones de divergir, y la divergencia es silenciosa.
+
+---
+
+### ⬇️ #21 — Feedback de descargas en la cola de operaciones
+
+**Estado: pendiente.** Estudio de APIs hecho; ver abajo los hallazgos y el diseño.
+
+#### Qué se quiere
+
+Al añadir una descarga desde un indexador, no hay ninguna señal de por dónde va.
+Idea inicial: dividir la zona de la cola de operaciones en **2/3 cola de operaciones** y
+**1/3 descargas**.
+
+#### Estudio de APIs (medido en vivo)
+
+**Fuentes disponibles**
+
+| Fuente | Endpoint | Qué aporta |
+| --- | --- | --- |
+| Radarr/Sonarr | `GET /api/v3/queue` | `status`, `trackedDownloadState`, `size`/`sizeleft`, `timeleft`, `estimatedCompletionTime`, `statusMessages`, `downloadId`, `downloadClient`, `indexer` |
+| aMuTorrent | `GET /api/v2/torrents/info` | `progress`, **`dlspeed`**, **`eta`**, `num_seeds`, `state`, `hash` |
+| aMuTorrent | `GET /api/v2/torrents/properties?hash=` | `dl_speed`, `dl_speed_avg`, `eta`, `peers` — solo para UN torrent |
+
+**Clave de unión:** `downloadId` de Radarr ↔ `hash` de aMuTorrent. Ya existe `normalize_hash`
+en `traces.py`, y `build_traces` ya hace este join para la vista de trazabilidad.
+
+**El hallazgo que condiciona el diseño:** `GET /api/v2/torrents/info` sin filtro devuelve
+**1097 KB / 813 torrents**. Un poll cada 3 s serían ~20 MB/min. Comprobado qué filtros funcionan:
+
+| Parámetro | Resultado |
+| --- | --- |
+| `hashes=` | **ignorado** (813) |
+| `filter=downloading` | **ignorado** (813) |
+| `category=radarr` | **funciona** (1) |
+
+Ojo con las categorías reales del servidor: existen **`radarr-ru`** y **`tv-sonarr-ru`** además
+de `radarr` / `tv-sonarr` / `sonarr`. Un filtro que solo cubra las no-RU perdería descargas.
+
+`GET /api/v2/sync/maindata` (el endpoint incremental de qBittorrent) devuelve **401** con la API
+key; requeriría sesión de login como la que ya usa `amu_ws_login`.
+
+El **WebSocket** de aMuTorrent es de **comandos** (enviar acción y esperar `*_complete`), no un
+stream de progreso. No sirve para push de descargas tal cual.
+
+#### Diseño recomendado
+
+1. **Endpoint nuevo y ligero** `GET /api/downloads` — NO reutilizar `/api/trace`, que carga
+   historial de grabs, todas las películas y todas las series (medido ~1 s). El nuevo solo
+   consulta las dos colas y aMuTorrent.
+2. **Filtrar aMuTorrent por categoría** para evitar el megabyte. Y **si la cola está vacía, no
+   llamar a aMuTorrent**: en reposo el coste es cero.
+3. **Polling dinámico**, como ya hace `QueueSidebar`: 3-5 s con descargas activas, 15-30 s en reposo.
+4. **Errores explícitos por fuente** (lección de `/api/wanted` y del grab): si aMuTorrent cae,
+   mostrar la descarga con el progreso de Radarr y marcar velocidad/ETA como no disponibles. Si
+   cae Radarr, decirlo — **nunca** un fallo de red debe parecer "no hay descargas".
+5. **Destacar `importBlocked` / `warning` / `failed`**: es el propósito de la app y ahora mismo
+   hay un caso real en el servidor (`Transformers ... 2160p`, `importBlocked` con `warning`).
+
+#### Punto a decidir
+
+Partir el sidebar **en horizontal (2/3 + 1/3)** es dudoso: la barra mide ~260 px, y los títulos
+reales son muy largos (`Transformers El ultimo caballero (2017).BDrip 2160p x265 10Bit DV HDR
+DUAL ac3-eac3.(.HispaShare.).mkv`). Un tercio serían ~90 px, insuficiente para título + progreso
++ velocidad + ETA. Alternativas: **dividir en vertical** (descargas arriba, operaciones abajo,
+mismo ancho) o ensanchar la barra.
 
 ---
 
