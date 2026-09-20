@@ -297,6 +297,7 @@ tab === 'episodes' // OK
 | 7 | Extraer post-move import a servicio compartido | ✅ | `backend/import_service.py` |
 | 8 | CSS Modules o Tailwind (66KB monolítico) | ✅ | Modularizado por componente (`components/*.css` + `styles/global.css`) |
 | 9 | Tests de componentes React (0 actualmente) | ✅ | `frontend/src/__tests__/*.test.tsx` (39 tests) |
+| 19 | **Poder filtrar los faltantes** (idioma / título / año) | ⬜ | Backend + Frontend — ver detalle abajo |
 
 ### 🔵 Largas (1-2 semanas)
 
@@ -316,6 +317,37 @@ tab === 'episodes' // OK
 | 16 | Documentación OpenAPI formal | ⬜ | FastAPI auto-genera |
 | 17 | UI para operaciones por lotes | ⬜ | Frontend |
 | 18 | WebSocket para progreso en tiempo real | ⬜ | Backend + Frontend |
+
+### 🔎 #19 — Filtrar los faltantes
+
+Hoy el filtrado por idioma **existe en la UI pero el backend lo ignora por completo**:
+
+- `MissingContent.tsx` tiene el selector "Idiomas:" con checkboxes (`LANG_LIST`, `selectedLangs`)
+  y **bloquea el botón de escaneo** si no eliges ninguno.
+- `scanForMovies()` lo envía en `local_path` (`languages.join(',')`).
+- `routes/wanted.py` recibía `req.local_path`, lo parseaba y **nunca lo usaba** (parsing muerto
+  eliminado en el PR de limpieza pyflakes). `req.local_path` ya no se referencia en ningún punto
+  del scan.
+
+Además, el propio scan arrastra dos helpers **muertos que nunca se llaman** — `pyflakes` no los
+detecta porque no analiza funciones no usadas:
+
+- `_detect_languages_from_alt_titles(alt_titles)` — ignora su argumento y devuelve **todos** los
+  idiomas: es un stub.
+- `_get_wanted_movies_with_alt_titles(wanted_data)` — nunca se invoca.
+
+**Qué falta para cerrar la feature:**
+
+1. Definir qué significa "idioma" en el match: ¿filtrar los `altTitles` considerados, o el idioma
+   de la release? `_match_score` hoy compara **solo título** contra todos los `altTitles`.
+2. Implementar el filtro real en `routes/wanted.py` usando la lista de idiomas que ya llega.
+3. Decidir si el filtro aplica también al **listado** de faltantes (`GET /api/wanted` hoy solo
+   filtra por `source`), no únicamente al scan de archivos desubicados.
+4. Tests: hoy `tests_routes.py` cubre el contrato de `/api/wanted` pero **no** el filtrado por
+   idioma del scan; hay que cubrirlo para que no vuelva a quedar a medias.
+
+> **Ojo:** `pyflakes` no detecta funciones ni clases muertas — solo imports y variables locales.
+> Este caso demuestra que un backend "pyflakes-clean" todavía puede esconder features a medias.
 
 ---
 
