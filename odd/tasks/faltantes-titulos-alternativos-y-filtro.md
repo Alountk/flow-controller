@@ -85,19 +85,36 @@ funcionales por tarea, sin exigir RED-first.
 ## Progress
 
 - Rama: `feat/faltantes-titulos-alternativos-y-filtro`
-- **T1 + T2 hechos.** `clients.py` lee `alternateTitles` de Radarr en
-  `arr_movie_metadata` y en `fetch_wanted_movies`. Nuevo `tests_wanted_scan.py`
-  (8 tests). Pendiente T3-T8.
+- **Todos los tasks hechos (T1-T8).**
 
 ## Verification evidence
 
-- `python -m pytest tests_wanted_scan.py -q` -> 8 passed.
-- **Guard validado revirtiendo el fix:** sin el arreglo fallan 5 (incluido
-  `test_scan_matches_file_named_after_an_alternate_title`, el bug real del
-  archivo `Ton Nom`); con el arreglo pasan 8.
-  `test_scan_still_matches_the_primary_title` pasa en ambos casos, confirmando
-  que la ruta del título principal nunca estuvo rota.
+- `python -m pytest -q` -> 172 passed. `npm test` -> 57 passed (39 -> 57).
+  `npm run build` y `tsc -b --noEmit` limpios.
+- **Guard del backend validado revirtiendo el fix:** sin el arreglo fallan 5 tests,
+  incluido `test_scan_matches_file_named_after_an_alternate_title`.
+  `test_scan_still_matches_the_primary_title` pasa en ambos casos, confirmando que
+  la ruta del título principal nunca estuvo rota.
+- **Guard del frontend validado:** al "simplificar" el deseleccionado a `new Set()`
+  fallan 2 tests (`never touches matches hidden by the filter` y el round-trip).
+- **Verificación en vivo (curl, datos reales) — el caso perfecto:**
+  `/mnt/storage/movies/es/Everything Everywhere All at Once (2022)/` contiene
+  `Todo a la vez en todas partes (2022) - Unknown - x264 MP3 .mkv`, título en
+  **español**, distinto del principal.
+  - `_match_score` vs principal `'Everything Everywhere All at Once'` -> **0.179** (bajo el umbral 0.5)
+  - `_match_score` vs alternativo `'Todo a la vez en todas partes'` -> **0.85**
+  - `curl POST /api/wanted/scan` **con el bug** -> `scanned_files: 1, matches: 0`
+  - `curl POST /api/wanted/scan` **con el arreglo** -> `matches: 1`,
+    `matched_title: Todo a la vez en todas partes`, score 0.85
+- Barrido de regresión: 12 endpoints GET en HTTP 200.
+
+## Nota sobre el entorno
+
+No se pudo crear un archivo de prueba en el storage: `/mnt/storage` es NFS4 con
+root-squash (ni root escribe) y `/mnt/storage-6tb` rechaza escrituras incluso para
+root. La verificación en vivo se hizo por tanto contra **archivos reales existentes**,
+que resultó mejor prueba que un fixture. No se creó ni se dejó nada en disco.
 
 ## Next step
 
-T3: input de filtro manual en el bloque de resultados del escaneo.
+Ninguno: PR abierta.
