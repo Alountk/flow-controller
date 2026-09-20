@@ -4,8 +4,6 @@ import shutil
 import tempfile
 from pathlib import Path
 
-import pytest
-
 # Configurar env vars antes de importar app
 os.environ.setdefault("FOLDER_DOWNLOAD_AMULE", "/mnt/storage-6tb/shared-downloads/amule")
 os.environ.setdefault("FOLDER_DOWNLOAD_TORRENT", "/mnt/storage/downloads/qbittorrent/completed")
@@ -15,7 +13,7 @@ os.environ.setdefault("AMUTORRENT_URL", "http://localhost:4000")
 
 from traces import host_path as _host_path, resolve_current_path as _resolve_current_path
 from config import _VOLUME_MAP
-from copy_engine import copy_files_to_root as _copy_files_to_root, copy_tasks, CopyCancelled
+from copy_engine import copy_files_to_root as _copy_files_to_root, copy_tasks
 
 
 # ── _host_path ──────────────────────────────────────────────────────────────
@@ -794,7 +792,6 @@ class TestConsumeQueuePostMoveImport:
         self, mock_manual, mock_rescan, mock_refresh, tmp_path
     ):
         import asyncio
-        import app
         mock_manual.return_value = {"ok": True, "detail": "Manual import OK"}
         mock_rescan.return_value = {"ok": True, "detail": "RescanMovie OK"}
         mock_refresh.return_value = {"ok": True, "detail": "RefreshMovie OK"}
@@ -830,7 +827,6 @@ class TestConsumeQueuePostMoveImport:
         self, mock_rescan, mock_refresh, tmp_path
     ):
         import asyncio
-        import app
         mock_rescan.return_value = {"ok": True, "detail": "RescanSeries OK"}
         mock_refresh.return_value = {"ok": True, "detail": "RefreshSeries OK"}
 

@@ -109,7 +109,7 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                     return {
                         "ok": True,
                         "id": existing_id,
-                        "detail": f"Película ya está en Radarr. Búsqueda lanzada.",
+                        "detail": "Película ya está en Radarr. Búsqueda lanzada.",
                     }
 
                 movie_payload = {
@@ -126,7 +126,7 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                     return {
                         "ok": True,
                         "id": add_result["id"],
-                        "detail": f"Película agregada y búsqueda lanzada",
+                        "detail": "Película agregada y búsqueda lanzada",
                     }
                 return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
 
@@ -141,7 +141,7 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                     return {
                         "ok": True,
                         "id": existing_id,
-                        "detail": f"Serie ya está en Sonarr. Puedes buscar releases directamente.",
+                        "detail": "Serie ya está en Sonarr. Puedes buscar releases directamente.",
                     }
 
                 series_payload = {
@@ -158,7 +158,7 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
                     return {
                         "ok": True,
                         "id": add_result["id"],
-                        "detail": f"Serie agregada a Sonarr",
+                        "detail": "Serie agregada a Sonarr",
                     }
                 return {"ok": False, "id": None, "detail": add_result.get("detail", "Error desconocido")}
 

@@ -61,7 +61,7 @@ docker compose up -d --build
 **NUNCA hacer push sin verificar que el sistema arranca.** Pasos obligatorios:
 
 ```bash
-# 1. Tests backend (incluye guard estático de nombres indefinidos)
+# 1. Tests backend (incluye linter estático pyflakes)
 cd backend && pip install -r requirements-dev.txt && python -m pytest -q
 
 # 2. Build frontend
@@ -81,6 +81,8 @@ git push origin main
 (config en `backend/pytest.ini`), así que un archivo de tests nuevo no puede quedar
 fuera de CI por olvido. Los tests de rutas (`tests_routes.py`) mockean únicamente
 el transporte HTTP, de modo que el cuerpo real de cada endpoint se ejecuta.
+El backend se mantiene **100% limpio de pyflakes** (`tests_static.py`); cualquier
+hallazgo falla la suite.
 
 ### CI Pipeline (GitHub Actions)
 

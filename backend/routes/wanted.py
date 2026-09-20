@@ -5,7 +5,6 @@ import os
 import re
 import time
 import unicodedata
-from pathlib import Path
 
 import aiohttp
 from fastapi import APIRouter, Depends
@@ -211,8 +210,6 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
     """Lógica interna de escaneo de contenido faltante."""
     source = req.source
     folder_path = req.remote_path or ""
-    languages_str = req.local_path or "en"
-    languages = [l.strip() for l in languages_str.split(",") if l.strip()]
     ids = req.ids or {}
     movie_id = ids.get("movie_id")
     series_id = ids.get("series_id")

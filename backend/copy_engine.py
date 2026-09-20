@@ -11,7 +11,6 @@ import aiohttp
 from config import (
     IMPORT_POLL_INTERVAL,
     IMPORT_POLL_TIMEOUT,
-    REQUEST_TIMEOUT,
     SERVICES,
 )
 from clients import (
@@ -24,7 +23,7 @@ from clients import (
     arr_series_metadata,
     arr_series_root_folder,
 )
-from traces import resolve_current_path, host_path
+from traces import host_path
 from task_manager import copy_tasks
 
 log = logging.getLogger("flow-controller")
@@ -194,8 +193,7 @@ async def verify_import(task_id: str, service: dict, source: str, ids: dict):
 
 
 async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) -> dict:
-    from config import ACTIONS, EXPECTED_CATEGORY
-    from traces import host_path as _host_path_unused
+    from config import EXPECTED_CATEGORY
 
     def _service_by_key(key: str) -> dict | None:
         for service in SERVICES:
@@ -205,7 +203,6 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
 
     source = payload.get("source")
     service = _service_by_key(source) if source else None
-    download_id = payload.get("download_id") or ""
     matched_hash = payload.get("matched_hash")
     ids = payload.get("ids") or {}
     queue_id = ids.get("queue_id")

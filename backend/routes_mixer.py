@@ -5,8 +5,6 @@ and managing mux tasks (list, status, cancel, pause, resume).
 """
 import logging
 import os
-import time
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
@@ -14,7 +12,6 @@ from pydantic import BaseModel
 from media_mixer import (
     probe_file,
     check_compatibility,
-    select_best_video,
     start_mux,
     cancel_task,
     pause_task,

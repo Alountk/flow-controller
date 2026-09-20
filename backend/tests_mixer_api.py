@@ -1,10 +1,7 @@
 """Tests para las rutas API de media_mixer."""
 import os
 import time
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-
-import pytest
+from unittest.mock import patch, MagicMock
 
 # Configurar env vars antes de importar
 os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")

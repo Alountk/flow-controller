@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import os
-import time
 
 import aiohttp
 
@@ -10,7 +8,6 @@ from config import (
     FOLDER_DOWNLOAD_AMULE,
     FOLDER_DOWNLOAD_TORRENT,
     PAUSED_STATES,
-    REQUEST_TIMEOUT,
     SERVICES,
     TRACE_LIMIT,
     _DOWNLOAD_CLIENT_PATHS,

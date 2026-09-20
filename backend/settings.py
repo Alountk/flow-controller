@@ -2,7 +2,6 @@ import json
 import os
 import stat
 import logging
-from pathlib import Path
 from typing import Any
 
 log = logging.getLogger("settings")
