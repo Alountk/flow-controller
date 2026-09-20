@@ -42,3 +42,11 @@ services:
       - /mnt/storage:/mnt/storage:rw
       - /mnt/storage-6tb:/mnt/storage-6tb:rw
       - ./prototypes:/app/prototypes:ro
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
+        reservations:
+          memory: 256m
+          cpus: "0.25"
