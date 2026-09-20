@@ -12,15 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from config import SERVICES
 from traces import host_path
-from clients import (
-    arr_manual_import,
-    arr_rescan_movie,
-    arr_refresh_movie,
-    arr_rescan_series,
-    arr_refresh_series,
-    arr_downloaded_scan,
-    arr_downloaded_episodes_scan,
-)
+from import_service import post_move_import
 from models import ActionRequest
 from routes.status import verify_api_key
 from state import file_queue, queue_lock, queue_consumer_task
@@ -248,47 +240,16 @@ async def _consume_queue():
                         op["import_status"] = "importing"
                     try:
                         async with aiohttp.ClientSession() as session:
-                            imported = False
-                            if service["key"] == "radarr":
-                                movie_id = op.get("movie_id")
-                                if movie_id:
-                                    log.info("Trying Radarr manual import: dst=%s movie_id=%s", dst, movie_id)
-                                    res_manual = await arr_manual_import(session, service, dst, int(movie_id))
-                                    log.info("Radarr manual import result: %s", res_manual)
-                                    if res_manual.get("ok"):
-                                        imported = True
-
-                                    log.info("Triggering RescanMovie + RefreshMovie: movie_id=%s", movie_id)
-                                    res_rescan = await arr_rescan_movie(session, service, int(movie_id))
-                                    res_refresh = await arr_refresh_movie(session, service, int(movie_id))
-                                    log.info("Radarr Rescan/Refresh result: rescan=%s refresh=%s", res_rescan, res_refresh)
-                                    if res_rescan.get("ok") or res_refresh.get("ok"):
-                                        imported = True
-                                else:
-                                    parent_dir = str(Path(dst).parent)
-                                    log.info("Triggering DownloadedMoviesScan: path=%s", parent_dir)
-                                    res_scan = await arr_downloaded_scan(session, service, parent_dir)
-                                    log.info("Radarr DownloadedMoviesScan result: %s", res_scan)
-                                    if res_scan.get("ok"):
-                                        imported = True
-
-                            elif service["key"] == "sonarr":
-                                series_id = op.get("series_id") or op.get("movie_id")
-                                if series_id:
-                                    log.info("Triggering Sonarr RescanSeries + RefreshSeries: series_id=%s", series_id)
-                                    res_rescan = await arr_rescan_series(session, service, int(series_id))
-                                    res_refresh = await arr_refresh_series(session, service, int(series_id))
-                                    log.info("Sonarr Rescan/Refresh result: rescan=%s refresh=%s", res_rescan, res_refresh)
-                                    if res_rescan.get("ok") or res_refresh.get("ok"):
-                                        imported = True
-                                else:
-                                    parent_dir = str(Path(dst).parent)
-                                    log.info("Triggering DownloadedEpisodesScan: path=%s", parent_dir)
-                                    res_scan = await arr_downloaded_episodes_scan(session, service, parent_dir)
-                                    log.info("Sonarr DownloadedEpisodesScan result: %s", res_scan)
-                                    if res_scan.get("ok"):
-                                        imported = True
-
+                            movie_id = int(op["movie_id"]) if op.get("movie_id") else None
+                            series_id = int(op.get("series_id") or op.get("movie_id")) if (op.get("series_id") or (service["key"] == "sonarr" and op.get("movie_id"))) else None
+                            res = await post_move_import(
+                                session,
+                                service,
+                                dst,
+                                movie_id=movie_id,
+                                series_id=series_id,
+                            )
+                            imported = res.get("imported", False)
                             async with queue_lock:
                                 op["import_status"] = "imported" if imported else "import_failed"
                                 op["detail"] = (

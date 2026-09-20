@@ -11,7 +11,7 @@ os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
 
 from fastapi.testclient import TestClient
 from app import app
-from media_mixer import _tasks
+from task_manager import mux_tasks
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -172,7 +172,7 @@ class TestMuxEndpoint:
 
 class TestTasksListEndpoint:
     def test_list_tasks_empty(self):
-        _tasks.clear()
+        mux_tasks._tasks.clear()
         resp = client.get("/api/mixer/tasks")
         assert resp.status_code == 200
         data = resp.json()
@@ -180,8 +180,8 @@ class TestTasksListEndpoint:
         assert isinstance(data["tasks"], list)
 
     def test_list_tasks_with_entries(self):
-        _tasks.clear()
-        _tasks["test-id"] = {
+        mux_tasks._tasks.clear()
+        mux_tasks._tasks["test-id"] = {
             "status": "running",
             "progress": 0.5,
             "detail": "Muxing...",
@@ -196,7 +196,7 @@ class TestTasksListEndpoint:
         assert len(data["tasks"]) == 1
         assert data["tasks"][0]["task_id"] == "test-id"
         assert data["tasks"][0]["status"] == "running"
-        _tasks.clear()
+        mux_tasks._tasks.clear()
 
 
 # ── Single Task Endpoint ────────────────────────────────────────────────────
@@ -210,8 +210,8 @@ class TestSingleTaskEndpoint:
         assert "not found" in data["detail"].lower()
 
     def test_get_task_found(self):
-        _tasks.clear()
-        _tasks["test-task-abc"] = {
+        mux_tasks._tasks.clear()
+        mux_tasks._tasks["test-task-abc"] = {
             "status": "running",
             "progress": 0.75,
             "detail": "Muxing...",
@@ -227,7 +227,7 @@ class TestSingleTaskEndpoint:
         assert data["task_id"] == "test-task-abc"
         assert data["status"] == "running"
         assert data["progress"] == 0.75
-        _tasks.clear()
+        mux_tasks._tasks.clear()
 
 
 # ── Cancel Task Endpoint ────────────────────────────────────────────────────
@@ -240,10 +240,10 @@ class TestCancelTaskEndpoint:
         assert data["ok"] is False
 
     def test_cancel_task_running(self):
-        _tasks.clear()
+        mux_tasks._tasks.clear()
         pause_event = MagicMock()
         pause_event.is_set.return_value = True
-        _tasks["test-cancel"] = {
+        mux_tasks._tasks["test-cancel"] = {
             "status": "running",
             "progress": 0.5,
             "detail": "Muxing...",
@@ -258,7 +258,7 @@ class TestCancelTaskEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        _tasks.clear()
+        mux_tasks._tasks.clear()
 
 
 # ── Pause Task Endpoint ─────────────────────────────────────────────────────
@@ -271,10 +271,10 @@ class TestPauseTaskEndpoint:
         assert data["ok"] is False
 
     def test_pause_task_running(self):
-        _tasks.clear()
+        mux_tasks._tasks.clear()
         pause_event = MagicMock()
         pause_event.is_set.return_value = True
-        _tasks["test-pause"] = {
+        mux_tasks._tasks["test-pause"] = {
             "status": "running",
             "progress": 0.5,
             "detail": "Muxing...",
@@ -289,7 +289,7 @@ class TestPauseTaskEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        _tasks.clear()
+        mux_tasks._tasks.clear()
 
 
 # ── Resume Task Endpoint ────────────────────────────────────────────────────
@@ -302,10 +302,10 @@ class TestResumeTaskEndpoint:
         assert data["ok"] is False
 
     def test_resume_task_paused(self):
-        _tasks.clear()
+        mux_tasks._tasks.clear()
         pause_event = MagicMock()
         pause_event.is_set.return_value = False
-        _tasks["test-resume"] = {
+        mux_tasks._tasks["test-resume"] = {
             "status": "paused",
             "progress": 0.5,
             "detail": "Task paused",
@@ -320,7 +320,7 @@ class TestResumeTaskEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        _tasks.clear()
+        mux_tasks._tasks.clear()
 
 
 # ── Task Lifecycle ──────────────────────────────────────────────────────────
@@ -328,12 +328,12 @@ class TestResumeTaskEndpoint:
 class TestTaskLifecycle:
     def test_start_poll_cancel(self):
         """Test full task lifecycle: start → poll → cancel."""
-        _tasks.clear()
+        mux_tasks._tasks.clear()
 
         # Add a running task
         pause_event = MagicMock()
         pause_event.is_set.return_value = True
-        _tasks["lifecycle-test"] = {
+        mux_tasks._tasks["lifecycle-test"] = {
             "status": "running",
             "progress": 0.25,
             "detail": "Muxing...",
@@ -358,4 +358,4 @@ class TestTaskLifecycle:
         data = resp.json()
         assert data["ok"] is True
 
-        _tasks.clear()
+        mux_tasks._tasks.clear()

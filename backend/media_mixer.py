@@ -10,12 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from settings import get_setting
+from task_manager import mux_tasks
 
 log = logging.getLogger("flow-controller")
-
-# Shared task state (mirrors copy_engine.py pattern)
-_tasks: dict[str, dict] = {}
-_task_lock = asyncio.Lock()
 
 # Priority: hevc > h264 > other (lower index = higher priority)
 CODEC_PRIORITY: dict[str, int] = {"hevc": 0, "h265": 0, "h264": 1, "avc": 1}
@@ -287,18 +284,17 @@ def start_mux(
     task_id = str(uuid.uuid4())
     output_path = _generate_output_path(video_source, output_dir)
 
-    _tasks[task_id] = {
-        "status": "running",
-        "progress": 0.0,
-        "detail": "Starting mux...",
-        "output_path": None,
-        "created_at": time.time(),
-        "cancelled": False,
-        "paused": False,
-        "pause_event": threading.Event(),
-        "process": None,
-    }
-    _tasks[task_id]["pause_event"].set()  # Not paused initially
+    mux_tasks.create(task_id,
+        status="running",
+        progress=0.0,
+        detail="Starting mux...",
+        output_path=None,
+        cancelled=False,
+        paused=False,
+        pause_event=threading.Event(),
+        process=None,
+    )
+    mux_tasks._tasks[task_id]["pause_event"].set()  # Not paused initially
 
     cmd = build_mux_command(video_source, audio_sources, output_path)
     asyncio.create_task(_run_mux_background(task_id, cmd, output_path))
@@ -308,7 +304,7 @@ def start_mux(
 
 async def _run_mux_background(task_id: str, cmd: list[str], output_path: str):
     """Background coroutine that runs ffmpeg and tracks progress."""
-    task = _tasks.get(task_id)
+    task = mux_tasks.get(task_id)
     if not task:
         return
 
@@ -355,13 +351,12 @@ async def _run_mux_background(task_id: str, cmd: list[str], output_path: str):
                     try:
                         us = int(decoded.split("=")[1])
                         current = us / 1_000_000
-                        task["progress"] = min(current / duration, 0.99)
-                        task["detail"] = f"Muxing... {int(task['progress'] * 100)}%"
+                        mux_tasks.update(task_id, progress=min(current / duration, 0.99), detail=f"Muxing... {int(min(current / duration, 0.99) * 100)}%")
                     except (ValueError, IndexError):
                         pass
 
                 if decoded == "progress=end":
-                    task["progress"] = 1.0
+                    mux_tasks.update(task_id, progress=1.0)
                     break
 
             proc.wait()
@@ -374,38 +369,39 @@ async def _run_mux_background(task_id: str, cmd: list[str], output_path: str):
 
         if result == "cancelled":
             _cleanup_partial(output_path)
-            task.update({
-                "status": "cancelled",
-                "detail": "Task cancelled",
-                "progress": 0.0,
-            })
+            mux_tasks.update(task_id,
+                status="cancelled",
+                detail="Task cancelled",
+                progress=0.0,
+            )
         elif result == "paused":
-            task.update({
-                "status": "paused",
-                "detail": "Task paused",
-            })
+            mux_tasks.update(task_id,
+                status="paused",
+                detail="Task paused",
+            )
         elif result == "done":
-            task.update({
-                "status": "done",
-                "progress": 1.0,
-                "detail": "Mux complete",
-                "output_path": output_path,
-            })
+            mux_tasks.update(task_id,
+                status="done",
+                progress=1.0,
+                detail="Mux complete",
+                output_path=output_path,
+            )
         else:
             _cleanup_partial(output_path)
-            task.update({
-                "status": "error",
-                "detail": "Mux failed",
-                "progress": 0.0,
-            })
+            mux_tasks.update(task_id,
+                status="error",
+                detail="Mux failed",
+                progress=0.0,
+            )
     except Exception as exc:
         log.exception("mux task %s failed", task_id)
         _cleanup_partial(output_path)
-        task.update({
-            "status": "error",
-            "detail": f"{type(exc).__name__}: {exc}",
-        })
+        mux_tasks.update(task_id,
+            status="error",
+            detail=f"{type(exc).__name__}: {exc}",
+        )
     finally:
+        task = mux_tasks.get(task_id) or {}
         task.pop("process", None)
         task.pop("pause_event", None)
 
@@ -422,7 +418,7 @@ def _cleanup_partial(path: str):
 
 def cancel_task(task_id: str) -> dict:
     """Cancel a running task."""
-    task = _tasks.get(task_id)
+    task = mux_tasks.get(task_id)
     if not task:
         return {"ok": False, "detail": "Task not found"}
 
@@ -446,7 +442,7 @@ def cancel_task(task_id: str) -> dict:
 
 def pause_task(task_id: str) -> dict:
     """Pause a running task."""
-    task = _tasks.get(task_id)
+    task = mux_tasks.get(task_id)
     if not task:
         return {"ok": False, "detail": "Task not found"}
 
@@ -463,7 +459,7 @@ def pause_task(task_id: str) -> dict:
 
 def resume_task(task_id: str) -> dict:
     """Resume a paused task."""
-    task = _tasks.get(task_id)
+    task = mux_tasks.get(task_id)
     if not task:
         return {"ok": False, "detail": "Task not found"}
 
@@ -482,15 +478,9 @@ def resume_task(task_id: str) -> dict:
 
 def get_task(task_id: str) -> dict | None:
     """Get task status. Returns None if not found or expired."""
-    task = _tasks.get(task_id)
+    task = mux_tasks.get(task_id)
     if not task:
         return None
-
-    # Check TTL (600s)
-    if task["status"] in ("done", "error", "cancelled"):
-        if time.time() - task.get("created_at", 0) > 600:
-            del _tasks[task_id]
-            return None
 
     return {
         "task_id": task_id,
@@ -503,12 +493,5 @@ def get_task(task_id: str) -> dict | None:
 
 
 def cleanup_tasks():
-    """Remove completed tasks older than 600s TTL."""
-    now = time.time()
-    expired = [
-        tid for tid, t in _tasks.items()
-        if t.get("status") not in ("running", "paused", "pending")
-        and now - t.get("created_at", 0) > 600
-    ]
-    for tid in expired:
-        del _tasks[tid]
+    """Remove completed tasks older than TTL."""
+    mux_tasks.cleanup()

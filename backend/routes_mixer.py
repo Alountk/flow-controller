@@ -21,8 +21,8 @@ from media_mixer import (
     resume_task,
     get_task,
     cleanup_tasks,
-    _tasks,
 )
+from task_manager import mux_tasks
 from config import API_KEY
 
 log = logging.getLogger("flow-controller")
@@ -203,7 +203,7 @@ async def mixer_list_tasks(_key: str = Depends(verify_api_key)):
     cleanup_tasks()
 
     tasks = []
-    for task_id, task in _tasks.items():
+    for task_id, task in mux_tasks._tasks.items():
         tasks.append({
             "task_id": task_id,
             "status": task.get("status", "unknown"),

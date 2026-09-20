@@ -276,7 +276,7 @@ tab === 'episodes' // OK
 
 | # | Mejora | Estado | Archivos |
 |---|--------|--------|----------|
-| 1 | Eliminar dead code (`clients.py:868` except duplicado) | ⬜ | `backend/clients.py` |
+| 1 | Eliminar dead code (`clients.py:868` except duplicado) | ✅ | `backend/clients.py` |
 | 2 | Health check en Dockerfile | ✅ | `Dockerfile` |
 | 3 | Límites de recursos (RAM/CPU) en docker-compose | ⬜ | `docker-compose.yml` |
 | 4 | Fix API key expuesta en `/api/config` | ⬜ | `app.py` + frontend |
@@ -286,8 +286,8 @@ tab === 'episodes' // OK
 | # | Mejora | Estado | Archivos |
 |---|--------|--------|----------|
 | 5 | Split `app.py` en módulos de rutas | ✅ | `app.py` → `routes/*.py` |
-| 6 | Unificar TaskManager (3 sistemas idénticos) | 🟡 | `task_manager.py` creado, integración pendiente |
-| 7 | Extraer post-move import a servicio compartido | ⬜ | Nuevo `import_service.py` |
+| 6 | Unificar TaskManager (3 sistemas idénticos) | ✅ | `task_manager.py` + integración completa |
+| 7 | Extraer post-move import a servicio compartido | ✅ | `backend/import_service.py` |
 | 8 | CSS Modules o Tailwind (66KB monolítico) | ⬜ | Frontend |
 | 9 | Tests de componentes React (0 actualmente) | ⬜ | `frontend/src/**/*.test.tsx` |
 

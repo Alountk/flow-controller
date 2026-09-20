@@ -15,10 +15,10 @@ from media_mixer import (
     select_best_video,
     check_compatibility,
     build_mux_command,
-    _tasks,
     _cleanup_partial,
     CODEC_PRIORITY,
 )
+from task_manager import mux_tasks
 
 
 # ── parse_probe_data ────────────────────────────────────────────────────────
