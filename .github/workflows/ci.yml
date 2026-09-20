@@ -120,6 +120,8 @@ jobs:
 
       - name: Build and push
         run: |
+          IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           docker compose -f docker-compose.yml -f docker-compose.ci.yml build --no-cache
-          docker push ghcr.io/${{ github.repository }}:latest
-          echo "✅ Image pushed to ghcr.io/${{ github.repository }}:latest"
+          docker tag flow-controller:latest "$IMAGE:latest"
+          docker push "$IMAGE:latest"
+          echo "✅ Image pushed to $IMAGE:latest"
