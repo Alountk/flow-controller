@@ -65,18 +65,17 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker compose build --no-cache
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml build --no-cache
 
       - name: Start container
         run: |
-          docker compose up -d
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
           sleep 15
 
-      - name: Health check
+      - name: Health check (port 8000)
         run: |
-          # Backend must respond on port 8001
           for i in $(seq 1 10); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/api/status 2>/dev/null || true)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/status 2>/dev/null || true)
             if [ "$STATUS" = "200" ]; then
               echo "✅ Backend healthy (HTTP $STATUS)"
               exit 0
@@ -85,12 +84,12 @@ jobs:
             sleep 3
           done
           echo "❌ Backend did not start within 45s"
-          docker compose logs --tail=50
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=50
           exit 1
 
       - name: Frontend served by backend
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/ 2>/dev/null || true)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ 2>/dev/null || true)
           if [ "$STATUS" = "200" ]; then
             echo "✅ Frontend served (HTTP $STATUS)"
           else
@@ -100,7 +99,7 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
 
   # ── Push Docker image (only on main branch push) ───────────────
   docker-push:
@@ -121,6 +120,6 @@ jobs:
 
       - name: Build and push
         run: |
-          docker compose build --no-cache
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml build --no-cache
           docker push ghcr.io/${{ github.repository }}:latest
           echo "✅ Image pushed to ghcr.io/${{ github.repository }}:latest"

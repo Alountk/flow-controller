@@ -1,0 +1,11 @@
+# CI override — no host mounts, no network_mode
+services:
+  flow-controller:
+    network_mode: null
+    ports:
+      - "8000:8000"
+    volumes: []          # remove all host mounts
+    environment:
+      - SAFE_MODE=true
+      - DEVELOPER=false
+      - API_KEY=test-key
