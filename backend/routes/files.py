@@ -10,12 +10,13 @@ from pathlib import Path
 import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 
+import state
 from config import SERVICES
 from traces import host_path
 from import_service import post_move_import
 from models import ActionRequest
 from routes.status import verify_api_key
-from state import file_queue, queue_lock, queue_consumer_task
+from state import file_queue, queue_lock
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
@@ -307,7 +308,9 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
         if len(file_queue) > 50:
             file_queue[:] = [o for o in file_queue if o["status"] in ("pending", "running")]
 
-    task = asyncio.create_task(_consume_queue())
+    # Hold a reference on the shared state object: an unreferenced asyncio task
+    # may be garbage-collected mid-execution, silently aborting the queue.
+    state.queue_consumer_task = asyncio.create_task(_consume_queue())
 
     return {"ok": True, "detail": f"Agregado a la cola: {op['name']}", "op": op}
 

@@ -1,11 +1,5 @@
 """Tests para las funciones de media_mixer."""
-import json
 import os
-import time
-from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
-
-import pytest
 
 # Configurar env vars antes de importar
 os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
@@ -18,7 +12,6 @@ from media_mixer import (
     _cleanup_partial,
     CODEC_PRIORITY,
 )
-from task_manager import mux_tasks
 
 
 # ── parse_probe_data ────────────────────────────────────────────────────────

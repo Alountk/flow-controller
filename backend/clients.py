@@ -808,7 +808,6 @@ async def fetch_all_series_detailed(
                         path_exists = os.path.isdir(path)
                     except (OSError, ValueError):
                         path_exists = False
-                seasons = s.get("seasons", [])
                 items.append({
                     "id": s.get("id"),
                     "title": s.get("title", ""),
