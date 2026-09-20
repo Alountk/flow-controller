@@ -289,7 +289,7 @@ tab === 'episodes' // OK
 | 6 | Unificar TaskManager (3 sistemas idénticos) | ✅ | `task_manager.py` + integración completa |
 | 7 | Extraer post-move import a servicio compartido | ✅ | `backend/import_service.py` |
 | 8 | CSS Modules o Tailwind (66KB monolítico) | ✅ | Modularizado por componente (`components/*.css` + `styles/global.css`) |
-| 9 | Tests de componentes React (0 actualmente) | ⬜ | `frontend/src/**/*.test.tsx` |
+| 9 | Tests de componentes React (0 actualmente) | ✅ | `frontend/src/__tests__/*.test.tsx` (39 tests) |
 
 ### 🔵 Largas (1-2 semanas)
 

@@ -8,7 +8,9 @@ on:
 
 env:
   PYTHON_VERSION: "3.12"
-  NODE_VERSION: "20"
+  # Matches the runtime in the Dockerfile (node:22-alpine).
+  # jsdom@30 requires Node ^22.22.2 || ^24.15.0 || >=26.0.0.
+  NODE_VERSION: "22"
 
 jobs:
   # ── Backend tests ──────────────────────────────────────────────
@@ -50,6 +52,11 @@ jobs:
         run: |
           cd frontend
           npm ci
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test
 
       - name: TypeScript check + Vite build
         run: |
