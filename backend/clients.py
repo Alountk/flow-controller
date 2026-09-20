@@ -439,9 +439,12 @@ async def arr_movie_metadata(
             mf = data.get("movieFile") or {}
             q = (mf.get("quality") or {}).get("quality") or {}
             quality = q.get("name", "")
+            # Radarr exposes alternate titles as `alternateTitles`; `altTitles`
+            # does not exist there and always came back empty. The output key
+            # stays `altTitles` because that is our own normalized contract.
             alt_titles = [
                 alt.get("title", "") if isinstance(alt, dict) else str(alt)
-                for alt in (data.get("altTitles") or [])
+                for alt in (data.get("alternateTitles") or [])
             ]
             return {
                 "title": data.get("title", ""),
@@ -699,9 +702,10 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
                     "overview": m.get("overview", ""),
                     "remotePoster": m.get("remotePoster", ""),
                     "has_file": m.get("hasFile", False),
+                    # Radarr sends `alternateTitles`; kept as our own `altTitles` key.
                     "altTitles": [
                         alt.get("title", "") if isinstance(alt, dict) else str(alt)
-                        for alt in (m.get("altTitles") or [])
+                        for alt in (m.get("alternateTitles") or [])
                     ],
                 }
                 for m in data.get("records", [])
