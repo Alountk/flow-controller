@@ -25,6 +25,9 @@ export async function fetchWantedMovies(page = 1, pageSize = 50, query = ''): Pr
     total: radarr?.total ?? 0,
     page,
     page_size: pageSize,
+    // Carry the failure through: without it a timeout renders as "no missing".
+    error: radarr?.error,
+    error_kind: radarr?.error_kind,
   }
 }
 
@@ -37,6 +40,8 @@ export async function fetchWantedEpisodes(page = 1, pageSize = 50, query = ''): 
     total: sonarr?.total ?? 0,
     page,
     page_size: pageSize,
+    error: sonarr?.error,
+    error_kind: sonarr?.error_kind,
   }
 }
 

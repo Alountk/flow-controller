@@ -68,6 +68,22 @@
   border-radius: 12px;
 }
 
+.wanted-error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  border: 1px solid var(--bad);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.wanted-error strong {
+  color: var(--bad);
+}
+
 .wanted-infinite-sentinel {
   padding: 24px 0;
   display: flex;
