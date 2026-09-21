@@ -18,7 +18,11 @@ AMUTORRENT_API_KEY = get_setting("services", "amutorrent", "api_key", default=""
 AMUTORRENT_USER = get_setting("services", "amutorrent", "user", default="admin")
 AMUTORRENT_PASSWORD = get_setting("services", "amutorrent", "password", default="")
 
-API_KEY = get_setting("security", "api_key", default="")
+#: The app's own key is stored as a hash, never in the clear. AUTH_REQUIRED
+#: says whether one has been configured at all.
+API_KEY_SALT = get_setting("security", "api_key_salt", default="")
+API_KEY_HASH = get_setting("security", "api_key_hash", default="")
+AUTH_REQUIRED = bool(API_KEY_HASH and API_KEY_SALT)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIST = os.path.normpath(os.path.join(BASE_DIR, "..", "frontend", "dist"))

@@ -7,9 +7,12 @@ import traceback
 import aiohttp
 from fastapi import APIRouter, Depends, Header, HTTPException
 
+import credentials
 from config import (
     AMUTORRENT_INDEXER,
-    API_KEY,
+    API_KEY_HASH,
+    API_KEY_SALT,
+    AUTH_REQUIRED,
     DEVELOPER,
     all_services,
     configured_services,
@@ -25,9 +28,14 @@ router = APIRouter()
 # ── API key verification ─────────────────────────────────────────────────────
 
 async def verify_api_key(x_api_key: str | None = Header(default=None)):
-    if not API_KEY:
+    """Reject anything that does not match the stored hash of the app key.
+
+    The key itself is not kept anywhere, so this compares hashes in constant
+    time instead of the two strings.
+    """
+    if not AUTH_REQUIRED:
         return ""
-    if x_api_key != API_KEY:
+    if not x_api_key or not credentials.verify_api_key(x_api_key, API_KEY_SALT, API_KEY_HASH):
         raise HTTPException(status_code=401, detail="API key inválida")
     return x_api_key
 
@@ -127,7 +135,7 @@ async def config():
     cualquiera que alcanzara el puerto obtuviera la clave y, con ella, todas las
     credenciales vía /api/settings. Solo informa de si hace falta autenticarse.
     """
-    return {"developer": DEVELOPER, "auth_required": bool(API_KEY)}
+    return {"developer": DEVELOPER, "auth_required": AUTH_REQUIRED}
 
 
 @router.get("/api/auth/check")

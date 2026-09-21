@@ -2,6 +2,7 @@ import json
 import os
 import stat
 import logging
+import credentials
 from typing import Any
 
 log = logging.getLogger("settings")
@@ -15,7 +16,7 @@ DEFAULTS: dict[str, Any] = {
         "sonarr": {"url": "http://localhost:8989", "api_key": ""},
         "amutorrent": {"url": "http://localhost:4000", "api_key": "", "user": "admin", "password": ""},
     },
-    "security": {"api_key": "", "safe_mode": True},
+    "security": {"api_key_hash": "", "api_key_salt": "", "safe_mode": True},
     "developer": False,
     "paths": {
         "download_amule": "/mnt/storage-6tb/shared-downloads/amule",
@@ -93,6 +94,29 @@ def _set_nested(d: dict, keys: tuple[str, ...], value: Any) -> None:
     d[keys[-1]] = typed_value
 
 
+def _env_fills_gaps(data: dict) -> dict:
+    """Apply environment values only where the settings file has none.
+
+    This is the middle ground between two broken extremes. Overriding on every
+    load made the Settings UI useless (an env var silently beat it); ignoring
+    the environment entirely removed any way back in when the key was lost.
+    Filling gaps keeps edits authoritative while letting a deployment variable
+    (and a Portainer secret) act as a recovery path.
+    """
+    result = _deep_merge(DEFAULTS, data)
+    for env_key, path in _env_to_settings.items():
+        env_val = os.getenv(env_key)
+        if env_val is None or env_val == "":
+            continue
+        current = result
+        for key in path[:-1]:
+            current = current.setdefault(key, {})
+        existing = current.get(path[-1])
+        if existing in (None, "", [], {}):
+            _set_nested(result, path, env_val)
+    return result
+
+
 def _env_seed() -> dict:
     """Settings values found in the environment, if any."""
     env_data: dict[str, Any] = {}
@@ -122,7 +146,11 @@ def load_settings() -> dict[str, Any]:
             log.info("Loaded settings from %s", SETTINGS_FILE)
         except Exception as exc:
             log.error("Failed to load settings from %s: %s", SETTINGS_FILE, exc)
-        _settings = _deep_merge(DEFAULTS, file_data)
+        _settings = _env_fills_gaps(file_data)
+        # Migrate a plaintext app key (or clear one corrupted by the mask bug)
+        # before anything reads it.
+        if credentials.normalise_app_key(_settings):
+            save_settings(_settings)
     elif not _settings:
         # No file and nothing seeded in memory: pure defaults.
         _settings = _deep_merge(DEFAULTS, {})
@@ -136,6 +164,8 @@ def load_settings() -> dict[str, Any]:
 def save_settings(data: dict[str, Any]) -> bool:
     global _settings
     _settings = _deep_merge(DEFAULTS, data)
+    # Never persist the app key in the clear: hash it on the way out.
+    credentials.normalise_app_key(_settings)
     try:
         os.makedirs(CONFIG_DIR, exist_ok=True)
         tmp = SETTINGS_FILE + ".tmp"
