@@ -15,9 +15,13 @@ random token, where brute force is already infeasible, so a fast hash is both
 safe and free of per-request cost.
 """
 
+import base64
+import copy
+import functools
 import hashlib
 import hmac
 import logging
+import os
 import secrets
 
 log = logging.getLogger("flow-controller")
@@ -27,10 +31,134 @@ log = logging.getLogger("flow-controller")
 #: overwrote real credentials with their mask.
 MASK_PREFIX = "****"
 
+from cryptography.fernet import Fernet, InvalidToken
+
 # Field paths inside the settings document.
 PLAINTEXT_PATH = ("security", "api_key")
 HASH_PATH = ("security", "api_key_hash")
 SALT_PATH = ("security", "api_key_salt")
+ENC_SALT_PATH = ("security", "encryption_salt")
+
+# ── Secrets that must survive as-is ──────────────────────────────────────────
+#
+# These are sent to Radarr/Sonarr/aMuTorrent, so unlike the app's own key they
+# cannot be hashed. They are encrypted at rest instead.
+
+ENCRYPTED_SECRET_FIELDS = (
+    ("services", "radarr", "api_key"),
+    ("services", "sonarr", "api_key"),
+    ("services", "amutorrent", "api_key"),
+    ("services", "amutorrent", "password"),
+)
+
+#: Marks a value as ciphertext, so legacy plaintext can still be read.
+ENCRYPTED_PREFIX = "enc:"
+
+#: Name of the deployment variable holding the encryption secret. Deliberately
+#: NOT written to the settings file: the whole point is that the file alone is
+#: not enough to read the credentials.
+SECRET_ENV_VAR = "FC_SECRET"
+
+
+def encryption_secret() -> str:
+    return os.getenv(SECRET_ENV_VAR, "")
+
+
+def is_encrypted(value) -> bool:
+    return isinstance(value, str) and value.startswith(ENCRYPTED_PREFIX)
+
+
+@functools.lru_cache(maxsize=8)
+def _fernet(secret: str, salt: str) -> Fernet:
+    """Derive the encryption key from the deployment secret.
+
+    PBKDF2 so a short or human-chosen secret still yields a proper key. Cached
+    because derivation is deliberately slow and this runs on every load and
+    save, not on every request.
+    """
+    derived = hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"), salt.encode("utf-8"), 200_000, dklen=32)
+    return Fernet(base64.urlsafe_b64encode(derived))
+
+
+def encrypt_secret(value: str, secret: str, salt: str) -> str:
+    return ENCRYPTED_PREFIX + _fernet(secret, salt).encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def decrypt_secret(token: str, secret: str, salt: str) -> str | None:
+    """The plaintext, or None when the secret does not match or data is damaged.
+
+    None rather than an exception so callers must decide what to do; returning a
+    placeholder would send a wrong credential to a service and look like an
+    outage.
+    """
+    try:
+        raw = token[len(ENCRYPTED_PREFIX):].encode("ascii")
+        return _fernet(secret, salt).decrypt(raw).decode("utf-8")
+    except (InvalidToken, ValueError, TypeError):
+        return None
+
+
+def ensure_encryption_salt(data: dict) -> str:
+    """The salt the ciphertext is bound to, created on first use.
+
+    It must exist before anything is encrypted, and it must stay stable: a new
+    salt would make every previously written value unreadable.
+    """
+    salt = _get(data, ENC_SALT_PATH, "")
+    if not salt:
+        salt = new_salt()
+        _set(data, ENC_SALT_PATH, salt)
+    return salt
+
+
+def prepare_for_use(data: dict, secret: str) -> list[str]:
+    """Decrypt the stored secrets in place, so the app can send them.
+
+    Returns the fields that could NOT be decrypted, as paths. Callers must treat
+    a non-empty result as a loud failure: a wrong secret means the credentials
+    are unreadable, and quietly continuing with empty values would look like
+    every service being misconfigured.
+    """
+    if secret:
+        ensure_encryption_salt(data)
+
+    salt = _get(data, ENC_SALT_PATH, "")
+    failures: list[str] = []
+
+    for path in ENCRYPTED_SECRET_FIELDS:
+        value = _get(data, path)
+        if not is_encrypted(value):
+            continue
+        plain = decrypt_secret(value, secret, salt) if secret else None
+        if plain is None:
+            failures.append(".".join(path))
+            # Never hand ciphertext to a service.
+            _set(data, path, "")
+        else:
+            _set(data, path, plain)
+
+    return failures
+
+
+def prepare_for_storage(data: dict, secret: str) -> dict:
+    """A copy ready to write, with the service secrets encrypted.
+
+    Without a secret nothing is encrypted: the app still works with plaintext
+    and says so at start-up, rather than refusing to run.
+    """
+    out = copy.deepcopy(data)
+    if not secret:
+        return out
+
+    # Establish the salt here too: a save can happen before any load.
+    salt = ensure_encryption_salt(out)
+
+    for path in ENCRYPTED_SECRET_FIELDS:
+        value = _get(out, path)
+        if isinstance(value, str) and value and not is_encrypted(value):
+            _set(out, path, encrypt_secret(value, secret, salt))
+
+    return out
 
 
 def new_salt() -> str:
