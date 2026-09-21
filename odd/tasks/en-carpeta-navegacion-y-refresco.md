@@ -125,8 +125,21 @@ unit; el preflight se lanzará al cerrar el slice. La declaración de no rastrea
 herramienta se resolvió con `--untracked-scope=exclude` (el `.md` de la otra feature queda fuera
 del candidato a propósito).
 
-Presupuesto de entrega: **376 / ~400 líneas**. T3-T5 lo excederán, así que hay que elegir
-estrategia de entrega antes del siguiente commit.
+## Entrega
+
+Estrategia elegida por el usuario: **PRs encadenados**, cadena **`stacked-to-main`** (cada PR
+mergea a `main` en orden).
+
+| PR | Contenido | Commits |
+| --- | --- | --- |
+| #1 | T1+T2 (navegación y refresco) | `d160c29`, `bbd5022`, `4797038`, `3071f92` |
+| #2 | T3-T5 (enriquecido de episodios) + T6/T7 | todavía sin crear |
+
+Presupuesto: **376 / ~400 líneas** en el slice #1. El slice #2 arranca con el presupuesto a cero
+y su base es la rama del #1.
+
+Antes de crear cualquier PR hay que resolver por registro las skills `work-unit-commits` y
+`chained-pr`. Push, creación de PR y merge siguen siendo decisión del usuario.
 
 ## Hipótesis pendiente de confirmar
 
