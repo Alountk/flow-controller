@@ -294,3 +294,36 @@ class TestQueueLifecycleIsPersisted:
         file_queue.clear()  # simulates the process going away
 
         assert [r["id"] for r in history.recent_operations()] == ["lifecycle-1"]
+
+
+# ── An unavailable database must never stop the app ──────────────────────────
+
+
+class TestUnavailableDatabase:
+    """init_db runs in the app lifespan, so an escaping error there stops the
+    whole server from starting — over a HISTORY database."""
+
+    def test_init_db_survives_an_unwritable_directory(self, tmp_path):
+        history.close()
+        blocked = tmp_path / "readonly"
+        blocked.mkdir()
+        blocked.chmod(0o500)  # no write permission
+        try:
+            history.init_db(blocked / "nested" / "history.db")
+            # Must not raise, and must simply report itself as unavailable.
+            history.record_operation(_op())
+            assert history.recent_operations() == []
+        finally:
+            blocked.chmod(0o700)
+            history.close()
+
+    def test_init_db_survives_a_path_that_is_a_file(self, tmp_path):
+        history.close()
+        a_file = tmp_path / "not-a-dir"
+        a_file.write_text("x")
+
+        # mkdir on a path whose parent is a file raises OSError.
+        history.init_db(a_file / "history.db")
+
+        assert history.recent_operations() == []
+        history.close()

@@ -114,6 +114,64 @@ async def check_service(session: aiohttp.ClientSession, service: dict) -> tuple[
     return await check_arr(session, service)
 
 
+async def test_service_connection(session: aiohttp.ClientSession, service: dict) -> dict:
+    """Probe one configured service and report what actually happened.
+
+    Deliberately NOT the same as check_arr, which treats HTTP 401 as "online":
+    a rejected API key is the most likely misconfiguration, and calling it a
+    successful connection hides exactly the thing the user is testing.
+
+    Always echoes the URL, because the same logical setting resolves to
+    localhost or to a host IP depending on where the app runs.
+    """
+    service_key = service.get("key", "?")
+    result = {
+        "key": service_key,
+        "kind": service.get("kind", "arr"),
+        "url": service.get("url", ""),
+    }
+
+    if service["kind"] == "qbit":
+        endpoint = f"{service['url']}/api/v2/app/version"
+        headers = qbit_headers(service["api_key"])
+    else:
+        endpoint = f"{service['url']}/api/v3/system/status"
+        headers = arr_headers(service["api_key"])
+
+    try:
+        async with session.get(
+            endpoint, headers=headers, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+        ) as resp:
+            if resp.status != 200:
+                return {**result, "ok": False, **_failure_detail(service, status=resp.status)}
+
+            if service["kind"] == "qbit":
+                version = (await resp.text()).strip()
+            else:
+                data = await resp.json(content_type=None)
+                version = data.get("version", "")
+
+            return {
+                **result,
+                "ok": True,
+                "version": version,
+                "detail": f"Conectado ({version})" if version else "Conectado",
+            }
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {**result, "ok": False, **_failure_detail(service, exc=exc)}
+
+
+def _failure_detail(service: dict, **kwargs) -> dict:
+    """arr_failure under a name that matches this endpoint's response shape.
+
+    The wanted endpoints expose `error`; this list exposes `detail`, which is
+    what a status row shows. `error_kind` stays identical so the two share one
+    classification.
+    """
+    failure = arr_failure(service, **kwargs)
+    return {"error_kind": failure["error_kind"], "detail": failure["error"]}
+
+
 async def arr_command(session: aiohttp.ClientSession, service: dict, body: dict) -> dict:
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"

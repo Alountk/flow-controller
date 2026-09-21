@@ -321,6 +321,7 @@ falla y **nombra el módulo**.
 | 20 | **Filtros en los resultados de los indexadores** | ✅ | `ReleaseSearchModal.tsx`, `utils/releaseFilters.ts`, `utils/selection.ts` |
 | 21 | **Feedback de descargas en la cola de operaciones** | ✅ | `routes/downloads.py`, `hooks/useDownloads.ts`, `QueueSidebar.tsx` |
 | 23 | **Persistencia del historial de operaciones (SQLite)** | ✅ | `backend/history.py` + `routes/files.py` |
+| 24 | **Botón para probar las conexiones** | ✅ | `routes/settings.py` + `Settings.tsx` |
 | 22 | **Filtro de texto en faltantes** | ✅ | `routes/wanted.py`, `MissingContent.tsx`, `hooks/useDebouncedValue.ts` |
 
 ### 🔵 Largas (1-2 semanas)
@@ -438,6 +439,45 @@ Detalles:
 > recortada, así que `q='your'` devolvía 0 aunque "Your Name." estuviera en la biblioteca, y
 > `q='the'` devolvía 1 en vez de 332. Los tests de ruta no podían verlo porque el recorte ocurre
 > en el cliente: hizo falta un test que usara el **cliente real** contra un transporte HTTP falso.
+
+### 🔌 #24 — Probar las conexiones desde Configuración
+
+**Hecho ✅** — botón en Configuración que prueba Radarr, Sonarr y aMuTorrent y dice **qué**
+falla en cada uno.
+
+Nace pensando en el **Paso 3** (mover los servicios detrás de un proxy): cuando dejen de estar en
+`localhost`, esto es lo que dice si siguen siendo alcanzables.
+
+**Por qué no reutiliza `check_arr`:** esa función considera **HTTP 401 como "online"** —
+```python
+if resp.status in (200, 401, 301, 302):
+    return "online", f"Conexión exitosa (intento {attempt})", {}
+```
+Es decir, una **API key rechazada se reporta como conexión exitosa**, y encima descarta el motivo.
+Para un botón cuyo propósito es diagnosticar, es justo lo contrario de lo útil.
+
+**Qué reporta:** la **URL intentada** (clave durante la migración), la versión cuando funciona, y
+el motivo clasificado cuando no: `auth` (401/403), `http`, `timeout`, `unreachable`.
+
+**Verificado en vivo:**
+
+```
+[OK  ] radarr      http://…:7878  Conectado (6.4.4.10685)
+[OK  ] sonarr      http://…:8989  Conectado (4.0.20.3014)
+[OK  ] amutorrent  http://…:4000  Conectado (v5.1.4)
+```
+
+y con una clave forzada a mala:
+
+```
+ok global: False
+[FALLA] radarr  radarr: API key rechazada (HTTP 401)
+```
+
+**Hallazgo colateral:** las **variables de entorno tienen prioridad sobre `settings.json`**
+(`_apply_env_overrides`). Si defines `RADARR_API_KEY` en el compose, **pisa lo que guardes desde
+la UI** y el cambio parece no surtir efecto. El botón ayuda a detectarlo porque muestra con qué
+configuración se está intentando de verdad.
 
 ### 💾 #23 — Persistencia del historial de operaciones
 
