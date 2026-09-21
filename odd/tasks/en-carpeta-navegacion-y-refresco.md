@@ -182,7 +182,7 @@ rama apuntándolo.
 | PR | Contenido | Base | Líneas | Commits |
 | --- | --- | --- | --- | --- |
 | [#27](https://github.com/Alountk/flow-controller/pull/27) | T1 — refresco del listado | `main` | 146 (145+, 1−) | `d160c29` |
-| [#28](https://github.com/Alountk/flow-controller/pull/28) | T2 — archivos en el navegador + registro | `fix/en-carpeta-refresh` | 264 (250+, 14−) | `bbd5022`, `4797038`, `3071f92`, `2a76bff` |
+| [#28](https://github.com/Alountk/flow-controller/pull/28) | T2 — archivos en el navegador + registro | `fix/en-carpeta-refresh` | 271 (257+, 14−) | `bbd5022`, `4797038`, `3071f92`, `2a76bff`, `6ae5ed4` |
 | [#29](https://github.com/Alountk/flow-controller/pull/29) | T3 — endpoint de episodios de una serie | rama de #28 | 119 (118+, 1−) | `ef098c8` |
 | [#30](https://github.com/Alountk/flow-controller/pull/30) | T4 — parser `S##E##` + anotación por archivo | rama de #29 | 289 (270+, 19−) | `91e508c` |
 | [#31](https://github.com/Alountk/flow-controller/pull/31) | T5 — header del episodio + este registro | rama de #30 | 136 (124+, 12−) | `5a36c2e`, `368bdcc`, más el commit de este cuadro |
