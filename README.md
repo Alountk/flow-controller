@@ -306,7 +306,7 @@ tab === 'episodes' // OK
 | 9 | Tests de componentes React (0 actualmente) | ✅ | `frontend/src/__tests__/*.test.tsx` (39 tests) |
 | 19 | **Filtrar los faltantes** (títulos alternativos + filtro de resultados) | ✅ | `clients.py`, `MissingContent.tsx`, `utils/scanResults.ts` |
 | 20 | **Filtros en los resultados de los indexadores** | ✅ | `ReleaseSearchModal.tsx`, `utils/releaseFilters.ts`, `utils/selection.ts` |
-| 21 | **Feedback de descargas en la cola de operaciones** | 📋 | Backend + Frontend — ver estudio abajo |
+| 21 | **Feedback de descargas en la cola de operaciones** | ✅ | `routes/downloads.py`, `hooks/useDownloads.ts`, `QueueSidebar.tsx` |
 | 22 | **Filtro de texto en faltantes** | ✅ | `routes/wanted.py`, `MissingContent.tsx`, `hooks/useDebouncedValue.ts` |
 
 ### 🔵 Largas (1-2 semanas)
@@ -427,7 +427,48 @@ Detalles:
 
 ### ⬇️ #21 — Feedback de descargas en la cola de operaciones
 
-**Estado: pendiente.** Estudio de APIs hecho; ver abajo los hallazgos y el diseño.
+**Hecho ✅** — panel de descargas en el sidebar, dividido **en vertical** (operaciones 2/3 arriba,
+descargas 1/3 abajo).
+
+**Por qué en vertical y no en horizontal:** el sidebar mide ~280 px, así que un tercio serían
+~90 px, insuficiente para títulos reales como
+`Transformers El ultimo caballero (2017).BDrip 2160p x265 10Bit DV HDR DUAL ac3-eac3.(.HispaShare.).mkv`
+junto con progreso, velocidad y ETA.
+
+**Unión de dos fuentes** por `downloadId` ↔ `hash` (con `normalize_hash`, el mismo que ya usaba
+la trazabilidad). Cada fuente aporta lo que la otra no tiene:
+
+| Radarr/Sonarr | aMuTorrent |
+| --- | --- |
+| `trackedDownloadState`, `statusMessages`, `timeleft`, `sizeleft` | `dlspeed`, `eta`, `num_seeds` |
+
+**Control de coste** (el hallazgo que decidió el diseño):
+
+| Enfoque | Torrents | Payload |
+| --- | --- | --- |
+| `/torrents/info` sin filtro | 813 | **1097 KB** |
+| Filtrado por categoría | **1** | **1.4 KB** |
+
+Comprobado que `hashes=` y `filter=` **se ignoran** y `category=` sí funciona. Y las categorías
+reales incluyen **`radarr-ru`** y **`tv-sonarr-ru`**, así que el filtro cubre la base y sus
+variantes con guion — filtrar solo las base perdería las descargas rusas. **Con la cola vacía no
+se consulta a aMuTorrent**: en reposo el coste es cero.
+
+**Verificado en vivo** con una descarga real:
+
+```json
+{"title": "Transformers El ultimo caballero (2017).BDrip 2160p...",
+ "problem": true, "tracked_state": "importBlocked", "tracked_status": "warning",
+ "messages": ["Failed to import movie"],
+ "progress": 88.6, "speed": 4680957, "eta_seconds": 483, "seeders": 1, "matched": true}
+```
+
+Ese caso — descarga terminada e **import bloqueado** — es justo lo que la app existe para
+detectar, y hasta ahora no se veía en ningún sitio.
+
+**Degradación y errores:** si el cliente de descargas falla, se sigue mostrando el progreso de
+Radarr, se marca "Sin datos del cliente de descargas" y **se dice cuál falló y por qué**; nunca
+se presenta como "sin descargas".
 
 #### Qué se quiere
 

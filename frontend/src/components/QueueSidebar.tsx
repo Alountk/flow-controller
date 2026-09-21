@@ -2,7 +2,55 @@ import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queueStatus, queueCancel } from '../api/files'
 import type { QueueOp } from '../api/files'
+import type { Download } from '../api/downloads'
+import {
+  downloadStateLabel,
+  formatEta,
+  formatSpeed,
+  useDownloads,
+} from '../hooks/useDownloads'
 import './QueueSidebar.css'
+
+function DownloadItem({ download }: { download: Download }) {
+  const badge = downloadStateLabel(download)
+
+  return (
+    <div className={`qsidebar-download ${download.problem ? 'problem' : ''}`}>
+      <div className="qsidebar-download-title" title={download.title}>
+        {download.title}
+      </div>
+
+      <div className="qsidebar-progress">
+        <div className="qsidebar-bar-track">
+          <div
+            className={`qsidebar-bar-fill ${download.problem ? 'problem' : ''}`}
+            style={{ width: `${download.progress}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="qsidebar-download-meta">
+        <span className={`qsidebar-badge ${download.problem ? 'problem' : ''}`}>{badge}</span>
+        <span className="qsidebar-download-progress">{download.progress}%</span>
+      </div>
+
+      {/* Speed, ETA and seeds exist only when the download client answered. */}
+      {download.matched ? (
+        <div className="qsidebar-download-stats">
+          <span>⬇ {formatSpeed(download.speed)}</span>
+          <span>⏱ {formatEta(download.eta_seconds)}</span>
+          {download.seeders !== null && <span>🌱 {download.seeders}</span>}
+        </div>
+      ) : (
+        <div className="qsidebar-download-nostats">Sin datos del cliente de descargas</div>
+      )}
+
+      {download.messages.length > 0 && (
+        <div className="qsidebar-download-message">{download.messages[0]}</div>
+      )}
+    </div>
+  )
+}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -89,6 +137,11 @@ export function QueueSidebar() {
     },
   })
 
+  const { data: downloadsData } = useDownloads()
+  const downloads = downloadsData?.downloads ?? []
+  const downloadErrors = downloadsData?.errors ?? []
+  const problemCount = downloads.filter((d) => d.problem).length
+
   const activeOps = queueData?.queue ?? []
   const recentDone = (queueData?.completed ?? []).slice(-5).reverse()
   const activeCount = activeOps.length
@@ -138,27 +191,64 @@ export function QueueSidebar() {
           <span className="qsidebar-title">
             Cola de operaciones
             {activeCount > 0 && <span className="qsidebar-count">{activeCount}</span>}
+            {problemCount > 0 && (
+              <span className="qsidebar-count qsidebar-count-problem">{problemCount}</span>
+            )}
           </span>
           <span className="qsidebar-toggle">▶</span>
         </div>
-        <div className="qsidebar-body">
-          {activeOps.length === 0 && recentDone.length === 0 ? (
-            <div className="qsidebar-empty">Sin operaciones</div>
-          ) : (
-            <>
-              {activeOps.map((op) => (
-                <QueueOpItem key={op.id} op={op} onCancel={(id) => cancelMutation.mutate(id)} />
-              ))}
-              {recentDone.length > 0 && (
-                <div className="qsidebar-done-section">
-                  <div className="qsidebar-done-label">Recientes</div>
-                  {recentDone.map((op) => (
-                    <QueueOpItem key={op.id} op={op} onCancel={() => {}} />
+        {/* Vertical split: the sidebar is ~280px wide, so splitting it
+            horizontally would leave a third too narrow for the long release
+            titles this app deals with. */}
+        <div className="qsidebar-split">
+          <div className="qsidebar-section qsidebar-section-ops">
+            <div className="qsidebar-section-title">
+              Operaciones
+              {activeCount > 0 && <span className="qsidebar-count">{activeCount}</span>}
+            </div>
+            <div className="qsidebar-body">
+              {activeOps.length === 0 && recentDone.length === 0 ? (
+                <div className="qsidebar-empty">Sin operaciones</div>
+              ) : (
+                <>
+                  {activeOps.map((op) => (
+                    <QueueOpItem key={op.id} op={op} onCancel={(id) => cancelMutation.mutate(id)} />
                   ))}
-                </div>
+                  {recentDone.length > 0 && (
+                    <div className="qsidebar-done-section">
+                      <div className="qsidebar-done-label">Recientes</div>
+                      {recentDone.map((op) => (
+                        <QueueOpItem key={op.id} op={op} onCancel={() => {}} />
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
+            </div>
+          </div>
+
+          <div className="qsidebar-section qsidebar-section-downloads">
+            <div className="qsidebar-section-title">
+              Descargas
+              {downloads.length > 0 && <span className="qsidebar-count">{downloads.length}</span>}
+              {problemCount > 0 && (
+                <span className="qsidebar-count qsidebar-count-problem">{problemCount}</span>
+              )}
+            </div>
+            <div className="qsidebar-body">
+              {downloadErrors.map((failure) => (
+                <div key={failure.source} className="qsidebar-download-error" role="alert">
+                  {failure.error}
+                </div>
+              ))}
+              {downloads.length === 0 && downloadErrors.length === 0 && (
+                <div className="qsidebar-empty">Sin descargas</div>
+              )}
+              {downloads.map((download) => (
+                <DownloadItem key={download.id} download={download} />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </>

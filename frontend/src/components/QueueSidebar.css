@@ -118,6 +118,141 @@
   padding: 8px;
 }
 
+/* ── Vertical split: operations 2/3, downloads 1/3 ───────────────────────── */
+
+.qsidebar-split {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.qsidebar-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.qsidebar-section-ops {
+  flex: 2 1 0;
+}
+
+.qsidebar-section-downloads {
+  flex: 1 1 0;
+  border-top: 1px solid var(--border);
+  min-height: 110px;
+}
+
+.qsidebar-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* ── Downloads ───────────────────────────────────────────────────────────── */
+
+.qsidebar-download {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  margin-bottom: 6px;
+}
+
+.qsidebar-download.problem {
+  border-color: var(--bad);
+}
+
+.qsidebar-download-title {
+  font-size: 11px;
+  color: var(--text);
+  margin-bottom: 6px;
+  /* Release names are long: never let one push the layout around. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.qsidebar-download-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.qsidebar-badge {
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.qsidebar-badge.problem {
+  border-color: var(--bad);
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.qsidebar-download-progress {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.qsidebar-bar-fill.problem {
+  background: var(--bad);
+}
+
+.qsidebar-download-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.qsidebar-download-nostats {
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.qsidebar-download-message {
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--bad);
+  word-break: break-word;
+}
+
+.qsidebar-download-error {
+  padding: 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--bad);
+  border-radius: 8px;
+  font-size: 10px;
+  color: var(--bad);
+}
+
+.qsidebar-count-problem {
+  background: var(--bad);
+  color: #fff;
+}
+
 .qsidebar-empty {
   text-align: center;
   color: var(--text-dim);
