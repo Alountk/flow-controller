@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PrototypeFile } from '../types'
 import './Prototypes.css'
+import { authHeaders } from '../api/auth'
 
 export function Prototypes() {
   const [prototypes, setPrototypes] = useState<PrototypeFile[]>([])
@@ -9,7 +10,7 @@ export function Prototypes() {
 
   useEffect(() => {
     let active = true
-    fetch('/api/prototypes')
+    fetch('/api/prototypes', { headers: authHeaders() })
       .then((r) => r.json())
       .then((data: PrototypeFile[]) => {
         if (!active) return

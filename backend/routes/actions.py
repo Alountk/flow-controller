@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 @router.get("/api/actions")
-async def list_actions():
+async def list_actions(_key: str = Depends(verify_api_key)):
     return {
         "actions": [
             {"key": k, **v} for k, v in ACTIONS.items()

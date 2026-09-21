@@ -38,7 +38,7 @@ router = APIRouter()
 
 
 @router.get("/api/calendar")
-async def get_calendar(start: str = "", end: str = ""):
+async def get_calendar(start: str = "", end: str = "", _key: str = Depends(verify_api_key)):
     """Calendario de próximos episodios y películas."""
     if not start:
         start = date.today().isoformat()
@@ -248,7 +248,7 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
 
 
 @router.get("/api/calendar/indexers")
-async def calendar_indexers(source: str = "radarr"):
+async def calendar_indexers(source: str = "radarr", _key: str = Depends(verify_api_key)):
     """Lista de indexadores configurados en Radarr/Sonarr."""
     service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
     if not service:
@@ -259,7 +259,7 @@ async def calendar_indexers(source: str = "radarr"):
 
 
 @router.get("/api/disk")
-async def get_disk_usage():
+async def get_disk_usage(_key: str = Depends(verify_api_key)):
     """Uso de disco de cada volumen configurado."""
     import shutil
     volumes = [

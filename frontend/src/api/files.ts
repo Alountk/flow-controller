@@ -33,12 +33,12 @@ export interface QueueStatusResponse {
 }
 
 export async function fetchRoots(): Promise<RootsResponse> {
-  const res = await fetch('/api/files/roots')
+  const res = await fetch('/api/files/roots', { headers: authHeaders() })
   return (await res.json()) as RootsResponse
 }
 
 export async function browsePath(path: string): Promise<BrowseResponse> {
-  const res = await fetch(`/api/files/browse?path=${encodeURIComponent(path)}`)
+  const res = await fetch(`/api/files/browse?path=${encodeURIComponent(path)}`, { headers: authHeaders() })
   return (await res.json()) as BrowseResponse
 }
 
@@ -112,7 +112,7 @@ export async function queueAdd(
 }
 
 export async function queueStatus(): Promise<QueueStatusResponse> {
-  const res = await fetch('/api/files/queue/status')
+  const res = await fetch('/api/files/queue/status', { headers: authHeaders() })
   return (await res.json()) as QueueStatusResponse
 }
 

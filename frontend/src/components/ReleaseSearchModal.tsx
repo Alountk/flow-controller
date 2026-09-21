@@ -6,6 +6,7 @@ import {
   grabCalendarReleaseBatch,
   type Release,
 } from '../api/calendar'
+import { authHeaders } from '../api/auth'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
 import {
   NO_RELEASE_FILTERS,
@@ -91,7 +92,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
 
   // Fetch indexers on mount
   useEffect(() => {
-    fetch(`/api/calendar/indexers?source=${item.source}`)
+    fetch(`/api/calendar/indexers?source=${item.source}`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data: { indexers: Indexer[] }) => setIndexers(data.indexers || []))
       .catch(() => {})

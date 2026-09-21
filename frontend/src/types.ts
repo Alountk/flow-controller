@@ -168,7 +168,8 @@ export const STAGE_LABELS: Record<TraceStage, string> = {
 
 export interface ConfigResponse {
   developer: boolean
-  api_key: string
+  /** Whether the backend requires an API key. The key itself is never sent. */
+  auth_required: boolean
 }
 
 export interface Settings {
