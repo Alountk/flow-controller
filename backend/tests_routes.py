@@ -14,6 +14,7 @@ body itself was never executed.
 
 import asyncio
 import json
+from urllib.parse import urlencode
 from unittest.mock import patch
 
 import aiohttp
@@ -87,7 +88,14 @@ class _StubSession:
         return _StubResponse(self.default_status, self.default_payload)
 
     def get(self, url, **kwargs):
-        return self._resolve(str(url))
+        # Query parameters take part in matching: routes like
+        # `?category=radarr` carry meaning in params, not in the path, and a
+        # URL-only match would silently serve the wrong payload.
+        target = str(url)
+        params = kwargs.get("params")
+        if params:
+            target += "?" + urlencode(params)
+        return self._resolve(target)
 
     def post(self, url, **kwargs):
         return self._resolve(str(url))
