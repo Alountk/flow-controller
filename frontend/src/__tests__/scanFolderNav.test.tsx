@@ -227,4 +227,16 @@ describe('"En carpeta" navigator', () => {
     expect(await screen.findByText('Some.Show.1080p.mkv')).toBeInTheDocument()
     expect(document.querySelectorAll('.scan-file-row-episode')).toHaveLength(0)
   })
+
+  it('identifies the scanned episode in the modal header', async () => {
+    mockFetch([file('Some.Show.1080p.mkv')])
+    await openScanModalForSeries()
+
+    // The header names the episode, not only the series.
+    expect(document.querySelector('.scan-selected-info strong')).toHaveTextContent(
+      'S03E07 · Of Ice Men · 2006-11-27',
+    )
+    // The series title stays visible alongside it.
+    expect(document.querySelector('.scan-selected-series')).toHaveTextContent('Some Show')
+  })
 })

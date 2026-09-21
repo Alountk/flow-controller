@@ -717,6 +717,15 @@
   color: var(--text);
 }
 
+/* The series title stays visible next to the episode label. */
+.scan-modal-header .scan-selected-series {
+  font-size: 0.85rem;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .scan-modal-header .scan-selected-type {
   font-size: 0.85rem;
   color: var(--text-2);

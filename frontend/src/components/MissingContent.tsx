@@ -35,6 +35,12 @@ interface ScanItem {
   id: number
   title: string
   source: string
+  // Present only when "En carpeta" was opened for one specific episode; the
+  // "Todas" series card scans a whole series and leaves these empty.
+  season_number?: number | null
+  episode_number?: number | null
+  episode_title?: string | null
+  air_date?: string | null
 }
 
 function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
@@ -180,6 +186,18 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
 
   const selectedMatches = allMatches.filter((m) => selectedFiles.has(m.file_path))
 
+  // The header must identify the episode, not just the series. Movies and
+  // whole-series scans fall back to the bare title.
+  const episodeLabel =
+    item.type === 'series' && item.season_number != null && item.episode_number != null
+      ? formatEpisodeLabel({
+          season: item.season_number,
+          episode: item.episode_number,
+          title: item.episode_title,
+          air_date: item.air_date,
+        })
+      : null
+
   return (
     <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
       <div className="scan-modal" ref={modalRef}>
@@ -188,7 +206,8 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
         <div className="scan-modal-header">
           <div className="scan-selected-info">
             <span className="scan-selected-type">{item.type === 'movie' ? '🎬' : '📺'}</span>
-            <strong>{item.title}</strong>
+            <strong>{episodeLabel ?? item.title}</strong>
+            {episodeLabel && <span className="scan-selected-series">{item.title}</span>}
           </div>
           <button className="scan-modal-close" onClick={onClose}>×</button>
         </div>
@@ -469,9 +488,26 @@ export function MissingContent() {
     setScanItem({ type: 'movie', id: movie.id, title: movie.title, source: 'radarr' })
   }
 
-  function handleScanForSeries(seriesTitle: string, seriesId: number | null) {
-    if (!seriesId) return
-    setScanItem({ type: 'series', id: seriesId, title: seriesTitle, source: 'sonarr' })
+  function handleScanForSeries(series: {
+    id: number | null
+    title: string
+    season_number?: number | null
+    episode_number?: number | null
+    episode_title?: string | null
+    air_date?: string | null
+  }) {
+    if (!series.id) return
+    setScanItem({
+      type: 'series',
+      id: series.id,
+      title: series.title,
+      source: 'sonarr',
+      // Carried through so the modal can identify the episode, not just the series.
+      season_number: series.season_number,
+      episode_number: series.episode_number,
+      episode_title: series.episode_title,
+      air_date: series.air_date,
+    })
   }
 
   const radarrWantedTotal = wantedMoviesQuery.data?.pages[0]?.total ?? 0
@@ -729,7 +765,14 @@ export function MissingContent() {
                         <button
                           className="action-btn scan-folder-btn"
                           title="Buscar en carpeta"
-                          onClick={() => handleScanForSeries(ep.series_title, ep.series_id)}
+                          onClick={() => handleScanForSeries({
+                            id: ep.series_id,
+                            title: ep.series_title,
+                            season_number: ep.season_number,
+                            episode_number: ep.episode_number,
+                            episode_title: ep.title,
+                            air_date: ep.air_date,
+                          })}
                         >
                           📁
                         </button>
@@ -800,7 +843,7 @@ export function MissingContent() {
                         </button>
                         <button
                           className="action-btn scan-folder-btn"
-                          onClick={() => handleScanForSeries(series.title, series.id)}
+                          onClick={() => handleScanForSeries({ id: series.id, title: series.title })}
                         >
                           📁 En carpeta
                         </button>
