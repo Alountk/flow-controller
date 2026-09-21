@@ -67,10 +67,10 @@ Fuera:
 
 - [x] **T1** Frontend: `scan-browse` con `staleTime: 0` y `refetchOnMount: 'always'`, más botón ↻
 - [x] **T2** Frontend: listar archivos (además de carpetas) en la navegación del modal
-- [ ] **T3** Backend: traer los episodios de una serie en **una** llamada (Sonarr
+- [x] **T3** Backend: traer los episodios de una serie en **una** llamada (Sonarr
       `/api/v3/episode?seriesId=`; verificar la forma real de la respuesta antes de fiarse)
-- [ ] **T4** Frontend: resolver `S##E##` del nombre del archivo y pintar `s03e07 Título fecha`
-- [ ] **T5** Frontend: header del modal con temporada, episodio, título y fecha
+- [x] **T4** Frontend: resolver `S##E##` del nombre del archivo y pintar `s03e07 Título fecha`
+- [x] **T5** Frontend: header del modal con temporada, episodio, título y fecha
 - [ ] **T6** Tests: refetch al navegar, archivos visibles, episodio resuelto por `S##E##`
 - [ ] **T7** Verificación en vivo: una carpeta/archivo recién creado aparece sin recargar
 
@@ -112,6 +112,50 @@ Comandos ejecutados en `frontend/`:
 El test de refresco se comprobó en negativo: con el handler del botón ↻ sustituido por un
 no-op, `src/__tests__/scanFolderNav.test.tsx` falla (el nombre nuevo no aparece y no hay
 segunda petición a `/api/files/browse`).
+
+### Slice T3-T5 (rama `feat/en-carpeta-enriquecido-episodios`, base `feat/en-carpeta-navegacion-y-refresco`)
+
+- Commit T3: `ef098c8` — `feat(wanted): fetch a series' episodes for the "En carpeta" navigator`
+- Commit T4: `91e508c` — `feat(wanted): resolve and show the episode of each file in the navigator`
+- Commit T5: `5a36c2e` — `feat(wanted): identify the scanned episode in the "En carpeta" header`
+
+Comandos y resultados literales:
+
+- `cd backend && python -m pytest -q` → el binario `python` no existe en este checkout
+  (`zsh: command not found: python`). Se ejecutó con el intérprete disponible:
+  `python3 -m pytest -q` → `324 passed, 2 warnings in 13.85s`, exit 0.
+- `cd backend && python -m pyflakes *.py routes/*.py` → mismo problema de binario; con
+  `python3 -m pyflakes *.py routes/*.py` → sin salida, exit 0.
+- `cd backend && python -m vulture` → mismo problema de binario; con `python3 -m vulture` →
+  sin salida, exit 0.
+- `cd frontend && npm test` → `Test Files 24 passed (24)`, `Tests 182 passed (182)`, exit 0.
+- `cd frontend && npm run build` → `tsc -b && vite build` en verde: 130 módulos
+  transformados, `✓ built in 1.88s`, exit 0.
+
+Tamaño del slice: `git diff --shortstat feat/en-carpeta-navegacion-y-refresco...HEAD` →
+`11 files changed, 458 insertions(+), 26 deletions(-)` = **484 líneas cambiadas**, por
+encima del presupuesto blando de ~400. **No se recortaron tests, comentarios ni
+documentación para encajar**: el presupuesto corta trabajo, no encoge código. Se reporta el
+número real y queda a criterio del padre decidir si este slice se abre como un solo PR o se
+parte.
+
+### Verificación en vivo: NO posible desde este checkout
+
+No se pudo verificar contra el Sonarr real. `backend/.env` es una copia de `.env.example`
+con una dirección de relleno (`111.111.111.111`) y claves ficticias, y la configuración real
+vive en el host de despliegue. No se hizo ninguna llamada de red a un servicio real.
+
+Por qué los nombres de campo **no** son una suposición: `/api/v3/episode` devuelve el mismo
+`EpisodeResource` que `fetch_wanted_episodes` ya consume en producción
+(`seasonNumber`, `episodeNumber`, `title`, `airDateUtc`), y por eso las filas de episodios de
+Faltantes ya pintan `S##E##` correctamente hoy. El mapeo del fetcher nuevo reutiliza
+exactamente esos campos.
+
+Suposición residual única sin probar: que `/api/v3/episode?seriesId=` **sin** `seasonNumber`
+devuelve todas las temporadas. El call site existente (`clients.py:571`) nunca lo demostró
+porque siempre pasó `seasonNumber`. Si Sonarr devolviera solo una temporada, el enriquecido
+mostraría etiquetas parciales —los archivos de otras temporadas se quedarían sin segunda
+línea— y **nunca** etiquetas incorrectas: un tag sin coincidencia no pinta nada.
 
 ## Review (RDD)
 
@@ -157,6 +201,10 @@ reforzaría que el síntoma principal es el punto 1: lo que no se ve son los **a
 
 ## Next step
 
-Seguir con T3-T5 (enriquecido de episodios, una llamada por serie). Antes de fiarse de la forma
-de `/api/v3/episode?seriesId=` hay que verificarla contra la API real: qué campos trae cada
-episodio y si el mapeo `S##E##` → título + `airDate` es directo. T1-T2 ya están cerrados.
+Seguir con **T6** (tests de refetch al navegar, archivos visibles y episodio resuelto por
+`S##E##`) y **T7** (verificación en vivo: una carpeta o archivo recién creado aparece sin
+recargar). T7 es justamente la que no puede cerrarse desde este checkout, por lo dicho en la
+sección de honestidad de arriba.
+
+El tercer PR de la cadena (T3-T5, rama `feat/en-carpeta-enriquecido-episodios`) **todavía no
+está abierto**: lo abre el padre. T1-T2 ya están cerrados.
