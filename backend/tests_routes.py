@@ -1047,7 +1047,10 @@ class TestConfiguredServices:
         from app import app as _app
         import routes.status as status_module
 
-        with patch.object(status_module, "API_KEY", "secreta"):
+        with patch.object(status_module, "AUTH_REQUIRED", True), patch.object(
+            status_module, "credentials"
+        ) as creds:
+            creds.verify_api_key.return_value = False
             unauth = TestClient(_app, raise_server_exceptions=False)
             assert unauth.get("/api/services").status_code == 401
 
@@ -1134,7 +1137,7 @@ class TestMaskedSecretsRoundTrip:
                 "password": "REAL-PASSWORD-SECRETO",
             },
         },
-        "security": {"api_key": "REAL-APP-KEY-ABCD", "safe_mode": True},
+        "security": {"api_key_hash": "hash", "api_key_salt": "salt", "safe_mode": True},
         "developer": False,
     }
 
@@ -1167,17 +1170,20 @@ class TestMaskedSecretsRoundTrip:
     def test_saving_the_untouched_form_preserves_every_secret(self, stored):
         saved = self._save(self._masked_form())
 
-        assert saved["security"]["api_key"] == "REAL-APP-KEY-ABCD"
         assert saved["services"]["radarr"]["api_key"] == "REAL-RADARR-1234"
         assert saved["services"]["sonarr"]["api_key"] == "REAL-SONARR-5678"
         assert saved["services"]["amutorrent"]["api_key"] == "REAL-AMU-9012"
         assert saved["services"]["amutorrent"]["password"] == "REAL-PASSWORD-SECRETO"
 
-    def test_the_users_own_key_survives_a_save(self, stored):
+    def test_the_users_own_key_is_not_touched_by_an_untouched_form(self, stored):
         """This is what locked the user out: the key became its own mask."""
+        before = copy.deepcopy(stored["security"])
+
         saved = self._save(self._masked_form())
 
-        assert not saved["security"]["api_key"].startswith("****")
+        assert saved["security"]["api_key_hash"] == before["api_key_hash"]
+        assert saved["security"]["api_key_salt"] == before["api_key_salt"]
+        assert "api_key" not in saved["security"] or not saved["security"]["api_key"]
 
     def test_a_changed_secret_is_saved(self, stored):
         form = self._masked_form()

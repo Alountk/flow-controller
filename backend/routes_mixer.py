@@ -6,7 +6,7 @@ and managing mux tasks (list, status, cancel, pause, resume).
 import logging
 import os
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from media_mixer import (
@@ -20,21 +20,11 @@ from media_mixer import (
     cleanup_tasks,
 )
 from task_manager import mux_tasks
-from config import API_KEY
+from routes.status import verify_api_key
 
 log = logging.getLogger("flow-controller")
 
 router = APIRouter(prefix="/api/mixer", tags=["mixer"])
-
-# ── Auth ──────────────────────────────────────────────────────────────────────
-
-
-async def verify_api_key(x_api_key: str | None = Header(default=None)):
-    if not API_KEY:
-        return
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="API key inválida")
-
 
 # ── Pydantic Models ──────────────────────────────────────────────────────────
 

@@ -6,6 +6,7 @@ import os
 import aiohttp
 from fastapi import APIRouter, Depends
 
+import credentials
 from config import BASE_DIR
 from settings import get_settings, save_settings
 from clients import test_service_connection
@@ -57,12 +58,29 @@ def _restore_masked_secrets(incoming: dict, current: dict) -> dict:
         stored_pw = current.get("services", {}).get("amutorrent", {}).get("password", "")
         merged.setdefault("services", {}).setdefault("amutorrent", {})["password"] = stored_pw
 
-    if _is_mask(merged.get("security", {}).get("api_key")):
-        merged.setdefault("security", {})["api_key"] = (
-            current.get("security", {}).get("api_key", "")
-        )
-
     return merged
+
+
+def _apply_app_key_change(body: dict, data: dict) -> dict:
+    """Store the app key as a hash, or clear it, and never write it in the clear.
+
+    - absent or masked  -> leave the stored key alone
+    - empty             -> clear it (auth off)
+    - anything else     -> hash the new key
+    """
+    incoming = body.get("security", {}).get("api_key")
+    if incoming is None:
+        return data
+
+    if _is_mask(incoming):
+        # Strip it: normalise_app_key reads a masked value as corruption and
+        # would delete the stored hash, silently turning authentication off.
+        data.setdefault("security", {}).pop("api_key", None)
+        return data
+
+    credentials.set_app_key(data, incoming)
+    data.setdefault("security", {}).pop("api_key", None)
+    return data
 
 
 def _mask_secrets(data: dict) -> dict:
@@ -71,9 +89,10 @@ def _mask_secrets(data: dict) -> dict:
         key = masked.get("services", {}).get(svc, {}).get("api_key", "")
         if key:
             masked["services"][svc]["api_key"] = "****" + key[-4:] if len(key) > 4 else "****"
-    ak = masked.get("security", {}).get("api_key", "")
-    if ak:
-        masked["security"]["api_key"] = "****" + ak[-4:] if len(ak) > 4 else "****"
+    # The app key is stored hashed, so there is no value to reveal. The UI only
+    # needs to know whether one is set, so an untouched field stays masked.
+    if credentials.app_key_is_set(masked):
+        masked["security"]["api_key"] = credentials.MASK_PREFIX
     pw = masked.get("services", {}).get("amutorrent", {}).get("password", "")
     if pw:
         masked["services"]["amutorrent"]["password"] = "****"
@@ -89,7 +108,10 @@ async def get_settings_endpoint(_key: str = Depends(verify_api_key)):
 async def save_settings_endpoint(body: dict, _key: str = Depends(verify_api_key)):
     # Unmask before persisting: the form posts the secrets back as they were
     # shown, and saving those verbatim destroyed them.
-    save_settings(_restore_masked_secrets(body, get_settings()))
+    current = get_settings()
+    merged = _restore_masked_secrets(body, current)
+    merged = _apply_app_key_change(body, merged)
+    save_settings(merged)
     restart_needed = []
     def _check(data: dict, prefix: str = "") -> None:
         for k, v in data.items():
