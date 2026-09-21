@@ -101,6 +101,9 @@ describe('the app sends its auth header', () => {
       if (url.includes('/api/trace')) return ok({ items: [], summary: {} })
       if (url.includes('/api/actions')) return ok({ actions: {} })
       if (url.includes('/api/downloads')) return ok({ downloads: [], errors: [] })
+      if (url.includes('/api/services')) {
+        return ok({ services: [], configured: ['radarr', 'sonarr', 'amutorrent'] })
+      }
       return ok({})
     })
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -137,6 +140,9 @@ describe('the app sends its auth header', () => {
       if (url.includes('/api/trace')) return ok({ items: [], summary: {} })
       if (url.includes('/api/actions')) return ok({ actions: {} })
       if (url.includes('/api/downloads')) return ok({ downloads: [], errors: [] })
+      if (url.includes('/api/services')) {
+        return ok({ services: [], configured: ['radarr', 'sonarr', 'amutorrent'] })
+      }
       return ok({})
     })
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

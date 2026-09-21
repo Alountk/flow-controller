@@ -968,3 +968,143 @@ class TestHealthCheckHonesty:
 
         assert state == "misconfigured"
         assert "403" in reason
+
+
+# ── Configured services ──────────────────────────────────────────────────────
+
+
+class TestConfiguredServices:
+    """An unconfigured service must be invisible, not broken.
+
+    Without this the app calls it, gets an auth error, and reports a failure for
+    something the user never set up — indistinguishable from a real outage.
+    """
+
+    def test_an_unconfigured_service_cannot_be_found(self):
+        import config
+
+        unconfigured = {"key": "radarr", "kind": "arr", "url": "", "api_key": "", "configured": False}
+        with patch.object(config, "SERVICES", [unconfigured]):
+            assert config.find_service("radarr", "arr") is None
+
+    def test_a_configured_service_is_found(self):
+        import config
+
+        usable = {"key": "radarr", "kind": "arr", "url": "http://r:1", "api_key": "k", "configured": True}
+        with patch.object(config, "SERVICES", [usable]):
+            assert config.find_service("radarr", "arr") == usable
+
+    def test_the_reason_distinguishes_unknown_from_unconfigured(self):
+        import config
+
+        unconfigured = {"key": "radarr", "kind": "arr", "url": "", "api_key": "", "configured": False}
+        with patch.object(config, "SERVICES", [unconfigured]):
+            assert "no está configurado" in config.service_unavailable_reason("radarr")
+            assert "desconocido" in config.service_unavailable_reason("nope")
+
+    def test_a_service_needs_both_url_and_key(self):
+        from config import service_is_configured
+
+        assert service_is_configured("http://r:1", "k") is True
+        assert service_is_configured("", "k") is False
+        assert service_is_configured("http://r:1", "") is False
+        assert service_is_configured("", "") is False
+
+    def test_only_configured_services_are_returned(self):
+        import config
+
+        mixed = [
+            {"key": "radarr", "kind": "arr", "url": "http://r:1", "api_key": "k", "configured": True},
+            {"key": "sonarr", "kind": "arr", "url": "", "api_key": "", "configured": False},
+        ]
+        with patch.object(config, "SERVICES", mixed):
+            assert [s["key"] for s in config.configured_services("arr")] == ["radarr"]
+
+    def test_the_endpoint_reports_configured_state_without_probing(self):
+        import config
+
+        mixed = [
+            {"key": "radarr", "kind": "arr", "url": "http://r:1", "api_key": "k", "configured": True},
+            {"key": "sonarr", "kind": "arr", "url": "", "api_key": "", "configured": False},
+            {"key": "amutorrent", "kind": "qbit", "url": "http://a:1", "api_key": "k", "configured": True},
+        ]
+        with patch.object(config, "SERVICES", mixed), patch(
+            "routes.settings.SERVICES", mixed
+        ), patch("routes.settings.configured_services", return_value=[s for s in mixed if s["configured"]]):
+            with patch("aiohttp.ClientSession") as session:
+                body = client.get("/api/services").json()
+
+        session.assert_not_called()
+        assert body["configured"] == ["radarr", "amutorrent"]
+        assert {s["key"]: s["configured"] for s in body["services"]} == {
+            "radarr": True, "sonarr": False, "amutorrent": True,
+        }
+
+    def test_the_endpoint_requires_auth(self):
+        from fastapi.testclient import TestClient
+
+        from app import app as _app
+        import routes.status as status_module
+
+        with patch.object(status_module, "API_KEY", "secreta"):
+            unauth = TestClient(_app, raise_server_exceptions=False)
+            assert unauth.get("/api/services").status_code == 401
+
+
+class TestHealthCheckSkipsUnconfigured:
+    """An unconfigured service is not "down" — it was never set up."""
+
+    def test_unconfigured_services_are_labelled_not_failed(self):
+        from unittest.mock import AsyncMock as _AM
+
+        import config
+
+        mixed = [
+            {"key": "radarr", "kind": "arr", "url": "http://r:1", "api_key": "k", "configured": True},
+            {"key": "sonarr", "kind": "arr", "url": "", "api_key": "", "configured": False},
+        ]
+        with patch.object(config, "SERVICES", mixed), patch(
+            "routes.status.configured_services", return_value=[mixed[0]]
+        ), patch("routes.status.check_service", new=_AM(return_value=("online", "ok", {}))):
+            body = client.get("/api/status/refresh").json()
+
+        assert body["radarr"] == "online:ok"
+        assert body["sonarr"] == "unconfigured:Sin configurar", (
+            "an unconfigured service must not read as offline"
+        )
+        # Only the configured one can drag the flow down.
+        assert body["flow"] == "running"
+
+    def test_nothing_configured_is_not_a_stopped_flow(self):
+        from unittest.mock import AsyncMock as _AM
+
+        import config
+
+        nothing = [
+            {"key": "radarr", "kind": "arr", "url": "", "api_key": "", "configured": False},
+        ]
+        with patch.object(config, "SERVICES", nothing), patch(
+            "routes.status.configured_services", return_value=[]
+        ), patch("routes.status.check_service", new=_AM(return_value=("online", "ok", {}))):
+            body = client.get("/api/status/refresh").json()
+
+        assert body["flow"] == "unconfigured"
+        assert body["flow"] != "stopped"
+
+    def test_an_unconfigured_service_is_never_probed(self):
+        from unittest.mock import AsyncMock as _AM
+
+        import config
+
+        mixed = [
+            {"key": "radarr", "kind": "arr", "url": "http://r:1", "api_key": "k", "configured": True},
+            {"key": "sonarr", "kind": "arr", "url": "", "api_key": "", "configured": False},
+        ]
+        probe = _AM(return_value=("online", "ok", {}))
+        with patch.object(config, "SERVICES", mixed), patch(
+            "routes.status.configured_services", return_value=[mixed[0]]
+        ), patch("routes.status.check_service", new=probe):
+            client.get("/api/status/refresh")
+
+        probed = [call.args[1]["key"] for call in probe.await_args_list]
+        assert probed == ["radarr"]

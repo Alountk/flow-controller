@@ -81,7 +81,8 @@ def _collect(routes):
     ]
     # The collector opens its own session, so the patch must be a factory bound
     # to these routes — `_StubSession` bare would answer every call with 503.
-    with patch("routes.downloads.SERVICES", services), patch(
+    arr = [s for s in services if s["kind"] == "arr"]
+    with patch("routes.downloads.configured_services", return_value=arr), patch(
         "clients.AMUTORRENT_URL", AMU_URL
     ), patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
         return asyncio.run(_run())

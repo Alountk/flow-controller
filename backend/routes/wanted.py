@@ -9,7 +9,7 @@ import unicodedata
 import aiohttp
 from fastapi import APIRouter, Depends
 
-from config import SERVICES
+from config import configured_services, find_service, service_unavailable_reason
 from traces import host_path
 from clients import (
     fetch_wanted_movies,
@@ -75,7 +75,7 @@ async def _fetch_all_wanted(source_key: str) -> dict:
     if cached and time.time() - cached[0] < _ALL_WANTED_TTL:
         return {"items": cached[1]}
 
-    service = next((s for s in SERVICES if s["key"] == source_key and s["kind"] == "arr"), None)
+    service = find_service(source_key, "arr")
     if not service:
         return {"items": [], "total": 0, "error_kind": "unknown", "error": f"{source_key}: servicio no configurado"}
 
@@ -96,7 +96,7 @@ async def _fetch_all_wanted(source_key: str) -> dict:
 @router.get("/api/wanted")
 async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: str = "", _key: str = Depends(verify_api_key)):
     """Películas y episodios faltantes (wanted), con filtro de texto opcional."""
-    arr_services = [s for s in SERVICES if s["kind"] == "arr"]
+    arr_services = configured_services("arr")
     if source:
         arr_services = [s for s in arr_services if s["key"] == source]
 
@@ -185,7 +185,7 @@ def _filter_all_endpoint(result: dict, q: str, page: int, page_size: int) -> dic
 @router.get("/api/wanted/all")
 async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: str = Depends(verify_api_key)):
     """Todas las películas de Radarr con estado de archivo y ruta (paginado)."""
-    service = next((s for s in SERVICES if s["key"] == "radarr" and s["kind"] == "arr"), None)
+    service = find_service("radarr", "arr")
     if not service:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
     # page_size=0 tells the client not to slice, so the filter sees everything.
@@ -198,7 +198,7 @@ async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: 
 @router.get("/api/wanted/series/all")
 async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: str = Depends(verify_api_key)):
     """Todas las series de Sonarr con estado de archivo y ruta (paginado)."""
-    service = next((s for s in SERVICES if s["key"] == "sonarr" and s["kind"] == "arr"), None)
+    service = find_service("sonarr", "arr")
     if not service:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
     fetch_size = 0 if normalize_for_search(q) else page_size
@@ -211,9 +211,9 @@ async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: 
 async def search_wanted(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Busca contenido faltante en los indexadores."""
     source = req.source
-    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    service = find_service(source, "arr")
     if not service:
-        return {"ok": False, "error": "servicio desconocido"}
+        return {"ok": False, "error": service_unavailable_reason(source)}
 
     async with aiohttp.ClientSession() as session:
         if source == "radarr":
@@ -230,9 +230,9 @@ async def search_wanted(req: ActionRequest, _key: str = Depends(verify_api_key))
 async def search_wanted_item(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Busca un item específico en los indexadores."""
     source = req.source
-    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    service = find_service(source, "arr")
     if not service:
-        return {"ok": False, "error": "servicio desconocido"}
+        return {"ok": False, "error": service_unavailable_reason(source)}
 
     ids = req.ids or {}
     async with aiohttp.ClientSession() as session:
@@ -335,7 +335,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
     if not os.path.isdir(target):
         return {"ok": False, "detail": f"No es un directorio: {target}"}
 
-    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    service = find_service(source, "arr")
     if not service:
         return {"ok": False, "detail": "Servicio no encontrado"}
 

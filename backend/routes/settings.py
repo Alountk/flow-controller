@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 from config import BASE_DIR
 from settings import get_settings, save_settings
 from clients import test_service_connection
-from config import SERVICES
+from config import SERVICES, configured_services
 from routes.status import verify_api_key
 
 router = APIRouter()
@@ -87,3 +87,25 @@ async def test_services(service: str = "", _key: str = Depends(verify_api_key)):
         for target in targets:
             results.append(await test_service_connection(session, target))
     return {"results": results, "ok": all(r["ok"] for r in results)}
+
+
+@router.get("/api/services")
+async def list_services(_key: str = Depends(verify_api_key)):
+    """Qué servicios están utilizables, sin salir a la red.
+
+    Existe para que la interfaz no muestre ni llame a un servicio que el usuario
+    no ha configurado. Deliberadamente NO sondea: para eso está
+    /api/services/test. Distinto de "configurado pero caído", que sí se muestra.
+    """
+    return {
+        "services": [
+            {
+                "key": s["key"],
+                "kind": s["kind"],
+                "url": s["url"],
+                "configured": bool(s.get("configured")),
+            }
+            for s in SERVICES
+        ],
+        "configured": [s["key"] for s in configured_services()],
+    }

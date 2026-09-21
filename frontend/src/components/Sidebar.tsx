@@ -40,10 +40,13 @@ interface Props {
   active: Page
   onNavigate: (page: Page) => void
   developer: boolean
+  /** Pages that depend on a service the user has not configured. */
+  hidden?: Page[]
   children?: ReactNode
 }
 
-export function Sidebar({ active, onNavigate, developer }: Props) {
+export function Sidebar({ active, onNavigate, developer, hidden = [] }: Props) {
+  const visibleItems = NAV_ITEMS.filter((item) => !hidden.includes(item.key))
   return (
     <aside className="sidebar">
       <div className="sb-header">
@@ -53,7 +56,7 @@ export function Sidebar({ active, onNavigate, developer }: Props) {
 
       <nav className="sb-nav">
         <div className="sb-section">Principal</div>
-        {NAV_ITEMS.map((item) => (
+        {visibleItems.map((item) => (
           <a
             key={item.key}
             href={PAGE_PATHS[item.key]}

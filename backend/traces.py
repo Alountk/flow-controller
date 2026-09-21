@@ -8,8 +8,8 @@ from config import (
     FOLDER_DOWNLOAD_AMULE,
     FOLDER_DOWNLOAD_TORRENT,
     PAUSED_STATES,
-    SERVICES,
     TRACE_LIMIT,
+    configured_services,
     _DOWNLOAD_CLIENT_PATHS,
     _VOLUME_MAP,
 )
@@ -101,7 +101,7 @@ def derive_stage(torrent: dict | None, queue_item: dict | None) -> str:
 
 
 async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
-    arr_services = [s for s in SERVICES if s["kind"] == "arr"]
+    arr_services = configured_services("arr")
 
     results = await asyncio.gather(
         *(fetch_arr_grabbed(session, s, TRACE_LIMIT) for s in arr_services),
