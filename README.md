@@ -280,9 +280,22 @@ tab === 'episodes' // OK
 **Solución:** Usar doble casting: `as unknown as Record<string, unknown>`.
 
 ### ModuleNotFoundError en Docker
-**Causa:** El Dockerfile copia archivos backend uno por uno (`COPY backend/app.py .`). Si se agrega un módulo nuevo (`settings.py`) sin agregarlo al Dockerfile, el contenedor no lo encuentra.
+**Causa:** El Dockerfile copiaba los módulos del backend uno por uno (`COPY backend/app.py .`).
+Si se añadía un módulo nuevo sin añadirlo a esa lista, el contenedor fallaba al arrancar con
+`ModuleNotFoundError` — y **todos los tests locales pasaban**, porque el fichero sí existe en disco.
 
-**Solución:** Agregar `COPY backend/settings.py .` al Dockerfile. Considerar cambiar a `COPY backend/ .` para evitar este problema en el futuro.
+Esto ocurrió **dos veces**: con `settings.py` y con `history.py`.
+
+**Solución (estructural):** el Dockerfile ya no enumera módulos:
+```dockerfile
+COPY backend/*.py .
+```
+Eso elimina la lista que había que mantener a mano.
+
+**Y un guard para que no vuelva:** `tests_static.py` comprueba que todo módulo de runtime está
+cubierto por algún `COPY` del Dockerfile, y `.dockerignore` mantiene fuera los ficheros de
+desarrollo. El guard se validó reproduciendo el fallo real: con la lista antigua sin `history.py`
+falla y **nombra el módulo**.
 
 ## Backlog de mejoras
 

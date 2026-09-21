@@ -12,18 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY backend/app.py .
-COPY backend/config.py .
-COPY backend/settings.py .
-COPY backend/clients.py .
-COPY backend/traces.py .
-COPY backend/copy_engine.py .
-COPY backend/media_mixer.py .
-COPY backend/routes_mixer.py .
-COPY backend/models.py .
-COPY backend/state.py .
-COPY backend/task_manager.py .
-COPY backend/import_service.py .
+# Every top-level module at once. The previous explicit list had to be kept in
+# sync with imports by hand, and twice it was not: settings.py once, history.py
+# again. Globbing removes the failure mode instead of relying on memory.
+COPY backend/*.py .
 COPY backend/routes/ /app/routes/
 COPY --from=frontend /frontend/dist /frontend/dist
 COPY prototypes/ /app/prototypes/
