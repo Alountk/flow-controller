@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import state
 from config import SERVICES
 from traces import host_path
+import history
 from import_service import post_move_import
 from models import ActionRequest
 from routes.status import verify_api_key
@@ -198,6 +199,8 @@ async def _consume_queue():
             op["files_done"] = 0
             op["files_total"] = 0
 
+        await asyncio.to_thread(history.record_operation, op)
+
         try:
             src = op["src"]
             dst = op["dst"]
@@ -230,6 +233,8 @@ async def _consume_queue():
                     op["progress"] = 100
                     op["detail"] = f"Completado: {Path(src).name}"
 
+            await asyncio.to_thread(history.record_operation, op)
+
             # Post-move import: tell Radarr/Sonarr to import the moved file
             if not op.get("cancelled") and op.get("arr_source"):
                 service = next(
@@ -258,6 +263,7 @@ async def _consume_queue():
                                     if imported
                                     else f"Movido (import pendiente): {Path(src).name}"
                                 )
+                            await asyncio.to_thread(history.record_operation, op)
                     except Exception as exc:
                         log.error("Import failed: %s", exc)
                         async with queue_lock:
@@ -270,6 +276,7 @@ async def _consume_queue():
             async with queue_lock:
                 op["status"] = "failed"
                 op["detail"] = f"{type(exc).__name__}: {exc}"
+            await asyncio.to_thread(history.record_operation, op)
 
 
 @router.post("/api/files/queue/add")
@@ -307,6 +314,9 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
         file_queue.append(op)
         if len(file_queue) > 50:
             file_queue[:] = [o for o in file_queue if o["status"] in ("pending", "running")]
+
+    # Durable from the moment it is accepted, so a restart still shows it.
+    await asyncio.to_thread(history.record_operation, op)
 
     # Hold a reference on the shared state object: an unreferenced asyncio task
     # may be garbage-collected mid-execution, silently aborting the queue.
@@ -351,6 +361,24 @@ async def queue_status(_key: str = Depends(verify_api_key)):
             for o in file_queue
             if o["status"] in ("done", "failed", "cancelled")
         ]
+
+    # Prefer the durable record so history survives a restart; fall back to the
+    # in-memory list if the database is unavailable.
+    durable = await asyncio.to_thread(history.recent_operations, 10)
+    if durable:
+        completed = [
+            {
+                "id": row["id"],
+                "type": row["type"],
+                "name": row["name"],
+                "status": row["status"],
+                "detail": row["detail"],
+                "progress": 100 if row["status"] == "done" else 0,
+                "import_status": row["import_status"] or "",
+            }
+            for row in durable
+        ]
+
     return {"queue": ops, "completed": completed[-10:], "running": False}
 
 
@@ -363,6 +391,7 @@ async def queue_cancel(op_id: str, _key: str = Depends(verify_api_key)):
                 if op["status"] == "pending":
                     op["status"] = "cancelled"
                     op["detail"] = "Cancelado por el usuario"
+                    await asyncio.to_thread(history.record_operation, op)
                     return {"ok": True, "detail": "Operación cancelada"}
                 elif op["status"] == "running":
                     op["cancelled"] = True

@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import history
 from config import FRONTEND_DIST
 from state import buf_handler, _load_log_file
 from routes.status import router as status_router, background_checker
@@ -48,6 +49,12 @@ _http_session: aiohttp.ClientSession | None = None
 
 async def lifespan(_app: FastAPI):
     global _http_session
+
+    # Open the durable history before serving, and record honestly that any
+    # operation still marked running did not survive the previous process.
+    history.init_db()
+    history.mark_interrupted()
+
     _http_session = aiohttp.ClientSession()
     task = asyncio.create_task(background_checker())
     try:
