@@ -1,4 +1,4 @@
-import { authHeaders } from './auth'
+import { apiFetch } from './auth'
 
 export interface ServiceTestResult {
   key: string
@@ -17,7 +17,7 @@ export interface ServicesTestResponse {
 }
 
 export async function testServiceConnections(): Promise<ServicesTestResponse> {
-  const res = await fetch('/api/services/test', { headers: authHeaders() })
+  const res = await apiFetch('/api/services/test', {})
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
   }

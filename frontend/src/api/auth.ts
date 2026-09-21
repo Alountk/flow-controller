@@ -69,3 +69,50 @@ export function authHeaders(): Record<string, string> {
   if (_apiKey) h['X-Api-Key'] = _apiKey
   return h
 }
+
+
+/* ── Central 401 handling ──────────────────────────────────────────────────
+ *
+ * The key used to be validated exactly once, at boot. If it was later cleared,
+ * rotated, or rejected, every call failed and the app never asked again — the
+ * user just saw broken panels.
+ *
+ * Every request now goes through `apiFetch`, which reacts to a 401 by
+ * forgetting the key and telling the app to ask for it again.
+ */
+
+type UnauthorizedHandler = () => void
+
+let _onUnauthorized: UnauthorizedHandler | null = null
+
+/** The app registers how to react when the backend rejects the key. */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  _onUnauthorized = handler
+}
+
+/** Thrown when the backend rejects the key, so callers can skip their own UI. */
+export class UnauthorizedError extends Error {
+  constructor() {
+    super('API key rechazada')
+    this.name = 'UnauthorizedError'
+  }
+}
+
+/**
+ * `fetch` with the auth header, plus one place that handles a rejected key.
+ *
+ * On 401: forget the stored key and signal the app, so the key is asked for
+ * again instead of silently failing every subsequent call.
+ */
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = { ...authHeaders(), ...(init.headers as Record<string, string> | undefined) }
+  const res = await fetch(input, { ...init, headers })
+
+  if (res.status === 401) {
+    forgetApiKey()
+    _onUnauthorized?.()
+    throw new UnauthorizedError()
+  }
+
+  return res
+}

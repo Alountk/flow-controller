@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Settings, SaveSettingsResponse } from '../types'
-import { authHeaders } from '../api/auth'
+import { apiFetch } from '../api/auth'
 import { testServiceConnections, type ServiceTestResult } from '../api/services'
 import './Settings.css'
 
@@ -21,7 +21,7 @@ function LogsSection() {
   async function fetchLogs() {
     setLoading(true)
     try {
-      const res = await fetch('/api/logs', { headers: authHeaders() })
+      const res = await apiFetch('/api/logs', {})
       if (res.ok) {
         const data = await res.json() as { logs: LogEntry[] }
         setLogs(data.logs)
@@ -89,15 +89,14 @@ function LogsSection() {
 }
 
 async function fetchSettings(): Promise<Settings> {
-  const res = await fetch('/api/settings', { headers: authHeaders() })
+  const res = await apiFetch('/api/settings', {})
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json() as Promise<Settings>
 }
 
 async function saveSettings(data: Settings): Promise<SaveSettingsResponse> {
-  const res = await fetch('/api/settings', {
+  const res = await apiFetch('/api/settings', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(data),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)

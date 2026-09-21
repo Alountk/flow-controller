@@ -7,35 +7,11 @@ services:
     restart: unless-stopped
     user: "1000:1000"
     environment:
-      # Radarr
-      - RADARR_URL=${RADARR_URL:-http://localhost:7878}
-      - RADARR_API_KEY=${RADARR_API_KEY:-}
-      # Sonarr
-      - SONARR_URL=${SONARR_URL:-http://localhost:8989}
-      - SONARR_API_KEY=${SONARR_API_KEY:-}
-      # AmuTorrent
-      - AMUTORRENT_URL=${AMUTORRENT_URL:-http://localhost:4000}
-      - AMUTORRENT_API_KEY=${AMUTORRENT_API_KEY:-}
-      - AMUTORRENT_USER=${AMUTORRENT_USER:-admin}
-      - AMUTORRENT_PASSWORD=${AMUTORRENT_PASSWORD:-}
-      # Seguridad
-      - SAFE_MODE=${SAFE_MODE:-true}
-      - API_KEY=${API_KEY:-}
-      # Desarrollador
-      - DEVELOPER=${DEVELOPER:-false}
-      # Rutas de descarga
-      - FOLDER_DOWNLOAD_AMULE=${FOLDER_DOWNLOAD_AMULE:-/mnt/storage-6tb/shared-downloads/amule}
-      - FOLDER_DOWNLOAD_TORRENT=${FOLDER_DOWNLOAD_TORRENT:-/mnt/storage/downloads/qbittorrent/completed}
-      # Intervalos
-      - CHECK_INTERVAL=${CHECK_INTERVAL:-15}
-      - MAX_RETRIES=${MAX_RETRIES:-3}
-      - RETRY_DELAY=${RETRY_DELAY:-2}
-      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-5}
-      - IMPORT_TIMEOUT=${IMPORT_TIMEOUT:-40}
-      # Trazabilidad
-      - TRACE_LIMIT=${TRACE_LIMIT:-25}
-      - AMUTORRENT_INDEXER=${AMUTORRENT_INDEXER:-}
-      # Puerto del servidor
+      # Only what the container needs to boot. Service URLs, credentials and
+      # intervals live in settings.json (Configuración in the UI): deployment
+      # variables used to override the file on every start, so an edit in the UI
+      # silently did nothing. Run once with these set to seed a fresh install;
+      # after that the file is the single source of truth.
       - PORT=${PORT:-8000}
     volumes:
       - /mnt/storage/config/flow-control:/app/config

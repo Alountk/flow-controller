@@ -1,4 +1,4 @@
-import { authHeaders } from './auth'
+import { apiFetch } from './auth'
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -69,9 +69,8 @@ export interface TasksResponse {
 /* ── API Functions ─────────────────────────────────────────────────────────── */
 
 export async function probeFiles(pathA: string, pathB: string): Promise<ProbeResult> {
-  const res = await fetch('/api/mixer/probe', {
+  const res = await apiFetch('/api/mixer/probe', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ path_a: pathA, path_b: pathB }),
   })
   if (!res.ok) {
@@ -93,9 +92,8 @@ export async function startMux(
   }
   if (outputPath) body.output_path = outputPath
 
-  const res = await fetch('/api/mixer/mux', {
+  const res = await apiFetch('/api/mixer/mux', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(body),
   })
   if (!res.ok) {
@@ -107,21 +105,20 @@ export async function startMux(
 }
 
 export async function listTasks(): Promise<TasksResponse> {
-  const res = await fetch('/api/mixer/tasks', { headers: authHeaders() })
+  const res = await apiFetch('/api/mixer/tasks', {})
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json() as Promise<TasksResponse>
 }
 
 export async function getTask(taskId: string): Promise<{ ok: boolean } & Partial<MuxTask>> {
-  const res = await fetch(`/api/mixer/tasks/${encodeURIComponent(taskId)}`, { headers: authHeaders() })
+  const res = await apiFetch(`/api/mixer/tasks/${encodeURIComponent(taskId)}`, {})
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json() as Promise<{ ok: boolean } & Partial<MuxTask>>
 }
 
 export async function cancelTask(taskId: string): Promise<{ ok: boolean; detail: string }> {
-  const res = await fetch(`/api/mixer/tasks/${encodeURIComponent(taskId)}/cancel`, {
+  const res = await apiFetch(`/api/mixer/tasks/${encodeURIComponent(taskId)}/cancel`, {
     method: 'POST',
-    headers: authHeaders(),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>
@@ -132,9 +129,8 @@ export async function cancelTask(taskId: string): Promise<{ ok: boolean; detail:
 }
 
 export async function pauseTask(taskId: string): Promise<{ ok: boolean; detail: string }> {
-  const res = await fetch(`/api/mixer/tasks/${encodeURIComponent(taskId)}/pause`, {
+  const res = await apiFetch(`/api/mixer/tasks/${encodeURIComponent(taskId)}/pause`, {
     method: 'POST',
-    headers: authHeaders(),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>
@@ -145,9 +141,8 @@ export async function pauseTask(taskId: string): Promise<{ ok: boolean; detail: 
 }
 
 export async function resumeTask(taskId: string): Promise<{ ok: boolean; detail: string }> {
-  const res = await fetch(`/api/mixer/tasks/${encodeURIComponent(taskId)}/resume`, {
+  const res = await apiFetch(`/api/mixer/tasks/${encodeURIComponent(taskId)}/resume`, {
     method: 'POST',
-    headers: authHeaders(),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>
