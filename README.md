@@ -293,7 +293,7 @@ tab === 'episodes' // OK
 | 1 | Eliminar dead code (`clients.py:868` except duplicado) | ✅ | `backend/clients.py` |
 | 2 | Health check en Dockerfile | ✅ | `Dockerfile` |
 | 3 | Límites de recursos (RAM/CPU) en docker-compose | ✅ | `docker-compose.yml` |
-| 4 | Fix API key expuesta en `/api/config` | ⚠️ | `app.py` + frontend — aceptable para tool local, requiere refactor si se expone a internet |
+| 4 | Fix API key expuesta en `/api/config` | ✅ | Cadena cerrada: `/api/config` ya no entrega la clave y las 21 rutas de datos exigen auth |
 
 ### 🟡 Medianas (1-3 días)
 
