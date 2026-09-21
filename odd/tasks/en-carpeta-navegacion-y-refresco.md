@@ -113,6 +113,21 @@ El test de refresco se comprobó en negativo: con el handler del botón ↻ sust
 no-op, `src/__tests__/scanFolderNav.test.tsx` falla (el nombre nuevo no aparece y no hay
 segunda petición a `/api/files/browse`).
 
+## Review (RDD)
+
+RDD activo (global). Evaluado el slice con
+`gentle-ai review assess --cwd . --base-ref main --committed-only --json`:
+
+- `risk: medium`, motivo `executable_change`, 4 ficheros, 376 líneas.
+
+Por contrato, **medium se difiere al slice**: no se abre transacción de review por este work
+unit; el preflight se lanzará al cerrar el slice. La declaración de no rastreados que exige la
+herramienta se resolvió con `--untracked-scope=exclude` (el `.md` de la otra feature queda fuera
+del candidato a propósito).
+
+Presupuesto de entrega: **376 / ~400 líneas**. T3-T5 lo excederán, así que hay que elegir
+estrategia de entrega antes del siguiente commit.
+
 ## Hipótesis pendiente de confirmar
 
 El backend no cachea el listado, así que un F5 debería mostrar una carpeta nueva al instante. Si
