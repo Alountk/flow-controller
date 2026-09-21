@@ -410,8 +410,26 @@
   flex-shrink: 0;
 }
 
-.scan-file-row-name {
+.scan-file-row-main {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.scan-file-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Optional second line: the episode the file resolves to. */
+.scan-file-row-episode {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.75;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

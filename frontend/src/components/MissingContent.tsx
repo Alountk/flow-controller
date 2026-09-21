@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { WantedMovie, ScanMatch, ScanResult } from '../types'
 import {
@@ -6,8 +6,10 @@ import {
   fetchWantedEpisodes,
   fetchAllMovies,
   fetchAllSeries,
+  fetchSeriesEpisodes,
   scanForMovies,
 } from '../api/wanted'
+import { episodeTagKey, formatEpisodeLabel, parseEpisodeTag } from '../utils/episodeTag'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -63,6 +65,28 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
     staleTime: 0,
     refetchOnMount: 'always',
   })
+
+  const episodesQuery = useQuery({
+    queryKey: ['series-episodes', item.id],
+    queryFn: () => fetchSeriesEpisodes(item.id),
+    enabled: item.type === 'series',
+    // Sonarr's episode metadata changes on its own schedule, not per keystroke.
+    // Unlike the disk listing above, caching it for a few minutes is correct.
+    staleTime: 5 * 60_000,
+  })
+
+  // One lookup per series, then every file's `S##E##` is resolved locally.
+  const episodeByTag = useMemo(() => {
+    const map = new Map<string, { title: string; air_date: string }>()
+    for (const ep of episodesQuery.data?.episodes ?? []) {
+      if (ep.season_number == null || ep.episode_number == null) continue
+      map.set(episodeTagKey(ep.season_number, ep.episode_number), {
+        title: ep.title,
+        air_date: ep.air_date,
+      })
+    }
+    return map
+  }, [episodesQuery.data])
 
   useEffect(() => {
     setScanResult(null)
@@ -206,23 +230,43 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
             {currentPath && (
               <div className="scan-path-list">
                 <div className="scan-current-path">{currentPath}</div>
-                {items.map((entry) =>
-                  entry.is_dir ? (
-                    <div
-                      key={entry.path}
-                      className="scan-folder-item"
-                      onClick={() => navigateTo(entry.path)}
-                    >
-                      📁 {entry.name}
-                    </div>
-                  ) : (
+                {items.map((entry) => {
+                  if (entry.is_dir) {
+                    return (
+                      <div
+                        key={entry.path}
+                        className="scan-folder-item"
+                        onClick={() => navigateTo(entry.path)}
+                      >
+                        📁 {entry.name}
+                      </div>
+                    )
+                  }
+                  // Resolve the episode from the name, then look it up in the
+                  // series map. No tag or no match means no extra line — never
+                  // a guessed episode.
+                  const tag = parseEpisodeTag(entry.name)
+                  const episode = tag ? episodeByTag.get(episodeTagKey(tag.season, tag.episode)) : undefined
+                  return (
                     <div key={entry.path} className="scan-file-row">
                       <span className="scan-file-row-icon">📄</span>
-                      <span className="scan-file-row-name" title={entry.name}>{entry.name}</span>
+                      <div className="scan-file-row-main">
+                        <span className="scan-file-row-name" title={entry.name}>{entry.name}</span>
+                        {tag && episode && (
+                          <span className="scan-file-row-episode">
+                            {formatEpisodeLabel({
+                              season: tag.season,
+                              episode: tag.episode,
+                              title: episode.title,
+                              air_date: episode.air_date,
+                            })}
+                          </span>
+                        )}
+                      </div>
                       <span className="scan-file-row-size">{formatSize(entry.size)}</span>
                     </div>
-                  ),
-                )}
+                  )
+                })}
                 {items.length === 0 && (
                   <div className="scan-no-subfolders">Carpeta vacía</div>
                 )}

@@ -1,4 +1,4 @@
-import type { ActionResult, ScanResult, PaginatedResponse, WantedMovie, WantedEpisode, AllMovie, AllSeries } from '../types'
+import type { ActionResult, ScanResult, PaginatedResponse, WantedMovie, WantedEpisode, AllMovie, AllSeries, SeriesEpisode } from '../types'
 import { apiFetch } from './auth'
 
 /** Only include the filter when it has content, so an empty box is a no-op. */
@@ -53,6 +53,21 @@ export async function fetchAllMovies(page = 1, pageSize = 50, query = ''): Promi
 export async function fetchAllSeries(page = 1, pageSize = 50, query = ''): Promise<PaginatedResponse<AllSeries>> {
   const res = await apiFetch(`/api/wanted/series/all?page=${page}&page_size=${pageSize}${queryParam(query)}`, {})
   return (await res.json()) as PaginatedResponse<AllSeries>
+}
+
+/** Every episode of a series, for enriching the "En carpeta" navigator.
+ *
+ *  One call per series, not per file: the browser resolves each file's `S##E##`
+ *  against this map locally. A failure carries `error` so the UI degrades to no
+ *  annotation instead of a wrong one.
+ */
+export async function fetchSeriesEpisodes(seriesId: number): Promise<{ episodes: SeriesEpisode[]; error?: string }> {
+  const res = await apiFetch(`/api/wanted/series/${seriesId}/episodes`, {})
+  const data = await res.json()
+  return {
+    episodes: (data?.episodes ?? []) as SeriesEpisode[],
+    error: data?.error,
+  }
 }
 
 export async function searchWanted(source: string): Promise<ActionResult> {
