@@ -778,3 +778,97 @@ class TestAuthBoundary:
     def test_auth_check_validates_the_key(self):
         """With API_KEY unset every request is allowed, so this passes too."""
         assert client.get("/api/auth/check").status_code == 200
+
+
+# ── Service connection tester ────────────────────────────────────────────────
+
+
+class TestServiceConnectionTester:
+    """The tester must distinguish a rejected key from a healthy connection.
+
+    check_arr treats HTTP 401 as "online", which hides the most likely
+    misconfiguration behind a success message.
+    """
+
+    def _test(self, routes, service_key="radarr"):
+        from clients import test_service_connection
+
+        async def _run():
+            async with _StubSession(routes) as session:
+                return await test_service_connection(session, ARR_BY_KEY[service_key])
+
+        return asyncio.run(_run())
+
+    def test_a_healthy_arr_reports_its_version(self):
+        routes = {"/api/v3/system/status": (200, {"appName": "Radarr", "version": "6.4.4.10685"})}
+
+        result = self._test(routes)
+
+        assert result["ok"] is True
+        assert result["version"] == "6.4.4.10685"
+        assert result["url"] == ARR_BY_KEY["radarr"]["url"]
+
+    def test_a_rejected_api_key_is_not_reported_as_online(self):
+        routes = {"/api/v3/system/status": (401, {})}
+
+        result = self._test(routes)
+
+        assert result["ok"] is False
+        assert result["error_kind"] == "auth"
+        assert "401" in result["detail"]
+
+    def test_a_plain_http_error_is_reported(self):
+        result = self._test({"/api/v3/system/status": (500, {})})
+
+        assert result["ok"] is False
+        assert result["error_kind"] == "http"
+
+    def test_a_timeout_is_reported(self):
+        from clients import test_service_connection
+
+        async def _run():
+            session = _RaisingSession(asyncio.TimeoutError())
+            return await test_service_connection(session, ARR_BY_KEY["radarr"])
+
+        result = asyncio.run(_run())
+
+        assert result["ok"] is False
+        assert result["error_kind"] == "timeout"
+
+    def test_an_unreachable_host_is_reported(self):
+        from clients import test_service_connection
+
+        async def _run():
+            session = _RaisingSession(aiohttp.ClientError("no"))
+            return await test_service_connection(session, ARR_BY_KEY["radarr"])
+
+        result = asyncio.run(_run())
+
+        assert result["ok"] is False
+        assert result["error_kind"] == "unreachable"
+
+    def test_the_url_is_always_reported(self):
+        """The migration to a proxy is exactly about which URL is reached."""
+        result = self._test({"/api/v3/system/status": (401, {})})
+
+        assert result["url"], "an error without the URL is not actionable"
+
+    def test_the_endpoint_lists_every_service(self):
+        routes = {
+            "/api/v3/system/status": (200, {"version": "1.0"}),
+            "/api/v2/app/version": (200, "v5.1.4"),
+        }
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            resp = client.get("/api/services/test")
+
+        body = resp.json()
+        assert {r["key"] for r in body["results"]} == ARR_KEYS | {"amutorrent"}
+        assert body["ok"] is True
+
+    def test_a_single_service_can_be_tested(self):
+        routes = {"/api/v3/system/status": (200, {"version": "1.0"})}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            resp = client.get("/api/services/test", params={"service": "radarr"})
+
+        body = resp.json()
+        assert [r["key"] for r in body["results"]] == ["radarr"]

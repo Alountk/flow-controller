@@ -212,3 +212,67 @@
   }
 }
 
+
+/* ── Connection tests ────────────────────────────────────────────── */
+.settings-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  max-width: 70ch;
+}
+
+.settings-service-tests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.service-test {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+
+.service-test.ok {
+  border-color: var(--ok);
+}
+
+.service-test.fail {
+  border-color: var(--bad);
+}
+
+.service-test-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.service-test-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.service-test-url {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.service-test-detail {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  word-break: break-word;
+}
+
+.service-test.fail .service-test-detail {
+  color: var(--bad);
+}

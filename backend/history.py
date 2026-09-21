@@ -76,6 +76,10 @@ def init_db(path: Path | None = None) -> None:
         if _conn is not None:
             return
         try:
+            # The mkdir can raise OSError (unwritable or missing config
+            # directory) and connect can raise sqlite3.Error. Both must degrade,
+            # never raise: this runs in the app lifespan, so an escaping error
+            # would stop the whole server from starting over a HISTORY database.
             target.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(target, check_same_thread=False)
             # WAL lets readers work while a write is in flight.
@@ -93,7 +97,7 @@ def init_db(path: Path | None = None) -> None:
             conn.commit()
             _conn = conn
             log.info("History database ready at %s (schema v%d)", target, SCHEMA_VERSION)
-        except sqlite3.Error as exc:
+        except (OSError, sqlite3.Error) as exc:
             # Never take the app down over history: it is a record, not a
             # requirement for copying files.
             log.warning("History database unavailable at %s: %s", target, exc)

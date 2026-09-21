@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Settings, SaveSettingsResponse } from '../types'
 import { authHeaders } from '../api/auth'
+import { testServiceConnections, type ServiceTestResult } from '../api/services'
 import './Settings.css'
 
 interface LogEntry {
@@ -168,6 +169,10 @@ export function Settings() {
     if (data && !form) setForm(data)
   }, [data, form])
 
+  const testMutation = useMutation({
+    mutationFn: testServiceConnections,
+  })
+
   const saveMutation = useMutation({
     mutationFn: () => saveSettings(form!),
     onSuccess: (result) => {
@@ -247,6 +252,53 @@ export function Settings() {
         </div>
       </Section>
 
+      <Section title="Estado de las conexiones">
+        <p className="settings-hint">
+          Comprueba que Radarr, Sonarr y aMuTorrent responden con la configuración
+          actual. Útil antes y después de mover los servicios de sitio: muestra la
+          URL con la que se intenta conectar y distingue una clave rechazada de
+          un servicio inalcanzable.
+        </p>
+        <button
+          type="button"
+          className="action-btn search-all"
+          onClick={() => testMutation.mutate()}
+          disabled={testMutation.isPending}
+        >
+          {testMutation.isPending ? 'Probando…' : '🔌 Probar conexiones'}
+        </button>
+
+        {testMutation.data && (
+          <div className="settings-service-tests">
+            {testMutation.data.results.map((result: ServiceTestResult) => (
+              <div
+                key={result.key}
+                className={`service-test ${result.ok ? 'ok' : 'fail'}`}
+                role={result.ok ? undefined : 'alert'}
+              >
+                <div className="service-test-head">
+                  <span className="service-test-name">
+                    {result.ok ? '✅' : '❌'} {result.key}
+                  </span>
+                  <span className="service-test-url">{result.url}</span>
+                </div>
+                <div className="service-test-detail">{result.detail}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {testMutation.isError && (
+          <div className="settings-service-tests">
+            <div className="service-test fail" role="alert">
+              <div className="service-test-detail">
+                No se pudo completar la comprobación. Revisa la conexión con el backend.
+              </div>
+            </div>
+          </div>
+        )}
+      </Section>
+
       <Section title="Seguridad">
         <Field label="API Key propia" value={form.security.api_key} onChange={(v) => update('security.api_key', v)} restart={isRestarting('security.api_key')} placeholder="Clave para proteger la API" />
         <Field label="Modo seguro (bloquea acciones destructivas)" value={form.security.safe_mode} onChange={(v) => update('security.safe_mode', v)} type="toggle" />
@@ -255,7 +307,7 @@ export function Settings() {
       <Section title="Rutas">
         <Field label="Carpeta descargas aMuTorrent" value={form.paths.download_amule} onChange={(v) => update('paths.download_amule', v)} />
         <Field label="Carpeta descargas Torrent" value={form.paths.download_torrent} onChange={(v) => update('paths.download_torrent', v)} />
-        <Field label="Raíces permitidas (separadas por coma)" value={form.paths.allowed_roots.join(', ')} onChange={(v) => updateList('paths.allowed_roots', v)} />
+        <Field label="Raíces permitidas (separadas por coma)" value={(form.paths.allowed_roots ?? []).join(", ")} onChange={(v) => updateList('paths.allowed_roots', v)} />
       </Section>
 
       <Section title="Intervalos">
