@@ -14,6 +14,7 @@ body itself was never executed.
 
 import asyncio
 import copy
+import credentials
 import json
 from urllib.parse import urlencode
 from unittest.mock import patch
@@ -722,6 +723,11 @@ class TestAuthBoundary:
         "/{full_path}",
         "/api/config",
         "/api/health",
+        # /api/setup must be reachable on an install that has no key yet, which
+        # is exactly when it cannot authenticate. It compensates by refusing to
+        # write anything once a key exists (see TestFirstRunSetup), so it is not
+        # an open door to a configured deployment.
+        "/api/setup",
         "/openapi.json",
         "/docs",
         "/docs/oauth2-redirect",
@@ -1041,13 +1047,13 @@ class TestConfiguredServices:
             "radarr": True, "sonarr": False, "amutorrent": True,
         }
 
-    def test_the_endpoint_requires_auth(self):
+    def test_the_endpoint_requires_auth(self):  # noqa
         from fastapi.testclient import TestClient
 
         from app import app as _app
         import routes.status as status_module
 
-        with patch.object(status_module, "AUTH_REQUIRED", True), patch.object(
+        with patch("settings.auth_required", return_value=True), patch.object(
             status_module, "credentials"
         ) as creds:
             creds.verify_api_key.return_value = False
@@ -1117,6 +1123,10 @@ class TestHealthCheckSkipsUnconfigured:
 # ── Secrets must survive a round-trip through the settings form ──────────────
 
 
+_TEST_APP_KEY = "clave-de-test-para-el-suite"
+_TEST_APP_SALT = "salt-de-test"
+
+
 class TestMaskedSecretsRoundTrip:
     """The UI receives secrets masked and posts the form back unchanged.
 
@@ -1137,7 +1147,11 @@ class TestMaskedSecretsRoundTrip:
                 "password": "REAL-PASSWORD-SECRETO",
             },
         },
-        "security": {"api_key_hash": "hash", "api_key_salt": "salt", "safe_mode": True},
+        "security": {
+            "api_key_hash": credentials.hash_api_key(_TEST_APP_KEY, _TEST_APP_SALT),
+            "api_key_salt": _TEST_APP_SALT,
+            "safe_mode": True,
+        },
         "developer": False,
     }
 
@@ -1159,7 +1173,7 @@ class TestMaskedSecretsRoundTrip:
 
         captured = {}
         with patch.object(settings_route, "save_settings", side_effect=lambda d: captured.update(d)):
-            client.post("/api/settings", json=body)
+            client.post("/api/settings", json=body, headers={"X-Api-Key": _TEST_APP_KEY})
         return captured
 
     def _masked_form(self) -> dict:
@@ -1212,3 +1226,106 @@ class TestMaskedSecretsRoundTrip:
 
         assert saved["services"]["radarr"]["url"] == "http://otro:7878"
         assert saved["services"]["radarr"]["api_key"] == "REAL-RADARR-1234"
+
+
+# ── First-run setup ──────────────────────────────────────────────────────────
+
+
+class TestFirstRunSetup:
+    """A fresh install can be configured from the UI.
+
+    Without it the only way in is editing files on the volume — and the settings
+    page that would do it sits behind a key that does not exist yet.
+    """
+
+    @pytest.fixture
+    def fresh(self, tmp_path, monkeypatch):
+        import settings as settings_module
+
+        monkeypatch.setattr(settings_module, "_settings", {}, raising=False)
+        monkeypatch.setattr(
+            "routes.settings.get_settings",
+            lambda: {
+                "services": {
+                    "radarr": {"url": "", "api_key": ""},
+                    "sonarr": {"url": "", "api_key": ""},
+                    "amutorrent": {"url": "", "api_key": "", "user": "", "password": ""},
+                },
+                "security": {},
+            },
+        )
+        monkeypatch.setattr("routes.settings.save_settings", lambda data: saved.update(data))
+        saved: dict = {}
+        return saved
+
+    def test_a_fresh_install_reports_that_it_needs_setup(self, fresh, monkeypatch):
+        monkeypatch.setattr("settings.auth_required", lambda: False)
+        with patch("routes.settings.configured_services", return_value=[]):
+            body = client.get("/api/setup").json()
+
+        assert body["needs_setup"] is True
+
+    def test_a_configured_install_does_not(self, fresh, monkeypatch):
+        monkeypatch.setattr("settings.auth_required", lambda: True)
+        body = client.get("/api/setup").json()
+
+        assert body["needs_setup"] is False
+
+    def test_setup_saves_the_services(self, fresh, monkeypatch):
+        monkeypatch.setattr("settings.auth_required", lambda: False)
+
+        resp = client.post(
+            "/api/setup",
+            json={
+                "services": {
+                    "radarr": {"url": "http://r:7878", "api_key": "clave-r"},
+                    "sonarr": {"url": "http://s:8989", "api_key": "clave-s"},
+                }
+            },
+        )
+
+        assert resp.status_code == 200
+        assert fresh["services"]["radarr"]["url"] == "http://r:7878"
+        assert fresh["services"]["sonarr"]["api_key"] == "clave-s"
+
+    def test_setup_stores_the_app_key_hashed(self, fresh, monkeypatch):
+        monkeypatch.setattr("settings.auth_required", lambda: False)
+
+        client.post("/api/setup", json={"services": {}, "api_key": "mi-clave-nueva"})
+
+        security = fresh["security"]
+        assert "api_key" not in security, "the app key must not be stored in the clear"
+        assert credentials.verify_api_key(
+            "mi-clave-nueva", security.get("api_key_salt", ""), security.get("api_key_hash", "")
+        )
+
+    def test_setup_can_leave_the_app_unprotected(self, fresh, monkeypatch):
+        monkeypatch.setattr("settings.auth_required", lambda: False)
+
+        client.post("/api/setup", json={"services": {"radarr": {"url": "http://r:1"}}})
+
+        assert not fresh["security"].get("api_key_hash")
+
+    def test_setup_reports_that_a_restart_is_needed(self, fresh, monkeypatch):
+        monkeypatch.setattr("settings.auth_required", lambda: False)
+
+        body = client.post("/api/setup", json={"services": {"radarr": {"url": "http://r:1"}}}).json()
+
+        # Service URLs are read into config.SERVICES at import.
+        assert "services.radarr.url" in body["restart_required"]
+
+    def test_setup_is_refused_once_the_app_is_protected(self, fresh, monkeypatch):
+        """Otherwise anyone could rewrite the deployment's credentials."""
+        monkeypatch.setattr("settings.auth_required", lambda: True)
+
+        resp = client.post("/api/setup", json={"services": {"radarr": {"url": "http://atacante:1"}}})
+
+        assert resp.status_code == 403
+        assert not fresh, "nothing may be written when setup is refused"
+
+    def test_setup_ignores_unknown_service_keys(self, fresh, monkeypatch):
+        monkeypatch.setattr("settings.auth_required", lambda: False)
+
+        client.post("/api/setup", json={"services": {"inventado": {"url": "http://x:1"}}})
+
+        assert "inventado" not in fresh.get("services", {})

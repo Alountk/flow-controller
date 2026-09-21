@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AuthGate } from './components/AuthGate'
+import { SetupPage } from './components/SetupPage'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
@@ -23,6 +24,7 @@ import {
 } from './api/auth'
 import { usePageRoute } from './hooks/usePageRoute'
 import { useConfiguredServices } from './hooks/useConfiguredServices'
+import { fetchSetupStatus } from './api/setup'
 import {
   parseStatus,
   type ActionsResponse,
@@ -102,6 +104,16 @@ function App() {
     queryFn: () => fetchJson('/api/config'),
     staleTime: Infinity,
   })
+
+  // A fresh install has no key to authenticate with, so it gets the setup page
+  // instead of the key prompt.
+  const { data: setupData } = useQuery({
+    queryKey: ['setup'],
+    queryFn: fetchSetupStatus,
+    staleTime: Infinity,
+    enabled: configData !== undefined && !configData.auth_required,
+  })
+
 
   // The backend no longer serves the key, so one is either already remembered
   // by this browser or the user is asked for it.
@@ -204,6 +216,19 @@ function App() {
 
   if (configData?.auth_required && !authenticated) {
     return <AuthGate onAuthenticated={handleAuthenticated} />
+  }
+
+  if (!configData?.auth_required && setupData?.needs_setup) {
+    return (
+      <SetupPage
+        onDone={() => {
+          // The new config needs a refetch, and setting a key takes effect at
+          // once, so the browser must already hold it.
+          queryClient.invalidateQueries()
+          setAuthenticated(true)
+        }}
+      />
+    )
   }
 
   return (

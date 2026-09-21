@@ -10,9 +10,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 import credentials
 from config import (
     AMUTORRENT_INDEXER,
-    API_KEY_HASH,
-    API_KEY_SALT,
-    AUTH_REQUIRED,
     DEVELOPER,
     all_services,
     configured_services,
@@ -33,9 +30,15 @@ async def verify_api_key(x_api_key: str | None = Header(default=None)):
     The key itself is not kept anywhere, so this compares hashes in constant
     time instead of the two strings.
     """
-    if not AUTH_REQUIRED:
+    from settings import auth_required as _auth_required, get_settings
+
+    if not _auth_required():
         return ""
-    if not x_api_key or not credentials.verify_api_key(x_api_key, API_KEY_SALT, API_KEY_HASH):
+
+    security = get_settings().get("security", {})
+    if not x_api_key or not credentials.verify_api_key(
+        x_api_key, security.get("api_key_salt", ""), security.get("api_key_hash", "")
+    ):
         raise HTTPException(status_code=401, detail="API key inválida")
     return x_api_key
 
@@ -138,9 +141,10 @@ async def config():
     # encryption_ok is an operational signal, not a secret: without it the user
     # sees every service as unconfigured and has no way to know why.
     from settings import encryption_error
+    from settings import auth_required as _auth_required
     return {
         "developer": DEVELOPER,
-        "auth_required": AUTH_REQUIRED,
+        "auth_required": _auth_required(),
         "encryption_ok": not encryption_error,
         "encryption_error": encryption_error,
     }

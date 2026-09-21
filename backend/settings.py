@@ -234,6 +234,19 @@ def save_settings(data: dict[str, Any]) -> bool:
         return False
 
 
+def auth_required() -> bool:
+    """Whether an app API key is configured, read live.
+
+    Reading the current settings rather than a value captured at import means
+    setting a key takes effect immediately — otherwise the app would keep
+    accepting anonymous requests until a restart, right after telling the user
+    their key was saved.
+    """
+    data = get_settings()
+    security = data.get("security", {}) if isinstance(data, dict) else {}
+    return bool(security.get("api_key_hash")) and bool(security.get("api_key_salt"))
+
+
 def get_settings() -> dict[str, Any]:
     if not _settings:
         load_settings()
