@@ -183,14 +183,22 @@ rama apuntándolo.
 | --- | --- | --- | --- | --- |
 | [#27](https://github.com/Alountk/flow-controller/pull/27) | T1 — refresco del listado | `main` | 146 (145+, 1−) | `d160c29` |
 | [#28](https://github.com/Alountk/flow-controller/pull/28) | T2 — archivos en el navegador + registro | `fix/en-carpeta-refresh` | 264 (250+, 14−) | `bbd5022`, `4797038`, `3071f92`, `2a76bff` |
-| (futuro) | T3-T5 — enriquecido `S##E##` | rama de #28 | — | — |
+| [#29](https://github.com/Alountk/flow-controller/pull/29) | T3 — endpoint de episodios de una serie | rama de #28 | 119 (118+, 1−) | `ef098c8` |
+| [#30](https://github.com/Alountk/flow-controller/pull/30) | T4 — parser `S##E##` + anotación por archivo | rama de #29 | 289 (270+, 19−) | `91e508c` |
+| [#31](https://github.com/Alountk/flow-controller/pull/31) | T5 — header del episodio + este registro | rama de #30 | 136 (124+, 12−) | `5a36c2e`, `368bdcc`, más el commit de este cuadro |
+
+Segundo corte, mismo criterio: T3-T5 sumaban **544 líneas** (512+, 32−) y **ningún corte en dos
+bajaba de 400** (`T3+T4` = 408, ocho líneas por encima). El único corte honesto era otra vez por
+unidad de trabajo, que es también como están definidas las tareas. Ramas:
+`feat/en-carpeta-episodios-api` (`ef098c8`), `feat/en-carpeta-episodios-navegador` (`91e508c`) y
+`feat/en-carpeta-enriquecido-episodios` (punta).
 
 Patrón `stacked-to-main` real: cada PR apunta a `main`, pero el hijo se abre con la base del padre
 para que su diff no arrastre el trabajo anterior; al mergear el padre, GitHub reapunta el hijo.
-Consecuencia práctica a recordar: **la CI solo se dispara en PRs con base `main`**, así que #28 no
-tendrá checks hasta ese reapuntado.
+Consecuencia práctica a recordar: **la CI solo se dispara en PRs con base `main`**, así que #28, #29,
+#30 y #31 no tendrán checks hasta su reapuntado.
 
-Push, creación de PR y merge: autorizados por el usuario para este slice.
+Push, creación de PR y merge: autorizados por el usuario para los dos slices.
 
 ## Hipótesis pendiente de confirmar
 
