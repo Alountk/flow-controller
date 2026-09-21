@@ -263,6 +263,10 @@ export interface PaginatedResponse<T> {
   total: number
   page?: number
   page_size?: number
+  /** Present when the backend could not reach Radarr/Sonarr. An empty list
+   *  means "nothing missing" only when this is absent. */
+  error?: string
+  error_kind?: string
 }
 
 export interface WantedResponse {

@@ -393,6 +393,11 @@ export function MissingContent() {
   const sonarrWantedTotal = wantedEpisodesQuery.data?.pages[0]?.total ?? 0
   const sonarrAllTotal = allSeriesQuery.data?.pages[0]?.total ?? 0
 
+  // A failed fetch must never read as "nothing missing": the backend now says
+  // WHY it is empty, and that reason has to reach the screen.
+  const activeError =
+    activeQuery.data?.pages.find((p) => p.error)?.error ?? null
+
   const allWantedMovies = wantedMoviesQuery.data?.pages.flatMap((p) => p.items) ?? []
   const allCatalogMovies = allMoviesQuery.data?.pages.flatMap((p) => p.items) ?? []
   const allWantedEpisodes = wantedEpisodesQuery.data?.pages.flatMap((p) => p.items) ?? []
@@ -493,6 +498,11 @@ export function MissingContent() {
                   {isFetchingNextPage && <div className="wanted-loading-more">Cargando más películas...</div>}
                 </div>
               </>
+            ) : activeError ? (
+              <div className="wanted-error" role="alert">
+                <strong>No se pudo consultar Radarr</strong>
+                <span>{activeError}</span>
+              </div>
             ) : (
               <div className="wanted-empty">No hay películas faltantes</div>
             )
@@ -553,7 +563,14 @@ export function MissingContent() {
               </div>
             </>
           ) : (
-            <div className="wanted-empty">No hay películas en el catálogo</div>
+            activeError ? (
+              <div className="wanted-error" role="alert">
+                <strong>No se pudo consultar Radarr</strong>
+                <span>{activeError}</span>
+              </div>
+            ) : (
+              <div className="wanted-empty">No hay películas en el catálogo</div>
+            )
           )}
         </div>
       ) : (
@@ -633,7 +650,14 @@ export function MissingContent() {
                 </div>
               </>
             ) : (
-              <div className="wanted-empty">No hay episodios faltantes</div>
+              activeError ? (
+                <div className="wanted-error" role="alert">
+                  <strong>No se pudo consultar Sonarr</strong>
+                  <span>{activeError}</span>
+                </div>
+              ) : (
+                <div className="wanted-empty">No hay episodios faltantes</div>
+              )
             )
           ) : isPending ? (
             <div className="wanted-loading">Cargando catálogo de series...</div>
@@ -698,7 +722,14 @@ export function MissingContent() {
               </div>
             </>
           ) : (
-            <div className="wanted-empty">No hay series en el catálogo</div>
+            activeError ? (
+              <div className="wanted-error" role="alert">
+                <strong>No se pudo consultar Sonarr</strong>
+                <span>{activeError}</span>
+              </div>
+            ) : (
+              <div className="wanted-empty">No hay series en el catálogo</div>
+            )
           )}
         </div>
       )}

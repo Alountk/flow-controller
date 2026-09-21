@@ -65,15 +65,19 @@ def _paginate(items: list[dict], page: int, page_size: int) -> list[dict]:
     return items[start:start + page_size]
 
 
-async def _fetch_all_wanted(source_key: str) -> list[dict]:
-    """Everything Radarr/Sonarr report as wanted, cached for a short while."""
+async def _fetch_all_wanted(source_key: str) -> dict:
+    """Everything Radarr/Sonarr report as wanted, cached for a short while.
+
+    Returns the full result dict so a failure can be reported instead of being
+    flattened into an empty list.
+    """
     cached = _all_wanted_cache.get(source_key)
     if cached and time.time() - cached[0] < _ALL_WANTED_TTL:
-        return cached[1]
+        return {"items": cached[1]}
 
     service = next((s for s in SERVICES if s["key"] == source_key and s["kind"] == "arr"), None)
     if not service:
-        return []
+        return {"items": [], "total": 0, "error_kind": "unknown", "error": f"{source_key}: servicio no configurado"}
 
     async with aiohttp.ClientSession() as session:
         if source_key == "radarr":
@@ -81,9 +85,12 @@ async def _fetch_all_wanted(source_key: str) -> list[dict]:
         else:
             result = await fetch_wanted_episodes(session, service, page=1, page_size=ALL_ITEMS_PAGE_SIZE)
 
-    items = result.get("items", [])
-    _all_wanted_cache[source_key] = (time.time(), items)
-    return items
+    if result.get("error"):
+        # Never cache a failure: it would keep the UI broken for the whole TTL.
+        return result
+
+    _all_wanted_cache[source_key] = (time.time(), result.get("items", []))
+    return result
 
 
 @router.get("/api/wanted")
@@ -101,8 +108,15 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
         # reflects the filtered set rather than only the loaded pages.
         wanted = {}
         for service in arr_services:
-            items = await _fetch_all_wanted(service["key"])
-            matches = [item for item in items if _matches(item, needle)]
+            result = await _fetch_all_wanted(service["key"])
+            if result.get("error"):
+                wanted[service["key"]] = {
+                    **_empty_page(page, page_size),
+                    "error": result["error"],
+                    "error_kind": result.get("error_kind", "unknown"),
+                }
+                continue
+            matches = [item for item in result.get("items", []) if _matches(item, needle)]
             wanted[service["key"]] = {
                 "items": _paginate(matches, page, page_size),
                 "total": len(matches),
@@ -129,6 +143,17 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
     }
 
 
+def _empty_page(page: int, page_size: int) -> dict:
+    return {"items": [], "total": 0, "page": page, "page_size": page_size}
+
+
+def _failure_fields(result: dict) -> dict:
+    """Carry a fetch failure through a route that reshapes the result."""
+    if not result.get("error"):
+        return {}
+    return {"error": result["error"], "error_kind": result.get("error_kind", "unknown")}
+
+
 def _filter_all_endpoint(result: dict, q: str, page: int, page_size: int) -> dict:
     """Apply the text filter to an endpoint that already holds the full list.
 
@@ -138,6 +163,11 @@ def _filter_all_endpoint(result: dict, q: str, page: int, page_size: int) -> dic
     filter exists to avoid — so the caller asks for everything (page_size=0)
     when a filter is present.
     """
+    failure = _failure_fields(result)
+    if failure:
+        # A failed fetch must not be reported as "no matches for your filter".
+        return {**_empty_page(page, page_size), **failure, "filtered": True}
+
     needle = normalize_for_search(q)
     if not needle:
         return result

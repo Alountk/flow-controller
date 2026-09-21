@@ -12,6 +12,7 @@ did exist patched the route module's imported client functions, so the route
 body itself was never executed.
 """
 
+import asyncio
 import json
 from unittest.mock import patch
 
@@ -574,3 +575,121 @@ class TestAllListingsTextFilter:
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["title"] == "Rick and Morty"
+
+
+# ── Failures must not masquerade as "nothing missing" ────────────────────────
+
+
+class _RaisingSession:
+    """Session whose requests blow up, so a failure happens inside the fetcher.
+
+    Patching the constructor itself would break the route's own
+    ``async with aiohttp.ClientSession()`` before the fetcher ever runs.
+    """
+
+    def __init__(self, exc: BaseException):
+        self._exc = exc
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def close(self):
+        return None
+
+    def get(self, *args, **kwargs):
+        raise self._exc
+
+    def post(self, *args, **kwargs):
+        raise self._exc
+
+
+class TestWantedFailuresAreVisible:
+    """An empty list means "Radarr found nothing" ONLY when it actually answered.
+
+    A timeout, a rejected API key or an unreachable host used to produce the
+    same empty result, and the UI stated "No hay películas faltantes" with
+    confidence. Each failure now carries a reason to the screen.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from routes.wanted import _all_wanted_cache
+        _all_wanted_cache.clear()
+        yield
+        _all_wanted_cache.clear()
+
+    def _get(self, transport_routes, **params):
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(transport_routes)):
+            return client.get("/api/wanted", params={"source": "radarr", **params})
+
+    def test_rejected_api_key_is_reported(self):
+        body = self._get({"/api/v3/wanted/missing": (401, {})}).json()
+        radarr = body["wanted"]["radarr"]
+
+        assert radarr["total"] == 0
+        assert radarr["error_kind"] == "auth"
+        assert "401" in radarr["error"]
+
+    def test_plain_http_error_is_reported(self):
+        body = self._get({"/api/v3/wanted/missing": (500, {})}).json()
+
+        assert body["wanted"]["radarr"]["error_kind"] == "http"
+
+    def test_timeout_is_reported(self):
+        with patch("aiohttp.ClientSession", lambda *a, **k: _RaisingSession(asyncio.TimeoutError())):
+            body = client.get("/api/wanted", params={"source": "radarr"}).json()
+
+        assert body["wanted"]["radarr"]["error_kind"] == "timeout"
+
+    def test_connection_error_is_reported(self):
+        with patch("aiohttp.ClientSession", lambda *a, **k: _RaisingSession(aiohttp.ClientError("boom"))):
+            body = client.get("/api/wanted", params={"source": "radarr"}).json()
+
+        assert body["wanted"]["radarr"]["error_kind"] == "unreachable"
+
+    def test_a_healthy_empty_response_carries_no_error(self):
+        body = self._get({"/api/v3/wanted/missing": (200, {"records": [], "totalRecords": 0})}).json()
+        radarr = body["wanted"]["radarr"]
+
+        assert radarr["total"] == 0
+        assert "error" not in radarr, "genuinely empty must stay distinguishable from failed"
+
+    def test_failure_survives_the_text_filter(self):
+        """A failed fetch must not read as 'no matches for your filter'."""
+        body = self._get({"/api/v3/wanted/missing": (401, {})}, q="matrix").json()
+        radarr = body["wanted"]["radarr"]
+
+        assert radarr["error_kind"] == "auth"
+        assert radarr["total"] == 0
+
+    def test_a_failed_fetch_is_not_cached(self):
+        """Caching a failure would keep the UI broken for the whole TTL."""
+        from routes.wanted import _all_wanted_cache
+
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(
+            {"/api/v3/wanted/missing": (401, {})}
+        )):
+            client.get("/api/wanted", params={"source": "radarr", "q": "x"})
+
+        assert "radarr" not in _all_wanted_cache, "a failure must never be cached"
+
+        # Once Radarr answers, the result is served and cached.
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(
+            {"/api/v3/wanted/missing": (200, {"records": [_wanted_record(1, "Matrix")], "totalRecords": 1})}
+        )):
+            body = client.get("/api/wanted", params={"source": "radarr", "q": "matrix"}).json()
+
+        assert body["wanted"]["radarr"]["total"] == 1
+        assert "radarr" in _all_wanted_cache
+
+    def test_all_listings_report_failures_too(self):
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(
+            {f"{CONFIGURED_RADARR_URL}/api/v3/movie": (401, {})}
+        )):
+            body = client.get("/api/wanted/all", params={"q": "x"}).json()
+
+        assert body["error_kind"] == "auth"
+        assert body["items"] == []

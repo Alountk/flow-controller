@@ -674,6 +674,37 @@ async def fetch_qbit_torrents(session: aiohttp.ClientSession) -> list[dict]:
         return []
 
 
+def arr_failure(service: dict, *, status: int | None = None, exc: BaseException | None = None) -> dict:
+    """Explain why an arr call produced nothing.
+
+    Returning an empty list on a timeout or a rejected API key makes "Radarr
+    says there is nothing missing" indistinguishable from "we could not ask
+    Radarr", and the UI then states the former with confidence. Callers merge
+    this into their empty result so the failure survives to the screen.
+    """
+    name = service.get("key", "arr")
+
+    if status is not None:
+        if status in (401, 403):
+            return {
+                "error_kind": "auth",
+                "error": f"{name}: API key rechazada (HTTP {status})",
+            }
+        return {"error_kind": "http", "error": f"{name}: respuesta HTTP {status}"}
+
+    if isinstance(exc, asyncio.TimeoutError):
+        return {"error_kind": "timeout", "error": f"{name}: no respondió a tiempo"}
+
+    return {
+        "error_kind": "unreachable",
+        "error": f"{name}: no se pudo conectar ({type(exc).__name__ if exc else 'desconocido'})",
+    }
+
+
+def _empty_page(page: int, page_size: int) -> dict:
+    return {"items": [], "total": 0, "page": page, "page_size": page_size}
+
+
 async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
     """Devuelve películas monitorizadas sin archivo (wanted/missing)."""
     headers = arr_headers(service["api_key"])
@@ -692,7 +723,7 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
-                return {"items": [], "total": 0}
+                return {**_empty_page(page, page_size), **arr_failure(service, status=resp.status)}
             data = await resp.json(content_type=None)
             items = [
                 {
@@ -712,8 +743,8 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
             ]
             total = data.get("totalRecords") or data.get("total", len(items))
             return {"items": items, "total": total, "page": page, "page_size": page_size}
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {**_empty_page(page, page_size), **arr_failure(service, exc=exc)}
 
 
 async def fetch_all_movies_detailed(
@@ -729,7 +760,7 @@ async def fetch_all_movies_detailed(
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
-                return {"items": [], "total": 0, "page": page, "page_size": page_size}
+                return {**_empty_page(page, page_size), **arr_failure(service, status=resp.status)}
             data = await resp.json(content_type=None)
             valid_movies = [m for m in data if isinstance(m, dict) and "id" in m]
             total = len(valid_movies)
@@ -760,8 +791,8 @@ async def fetch_all_movies_detailed(
                     "monitored": m.get("monitored", False),
                 })
             return {"items": items, "total": total, "page": page, "page_size": page_size}
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {**_empty_page(page, page_size), **arr_failure(service, exc=exc)}
 
 
 async def fetch_all_series_detailed(
@@ -777,7 +808,7 @@ async def fetch_all_series_detailed(
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
-                return {"items": [], "total": 0, "page": page, "page_size": page_size}
+                return {**_empty_page(page, page_size), **arr_failure(service, status=resp.status)}
             data = await resp.json(content_type=None)
             valid_series = [s for s in data if isinstance(s, dict) and "id" in s]
             total = len(valid_series)
@@ -810,8 +841,8 @@ async def fetch_all_series_detailed(
                     "episode_file_count": s.get("statistics", {}).get("episodeFileCount", 0),
                 })
             return {"items": items, "total": total, "page": page, "page_size": page_size}
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {**_empty_page(page, page_size), **arr_failure(service, exc=exc)}
 
 
 async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
@@ -833,7 +864,7 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
-                return {"items": [], "total": 0, "page": page, "page_size": page_size}
+                return {**_empty_page(page, page_size), **arr_failure(service, status=resp.status)}
             data = await resp.json(content_type=None)
             items = [
                 {
@@ -852,8 +883,8 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
             ]
             total = data.get("totalRecords") or data.get("total", len(items))
             return {"items": items, "total": total, "page": page, "page_size": page_size}
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {**_empty_page(page, page_size), **arr_failure(service, exc=exc)}
 
 
 async def arr_search_missing_movies(session: aiohttp.ClientSession, service: dict) -> dict:
