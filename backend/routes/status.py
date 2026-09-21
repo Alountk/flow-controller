@@ -5,7 +5,7 @@ import time
 import traceback
 
 import aiohttp
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from config import AMUTORRENT_INDEXER, DEVELOPER, SERVICES, API_KEY
 from traces import build_traces
@@ -65,19 +65,19 @@ async def health():
 
 
 @router.get("/api/status")
-async def get_status():
+async def get_status(_key: str = Depends(verify_api_key)):
     return status_cache
 
 
 @router.get("/api/status/refresh")
-async def refresh_status():
+async def refresh_status(_key: str = Depends(verify_api_key)):
     async with aiohttp.ClientSession() as session:
         await check_all(session)
     return status_cache
 
 
 @router.get("/api/trace")
-async def get_trace():
+async def get_trace(_key: str = Depends(verify_api_key)):
     async with aiohttp.ClientSession() as session:
         traces = await build_traces(session)
     summary = {
@@ -100,11 +100,24 @@ async def get_trace():
 
 @router.get("/api/config")
 async def config():
-    return {"developer": DEVELOPER, "api_key": API_KEY}
+    """Configuración pública para el arranque del frontend.
+
+    NUNCA devuelve la API key: esta ruta es anónima por necesidad (el navegador
+    la consulta antes de tener credenciales), y entregarla aquí permitía que
+    cualquiera que alcanzara el puerto obtuviera la clave y, con ella, todas las
+    credenciales vía /api/settings. Solo informa de si hace falta autenticarse.
+    """
+    return {"developer": DEVELOPER, "auth_required": bool(API_KEY)}
+
+
+@router.get("/api/auth/check")
+async def auth_check(_key: str = Depends(verify_api_key)):
+    """Valida la clave introducida en el navegador. Protegida a propósito."""
+    return {"ok": True}
 
 
 @router.get("/api/logs")
-async def get_logs(level: str = "all"):
+async def get_logs(level: str = "all", _key: str = Depends(verify_api_key)):
     """Últimos logs del backend (WARNING+ por defecto)."""
     from state import _LOG_BUFFER
     entries = list(_LOG_BUFFER)
@@ -115,7 +128,7 @@ async def get_logs(level: str = "all"):
 
 
 @router.get("/api/debug/indexers")
-async def debug_indexers(source: str = "radarr"):
+async def debug_indexers(source: str = "radarr", _key: str = Depends(verify_api_key)):
     """Debug: respuesta cruda de Radarr/Sonarr indexers."""
     service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
     if not service:

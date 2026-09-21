@@ -58,7 +58,7 @@ async def save_settings_endpoint(body: dict, _key: str = Depends(verify_api_key)
 
 
 @router.get("/api/prototypes")
-async def list_prototypes():
+async def list_prototypes(_key: str = Depends(verify_api_key)):
     if not os.path.isdir(PROTOTYPES_DIR):
         return []
     files = sorted(

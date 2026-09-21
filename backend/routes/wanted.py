@@ -94,7 +94,7 @@ async def _fetch_all_wanted(source_key: str) -> dict:
 
 
 @router.get("/api/wanted")
-async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: str = ""):
+async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: str = "", _key: str = Depends(verify_api_key)):
     """Películas y episodios faltantes (wanted), con filtro de texto opcional."""
     arr_services = [s for s in SERVICES if s["kind"] == "arr"]
     if source:
@@ -183,7 +183,7 @@ def _filter_all_endpoint(result: dict, q: str, page: int, page_size: int) -> dic
 
 
 @router.get("/api/wanted/all")
-async def get_all_movies(page: int = 1, page_size: int = 50, q: str = ""):
+async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: str = Depends(verify_api_key)):
     """Todas las películas de Radarr con estado de archivo y ruta (paginado)."""
     service = next((s for s in SERVICES if s["key"] == "radarr" and s["kind"] == "arr"), None)
     if not service:
@@ -196,7 +196,7 @@ async def get_all_movies(page: int = 1, page_size: int = 50, q: str = ""):
 
 
 @router.get("/api/wanted/series/all")
-async def get_all_series(page: int = 1, page_size: int = 50, q: str = ""):
+async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: str = Depends(verify_api_key)):
     """Todas las series de Sonarr con estado de archivo y ruta (paginado)."""
     service = next((s for s in SERVICES if s["key"] == "sonarr" and s["kind"] == "arr"), None)
     if not service:

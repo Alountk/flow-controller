@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import type { DiskResponse } from '../types'
 import './DiskSpace.css'
+import { authHeaders } from '../api/auth'
 
 async function fetchDisk(): Promise<DiskResponse> {
-  const res = await fetch('/api/disk')
+  const res = await fetch('/api/disk', { headers: authHeaders() })
   return res.json() as Promise<DiskResponse>
 }
 

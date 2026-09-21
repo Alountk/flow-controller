@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { AuthGate } from './components/AuthGate'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
@@ -12,7 +13,7 @@ import { Settings } from './components/Settings'
 import { Calendar } from './components/Calendar'
 import { DiskSpace } from './components/DiskSpace'
 import { MediaMixer } from './components/MediaMixer'
-import { setApiKey } from './api/auth'
+import { forgetApiKey, getApiKey, hasStoredApiKey, verifyApiKey } from './api/auth'
 import { usePageRoute } from './hooks/usePageRoute'
 import {
   parseStatus,
@@ -73,13 +74,46 @@ function App() {
   const { data: configData } = useQuery<ConfigResponse>({
     queryKey: ['config'],
     queryFn: () => fetchJson('/api/config'),
-    refetchInterval: 60000,
     staleTime: Infinity,
   })
 
+  // The backend no longer serves the key, so one is either already remembered
+  // by this browser or the user is asked for it.
+  const [authenticated, setAuthenticated] = useState(false)
+  const [checkingStored, setCheckingStored] = useState(true)
+
   useEffect(() => {
-    if (configData?.api_key) setApiKey(configData.api_key)
+    if (!configData) return
+
+    if (!configData.auth_required) {
+      setAuthenticated(true)
+      setCheckingStored(false)
+      return
+    }
+
+    // A remembered key may have been rotated on the server, so validate it
+    // rather than trusting it and firing a screenful of 401s.
+    if (!hasStoredApiKey()) {
+      setCheckingStored(false)
+      return
+    }
+    let active = true
+    verifyApiKey(getApiKey()).then((ok) => {
+      if (!active) return
+      if (ok) setAuthenticated(true)
+      else forgetApiKey()
+      setCheckingStored(false)
+    })
+    return () => {
+      active = false
+    }
   }, [configData])
+
+  function handleAuthenticated() {
+    setAuthenticated(true)
+    // The data queries failed while unauthenticated; refetch them now.
+    queryClient.invalidateQueries()
+  }
 
   const [page, setPage] = usePageRoute()
 
@@ -108,6 +142,15 @@ function App() {
   const importBlocked = traceData?.summary?.import_blocked ?? 0
   const failed = traceData?.summary?.failed ?? 0
   const completed = traceData?.summary?.downloaded ?? 0
+
+  // Waiting on /api/config, or validating a remembered key.
+  if (checkingStored) {
+    return <div className="app-loading">Cargando…</div>
+  }
+
+  if (configData?.auth_required && !authenticated) {
+    return <AuthGate onAuthenticated={handleAuthenticated} />
+  }
 
   return (
     <div className="layout">

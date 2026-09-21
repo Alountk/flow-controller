@@ -81,8 +81,10 @@ jobs:
 
       - name: Health check (port 8000)
         run: |
+          # /api/health is the liveness probe: /api/status carries real data and
+          # now requires the API key, which CI does not have.
           for i in $(seq 1 10); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/status 2>/dev/null || true)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/health 2>/dev/null || true)
             if [ "$STATUS" = "200" ]; then
               echo "✅ Backend healthy (HTTP $STATUS)"
               exit 0

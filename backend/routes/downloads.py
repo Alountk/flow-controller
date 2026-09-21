@@ -13,7 +13,7 @@ import asyncio
 import time
 
 import aiohttp
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from clients import (
     arr_categories_for,
@@ -22,6 +22,7 @@ from clients import (
     fetch_arr_queue,
 )
 from config import SERVICES
+from routes.status import verify_api_key
 from traces import normalize_hash
 
 router = APIRouter()
@@ -121,6 +122,6 @@ async def collect_downloads() -> dict:
 
 
 @router.get("/api/downloads")
-async def get_downloads():
+async def get_downloads(_key: str = Depends(verify_api_key)):
     """Descargas activas, con progreso unido desde el cliente de descargas."""
     return await collect_downloads()

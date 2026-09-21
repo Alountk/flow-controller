@@ -701,3 +701,80 @@ class TestWantedFailuresAreVisible:
 
         assert body["error_kind"] == "auth"
         assert body["items"] == []
+
+
+# ── Authentication boundary ──────────────────────────────────────────────────
+
+
+class TestAuthBoundary:
+    """Every data route requires the API key; only three are public on purpose.
+
+    The audit that motivated this found 21 of 48 routes unauthenticated, and
+    /api/config handed out the key itself — so anyone reaching the port could
+    bootstrap to every credential via /api/settings.
+    """
+
+    # Public by design: the SPA shell must load, /api/config carries no secret,
+    # and /api/health is the liveness probe CI and Docker use.
+    PUBLIC = {
+        "/",
+        "/{full_path}",
+        "/api/config",
+        "/api/health",
+        "/openapi.json",
+        "/docs",
+        "/docs/oauth2-redirect",
+        "/redoc",
+    }
+
+    def _routes(self):
+        """Every documented route, via the OpenAPI schema.
+
+        Enumerating `app.routes` does NOT work here: FastAPI wraps included
+        routers in `_IncludedRouter` objects whose sub-routes are not exposed as
+        APIRoute instances, so a naive walk finds zero routes and the guard
+        passes vacuously. `app.openapi()` is the public, version-stable source.
+        """
+        found = []
+        for path, operations in app.openapi()["paths"].items():
+            for method, operation in operations.items():
+                params = {p.get("name") for p in operation.get("parameters", [])}
+                found.append((method.upper(), path, "x-api-key" in params))
+        return found
+
+    def test_the_guard_actually_sees_routes(self):
+        """A guard that enumerates nothing is worse than no guard."""
+        routes = self._routes()
+
+        assert len(routes) > 30, f"the guard only sees {len(routes)} routes"
+        assert any(path == "/api/settings" for _, path, _ in routes)
+        assert any(path == "/api/files/browse" for _, path, _ in routes)
+
+    def test_every_data_route_requires_the_api_key(self):
+        offenders = [
+            f"{method} {path}"
+            for method, path, protected in self._routes()
+            if path.startswith("/api/") and path not in self.PUBLIC and not protected
+        ]
+
+        assert not offenders, (
+            "These data routes are reachable without the API key:\n  "
+            + "\n  ".join(sorted(offenders))
+        )
+
+    def test_config_never_returns_the_api_key(self):
+        body = client.get("/api/config").json()
+
+        assert "api_key" not in body, "the key must never be handed out anonymously"
+        assert "auth_required" in body
+
+    def test_config_is_reachable_without_credentials(self):
+        """The browser needs it before it has a key."""
+        assert client.get("/api/config").status_code == 200
+
+    def test_health_is_reachable_without_credentials(self):
+        assert client.get("/api/health").status_code == 200
+
+    def test_auth_check_validates_the_key(self):
+        """With API_KEY unset every request is allowed, so this passes too."""
+        assert client.get("/api/auth/check").status_code == 200

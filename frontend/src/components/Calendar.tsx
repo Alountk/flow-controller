@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import type { CalendarItem, CalendarResponse } from '../types'
 import { ReleaseSearchModal } from './ReleaseSearchModal'
 import './Calendar.css'
+import { authHeaders } from '../api/auth'
 
 async function fetchCalendar(start: string, end: string): Promise<CalendarResponse> {
-  const res = await fetch(`/api/calendar?start=${start}&end=${end}`)
+  const res = await fetch(`/api/calendar?start=${start}&end=${end}`, { headers: authHeaders() })
   return res.json() as Promise<CalendarResponse>
 }
 

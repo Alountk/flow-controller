@@ -53,7 +53,7 @@ def _file_entry(p: Path) -> dict:
 # ── File Manager ──────────────────────────────────────────────────────────────
 
 @router.get("/api/files/roots")
-async def file_roots():
+async def file_roots(_key: str = Depends(verify_api_key)):
     """Devuelve las raíces de navegación disponibles."""
     roots = []
     for root in ALLOWED_ROOTS:
@@ -63,7 +63,7 @@ async def file_roots():
 
 
 @router.get("/api/files/browse")
-async def file_browse(path: str = "/"):
+async def file_browse(path: str = "/", _key: str = Depends(verify_api_key)):
     """Lista el contenido de un directorio."""
     target = _validate_path(path)
     if not os.path.isdir(target):
@@ -316,7 +316,7 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
 
 
 @router.get("/api/files/queue/status")
-async def queue_status():
+async def queue_status(_key: str = Depends(verify_api_key)):
     """Estado actual de la cola de operaciones."""
     async with queue_lock:
         ops = [
