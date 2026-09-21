@@ -10,6 +10,7 @@ import {
 } from '../api/wanted'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
 import { filterScanMatches, scanMatchKey } from '../utils/scanResults'
 import { ReleaseSearchModal, type ReleaseSearchItem } from './ReleaseSearchModal'
@@ -298,14 +299,16 @@ export function MissingContent() {
   const [seriesFilter, setSeriesFilter] = useHashState<'missing' | 'all'>('wanted', 'seriesFilter', 'missing')
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
   const [releaseSearchItem, setReleaseSearchItem] = useState<ReleaseSearchItem | null>(null)
+  const [query, setQuery] = useHashState<string>('wanted', 'q', '')
+  const debouncedQuery = useDebouncedValue(query, 350)
 
   // Sentinel ref for infinite scroll intersection observer
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
 
   // 1. Wanted Movies Infinite Query
   const wantedMoviesQuery = useInfiniteQuery({
-    queryKey: ['wanted-movies-infinite'],
-    queryFn: ({ pageParam = 1 }) => fetchWantedMovies(pageParam, PAGE_SIZE),
+    queryKey: ['wanted-movies-infinite', debouncedQuery],
+    queryFn: ({ pageParam = 1 }) => fetchWantedMovies(pageParam, PAGE_SIZE, debouncedQuery),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
@@ -316,8 +319,8 @@ export function MissingContent() {
 
   // 2. All Movies Infinite Query
   const allMoviesQuery = useInfiniteQuery({
-    queryKey: ['all-movies-infinite'],
-    queryFn: ({ pageParam = 1 }) => fetchAllMovies(pageParam, PAGE_SIZE),
+    queryKey: ['all-movies-infinite', debouncedQuery],
+    queryFn: ({ pageParam = 1 }) => fetchAllMovies(pageParam, PAGE_SIZE, debouncedQuery),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
@@ -328,8 +331,8 @@ export function MissingContent() {
 
   // 3. Wanted Episodes Infinite Query
   const wantedEpisodesQuery = useInfiniteQuery({
-    queryKey: ['wanted-episodes-infinite'],
-    queryFn: ({ pageParam = 1 }) => fetchWantedEpisodes(pageParam, PAGE_SIZE),
+    queryKey: ['wanted-episodes-infinite', debouncedQuery],
+    queryFn: ({ pageParam = 1 }) => fetchWantedEpisodes(pageParam, PAGE_SIZE, debouncedQuery),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
@@ -340,8 +343,8 @@ export function MissingContent() {
 
   // 4. All Series Infinite Query
   const allSeriesQuery = useInfiniteQuery({
-    queryKey: ['all-series-infinite'],
-    queryFn: ({ pageParam = 1 }) => fetchAllSeries(pageParam, PAGE_SIZE),
+    queryKey: ['all-series-infinite', debouncedQuery],
+    queryFn: ({ pageParam = 1 }) => fetchAllSeries(pageParam, PAGE_SIZE, debouncedQuery),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
@@ -431,6 +434,14 @@ export function MissingContent() {
               >
                 Todas ({radarrAllTotal || '...'})
               </button>
+              <input
+                type="search"
+                className="wanted-search"
+                placeholder={movieFilter === 'missing' ? 'Filtrar faltantes...' : 'Filtrar películas...'}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Filtrar películas"
+              />
             </div>
           </div>
 
@@ -561,6 +572,14 @@ export function MissingContent() {
               >
                 Todas ({sonarrAllTotal || '...'})
               </button>
+              <input
+                type="search"
+                className="wanted-search"
+                placeholder={seriesFilter === 'missing' ? 'Filtrar faltantes...' : 'Filtrar series...'}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Filtrar series"
+              />
             </div>
           </div>
 

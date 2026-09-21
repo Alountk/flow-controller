@@ -28,6 +28,10 @@ ARR_SERVICES = [s for s in SERVICES if s["kind"] == "arr"]
 ARR_BY_KEY = {s["key"]: s for s in ARR_SERVICES}
 ARR_KEYS = {s["key"] for s in ARR_SERVICES}
 
+# Routes resolve their service from the real config, so URL stubs must use the
+# configured Radarr URL rather than an invented one.
+CONFIGURED_RADARR_URL = ARR_BY_KEY["radarr"]["url"]
+
 
 # ── HTTP transport stubs ──────────────────────────────────────────────────────
 
@@ -379,3 +383,194 @@ class TestGrabBatchErrorReporting:
         )
 
         assert resp.json()["ok"] is False
+
+
+# ── Text filter on wanted / all listings ─────────────────────────────────────
+
+
+def _wanted_record(mid: int, title: str, *, year: int = 2020, alt=None) -> dict:
+    return {
+        "id": mid,
+        "title": title,
+        "year": year,
+        "overview": f"Sinopsis de {title}",
+        "hasFile": False,
+        "alternateTitles": [{"title": t} for t in (alt or [])],
+    }
+
+
+class TestWantedTextFilter:
+    """The filter must cover EVERY wanted item, not just the loaded page.
+
+    Radarr paginates server-side, so a client-side filter would only ever see
+    the first page. With `q` present the backend pulls everything and paginates
+    the matches itself, and `total` reflects the filtered set.
+    """
+
+    RECORDS = [
+        _wanted_record(1, "Todo a la vez en todas partes"),
+        _wanted_record(2, "Everything Everywhere All at Once", alt=["Ton Nom"]),
+        _wanted_record(3, "Otra Pelicula Cualquiera"),
+        _wanted_record(4, "Ámélie"),
+    ]
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from routes.wanted import _all_wanted_cache
+        _all_wanted_cache.clear()
+        yield
+        _all_wanted_cache.clear()
+
+    def _get(self, query: str = "", page_size: int = 50, page: int = 1):
+        payload = {"records": self.RECORDS, "totalRecords": len(self.RECORDS)}
+        routes = {f"{CONFIGURED_RADARR_URL}/api/v3/wanted/missing": (200, payload)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get(
+                "/api/wanted",
+                params={"source": "radarr", "q": query, "page": page, "page_size": page_size},
+            )
+
+    def test_without_filter_behaviour_is_unchanged(self):
+        body = self._get().json()
+
+        assert "filtered" not in body
+        assert body["wanted"]["radarr"]["total"] == len(self.RECORDS)
+
+    def test_filters_by_title(self):
+        body = self._get("Otra Pelicula").json()
+        radarr = body["wanted"]["radarr"]
+
+        assert body["filtered"] is True
+        assert radarr["total"] == 1
+        assert radarr["items"][0]["title"] == "Otra Pelicula Cualquiera"
+
+    def test_ignores_case(self):
+        assert self._get("OTRA pelicula").json()["wanted"]["radarr"]["total"] == 1
+
+    def test_ignores_accents_on_both_sides(self):
+        assert self._get("amelie").json()["wanted"]["radarr"]["total"] == 1
+        assert self._get("Ámélie").json()["wanted"]["radarr"]["total"] == 1
+
+    def test_matches_alternate_titles(self):
+        body = self._get("Ton Nom").json()
+        radarr = body["wanted"]["radarr"]
+
+        assert radarr["total"] == 1
+        assert radarr["items"][0]["id"] == 2
+
+    def test_matches_the_overview(self):
+        assert self._get("Sinopsis de Otra").json()["wanted"]["radarr"]["total"] == 1
+
+    def test_total_counts_matches_not_the_loaded_page(self):
+        """The whole point: 2 matches reported even though page_size is 1."""
+        body = self._get("", page_size=1).json()
+        assert body["wanted"]["radarr"]["total"] == len(self.RECORDS)
+
+        filtered = self._get("e", page_size=1).json()
+        assert filtered["wanted"]["radarr"]["total"] > 1
+        assert len(filtered["wanted"]["radarr"]["items"]) == 1
+
+    def test_paginates_the_filtered_set(self):
+        first = self._get("e", page=1, page_size=1).json()["wanted"]["radarr"]
+        second = self._get("e", page=2, page_size=1).json()["wanted"]["radarr"]
+
+        assert len(first["items"]) == 1
+        assert len(second["items"]) == 1
+        assert first["items"][0]["id"] != second["items"][0]["id"]
+
+    def test_no_matches_returns_zero(self):
+        body = self._get("zzzzz").json()
+
+        assert body["wanted"]["radarr"]["total"] == 0
+        assert body["wanted"]["radarr"]["items"] == []
+
+    def test_repeated_filters_reuse_the_cache(self):
+        """Typing must not re-download the full list on every keystroke."""
+        from routes.wanted import _all_wanted_cache
+
+        payload = {"records": self.RECORDS, "totalRecords": len(self.RECORDS)}
+        routes = {f"{CONFIGURED_RADARR_URL}/api/v3/wanted/missing": (200, payload)}
+
+        with patch("aiohttp.ClientSession") as session_cls:
+            session_cls.side_effect = lambda *a, **k: _StubSession(routes)
+            client.get("/api/wanted", params={"source": "radarr", "q": "o"})
+            client.get("/api/wanted", params={"source": "radarr", "q": "ot"})
+            client.get("/api/wanted", params={"source": "radarr", "q": "otra"})
+
+        assert "radarr" in _all_wanted_cache, "the full list should be cached"
+        assert session_cls.call_count == 1, "the wanted list must be fetched once, not per keystroke"
+
+    def test_blank_filter_is_treated_as_no_filter(self):
+        body = self._get("   ").json()
+
+        assert "filtered" not in body
+
+
+class TestAllListingsTextFilter:
+    """The /all endpoints paginate INSIDE the client, before the route sees them.
+
+    A route-level test with a stubbed client cannot catch filtering the wrong
+    slice, because the slicing never runs. These tests use the real client
+    against a stubbed HTTP transport, so the slicing is exercised.
+    """
+
+    # "Mk" marks the items the filter targets; they are spread across pages so a
+    # filter that only looked at page 1 would miss most of them.
+    MOVIES = [
+        {"id": i, "title": t, "year": 2000, "hasFile": False, "path": f"/x/{i}", "monitored": True}
+        for i, t in enumerate(
+            ["Alpha Mk", "Your Name.", "Zulu", "Beta Mk", "Gamma Mk"], start=1
+        )
+    ]
+
+    def _get(self, query: str, page_size: int = 2, page: int = 1, endpoint: str = "/api/wanted/all"):
+        payload = self.MOVIES
+        url = f"{CONFIGURED_RADARR_URL}/api/v3/movie"
+        routes = {url: (200, payload)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get(
+                endpoint, params={"q": query, "page": page, "page_size": page_size}
+            )
+
+    def test_filter_sees_items_beyond_the_first_page(self):
+        """Gamma Mk is index 5, so a page of size 2 would never contain it."""
+        body = self._get("gamma", page_size=2).json()
+
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Gamma Mk"
+
+    def test_filter_total_counts_all_matches(self):
+        body = self._get("mk", page_size=1).json()
+
+        # Three matches spread across the 5-item list, more than one page's worth.
+        assert body["total"] == 3
+        assert len(body["items"]) == 1
+
+    def test_filtered_results_still_paginate(self):
+        first = self._get("mk", page=1, page_size=2).json()
+        second = self._get("mk", page=2, page_size=2).json()
+
+        assert [i["title"] for i in first["items"]] == ["Alpha Mk", "Beta Mk"]
+        assert [i["title"] for i in second["items"]] == ["Gamma Mk"]
+
+    def test_unfiltered_request_is_unchanged(self):
+        body = self._get("").json()
+
+        assert "filtered" not in body
+        assert len(body["items"]) == 2
+        assert body["total"] == len(self.MOVIES)
+
+    def test_series_endpoint_also_searches_everything(self):
+        payload = [
+            {"id": i, "title": t, "year": 2000, "statistics": {}}
+            for i, t in enumerate(["Alfa", "Rick and Morty", "Zeta"], start=1)
+        ]
+        routes = {f"{ARR_BY_KEY['sonarr']['url']}/api/v3/series": (200, payload)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            resp = client.get(
+                "/api/wanted/series/all", params={"q": "rick", "page": 1, "page_size": 1}
+            )
+
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["title"] == "Rick and Morty"

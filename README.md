@@ -307,6 +307,7 @@ tab === 'episodes' // OK
 | 19 | **Filtrar los faltantes** (títulos alternativos + filtro de resultados) | ✅ | `clients.py`, `MissingContent.tsx`, `utils/scanResults.ts` |
 | 20 | **Filtros en los resultados de los indexadores** | ✅ | `ReleaseSearchModal.tsx`, `utils/releaseFilters.ts`, `utils/selection.ts` |
 | 21 | **Feedback de descargas en la cola de operaciones** | 📋 | Backend + Frontend — ver estudio abajo |
+| 22 | **Filtro de texto en faltantes** | ✅ | `routes/wanted.py`, `MissingContent.tsx`, `hooks/useDebouncedValue.ts` |
 
 ### 🔵 Largas (1-2 semanas)
 
@@ -390,6 +391,39 @@ compartida (`utils/selection.ts`), usada por el escaneo y por los indexadores: d
 dos ocasiones de divergir, y la divergencia es silenciosa.
 
 ---
+
+### 🔤 #22 — Filtro de texto en faltantes
+
+**Hecho ✅** — input a la derecha de "Faltantes / Todas", en las dos pestañas.
+
+El filtro es **en servidor**, y eso no es un detalle de implementación: el listado está paginado
+(50 por página, 1981 episodios), así que filtrar en el navegador solo vería lo ya cargado y diría
+"sin resultados" mientras hay coincidencias sin descargar. El backend trae todo, filtra y pagina
+las coincidencias, así que **`total` refleja el conjunto filtrado**.
+
+Medido en vivo:
+
+| Petición | Resultado |
+| --- | --- |
+| `/api/wanted?source=radarr` | total=94 |
+| `...&q=the` | **total=90** ← sobre los 94, no sobre los 5 cargados |
+| `/api/wanted/all?q=the` | **total=332** de 908 |
+| `/api/wanted/series/all?q=rick` | total=1 |
+
+Detalles:
+
+- **Sin filtro nada cambia**: se sigue pidiendo una página al arr (cero regresión de coste).
+- **Con filtro** se pide todo de una vez: verificado que `pageSize=2000` devuelve los 95
+  largometrajes y los 1981 episodios en una sola petición.
+- **Caché de 60 s** del listado completo: sin ella, cada tecla redescargaría ~1,3 MB.
+- **Debounce de 350 ms** en el input.
+- Ignora mayúsculas y acentos, y busca también en títulos alternativos y sinopsis.
+
+> **Bug cazado por la verificación en vivo, no por los tests:** los endpoints `/all` paginan
+> **dentro del cliente**, antes de que la ruta los vea. La primera versión filtraba esa página ya
+> recortada, así que `q='your'` devolvía 0 aunque "Your Name." estuviera en la biblioteca, y
+> `q='the'` devolvía 1 en vez de 332. Los tests de ruta no podían verlo porque el recorte ocurre
+> en el cliente: hizo falta un test que usara el **cliente real** contra un transporte HTTP falso.
 
 ### ⬇️ #21 — Feedback de descargas en la cola de operaciones
 

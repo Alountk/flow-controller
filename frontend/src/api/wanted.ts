@@ -1,6 +1,12 @@
 import type { ActionResult, ScanResult, PaginatedResponse, WantedMovie, WantedEpisode, AllMovie, AllSeries } from '../types'
 import { authHeaders } from './auth'
 
+/** Only include the filter when it has content, so an empty box is a no-op. */
+function queryParam(query: string): string {
+  const trimmed = query.trim()
+  return trimmed ? `&q=${encodeURIComponent(trimmed)}` : ''
+}
+
 async function handleResponse(res: Response): Promise<ActionResult> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>
@@ -10,8 +16,8 @@ async function handleResponse(res: Response): Promise<ActionResult> {
   return (await res.json()) as ActionResult
 }
 
-export async function fetchWantedMovies(page = 1, pageSize = 50): Promise<PaginatedResponse<WantedMovie>> {
-  const res = await fetch(`/api/wanted?source=radarr&page=${page}&page_size=${pageSize}`, { headers: authHeaders() })
+export async function fetchWantedMovies(page = 1, pageSize = 50, query = ''): Promise<PaginatedResponse<WantedMovie>> {
+  const res = await fetch(`/api/wanted?source=radarr&page=${page}&page_size=${pageSize}${queryParam(query)}`, { headers: authHeaders() })
   const data = await res.json()
   const radarr = data?.wanted?.radarr
   return {
@@ -22,8 +28,8 @@ export async function fetchWantedMovies(page = 1, pageSize = 50): Promise<Pagina
   }
 }
 
-export async function fetchWantedEpisodes(page = 1, pageSize = 50): Promise<PaginatedResponse<WantedEpisode>> {
-  const res = await fetch(`/api/wanted?source=sonarr&page=${page}&page_size=${pageSize}`, { headers: authHeaders() })
+export async function fetchWantedEpisodes(page = 1, pageSize = 50, query = ''): Promise<PaginatedResponse<WantedEpisode>> {
+  const res = await fetch(`/api/wanted?source=sonarr&page=${page}&page_size=${pageSize}${queryParam(query)}`, { headers: authHeaders() })
   const data = await res.json()
   const sonarr = data?.wanted?.sonarr
   return {
@@ -34,13 +40,13 @@ export async function fetchWantedEpisodes(page = 1, pageSize = 50): Promise<Pagi
   }
 }
 
-export async function fetchAllMovies(page = 1, pageSize = 50): Promise<PaginatedResponse<AllMovie>> {
-  const res = await fetch(`/api/wanted/all?page=${page}&page_size=${pageSize}`, { headers: authHeaders() })
+export async function fetchAllMovies(page = 1, pageSize = 50, query = ''): Promise<PaginatedResponse<AllMovie>> {
+  const res = await fetch(`/api/wanted/all?page=${page}&page_size=${pageSize}${queryParam(query)}`, { headers: authHeaders() })
   return (await res.json()) as PaginatedResponse<AllMovie>
 }
 
-export async function fetchAllSeries(page = 1, pageSize = 50): Promise<PaginatedResponse<AllSeries>> {
-  const res = await fetch(`/api/wanted/series/all?page=${page}&page_size=${pageSize}`, { headers: authHeaders() })
+export async function fetchAllSeries(page = 1, pageSize = 50, query = ''): Promise<PaginatedResponse<AllSeries>> {
+  const res = await fetch(`/api/wanted/series/all?page=${page}&page_size=${pageSize}${queryParam(query)}`, { headers: authHeaders() })
   return (await res.json()) as PaginatedResponse<AllSeries>
 }
 

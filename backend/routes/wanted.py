@@ -28,13 +28,89 @@ from routes.status import verify_api_key
 
 router = APIRouter()
 
+# Radarr paginates wanted/missing server-side, so asking for one page at a time
+# is cheap but makes client-side filtering dishonest (it would only see what is
+# loaded). When a text filter is present we pull everything in a single request
+# instead — verified: pageSize=2000 returns all 95 movies / 1981 episodes.
+ALL_ITEMS_PAGE_SIZE = 2000
+
+# Pulling everything costs ~1.3 MB and ~1.4s for episodes, so cache it briefly.
+# Without this, every keystroke would re-download the full wanted list.
+_ALL_WANTED_TTL = 60.0
+_all_wanted_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def normalize_for_search(value: str) -> str:
+    """Lowercase and strip accents so "Seu Nome" matches "seu nome"."""
+    decomposed = unicodedata.normalize("NFD", value or "")
+    stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return stripped.lower().strip()
+
+
+def _searchable_fields(item: dict) -> list[str]:
+    return [
+        item.get("title", ""),
+        item.get("series_title", ""),
+        item.get("overview", ""),
+        *(item.get("altTitles") or []),
+    ]
+
+
+def _matches(item: dict, needle: str) -> bool:
+    return any(normalize_for_search(field).find(needle) != -1 for field in _searchable_fields(item))
+
+
+def _paginate(items: list[dict], page: int, page_size: int) -> list[dict]:
+    start = max(0, (page - 1) * page_size)
+    return items[start:start + page_size]
+
+
+async def _fetch_all_wanted(source_key: str) -> list[dict]:
+    """Everything Radarr/Sonarr report as wanted, cached for a short while."""
+    cached = _all_wanted_cache.get(source_key)
+    if cached and time.time() - cached[0] < _ALL_WANTED_TTL:
+        return cached[1]
+
+    service = next((s for s in SERVICES if s["key"] == source_key and s["kind"] == "arr"), None)
+    if not service:
+        return []
+
+    async with aiohttp.ClientSession() as session:
+        if source_key == "radarr":
+            result = await fetch_wanted_movies(session, service, page=1, page_size=ALL_ITEMS_PAGE_SIZE)
+        else:
+            result = await fetch_wanted_episodes(session, service, page=1, page_size=ALL_ITEMS_PAGE_SIZE)
+
+    items = result.get("items", [])
+    _all_wanted_cache[source_key] = (time.time(), items)
+    return items
+
 
 @router.get("/api/wanted")
-async def get_wanted(page: int = 1, page_size: int = 50, source: str = ""):
-    """Películas y episodios faltantes (wanted)."""
+async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: str = ""):
+    """Películas y episodios faltantes (wanted), con filtro de texto opcional."""
     arr_services = [s for s in SERVICES if s["kind"] == "arr"]
     if source:
         arr_services = [s for s in arr_services if s["key"] == source]
+
+    needle = normalize_for_search(q)
+
+    if needle:
+        # Filter over EVERYTHING, then paginate here. The frontend keeps its
+        # page/page_size contract, so infinite scroll is unaffected and `total`
+        # reflects the filtered set rather than only the loaded pages.
+        wanted = {}
+        for service in arr_services:
+            items = await _fetch_all_wanted(service["key"])
+            matches = [item for item in items if _matches(item, needle)]
+            wanted[service["key"]] = {
+                "items": _paginate(matches, page, page_size),
+                "total": len(matches),
+                "page": page,
+                "page_size": page_size,
+            }
+        return {"wanted": wanted, "updated_at": int(time.time()), "filtered": True}
+
     async with aiohttp.ClientSession() as session:
         results = await asyncio.gather(
             *(
@@ -53,26 +129,52 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = ""):
     }
 
 
+def _filter_all_endpoint(result: dict, q: str, page: int, page_size: int) -> dict:
+    """Apply the text filter to an endpoint that already holds the full list.
+
+    Radarr's /api/v3/movie and Sonarr's /api/v3/series are fetched in full, but
+    the client slices to the requested page before returning. Filtering that
+    slice would only ever search the current page — the exact dishonesty this
+    filter exists to avoid — so the caller asks for everything (page_size=0)
+    when a filter is present.
+    """
+    needle = normalize_for_search(q)
+    if not needle:
+        return result
+
+    matches = [item for item in result.get("items", []) if _matches(item, needle)]
+    return {
+        "items": _paginate(matches, page, page_size),
+        "total": len(matches),
+        "page": page,
+        "page_size": page_size,
+        "filtered": True,
+    }
+
+
 @router.get("/api/wanted/all")
-async def get_all_movies(page: int = 1, page_size: int = 50):
+async def get_all_movies(page: int = 1, page_size: int = 50, q: str = ""):
     """Todas las películas de Radarr con estado de archivo y ruta (paginado)."""
     service = next((s for s in SERVICES if s["key"] == "radarr" and s["kind"] == "arr"), None)
     if not service:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
+    # page_size=0 tells the client not to slice, so the filter sees everything.
+    fetch_size = 0 if normalize_for_search(q) else page_size
     async with aiohttp.ClientSession() as session:
-        result = await fetch_all_movies_detailed(session, service, page, page_size)
-    return result
+        result = await fetch_all_movies_detailed(session, service, page, fetch_size)
+    return _filter_all_endpoint(result, q, page, page_size)
 
 
 @router.get("/api/wanted/series/all")
-async def get_all_series(page: int = 1, page_size: int = 50):
+async def get_all_series(page: int = 1, page_size: int = 50, q: str = ""):
     """Todas las series de Sonarr con estado de archivo y ruta (paginado)."""
     service = next((s for s in SERVICES if s["key"] == "sonarr" and s["kind"] == "arr"), None)
     if not service:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
+    fetch_size = 0 if normalize_for_search(q) else page_size
     async with aiohttp.ClientSession() as session:
-        result = await fetch_all_series_detailed(session, service, page, page_size)
-    return result
+        result = await fetch_all_series_detailed(session, service, page, fetch_size)
+    return _filter_all_endpoint(result, q, page, page_size)
 
 
 @router.post("/api/wanted/search")
