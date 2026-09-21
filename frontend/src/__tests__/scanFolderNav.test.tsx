@@ -38,6 +38,14 @@ const dir = (name: string): BrowseItem => ({
   modified: 0,
 })
 
+const file = (name: string, size = 1_500_000_000): BrowseItem => ({
+  name,
+  path: `/mnt/storage/${name}`,
+  is_dir: false,
+  size,
+  modified: 0,
+})
+
 function ok(body: unknown) {
   return Promise.resolve({ ok: true, json: async () => body } as Response)
 }
@@ -117,15 +125,46 @@ describe('"En carpeta" navigator', () => {
     vi.unstubAllGlobals()
   })
 
-  it('asks the backend again when the refresh button is clicked', async () => {
-    const fetchMock = mockFetch([[dir('Before Folder')], [dir('After Folder')]])
+  it('shows files alongside folders in the navigator', async () => {
+    mockFetch([
+      dir('Some Folder'),
+      file('Movie.2026.1080p.mkv'),
+    ])
     await openScanModal()
-    expect(await screen.findByText(/Before Folder/)).toBeInTheDocument()
+
+    // The folder row carries the "📁 " icon, so match it as a substring; the
+    // file name is its own text node and can be matched exactly.
+    expect(await screen.findByText(/Some Folder/)).toBeInTheDocument()
+    expect(screen.getByText('Movie.2026.1080p.mkv')).toBeInTheDocument()
+  })
+
+  it('shows a file size next to each file', async () => {
+    mockFetch([file('Movie.2026.1080p.mkv', 1_500_000_000)])
+    await openScanModal()
+
+    expect(await screen.findByText('Movie.2026.1080p.mkv')).toBeInTheDocument()
+    expect(screen.getByText('1.4 GB')).toBeInTheDocument()
+  })
+
+  it('asks the backend again when the refresh button is clicked', async () => {
+    const fetchMock = mockFetch([
+      [file('Before.2026.mkv')],
+      [file('After.2026.mkv')],
+    ])
+    await openScanModal()
+    expect(await screen.findByText('Before.2026.mkv')).toBeInTheDocument()
 
     const callsBefore = browseCallCount(fetchMock)
     fireEvent.click(screen.getByTitle('Refrescar listado'))
 
-    expect(await screen.findByText(/After Folder/)).toBeInTheDocument()
+    expect(await screen.findByText('After.2026.mkv')).toBeInTheDocument()
     expect(browseCallCount(fetchMock)).toBeGreaterThan(callsBefore)
+  })
+
+  it('reports an empty folder', async () => {
+    mockFetch([])
+    await openScanModal()
+
+    expect(await screen.findByText('Carpeta vacía')).toBeInTheDocument()
   })
 })

@@ -19,6 +19,15 @@ import './MissingContent.css'
 
 const PAGE_SIZE = 50
 
+function formatSize(bytes: number): string {
+  if (bytes === 0) return '—'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let size = bytes
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
 interface ScanItem {
   type: 'movie' | 'series'
   id: number
@@ -197,17 +206,25 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
             {currentPath && (
               <div className="scan-path-list">
                 <div className="scan-current-path">{currentPath}</div>
-                {items.filter((i: { is_dir: boolean }) => i.is_dir).map((dirItem: { path: string; name: string }) => (
-                  <div
-                    key={dirItem.path}
-                    className="scan-folder-item"
-                    onClick={() => navigateTo(dirItem.path)}
-                  >
-                    📁 {dirItem.name}
-                  </div>
-                ))}
-                {items.filter((i: { is_dir: boolean }) => i.is_dir).length === 0 && (
-                  <div className="scan-no-subfolders">Sin subcarpetas</div>
+                {items.map((entry) =>
+                  entry.is_dir ? (
+                    <div
+                      key={entry.path}
+                      className="scan-folder-item"
+                      onClick={() => navigateTo(entry.path)}
+                    >
+                      📁 {entry.name}
+                    </div>
+                  ) : (
+                    <div key={entry.path} className="scan-file-row">
+                      <span className="scan-file-row-icon">📄</span>
+                      <span className="scan-file-row-name" title={entry.name}>{entry.name}</span>
+                      <span className="scan-file-row-size">{formatSize(entry.size)}</span>
+                    </div>
+                  ),
+                )}
+                {items.length === 0 && (
+                  <div className="scan-no-subfolders">Carpeta vacía</div>
                 )}
               </div>
             )}

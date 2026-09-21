@@ -397,6 +397,31 @@
   font-style: italic;
 }
 
+.scan-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.scan-file-row-icon {
+  flex-shrink: 0;
+}
+
+.scan-file-row-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-file-row-size {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
 .scan-results {
   margin-top: 16px;
 }
