@@ -50,8 +50,10 @@ export function useDownloads() {
     queryKey: ['downloads'],
     queryFn: fetchDownloads,
     refetchInterval: (query) => {
-      const data = query.state.data
-      return data && data.downloads.length > 0 ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS
+      // Null-safe: a response missing `downloads` must not crash the sidebar
+      // during a poll, which happens outside any render a caller could guard.
+      const downloads = query.state.data?.downloads
+      return downloads && downloads.length > 0 ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS
     },
     // A failed poll must not blank the panel: keep showing the last known state.
     retry: false,
