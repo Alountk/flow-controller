@@ -127,19 +127,26 @@ del candidato a propósito).
 
 ## Entrega
 
-Estrategia elegida por el usuario: **PRs encadenados**, cadena **`stacked-to-main`** (cada PR
-mergea a `main` en orden).
+Estrategia elegida por el usuario: **PRs encadenados**, cadena **`stacked-to-main`**.
 
-| PR | Contenido | Commits |
-| --- | --- | --- |
-| #1 | T1+T2 (navegación y refresco) | `d160c29`, `bbd5022`, `4797038`, `3071f92` |
-| #2 | T3-T5 (enriquecido de episodios) + T6/T7 | todavía sin crear |
+Al medir el slice completo salieron **404 líneas** (392+, 12−), por encima del presupuesto fijo de
+400 por PR. En vez de pedir `size:exception` por 4 líneas, se hizo **un corte honesto** por unidad
+de trabajo, que es lo que prescriben `chained-pr` y `work-unit-commits` (una unidad entregable por
+PR). No hizo falta reescribir historia: `d160c29` cuelga directamente de `main`, así que basta una
+rama apuntándolo.
 
-Presupuesto: **376 / ~400 líneas** en el slice #1. El slice #2 arranca con el presupuesto a cero
-y su base es la rama del #1.
+| PR | Contenido | Base | Líneas | Commits |
+| --- | --- | --- | --- | --- |
+| [#27](https://github.com/Alountk/flow-controller/pull/27) | T1 — refresco del listado | `main` | 146 (145+, 1−) | `d160c29` |
+| [#28](https://github.com/Alountk/flow-controller/pull/28) | T2 — archivos en el navegador + registro | `fix/en-carpeta-refresh` | 264 (250+, 14−) | `bbd5022`, `4797038`, `3071f92`, `2a76bff` |
+| (futuro) | T3-T5 — enriquecido `S##E##` | rama de #28 | — | — |
 
-Antes de crear cualquier PR hay que resolver por registro las skills `work-unit-commits` y
-`chained-pr`. Push, creación de PR y merge siguen siendo decisión del usuario.
+Patrón `stacked-to-main` real: cada PR apunta a `main`, pero el hijo se abre con la base del padre
+para que su diff no arrastre el trabajo anterior; al mergear el padre, GitHub reapunta el hijo.
+Consecuencia práctica a recordar: **la CI solo se dispara en PRs con base `main`**, así que #28 no
+tendrá checks hasta ese reapuntado.
+
+Push, creación de PR y merge: autorizados por el usuario para este slice.
 
 ## Hipótesis pendiente de confirmar
 
