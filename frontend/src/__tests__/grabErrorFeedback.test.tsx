@@ -124,16 +124,16 @@ describe('grab batch error feedback', () => {
     expect(screen.getByText('…y 3 más')).toBeInTheDocument()
   })
 
-  it('surfaces an HTTP failure such as an invalid API key', async () => {
-    mockFetch(() => ({
-      ok: false,
-      status: 401,
-      json: async () => ({ detail: 'API key inválida' }),
-    }) as unknown as Response)
+  it('tells the user to re-enter the key when it is rejected', async () => {
+    // apiFetch handles the 401 centrally (it clears the key and prompts for it),
+    // so the client reports what to do instead of the raw response body.
+    mockFetch(() => ({ ok: false, status: 401, json: async () => ({}) }) as Response)
 
     await openAndSelect()
 
-    await waitFor(() => expect(screen.getByText('API key inválida')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/API key rechazada/)).toBeInTheDocument(),
+    )
   })
 
   it('reports a transport failure instead of hanging on "Descargando"', async () => {

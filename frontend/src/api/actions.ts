@@ -1,5 +1,5 @@
 import type { ActionResult, ActionKey, Trace } from '../types'
-import { authHeaders } from './auth'
+import { apiFetch } from './auth'
 
 export interface ActionOptions {
   blocklist?: boolean
@@ -15,9 +15,8 @@ export async function runAction(
   trace: Trace,
   options: ActionOptions = {},
 ): Promise<ActionResult> {
-  const res = await fetch(`/api/actions/${action}`, {
+  const res = await apiFetch(`/api/actions/${action}`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       source: trace.source,
       download_id: trace.download_id,

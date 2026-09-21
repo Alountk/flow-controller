@@ -93,26 +93,43 @@ def _set_nested(d: dict, keys: tuple[str, ...], value: Any) -> None:
     d[keys[-1]] = typed_value
 
 
-def _apply_env_overrides(data: dict) -> dict:
-    result = _deep_merge(DEFAULTS, data)
+def _env_seed() -> dict:
+    """Settings values found in the environment, if any."""
+    env_data: dict[str, Any] = {}
     for env_key, path in _env_to_settings.items():
         env_val = os.getenv(env_key)
         if env_val is not None and env_val != "":
-            _set_nested(result, path, env_val)
-    return result
+            _set_nested(env_data, path, env_val)
+    return env_data
 
 
 def load_settings() -> dict[str, Any]:
+    """Read the settings file. It is the single source of truth.
+
+    There is deliberately NO environment override here. One used to be applied
+    on every load, which meant an env var silently beat anything saved from the
+    Settings UI — so editing a URL or API key appeared to do nothing. The
+    environment now only seeds the file once, on first run (see
+    ``migrate_env_vars``).
+    """
     global _settings
-    file_data: dict[str, Any] = {}
+
     if os.path.isfile(SETTINGS_FILE):
+        file_data: dict[str, Any] = {}
         try:
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
                 file_data = json.load(f)
             log.info("Loaded settings from %s", SETTINGS_FILE)
         except Exception as exc:
             log.error("Failed to load settings from %s: %s", SETTINGS_FILE, exc)
-    _settings = _apply_env_overrides(file_data)
+        _settings = _deep_merge(DEFAULTS, file_data)
+    elif not _settings:
+        # No file and nothing seeded in memory: pure defaults.
+        _settings = _deep_merge(DEFAULTS, {})
+    # Otherwise migrate_env_vars already built the settings in memory and could
+    # not persist them (read-only config directory); keep them rather than
+    # clobbering with DEFAULTS.
+
     return _settings
 
 
@@ -153,13 +170,15 @@ def get_setting(*keys: str, default: Any = None) -> Any:
 
 
 def migrate_env_vars() -> bool:
+    """Seed settings.json from the environment, on FIRST run only.
+
+    This is a bootstrap, not a runtime override: once the file exists the
+    environment is ignored and the file decides. Deployment variables are
+    therefore an initial value, never an authority.
+    """
     if os.path.isfile(SETTINGS_FILE):
         return False
-    env_data: dict[str, Any] = {}
-    for env_key, path in _env_to_settings.items():
-        env_val = os.getenv(env_key)
-        if env_val is not None and env_val != "":
-            _set_nested(env_data, path, env_val)
+    env_data = _env_seed()
     merged = _deep_merge(DEFAULTS, env_data) if env_data else DEFAULTS
     saved = save_settings(merged)
     if saved:

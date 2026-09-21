@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../types'
 import { runAction, type ActionOptions } from '../api/actions'
-import { authHeaders } from '../api/auth'
+import { apiFetch } from '../api/auth'
 import './TraceActions.css'
 
 interface Props {
@@ -112,7 +112,7 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   const { data: taskData } = useQuery({
     queryKey: ['task', copyTask?.task_id],
     queryFn: async () => {
-      const res = await fetch(`/api/tasks/${copyTask!.task_id}`, { headers: authHeaders() })
+      const res = await apiFetch(`/api/tasks/${copyTask!.task_id}`, {})
       return res.json() as Promise<{ ok: boolean } & TaskProgress>
     },
     enabled: !!copyTask && ACTIVE_STATUSES.includes(copyTask.status),
@@ -196,7 +196,7 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   async function cancelTask() {
     if (!copyTask) return
     try {
-      await fetch(`/api/tasks/${copyTask.task_id}/cancel`, { method: 'POST', headers: authHeaders() })
+      await apiFetch(`/api/tasks/${copyTask.task_id}/cancel`, { method: 'POST' })
     } catch {
       // Will be handled by polling
     }

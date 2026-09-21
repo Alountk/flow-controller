@@ -13,7 +13,14 @@ import { Settings } from './components/Settings'
 import { Calendar } from './components/Calendar'
 import { DiskSpace } from './components/DiskSpace'
 import { MediaMixer } from './components/MediaMixer'
-import { forgetApiKey, getApiKey, hasStoredApiKey, verifyApiKey } from './api/auth'
+import {
+  apiFetch,
+  forgetApiKey,
+  getApiKey,
+  hasStoredApiKey,
+  setUnauthorizedHandler,
+  verifyApiKey,
+} from './api/auth'
 import { usePageRoute } from './hooks/usePageRoute'
 import {
   parseStatus,
@@ -26,8 +33,18 @@ import {
 } from './types'
 import type { Page } from './components/Sidebar'
 
+/**
+ * Authenticated JSON fetch.
+ *
+ * It used to call bare `fetch`, so /api/status, /api/trace and /api/actions
+ * went out with no X-Api-Key header. They were unauthenticated at the time, so
+ * nobody noticed; the moment those routes started requiring the key, every
+ * dashboard call failed with 401 for anyone who had one configured.
+ *
+ * It goes through `apiFetch` so a rejected key also re-prompts.
+ */
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json() as Promise<T>
 }
@@ -53,22 +70,29 @@ const PAGE_TITLES: Record<Page, string> = {
 function App() {
   const queryClient = useQueryClient()
 
+  // Declared before the queries: they are gated on it.
+  const [authenticated, setAuthenticated] = useState(false)
+  const [checkingStored, setCheckingStored] = useState(true)
+
   const { data, error, isPending } = useQuery<StatusResponse>({
     queryKey: ['status'],
     queryFn: () => fetchJson('/api/status'),
     refetchInterval: 5000,
+    enabled: authenticated,
   })
 
   const { data: traceData, isPending: traceLoading } = useQuery<TraceResponse>({
     queryKey: ['trace'],
     queryFn: () => fetchJson('/api/trace'),
     refetchInterval: 15000,
+    enabled: authenticated,
   })
 
   const { data: actionsData } = useQuery<ActionsResponse>({
     queryKey: ['actions'],
     queryFn: () => fetchJson('/api/actions'),
     refetchInterval: 60000,
+    enabled: authenticated,
   })
 
   const { data: configData } = useQuery<ConfigResponse>({
@@ -79,8 +103,6 @@ function App() {
 
   // The backend no longer serves the key, so one is either already remembered
   // by this browser or the user is asked for it.
-  const [authenticated, setAuthenticated] = useState(false)
-  const [checkingStored, setCheckingStored] = useState(true)
 
   useEffect(() => {
     if (!configData) return
@@ -114,6 +136,17 @@ function App() {
     // The data queries failed while unauthenticated; refetch them now.
     queryClient.invalidateQueries()
   }
+
+  // Any 401 from anywhere brings the user back to the key prompt. Without this
+  // the key was only checked once at boot, so a cleared or rotated key left
+  // every panel failing silently.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setAuthenticated(false)
+      setCheckingStored(false)
+    })
+    return () => setUnauthorizedHandler(null)
+  }, [])
 
   const [page, setPage] = usePageRoute()
 

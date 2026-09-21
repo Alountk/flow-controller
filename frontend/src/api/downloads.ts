@@ -1,4 +1,4 @@
-import { authHeaders } from './auth'
+import { apiFetch } from './auth'
 
 /** An active download, joined from Radarr/Sonarr and the download client. */
 export interface Download {
@@ -40,7 +40,7 @@ export interface DownloadsResponse {
 }
 
 export async function fetchDownloads(): Promise<DownloadsResponse> {
-  const res = await fetch('/api/downloads', { headers: authHeaders() })
+  const res = await apiFetch('/api/downloads', {})
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
   }

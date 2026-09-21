@@ -1,4 +1,4 @@
-import { authHeaders } from './auth'
+import { apiFetch, UnauthorizedError } from './auth'
 
 export interface Release {
   guid: string
@@ -20,9 +20,8 @@ export async function searchCalendarItem(
   type: string,
   id: number,
 ): Promise<{ ok: boolean; detail: string }> {
-  const res = await fetch('/api/calendar/search', {
+  const res = await apiFetch('/api/calendar/search', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ source, type, id }),
   })
   if (!res.ok) {
@@ -39,9 +38,8 @@ export async function addCalendarItem(
   title: string,
   year?: number,
 ): Promise<{ ok: boolean; id?: number; detail: string }> {
-  const res = await fetch('/api/calendar/add', {
+  const res = await apiFetch('/api/calendar/add', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ source, type, title, year }),
   })
   if (!res.ok) {
@@ -60,9 +58,8 @@ export async function fetchCalendarReleases(
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 245000) // 245s timeout (backend is 240s)
   try {
-    const res = await fetch('/api/calendar/releases', {
+    const res = await apiFetch('/api/calendar/releases', {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ source, type, id }),
       signal: controller.signal,
     })
@@ -89,6 +86,11 @@ export async function fetchCalendarReleases(
  * CORS problems alike — repeating it verbatim tells the user nothing.
  */
 function describeFetchFailure(err: unknown): string {
+  if (err instanceof UnauthorizedError) {
+    // apiFetch already triggered the key prompt; say what happened rather than
+    // leaking the exception name.
+    return 'API key rechazada. Vuelve a introducirla para continuar.'
+  }
   if (err instanceof DOMException && err.name === 'AbortError') {
     return 'La petición tardó demasiado y se canceló'
   }
@@ -110,9 +112,8 @@ export async function grabCalendarRelease(
   // not as an unhandled rejection that leaves the modal stuck on "Descargando".
   let res: Response
   try {
-    res = await fetch('/api/calendar/grab', {
+    res = await apiFetch('/api/calendar/grab', {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ source, guid, indexerId, movieId, episodeId }),
     })
   } catch (err) {
@@ -135,9 +136,8 @@ export async function grabCalendarReleaseBatch(
 ): Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }> {
   let res: Response
   try {
-    res = await fetch('/api/calendar/grab-batch', {
+    res = await apiFetch('/api/calendar/grab-batch', {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ source, guids, indexerIds, movieId, episodeId }),
     })
   } catch (err) {
