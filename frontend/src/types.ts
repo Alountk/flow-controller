@@ -175,6 +175,10 @@ export interface ConfigResponse {
   developer: boolean
   /** Whether the backend requires an API key. The key itself is never sent. */
   auth_required: boolean
+  /** False when the stored service credentials could not be decrypted. */
+  encryption_ok?: boolean
+  /** Why they could not be decrypted, ready to show. */
+  encryption_error?: string
 }
 
 export interface Settings {

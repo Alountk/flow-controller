@@ -219,6 +219,14 @@ function App() {
 
         <div className="content-and-queue">
           <div className="content">
+            {/* Loud on purpose: unreadable credentials otherwise look like every
+                service being misconfigured, with no hint at the real cause. */}
+            {configData?.encryption_ok === false && (
+              <div className="wanted-error" role="alert">
+                <strong>No se pudieron leer las credenciales guardadas</strong>
+                <span>{configData.encryption_error}</span>
+              </div>
+            )}
             {page === 'dashboard' && (
               <>
                 <div className="content-header">

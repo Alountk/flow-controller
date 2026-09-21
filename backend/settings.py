@@ -7,6 +7,9 @@ from typing import Any
 
 log = logging.getLogger("settings")
 
+#: Non-empty when the stored credentials could not be decrypted (wrong FC_SECRET).
+encryption_error: str = ""
+
 CONFIG_DIR = os.getenv("CONFIG_DIR", "/app/config")
 SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 
@@ -149,7 +152,15 @@ def load_settings() -> dict[str, Any]:
         _settings = _env_fills_gaps(file_data)
         # Migrate a plaintext app key (or clear one corrupted by the mask bug)
         # before anything reads it.
-        if credentials.normalise_app_key(_settings):
+        key_changed = credentials.normalise_app_key(_settings)
+
+        secret = credentials.encryption_secret()
+        failures = credentials.prepare_for_use(_settings, secret)
+        _set_encryption_error(failures, secret)
+
+        # Re-save when a plaintext app key was migrated or a service secret is
+        # still in the clear, so the file ends up fully protected.
+        if key_changed or (secret and _has_plaintext_secret(_settings)):
             save_settings(_settings)
     elif not _settings:
         # No file and nothing seeded in memory: pure defaults.
@@ -161,16 +172,56 @@ def load_settings() -> dict[str, Any]:
     return _settings
 
 
+def _set_encryption_error(failures: list[str], secret: str) -> None:
+    """Record, loudly, when credentials cannot be read back.
+
+    Silently returning empty credentials would show every service as
+    unconfigured, which is exactly the wrong diagnosis.
+    """
+    global encryption_error
+    if failures:
+        encryption_error = (
+            f"{credentials.SECRET_ENV_VAR} no coincide con el usado para cifrar: "
+            f"no se pudieron leer {', '.join(failures)}. Restaura el valor anterior "
+            f"o vuelve a introducir esas credenciales."
+        )
+        log.error(encryption_error)
+    elif not secret and _has_plaintext_secret(get_settings()):
+        encryption_error = ""
+        log.warning(
+            "%s no está definida: las credenciales se guardan SIN cifrar. "
+            "Defínela para protegerlas.",
+            credentials.SECRET_ENV_VAR,
+        )
+    else:
+        encryption_error = ""
+
+
+def _has_plaintext_secret(data: dict) -> bool:
+    for path in credentials.ENCRYPTED_SECRET_FIELDS:
+        node = data
+        for key in path:
+            node = node.get(key, {}) if isinstance(node, dict) else {}
+        if isinstance(node, str) and node and not credentials.is_encrypted(node):
+            return True
+    return False
+
+
 def save_settings(data: dict[str, Any]) -> bool:
     global _settings
     _settings = _deep_merge(DEFAULTS, data)
     # Never persist the app key in the clear: hash it on the way out.
     credentials.normalise_app_key(_settings)
+    # The file gets ciphertext; memory keeps the plaintext the app must send.
+    secret = credentials.encryption_secret()
+    if secret:
+        # Keep the salt in memory too, so it does not change between saves.
+        credentials.ensure_encryption_salt(_settings)
     try:
         os.makedirs(CONFIG_DIR, exist_ok=True)
         tmp = SETTINGS_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(_settings, f, indent=2, ensure_ascii=False)
+            json.dump(credentials.prepare_for_storage(_settings, secret), f, indent=2, ensure_ascii=False)
         os.replace(tmp, SETTINGS_FILE)
         try:
             os.chmod(SETTINGS_FILE, stat.S_IRUSR | stat.S_IWUSR)

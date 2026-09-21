@@ -19,7 +19,9 @@ function mockFetch(configured: ServiceKey[]) {
     const json = (body: unknown) =>
       Promise.resolve({ ok: true, status: 200, json: async () => body } as Response)
 
-    if (url.includes('/api/config')) return json({ developer: false, auth_required: true })
+    if (url.includes('/api/config')) {
+      return json({ developer: false, auth_required: true, encryption_ok: true })
+    }
     if (url.includes('/api/auth/check')) return json({ ok: true })
     if (url.includes('/api/services')) {
       return json({ services: [], configured })
@@ -153,5 +155,66 @@ describe('the app reflects what is configured', () => {
 
     // Hidden pages cannot be displayed, so the app falls back to the dashboard.
     await waitFor(() => expect(screen.getByText('Resumen del sistema')).toBeInTheDocument())
+  })
+})
+
+
+describe('unreadable credentials are announced', () => {
+  beforeEach(() => {
+    forgetApiKey()
+    rememberApiKey('clave')
+    window.location.hash = ''
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    setUnauthorizedHandler(null)
+    forgetApiKey()
+  })
+
+  function mockWithEncryptionError() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input)
+        const json = (body: unknown) =>
+          Promise.resolve({ ok: true, status: 200, json: async () => body } as Response)
+        if (url.includes('/api/config')) {
+          return json({
+            developer: false,
+            auth_required: true,
+            encryption_ok: false,
+            encryption_error: 'FC_SECRET no coincide con el usado para cifrar: no se pudieron leer services.radarr.api_key.',
+          })
+        }
+        if (url.includes('/api/auth/check')) return json({ ok: true })
+        if (url.includes('/api/services')) return json({ services: [], configured: [] })
+        if (url.includes('/api/status')) return json({ flow: 'unconfigured', checking: false, updated_at: 0 })
+        if (url.includes('/api/trace')) return json({ items: [], summary: {} })
+        if (url.includes('/api/actions')) return json({ actions: {} })
+        if (url.includes('/api/downloads')) return json({ downloads: [], errors: [] })
+        return json({})
+      }),
+    )
+  }
+
+  it('says the credentials could not be read, instead of looking unconfigured', async () => {
+    mockWithEncryptionError()
+    renderApp()
+
+    // Both this banner and the "nothing configured" notice are alerts, so match
+    // on the message rather than the role.
+    expect(
+      await screen.findByText(/No se pudieron leer las credenciales guardadas/),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/FC_SECRET no coincide/)).toBeInTheDocument()
+  })
+
+  it('stays silent when everything decrypted fine', async () => {
+    mockFetch(['radarr'])
+    renderApp()
+
+    await waitFor(() => expect(screen.getByText('Radarr')).toBeInTheDocument())
+    expect(screen.queryByText(/No se pudieron leer las credenciales/)).not.toBeInTheDocument()
   })
 })

@@ -135,7 +135,15 @@ async def config():
     cualquiera que alcanzara el puerto obtuviera la clave y, con ella, todas las
     credenciales vía /api/settings. Solo informa de si hace falta autenticarse.
     """
-    return {"developer": DEVELOPER, "auth_required": AUTH_REQUIRED}
+    # encryption_ok is an operational signal, not a secret: without it the user
+    # sees every service as unconfigured and has no way to know why.
+    from settings import encryption_error
+    return {
+        "developer": DEVELOPER,
+        "auth_required": AUTH_REQUIRED,
+        "encryption_ok": not encryption_error,
+        "encryption_error": encryption_error,
+    }
 
 
 @router.get("/api/auth/check")
