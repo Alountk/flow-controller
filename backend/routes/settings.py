@@ -4,7 +4,7 @@ import copy
 import os
 
 import aiohttp
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 import credentials
 from config import BASE_DIR
@@ -173,3 +173,67 @@ async def list_services(_key: str = Depends(verify_api_key)):
         ],
         "configured": [s["key"] for s in configured_services()],
     }
+
+
+# ── First-run setup ───────────────────────────────────────────────────────────
+
+
+@router.get("/api/setup")
+async def setup_status():
+    """Whether this install still needs first-run configuration.
+
+    Anonymous on purpose: an unconfigured install has no key to authenticate
+    with, and it is already fully open in that state, so this reveals nothing
+    that /api/config does not.
+    """
+    from settings import auth_required
+
+    return {
+        "needs_setup": not auth_required() and not configured_services(),
+        "auth_required": auth_required(),
+    }
+
+
+@router.post("/api/setup")
+async def run_setup(body: dict):
+    """Apply the first-run configuration.
+
+    Refuses outright once an API key exists. Without that guard this endpoint
+    would let anyone rewrite the deployment's credentials, since it has to be
+    reachable before authentication can work.
+    """
+    from settings import auth_required, get_settings
+
+    if auth_required():
+        raise HTTPException(
+            status_code=403,
+            detail="La aplicación ya está configurada. Usa Configuración para cambiarla.",
+        )
+
+    incoming = body.get("services") or {}
+    current = get_settings()
+    merged = copy.deepcopy(current)
+
+    for key in ("radarr", "sonarr", "amutorrent"):
+        service = incoming.get(key)
+        if not isinstance(service, dict):
+            continue
+        target = merged.setdefault("services", {}).setdefault(key, {})
+        for field in ("url", "api_key", "user", "password"):
+            if field in service:
+                target[field] = service[field]
+
+    # The app key is optional: leave it unset and the app stays open on the LAN.
+    app_key = body.get("api_key", "")
+    if app_key:
+        credentials.set_app_key(merged, app_key)
+    merged.setdefault("security", {}).pop("api_key", None)
+
+    save_settings(merged)
+
+    # The service URLs and keys are read into config.SERVICES at import, so they
+    # need a restart to take effect. The app key does not: it is read live.
+    restart_needed = sorted(
+        field for field in RESTART_REQUIRED_FIELDS if field.startswith("services.")
+    )
+    return {"ok": True, "restart_required": restart_needed}

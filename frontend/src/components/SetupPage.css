@@ -1,0 +1,98 @@
+.setup-page {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 32px 24px;
+  overflow-y: auto;
+}
+
+.setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 560px;
+  height: fit-content;
+}
+
+.setup-card h1 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text);
+}
+
+.setup-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.setup-hint-inline {
+  margin-bottom: 8px;
+}
+
+.setup-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--bg-elev);
+}
+
+.setup-group legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setup-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.setup-field span {
+  flex: 0 0 110px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.setup-field input {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.setup-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.setup-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-error {
+  padding: 10px 12px;
+  border: 1px solid var(--bad);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--bad);
+}
+
+.setup-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
