@@ -165,6 +165,9 @@ SMOKE_PARAMS = {
 
 DUMMY_PATH_PARAMS = {
     "task_id": "does-not-exist",
+    # Without this the smoke guard silently skips the series-episodes route:
+    # a guard that covers nothing is the failure mode this file exists to prevent.
+    "series_id": "1",
 }
 
 

@@ -14,6 +14,7 @@ from traces import host_path
 from clients import (
     fetch_wanted_movies,
     fetch_wanted_episodes,
+    arr_series_episodes,
     fetch_all_movies_detailed,
     fetch_all_series_detailed,
     arr_search_missing_movies,
@@ -205,6 +206,16 @@ async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: 
     async with aiohttp.ClientSession() as session:
         result = await fetch_all_series_detailed(session, service, page, fetch_size)
     return _filter_all_endpoint(result, q, page, page_size)
+
+
+@router.get("/api/wanted/series/{series_id}/episodes")
+async def get_series_episodes(series_id: int, _key: str = Depends(verify_api_key)):
+    """Episodios de una serie, para enriquecer la navegación de "En carpeta"."""
+    service = find_service("sonarr", "arr")
+    if not service:
+        return {"episodes": [], "error": service_unavailable_reason("sonarr")}
+    async with aiohttp.ClientSession() as session:
+        return await arr_series_episodes(session, service, series_id)
 
 
 @router.post("/api/wanted/search")
