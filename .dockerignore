@@ -33,6 +33,14 @@ frontend/.cache
 docker-compose*.yml
 Dockerfile
 
+# Backend dev-only files (never imported at runtime)
+backend/tests*.py
+backend/conftest.py
+backend/pytest.ini
+backend/pyproject.toml
+backend/vulture_whitelist.py
+backend/requirements-dev.txt
+
 # Misc
 *.md
 !README.md

@@ -280,9 +280,22 @@ tab === 'episodes' // OK
 **Solución:** Usar doble casting: `as unknown as Record<string, unknown>`.
 
 ### ModuleNotFoundError en Docker
-**Causa:** El Dockerfile copia archivos backend uno por uno (`COPY backend/app.py .`). Si se agrega un módulo nuevo (`settings.py`) sin agregarlo al Dockerfile, el contenedor no lo encuentra.
+**Causa:** El Dockerfile copiaba los módulos del backend uno por uno (`COPY backend/app.py .`).
+Si se añadía un módulo nuevo sin añadirlo a esa lista, el contenedor fallaba al arrancar con
+`ModuleNotFoundError` — y **todos los tests locales pasaban**, porque el fichero sí existe en disco.
 
-**Solución:** Agregar `COPY backend/settings.py .` al Dockerfile. Considerar cambiar a `COPY backend/ .` para evitar este problema en el futuro.
+Esto ocurrió **dos veces**: con `settings.py` y con `history.py`.
+
+**Solución (estructural):** el Dockerfile ya no enumera módulos:
+```dockerfile
+COPY backend/*.py .
+```
+Eso elimina la lista que había que mantener a mano.
+
+**Y un guard para que no vuelva:** `tests_static.py` comprueba que todo módulo de runtime está
+cubierto por algún `COPY` del Dockerfile, y `.dockerignore` mantiene fuera los ficheros de
+desarrollo. El guard se validó reproduciendo el fallo real: con la lista antigua sin `history.py`
+falla y **nombra el módulo**.
 
 ## Backlog de mejoras
 
@@ -307,6 +320,7 @@ tab === 'episodes' // OK
 | 19 | **Filtrar los faltantes** (títulos alternativos + filtro de resultados) | ✅ | `clients.py`, `MissingContent.tsx`, `utils/scanResults.ts` |
 | 20 | **Filtros en los resultados de los indexadores** | ✅ | `ReleaseSearchModal.tsx`, `utils/releaseFilters.ts`, `utils/selection.ts` |
 | 21 | **Feedback de descargas en la cola de operaciones** | ✅ | `routes/downloads.py`, `hooks/useDownloads.ts`, `QueueSidebar.tsx` |
+| 23 | **Persistencia del historial de operaciones (SQLite)** | ✅ | `backend/history.py` + `routes/files.py` |
 | 22 | **Filtro de texto en faltantes** | ✅ | `routes/wanted.py`, `MissingContent.tsx`, `hooks/useDebouncedValue.ts` |
 
 ### 🔵 Largas (1-2 semanas)
@@ -424,6 +438,46 @@ Detalles:
 > recortada, así que `q='your'` devolvía 0 aunque "Your Name." estuviera en la biblioteca, y
 > `q='the'` devolvía 1 en vez de 332. Los tests de ruta no podían verlo porque el recorte ocurre
 > en el cliente: hizo falta un test que usara el **cliente real** contra un transporte HTTP falso.
+
+### 💾 #23 — Persistencia del historial de operaciones
+
+**Hecho ✅** — SQLite, en `CONFIG_DIR/history.db` junto a `settings.json` y `logs.json`.
+
+Antes: las últimas 50 operaciones vivían **solo en memoria** y la UI mostraba 10; un reinicio
+borraba todo. Para una app cuyo trabajo es detectar dónde se rompe el pipeline, no recordar qué
+pasó ayer era justo lo contrario de lo que debe hacer.
+
+**Por qué SQLite:** está en la stdlib, es un fichero, da consultas y transacciones reales y no
+necesita ningún servicio. Las escrituras son raras (unas pocas por operación), así que el API
+síncrono de `sqlite3` se usa desde `asyncio.to_thread`. Modo **WAL** para que las lecturas no
+esperen a las escrituras.
+
+**Qué se persiste y cuándo** — tres puntos, no cada actualización de progreso:
+
+| Momento | Para qué |
+| --- | --- |
+| Al **encolar** | Es el caso que importa: 5 copias encoladas y un reinicio antes de que corran |
+| Al **empezar** | Deja rastro de que llegó a arrancar |
+| Al **terminar** | Resultado final: `done` / `failed` / `cancelled` + `import_status` |
+
+**Recuperación al arrancar:** una copia no sobrevive al proceso que la copiaba, así que dejar
+una operación en `running` para siempre sería mentira. Al iniciar se marcan como
+`failed (interrumpida por reinicio)`.
+
+**Verificado en vivo:** encolé una operación que falló, **reinicié el servidor** y
+`/api/files/queue/status` la devolvió desde la base de datos con la cola en memoria vacía.
+Y sembrando una fila en `running`, el arranque la reconoció:
+`Marked 1 interrupted operation(s) as failed`.
+
+**Robustez:** si la base de datos no está disponible, se registra un aviso y **la app sigue
+copiando archivos** — el historial es un registro, no un requisito. Un test lo cubre.
+
+**Preparado para el futuro:** el esquema usa `PRAGMA user_version`, así que una tabla `users`
+(el Paso 3, si algún día se quieren cuentas) se añade con una migración, sin rehacer nada.
+
+**Detalle que destapó un test:** al pasar un diccionario parcial, los campos ausentes
+**borraban datos** con `NULL`. Ahora la actualización usa `COALESCE`, así que un llamador
+futuro no puede destruir el `movie_id` que enlaza la operación con su entrada de biblioteca.
 
 ### ⬇️ #21 — Feedback de descargas en la cola de operaciones
 
