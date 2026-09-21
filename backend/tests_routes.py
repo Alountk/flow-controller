@@ -872,3 +872,99 @@ class TestServiceConnectionTester:
 
         body = resp.json()
         assert [r["key"] for r in body["results"]] == ["radarr"]
+
+
+# ── Health check must not call a rejected key "online" ───────────────────────
+
+
+class TestHealthCheckHonesty:
+    """check_arr used to include 401 in its success set:
+
+        if resp.status in (200, 401, 301, 302):
+            return "online", "Conexión exitosa", {}
+
+    so the dashboard showed a service as healthy when its API key was rejected.
+    That sends the user to check whether the container is running, when the
+    actual problem is the credential.
+    """
+
+    def _check(self, status: int):
+        from clients import check_arr
+
+        async def _run():
+            session = _StubSession({"/api/v3/system/status": (status, {})})
+            return await check_arr(session, ARR_BY_KEY["radarr"])
+
+        return asyncio.run(_run())
+
+    def test_a_valid_key_is_online(self):
+        state, reason, _ = self._check(200)
+
+        assert state == "online"
+        assert "exitosa" in reason
+
+    def test_a_rejected_key_is_misconfigured_not_online(self):
+        state, reason, _ = self._check(401)
+
+        assert state == "misconfigured", "a rejected key must never read as healthy"
+        assert "401" in reason
+        assert "API key" in reason
+
+    def test_a_forbidden_key_is_misconfigured(self):
+        state, _, _ = self._check(403)
+
+        assert state == "misconfigured"
+
+    def test_a_rejected_key_is_not_retried(self):
+        """Retrying cannot fix a credential, and it delays the dashboard."""
+        from unittest.mock import patch
+
+        from clients import check_arr
+
+        calls = []
+
+        class _Counting(_StubSession):
+            def get(self, url, **kwargs):
+                calls.append(url)
+                return super().get(url, **kwargs)
+
+        async def _run():
+            session = _Counting({"/api/v3/system/status": (401, {})})
+            return await check_arr(session, ARR_BY_KEY["radarr"])
+
+        with patch("asyncio.sleep"):
+            state, _, _ = asyncio.run(_run())
+
+        assert state == "misconfigured"
+        assert len(calls) == 1, f"asked {len(calls)} times; a 401 needs one attempt"
+
+    def test_a_server_error_still_goes_offline(self):
+        state, _, _ = self._check(500)
+
+        assert state == "offline"
+
+    def test_a_refused_connection_goes_offline(self):
+        from clients import check_arr
+
+        async def _run():
+            session = _RaisingSession(aiohttp.ClientError("refused"))
+            return await check_arr(session, ARR_BY_KEY["radarr"])
+
+        with patch("asyncio.sleep"):
+            state, reason, _ = asyncio.run(_run())
+
+        assert state == "offline"
+        assert "ClientError" in reason
+
+    def test_the_download_client_reports_a_rejected_key_too(self):
+        from clients import check_qbit
+
+        async def _run():
+            session = _StubSession({"/api/v2/app/version": (403, {})})
+            return await check_qbit(session, ARR_BY_KEY["radarr"] | {"kind": "qbit"})
+
+        with patch("asyncio.sleep"):
+            state, reason, _ = asyncio.run(_run())
+
+        assert state == "misconfigured"
+        assert "403" in reason

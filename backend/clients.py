@@ -37,6 +37,11 @@ def qbit_headers(api_key: str) -> dict:
     return headers
 
 
+# A rejected credential is not a transient failure: retrying cannot fix it,
+# and reporting it as "online" hides the most likely misconfiguration.
+AUTH_STATUSES = (401, 403)
+
+
 async def check_arr(session: aiohttp.ClientSession, service: dict) -> tuple[str, str, dict]:
     url = service["url"]
     headers = arr_headers(service["api_key"])
@@ -46,7 +51,12 @@ async def check_arr(session: aiohttp.ClientSession, service: dict) -> tuple[str,
         try:
             timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
             async with session.get(endpoint, headers=headers, timeout=timeout) as resp:
-                if resp.status in (200, 401, 301, 302):
+                if resp.status in AUTH_STATUSES:
+                    # Up but unusable. Calling this "online" sent the user to
+                    # check whether the container was running, when the actual
+                    # problem was the key.
+                    return "misconfigured", f"API key rechazada (HTTP {resp.status})", {}
+                if resp.status in (200, 301, 302):
                     return "online", f"Conexión exitosa (intento {attempt})", {}
                 last_error = f"HTTP {resp.status}"
         except asyncio.TimeoutError:
@@ -95,6 +105,8 @@ async def check_qbit(session: aiohttp.ClientSession, service: dict) -> tuple[str
         try:
             timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
             async with session.get(endpoint, headers=headers, timeout=timeout) as resp:
+                if resp.status in AUTH_STATUSES:
+                    return "misconfigured", f"API key rechazada (HTTP {resp.status})", {}
                 if resp.status == 200:
                     meta = await fetch_qbit_meta(session, service)
                     return "online", f"Conexión exitosa (intento {attempt})", meta

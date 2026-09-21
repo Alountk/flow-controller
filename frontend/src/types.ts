@@ -1,6 +1,11 @@
 export type ServiceKey = 'radarr' | 'sonarr' | 'amutorrent'
 
-export type ServiceState = 'online' | 'offline' | 'unknown'
+export type ServiceState =
+  | 'online'
+  | 'offline'
+  /** Reachable, but the API key was rejected. A different fix from "offline". */
+  | 'misconfigured'
+  | 'unknown'
 
 export interface TorrentStats {
   total: number
@@ -37,7 +42,7 @@ export function parseStatus(raw: unknown): { state: ServiceState; reason: string
   if (typeof raw !== 'string' || !raw) return { state: 'unknown', reason: 'Sin datos' }
   const [state, ...rest] = raw.split(':')
   const reason = rest.join(':').trim() || raw
-  if (state === 'online' || state === 'offline') {
+  if (state === 'online' || state === 'offline' || state === 'misconfigured') {
     return { state, reason }
   }
   return { state: 'unknown', reason: raw }
