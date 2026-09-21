@@ -25,6 +25,46 @@ RESTART_REQUIRED_FIELDS = {
 PROTOTYPES_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "prototypes"))
 
 
+#: A stored secret is shown to the UI as this prefix plus its last characters.
+#: Anything still carrying the prefix means the user did not change it.
+MASK_PREFIX = "****"
+
+
+def _is_mask(value) -> bool:
+    return isinstance(value, str) and value.startswith(MASK_PREFIX)
+
+
+def _restore_masked_secrets(incoming: dict, current: dict) -> dict:
+    """Keep the stored secret for every field the UI left masked.
+
+    Secrets are sent to the UI masked, and the form posts them back unchanged.
+    Saving that verbatim replaced every real credential with its mask —
+    "****ABCD" — destroying the Radarr, Sonarr and aMuTorrent keys and the
+    aMuTorrent password, and locking the user out of the app entirely.
+
+    An empty value is NOT a mask: clearing a field still clears it.
+    """
+    merged = copy.deepcopy(incoming)
+
+    for svc in ("radarr", "sonarr", "amutorrent"):
+        incoming_key = merged.get("services", {}).get(svc, {}).get("api_key")
+        if _is_mask(incoming_key):
+            stored = current.get("services", {}).get(svc, {}).get("api_key", "")
+            merged.setdefault("services", {}).setdefault(svc, {})["api_key"] = stored
+
+    incoming_pw = merged.get("services", {}).get("amutorrent", {}).get("password")
+    if _is_mask(incoming_pw):
+        stored_pw = current.get("services", {}).get("amutorrent", {}).get("password", "")
+        merged.setdefault("services", {}).setdefault("amutorrent", {})["password"] = stored_pw
+
+    if _is_mask(merged.get("security", {}).get("api_key")):
+        merged.setdefault("security", {})["api_key"] = (
+            current.get("security", {}).get("api_key", "")
+        )
+
+    return merged
+
+
 def _mask_secrets(data: dict) -> dict:
     masked = copy.deepcopy(data)
     for svc in ("radarr", "sonarr", "amutorrent"):
@@ -47,7 +87,9 @@ async def get_settings_endpoint(_key: str = Depends(verify_api_key)):
 
 @router.post("/api/settings")
 async def save_settings_endpoint(body: dict, _key: str = Depends(verify_api_key)):
-    save_settings(body)
+    # Unmask before persisting: the form posts the secrets back as they were
+    # shown, and saving those verbatim destroyed them.
+    save_settings(_restore_masked_secrets(body, get_settings()))
     restart_needed = []
     def _check(data: dict, prefix: str = "") -> None:
         for k, v in data.items():
