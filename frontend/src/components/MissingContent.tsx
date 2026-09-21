@@ -45,10 +45,14 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
 
   const roots = rootsData?.roots ?? []
 
-  const { data: browseData } = useQuery({
+  const { data: browseData, refetch: refetchBrowse } = useQuery({
     queryKey: ['scan-browse', currentPath],
     queryFn: () => browsePath(currentPath),
     enabled: !!currentPath,
+    // The listing mirrors the disk: any cache here hides a folder that a
+    // download just created, which is the one thing this modal exists to find.
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 
   useEffect(() => {
@@ -178,6 +182,15 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
                     if (parent.length >= selectedVolume.length) navigateTo(parent)
                   }
                 }} title="Subir">⬆</button>
+              )}
+              {currentPath && (
+                <button
+                  className="fm-nav-btn"
+                  onClick={() => refetchBrowse()}
+                  title="Refrescar listado"
+                >
+                  ↻
+                </button>
               )}
             </div>
 
