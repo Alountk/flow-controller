@@ -21,7 +21,7 @@ from clients import (
     fetch_amu_torrents_by_category,
     fetch_arr_queue,
 )
-from config import SERVICES
+from config import configured_services
 from routes.status import verify_api_key
 from traces import normalize_hash
 
@@ -80,7 +80,7 @@ def _build_download(service_key: str, queue_item: dict, torrent: dict | None) ->
 
 async def collect_downloads() -> dict:
     """Every active download across the arr services, with per-source failures."""
-    arr_services = [s for s in SERVICES if s["kind"] == "arr"]
+    arr_services = configured_services("arr")
     errors: list[dict] = []
 
     async with aiohttp.ClientSession() as session:

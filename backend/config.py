@@ -110,11 +110,82 @@ QBIT_COMPLETED = {
     "queuedUP", "stoppedUP", "checkingUP",
 }
 
+def service_is_configured(url: str, api_key: str) -> bool:
+    """A service is usable only when it has both a URL and its API key.
+
+    Without this, an unconfigured service is indistinguishable from a broken
+    one: the app calls it, gets an auth error and shows a failure the user
+    cannot act on, for a service they never set up.
+    """
+    return bool(url) and bool(api_key)
+
+
 SERVICES = [
-    {"key": "radarr", "kind": "arr", "url": RADARR_URL, "api_key": RADARR_API_KEY},
-    {"key": "sonarr", "kind": "arr", "url": SONARR_URL, "api_key": SONARR_API_KEY},
-    {"key": "amutorrent", "kind": "qbit", "url": AMUTORRENT_URL, "api_key": AMUTORRENT_API_KEY},
+    {
+        "key": "radarr",
+        "kind": "arr",
+        "url": RADARR_URL,
+        "api_key": RADARR_API_KEY,
+        "configured": service_is_configured(RADARR_URL, RADARR_API_KEY),
+    },
+    {
+        "key": "sonarr",
+        "kind": "arr",
+        "url": SONARR_URL,
+        "api_key": SONARR_API_KEY,
+        "configured": service_is_configured(SONARR_URL, SONARR_API_KEY),
+    },
+    {
+        "key": "amutorrent",
+        "kind": "qbit",
+        "url": AMUTORRENT_URL,
+        "api_key": AMUTORRENT_API_KEY,
+        "configured": service_is_configured(AMUTORRENT_URL, AMUTORRENT_API_KEY),
+    },
 ]
+
+
+def all_services() -> list[dict]:
+    """Every service, configured or not.
+
+    Read through a function so a caller always sees the current list rather
+    than a copy captured at import time.
+    """
+    return SERVICES
+
+
+def configured_services(kind: str | None = None) -> list[dict]:
+    """Only the services that can actually be called."""
+    return [
+        s for s in SERVICES
+        if s.get("configured") and (kind is None or s["kind"] == kind)
+    ]
+
+
+def find_service(key: str, kind: str | None = None) -> dict | None:
+    """A service by key, but only when it is usable.
+
+    Returns None for an unconfigured service on purpose: calling it would only
+    produce an auth error for something the user never set up.
+    """
+    return next(
+        (
+            s for s in SERVICES
+            if s["key"] == key and s.get("configured")
+            and (kind is None or s["kind"] == kind)
+        ),
+        None,
+    )
+
+
+def service_unavailable_reason(key: str, kind: str | None = None) -> str:
+    """Why a service cannot be used, phrased for the API response."""
+    known = any(
+        s["key"] == key and (kind is None or s["kind"] == kind) for s in SERVICES
+    )
+    if not known:
+        return f"servicio desconocido: {key}"
+    return f"{key} no está configurado (faltan la URL o la API key)"
 
 _AMU_WS_COMPLETE = {
     "batchPause": "batch-pause-complete",

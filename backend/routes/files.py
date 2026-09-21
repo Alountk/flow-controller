@@ -11,7 +11,7 @@ import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 
 import state
-from config import SERVICES
+from config import find_service
 from traces import host_path
 import history
 from import_service import post_move_import
@@ -237,10 +237,7 @@ async def _consume_queue():
 
             # Post-move import: tell Radarr/Sonarr to import the moved file
             if not op.get("cancelled") and op.get("arr_source"):
-                service = next(
-                    (s for s in SERVICES if s["key"] == op["arr_source"] and s["kind"] == "arr"),
-                    None,
-                )
+                service = find_service(op["arr_source"], "arr")
                 if service:
                     async with queue_lock:
                         op["import_status"] = "importing"

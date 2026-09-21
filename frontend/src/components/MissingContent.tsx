@@ -11,6 +11,7 @@ import {
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useConfiguredServices } from '../hooks/useConfiguredServices'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
 import { filterScanMatches, scanMatchKey } from '../utils/scanResults'
 import { ReleaseSearchModal, type ReleaseSearchItem } from './ReleaseSearchModal'
@@ -297,6 +298,17 @@ export function MissingContent() {
   const [tab, setTab] = useHashState<'movies' | 'episodes'>('wanted', 'tab', 'movies')
   const [movieFilter, setMovieFilter] = useHashState<'missing' | 'all'>('wanted', 'filter', 'missing')
   const [seriesFilter, setSeriesFilter] = useHashState<'missing' | 'all'>('wanted', 'seriesFilter', 'missing')
+  const { ready: servicesReady, isConfigured } = useConfiguredServices()
+  const showMovies = isConfigured('radarr')
+  const showEpisodes = isConfigured('sonarr')
+
+  // Never leave the user on a tab whose service is not configured.
+  useEffect(() => {
+    if (!servicesReady) return
+    if (tab === 'movies' && !showMovies && showEpisodes) setTab('episodes')
+    if (tab === 'episodes' && !showEpisodes && showMovies) setTab('movies')
+  }, [servicesReady, tab, showMovies, showEpisodes, setTab])
+
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
   const [releaseSearchItem, setReleaseSearchItem] = useState<ReleaseSearchItem | null>(null)
   const [query, setQuery] = useHashState<string>('wanted', 'q', '')
@@ -408,18 +420,24 @@ export function MissingContent() {
       <div className="wanted-header">
         <h2>Contenido Faltante</h2>
         <div className="wanted-tabs">
-          <button
-            className={`wanted-tab ${tab === 'movies' ? 'active' : ''}`}
-            onClick={() => setTab('movies')}
-          >
-            Películas ({radarrWantedTotal || '...'})
-          </button>
-          <button
-            className={`wanted-tab ${tab === 'episodes' ? 'active' : ''}`}
-            onClick={() => setTab('episodes')}
-          >
-            Episodios ({sonarrWantedTotal || '...'})
-          </button>
+          {/* A tab whose service is not configured is hidden: it could only
+              ever show errors for something the user never set up. */}
+          {(!servicesReady || showMovies) && (
+            <button
+              className={`wanted-tab ${tab === 'movies' ? 'active' : ''}`}
+              onClick={() => setTab('movies')}
+            >
+              Películas ({radarrWantedTotal || '...'})
+            </button>
+          )}
+          {(!servicesReady || showEpisodes) && (
+            <button
+              className={`wanted-tab ${tab === 'episodes' ? 'active' : ''}`}
+              onClick={() => setTab('episodes')}
+            >
+              Episodios ({sonarrWantedTotal || '...'})
+            </button>
+          )}
         </div>
       </div>
 

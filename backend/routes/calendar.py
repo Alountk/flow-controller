@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import aiohttp
 from fastapi import APIRouter, Depends
 
-from config import SERVICES
+from config import find_service, service_unavailable_reason
 from clients import (
     fetch_radarr_calendar,
     fetch_sonarr_calendar,
@@ -45,8 +45,8 @@ async def get_calendar(start: str = "", end: str = "", _key: str = Depends(verif
     if not end:
         end = (date.today() + timedelta(days=30)).isoformat()
 
-    radarr = next((s for s in SERVICES if s["key"] == "radarr" and s["kind"] == "arr"), None)
-    sonarr = next((s for s in SERVICES if s["key"] == "sonarr" and s["kind"] == "arr"), None)
+    radarr = find_service("radarr", "arr")
+    sonarr = find_service("sonarr", "arr")
 
     all_items = []
     async with aiohttp.ClientSession() as session:
@@ -67,9 +67,9 @@ async def get_calendar(start: str = "", end: str = "", _key: str = Depends(verif
 @router.post("/api/calendar/search")
 async def calendar_search(req: CalendarSearchRequest, _key: str = Depends(verify_api_key)):
     """Busca contenido en los indexadores de Radarr/Sonarr."""
-    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    service = find_service(req.source, "arr")
     if not service:
-        return {"ok": False, "detail": f"Servicio desconocido: {req.source}"}
+        return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
     async with aiohttp.ClientSession() as session:
         if req.type == "movie":
@@ -85,7 +85,7 @@ async def calendar_search(req: CalendarSearchRequest, _key: str = Depends(verify
 @router.post("/api/calendar/add")
 async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_key)):
     """Agrega una película/serie a Radarr/Sonarr y lanza búsqueda."""
-    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    service = find_service(req.source, "arr")
     if not service:
         return {"ok": False, "id": None, "detail": f"Servicio desconocido: {req.source}"}
 
@@ -172,7 +172,7 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
 @router.post("/api/calendar/releases")
 async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(verify_api_key)):
     """Obtiene releases disponibles para un movie/episode."""
-    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    service = find_service(req.source, "arr")
     if not service:
         return {"releases": [], "detail": f"Servicio desconocido: {req.source}"}
 
@@ -200,9 +200,9 @@ async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(ve
 @router.post("/api/calendar/grab")
 async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api_key)):
     """Descarga un release específico."""
-    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    service = find_service(req.source, "arr")
     if not service:
-        return {"ok": False, "detail": f"Servicio desconocido: {req.source}"}
+        return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -216,9 +216,9 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
 @router.post("/api/calendar/grab-batch")
 async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends(verify_api_key)):
     """Descarga múltiples releases en lote."""
-    service = next((s for s in SERVICES if s["key"] == req.source and s["kind"] == "arr"), None)
+    service = find_service(req.source, "arr")
     if not service:
-        return {"ok": False, "detail": f"Servicio desconocido: {req.source}"}
+        return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
     results = []
     errors = []
@@ -250,7 +250,7 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
 @router.get("/api/calendar/indexers")
 async def calendar_indexers(source: str = "radarr", _key: str = Depends(verify_api_key)):
     """Lista de indexadores configurados en Radarr/Sonarr."""
-    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    service = find_service(source, "arr")
     if not service:
         return {"indexers": []}
     async with aiohttp.ClientSession() as session:

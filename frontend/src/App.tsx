@@ -22,6 +22,7 @@ import {
   verifyApiKey,
 } from './api/auth'
 import { usePageRoute } from './hooks/usePageRoute'
+import { useConfiguredServices } from './hooks/useConfiguredServices'
 import {
   parseStatus,
   type ActionsResponse,
@@ -69,6 +70,7 @@ const PAGE_TITLES: Record<Page, string> = {
 
 function App() {
   const queryClient = useQueryClient()
+  const { ready: servicesReady, isConfigured, hasAnyArr } = useConfiguredServices()
 
   // Declared before the queries: they are gated on it.
   const [authenticated, setAuthenticated] = useState(false)
@@ -157,17 +159,36 @@ function App() {
     queryClient.invalidateQueries({ queryKey: ['status'] })
   }, [queryClient])
 
+  // Pages that cannot work without an arr service: they all read from Radarr or
+  // Sonarr. The local pages (disk, files, mixer, config) always work.
+  const hiddenPages = useMemo<Page[]>(() => {
+    if (!servicesReady || hasAnyArr) return []
+    return ['trace', 'wanted', 'calendar'] as Page[]
+  }, [servicesReady, hasAnyArr])
+
+  useEffect(() => {
+    if (hiddenPages.includes(page)) setPage('dashboard')
+  }, [hiddenPages, page, setPage])
+
   const services: ServiceStatus[] = useMemo(
     () =>
-      SERVICES.map(({ key, label }) => {
-        const { state, reason } = parseStatus(data?.[key])
-        const meta = key === 'amutorrent' ? data?.amutorrent_meta : undefined
-        return { key, label, state, reason, meta }
-      }),
-    [data],
+      SERVICES
+        // A service the user never configured is not part of the pipeline.
+        // Until the answer is known everything is shown, so nothing flashes in
+        // and out on first paint.
+        .filter(({ key }) => !servicesReady || isConfigured(key))
+        .map(({ key, label }) => {
+          const { state, reason } = parseStatus(data?.[key])
+          const meta = key === 'amutorrent' ? data?.amutorrent_meta : undefined
+          return { key, label, state, reason, meta }
+        }),
+    [data, servicesReady, isConfigured],
   )
 
-  const allOnline = services.every((s) => s.state === 'online')
+  // `every` on an empty list is true, which would report an empty pipeline as
+  // healthy. Nothing configured is not the same as everything working.
+  const nothingConfigured = servicesReady && services.length === 0
+  const allOnline = services.length > 0 && services.every((s) => s.state === 'online')
   const anyOffline = services.some((s) => s.state === 'offline')
   const broken = services.find((s) => s.state === 'offline')
 
@@ -187,7 +208,7 @@ function App() {
 
   return (
     <div className="layout">
-      <Sidebar active={page} onNavigate={setPage} developer={developer} />
+      <Sidebar active={page} onNavigate={setPage} developer={developer} hidden={hiddenPages} />
 
       <div className="main">
         <Topbar
@@ -205,10 +226,18 @@ function App() {
                   <p>Estado actual del pipeline de media y actividad reciente</p>
                 </div>
 
-                <PipelineVisual services={services} />
+                {nothingConfigured ? (
+                  <div className="wanted-empty" role="alert">
+                    No hay ningún servicio configurado todavía. Ve a <strong>Configuración</strong> para
+                    añadir la URL y la API key de Radarr, Sonarr o aMuTorrent.
+                  </div>
+                ) : (
+                  <PipelineVisual services={services} />
+                )}
 
                 {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
 
+                {!nothingConfigured && (
                 <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
                   <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
                   <div>
@@ -221,13 +250,14 @@ function App() {
                     </div>
                     <div className="flow-desc">
                       {allOnline
-                        ? 'Radarr, AmuTorrent y Sonarr responden correctamente.'
+                        ? 'Los servicios configurados responden correctamente.'
                         : anyOffline
                           ? broken?.reason
                           : 'Esperando la primera comprobación.'}
                     </div>
                   </div>
                 </div>
+                )}
 
                 <div className="dashboard-grid">
                   <div className="dash-card">

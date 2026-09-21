@@ -7,7 +7,14 @@ import traceback
 import aiohttp
 from fastapi import APIRouter, Depends, Header, HTTPException
 
-from config import AMUTORRENT_INDEXER, DEVELOPER, SERVICES, API_KEY
+from config import (
+    AMUTORRENT_INDEXER,
+    API_KEY,
+    DEVELOPER,
+    all_services,
+    configured_services,
+    find_service,
+)
 from traces import build_traces
 from clients import check_service, arr_headers
 from state import status_cache
@@ -30,9 +37,22 @@ async def verify_api_key(x_api_key: str | None = Header(default=None)):
 async def check_all(session: aiohttp.ClientSession) -> None:
     status_cache["checking"] = True
     try:
-        results = await asyncio.gather(*(check_service(session, s) for s in SERVICES))
+        # Only probe what the user configured. Checking the rest would report a
+        # service as down when it was simply never set up, and drag `flow` down
+        # with it.
+        services = configured_services()
+        for service in all_services():
+            if not service.get("configured"):
+                status_cache[service["key"]] = "unconfigured:Sin configurar"
+
+        if not services:
+            status_cache["flow"] = "unconfigured"
+            status_cache["updated_at"] = int(time.time())
+            return
+
+        results = await asyncio.gather(*(check_service(session, s) for s in services))
         flow_ok = True
-        for service, (state, reason, meta) in zip(SERVICES, results):
+        for service, (state, reason, meta) in zip(services, results):
             status_cache[service["key"]] = f"{state}:{reason}"
             if meta:
                 status_cache[f"{service['key']}_meta"] = meta
@@ -130,7 +150,7 @@ async def get_logs(level: str = "all", _key: str = Depends(verify_api_key)):
 @router.get("/api/debug/indexers")
 async def debug_indexers(source: str = "radarr", _key: str = Depends(verify_api_key)):
     """Debug: respuesta cruda de Radarr/Sonarr indexers."""
-    service = next((s for s in SERVICES if s["key"] == source and s["kind"] == "arr"), None)
+    service = find_service(source, "arr")
     if not service:
         return {"error": f"Servicio desconocido: {source}"}
     try:
