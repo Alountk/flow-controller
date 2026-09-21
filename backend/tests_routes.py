@@ -13,6 +13,7 @@ body itself was never executed.
 """
 
 import asyncio
+import copy
 import json
 from urllib.parse import urlencode
 from unittest.mock import patch
@@ -1108,3 +1109,100 @@ class TestHealthCheckSkipsUnconfigured:
 
         probed = [call.args[1]["key"] for call in probe.await_args_list]
         assert probed == ["radarr"]
+
+
+# ── Secrets must survive a round-trip through the settings form ──────────────
+
+
+class TestMaskedSecretsRoundTrip:
+    """The UI receives secrets masked and posts the form back unchanged.
+
+    Saving that verbatim replaced every real credential with its mask —
+    "****ABCD" — destroying the Radarr, Sonarr and aMuTorrent keys and the
+    aMuTorrent password, and locking the user out: the app's own API key became
+    "****ABCD", so no real key could ever match again.
+    """
+
+    STORED = {
+        "services": {
+            "radarr": {"url": "http://r:7878", "api_key": "REAL-RADARR-1234"},
+            "sonarr": {"url": "http://s:8989", "api_key": "REAL-SONARR-5678"},
+            "amutorrent": {
+                "url": "http://a:4000",
+                "api_key": "REAL-AMU-9012",
+                "user": "admin",
+                "password": "REAL-PASSWORD-SECRETO",
+            },
+        },
+        "security": {"api_key": "REAL-APP-KEY-ABCD", "safe_mode": True},
+        "developer": False,
+    }
+
+    @pytest.fixture
+    def stored(self, tmp_path, monkeypatch):
+        import settings as settings_module
+
+        monkeypatch.setattr(settings_module, "_settings", copy.deepcopy(self.STORED))
+        monkeypatch.setattr(
+            "routes.settings.get_settings", lambda: copy.deepcopy(self.STORED)
+        )
+        monkeypatch.setattr(
+            "routes.settings.save_settings", lambda data: settings_module.__dict__.update(_last_saved=data)
+        )
+        return self.STORED
+
+    def _save(self, body: dict) -> dict:
+        import routes.settings as settings_route
+
+        captured = {}
+        with patch.object(settings_route, "save_settings", side_effect=lambda d: captured.update(d)):
+            client.post("/api/settings", json=body)
+        return captured
+
+    def _masked_form(self) -> dict:
+        import routes.settings as settings_route
+
+        return settings_route._mask_secrets(copy.deepcopy(self.STORED))
+
+    def test_saving_the_untouched_form_preserves_every_secret(self, stored):
+        saved = self._save(self._masked_form())
+
+        assert saved["security"]["api_key"] == "REAL-APP-KEY-ABCD"
+        assert saved["services"]["radarr"]["api_key"] == "REAL-RADARR-1234"
+        assert saved["services"]["sonarr"]["api_key"] == "REAL-SONARR-5678"
+        assert saved["services"]["amutorrent"]["api_key"] == "REAL-AMU-9012"
+        assert saved["services"]["amutorrent"]["password"] == "REAL-PASSWORD-SECRETO"
+
+    def test_the_users_own_key_survives_a_save(self, stored):
+        """This is what locked the user out: the key became its own mask."""
+        saved = self._save(self._masked_form())
+
+        assert not saved["security"]["api_key"].startswith("****")
+
+    def test_a_changed_secret_is_saved(self, stored):
+        form = self._masked_form()
+        form["services"]["radarr"]["api_key"] = "NUEVA-CLAVE-RADARR"
+
+        saved = self._save(form)
+
+        assert saved["services"]["radarr"]["api_key"] == "NUEVA-CLAVE-RADARR"
+        # The untouched ones are still preserved.
+        assert saved["services"]["sonarr"]["api_key"] == "REAL-SONARR-5678"
+
+    def test_clearing_a_secret_still_clears_it(self, stored):
+        """An empty value is not a mask: removing a key must work."""
+        form = self._masked_form()
+        form["services"]["sonarr"]["api_key"] = ""
+
+        saved = self._save(form)
+
+        assert saved["services"]["sonarr"]["api_key"] == ""
+
+    def test_changing_an_unrelated_field_does_not_touch_secrets(self, stored):
+        form = self._masked_form()
+        form["services"]["radarr"]["url"] = "http://otro:7878"
+
+        saved = self._save(form)
+
+        assert saved["services"]["radarr"]["url"] == "http://otro:7878"
+        assert saved["services"]["radarr"]["api_key"] == "REAL-RADARR-1234"
