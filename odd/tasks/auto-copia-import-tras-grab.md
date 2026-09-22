@@ -164,6 +164,7 @@ fácil; recortar después de que haya movido algo mal, no.
 - [ ] **T7** Fila de historial por disparo, con su motivo
 - [ ] **T8** Tests de la función pura (los tres resultados) y de la idempotencia
 - [ ] **T9** Verificación en vivo en el entorno real
+- [x] **T10** Referencia temporal persistida para que la ventana de gracia pueda dispararse
 
 ## Acceptance criteria
 
@@ -197,7 +198,9 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`). Checks fun
       grabación en las rutas y el matcher puro.
 - [x] **T6 implementado y verificado** (evidencia abajo): el driver del barrido, el disparador POST
       explícito, la corrección de la semántica de la marca y la deuda de vulture saldada.
-      **T7-T9** siguen sin empezar.
+- [x] **T10 implementado y verificado** (evidencia abajo): la referencia temporal persistida que
+      cierra el hueco que T6 dejó abierto, y el arreglo del guard `arr_has_file=None` que solo se
+      vuelve alcanzable con ella. **T7-T9** siguen sin empezar.
 
 ## Verification evidence
 
@@ -516,22 +519,129 @@ Alcance verificado y no verificado:
   del registro `ACTIONS` (no toma un `ActionRequest`) y el módulo de rutas sigue el patrón de "cada
   módulo registra su APIRouter". Así el feature puede crecer (la fila de historial de T7) sin tocar
   el ejecutor de acciones.
-- **No verificado / abierto — la ventana de gracia temporizada espera.** El driver pasa
-  `since=None` a propósito: la traza no lleva el instante en que se observó por primera vez la
-  condición actual, y su único timestamp —el `date` del grab— es *anterior* a la descarga, así que
-  medir la gracia con él arrancaría el reloj antes de que la descarga terminara y competiría con el
-  arr (lo que T3 advirtió). Consecuencia honesta: hoy la acción desatendida es el **warning de
-  import** del arr (copia inmediata); `downloaded` y `importPending` sin warning esperan. Dar una
-  referencia temporal real ("primera vez visto") necesita persistencia, que ni T6 pide ni "WAIT no
-  escribe nada" permite; es el paso natural siguiente junto con T7.
+- **Cerrado por T10 — la ventana de gracia temporizada ya puede dispararse.** T6 dejó el driver
+  pasando `since=None` a propósito: la traza no lleva el instante en que se observó por primera vez
+  la condición actual, y su único timestamp —el `date` del grab— es *anterior* a la descarga, así
+  que medir la gracia con él arrancaría el reloj antes de que la descarga terminara y competiría con
+  el arr (lo que T3 advirtió). La consecuencia honesta de T6 fue que la única acción desatendida era
+  el **warning de import** del arr (copia inmediata), mientras `downloaded` e `importPending` sin
+  warning esperaban para siempre. T10 cierra ese hueco persistiendo la referencia ("primera vez
+  visto") en la tabla `auto_copy_seen`, con `stage` incluido en la identidad; ver la evidencia de
+  T10 más abajo.
 - **No verificado — la FK de la función pura** no se toca: `backend/auto_copy.py` sigue sin imports
   con efectos secundarios y su guard estructural sigue pasando.
 - **Frontend**: no se tocó en este slice. El botón de la UI es una tarea aparte (abajo).
 
+### T10 — referencia temporal persistida para que la ventana de gracia pueda dispararse (commits `d3011d0`, `6e88902`)
+
+Rama `feat/auto-copy-first-seen`, **cortada explícitamente de `origin/main`** (`git fetch origin` +
+`git checkout -b feat/auto-copy-first-seen origin/main`; `origin/main` = `d3acd82`, el merge de la
+documentación de T6; se comprobó con `git ls-tree origin/main backend/auto_copy_driver.py` que el
+driver existe en esa base antes de empezar). No se ramificó de `main` local.
+
+**El hueco que T6 dejó abierto, cerrado.** El barrido pasaba `since=None` a la política, así que la
+ventana de gracia no podía dispararse nunca: la app solo actuaba sobre el **warning de import** del
+arr, jamás sobre "la descarga terminó y el arr no se enteró" — el caso de categoría equivocada, que
+es el común. El motivo de aquel `None` era real y sigue siéndolo: la traza no lleva el instante en
+que se observó por primera vez la condición, y su único timestamp —el `date` del grab— es *anterior*
+a la descarga, así que medir la gracia con él arrancaría el reloj antes de que esta terminara y
+competiría con el arr (D2). La referencia se **persiste nosotros**: la primera vez que vemos un
+candidato en una condición dada.
+
+Cómo: `backend/history.py` sube `SCHEMA_VERSION` a 4 y añade la tabla
+`auto_copy_seen (key TEXT PRIMARY KEY, stage TEXT NOT NULL, first_seen_at REAL NOT NULL)` con la
+misma disciplina que v2/v3 (`CREATE TABLE IF NOT EXISTS` dentro del `executescript` que `init_db`
+corre en cada arranque, así que un v3 real gana la tabla sin ALTER y el bump solo lo registra).
+`note_auto_copy_seen(key, stage, *, seen_at=None) -> float` es **un único upsert atómico**
+(`INSERT ... ON CONFLICT DO UPDATE ... RETURNING first_seen_at`) que devuelve el valor efectivo, con
+estas semánticas: clave nueva → guarda `seen_at` (por defecto ahora) y lo devuelve; misma clave y
+misma etapa → **conserva y devuelve el instante original** (esto es lo que permite a un barrido
+posterior ver que la ventana venció); misma clave y **etapa distinta** → resetea `first_seen_at` a
+`seen_at` y lo devuelve, porque una descarga que pasa de `downloading` a `downloaded` es una
+condición NUEVA y su ventana arranca en la transición. Si la base no está disponible devuelve
+`seen_at`, que se lee como "la ventana acaba de empezar" y hace que el barrido **espere** en vez de
+actuar: la dirección segura. Ser atómico importa: con dos barridos concurrentes, un leer-y-luego-
+escribir haría que ambos se vieran "nuevos" y se resetearan la ventana mutuamente.
+
+`backend/auto_copy_driver.py` llama a `note_auto_copy_seen(key, trace.get("stage"))` y pasa el valor
+**devuelto** como `since` a `decide_copy`, sustituyendo el `None` fijo. Solo lo llama para las etapas
+que la política pueden decidir en la ventana (`downloaded`, e `import_blocked` **sin** warning) y
+solo cuando la traza es nuestra y no está ya tratada; para `sent`, `downloading`, `importing` o
+`failed` no escribe fila: esas trazas resuelven antes de la ventana y la tabla solo se llenaría de
+ruido. Todo lo que T6 dejó establecido se mantiene: el lock de un solo vuelo, el centinela compartido
+`UNIDENTIFIED` intacto, la sonda `has_file` solo para trazas plausiblemente accionables, `WAIT`/`SKIP`
+sin escribir marca de manejado, y `SAFE_MODE` proponiendo en vez de actuar.
+
+**El arreglo sutil que solo se vuelve alcanzable con ella** (`backend/auto_copy.py`). Al poder
+vencer la ventana, un `downloaded` puede por fin llegar a la rama de copia, y entonces
+`arr_has_file is None` deja de ser inofensivo: `None` significa que **no se pudo preguntar** al arr
+(sin id, non-200, timeout, error de cliente), **no** que "el arr no tiene fichero". La política solo
+saltaba con `True` y en cualquier otro caso caía a la ventana de gracia, así que un fallo transitorio
+del arr más una ventana vencida **copiarían un fichero que el arr quizá ya importó** — un duplicado
+en la biblioteca, justo lo que D2 y toda la guarda existen para evitar. Ahora, dentro de la ventana:
+`since is None` → `WAIT`; ventana pendiente → `WAIT`; **ventana vencida y `arr_has_file is None`** →
+`WAIT`, con motivo honesto ("no se pudo comprobar si el arr ya tiene el fichero"); ventana vencida y
+guarda `False` → `COPY`. La rama `import_blocked` **con warning** no se toca: ahí el arr ya nos ha
+dicho que está atascado y **sigue copiando aunque la sonda falle**, para que un fallo de sonda no
+desactive en silencio el único camino que funciona hoy. El módulo sigue puro: sin `aiohttp`, `state`,
+`history`, `config`, `os` ni `time` (el guard estructural de T3 sigue pasando).
+
+Dos tests existentes se **corrigieron** (no se debilitaron ni borraron) porque fijaban el
+comportamiento antiguo: `test_copies_just_after_the_grace_window` pasa ahora `arr_has_file=False`
+para seguir probando el borde de la ventana, y `test_arr_has_file_unknown_does_not_skip` se convierte
+en `test_arr_has_file_unknown_waits_after_the_window` porque un guard desconocido con la ventana
+vencida ahora espera. También se actualizó una aserción de la migración v2→v3 en
+`backend/tests_history.py` (`user_version == 3` → `history.SCHEMA_VERSION`), igual que T5 hizo con la
+v1: un fichero v2 ahora avanza hasta la versión actual.
+
+Comandos ejecutados en `backend/` (literal, sin recortes):
+
+| Comando | Resultado literal |
+| --- | --- |
+| `python3 -m pytest -q` | `437 passed, 2 warnings in 19.87s` (en `main` eran `426 passed`; este slice añade **11 tests**) |
+| `python3 -m pyflakes *.py routes/*.py` | sin salida, exit 0 |
+| `python3 -m vulture` | sin salida, exit 0 |
+
+Reparto de los 11 tests nuevos: 7 en `backend/tests_history.py` (6 de la semántica de
+`note_auto_copy_seen` + la migración v3→v4 sobre una base v3 construida a mano), 1 en
+`backend/tests_auto_copy.py` (el warning de import copia aunque la sonda no responda) y 3 en
+`backend/tests_auto_copy_driver.py` (la referencia viene del store, la tabla se escribe solo para las
+etapas relevantes, y la integración de dos barridos que acaba copiando al vencer la ventana).
+
+Tamaño del slice: dos unidades de trabajo coherentes y encadenables, cada una por debajo del
+presupuesto de ~400, pero el total **por encima** de un único PR:
+
+| Commit | Qué entrega | Líneas cambiadas (add+del) |
+| --- | --- | --- |
+| `d3011d0` | `fix(auto-copy)`: el guard `arr_has_file=None` espera en vez de copiar | `55 insertions(+), 7 deletions(-)` → **62** |
+| `6e88902` | `feat(auto-copy)`: la tabla `auto_copy_seen`, `note_auto_copy_seen` y el cableado del driver | `360 insertions(+), 11 deletions(-)` → **371** |
+
+Total de código: **433 líneas cambiadas**, por encima de ~400. Se parte en dos commits por unidad de
+trabajo (cada uno < 400); como PR único serían 433. El commit de documentación no cuenta aquí. No se
+recortaron tests ni comentarios para caber: el número real es el de arriba.
+
+**El orden de los commits es deliberado, no cosmético.** `d3011d0` (la guarda) va **primero**: en
+cuanto la ventana puede vencer, la combinación `since` real + `arr_has_file=None` + ventana vencida
+es un camino de copia duplicada. Poner el arreglo del guard antes evita que exista un commit
+intermedio con esa vulnerabilidad. Cada commit se verificó de forma aislada: `d3011d0` →
+`427 passed`; `d3011d0`+`6e88902` → `437 passed`; ambos con pyflakes y vulture limpios.
+
+Alcance verificado y no verificado:
+
+- **Verificado**: el árbol final pasa pytest/pyflakes/vulture. La integración de dos barridos con
+  store real cierra el hueco: el primero persiste la referencia y espera, un segundo dentro de la
+  ventana **no la resetea**, y un tercero con `now` pasado de la ventana **copia**.
+- **No se añadió ninguna entrada a `backend/vulture_whitelist.py`.** `note_auto_copy_seen` tiene
+  llamador de producción real en el driver; no hay deuda nueva que declarar.
+- **Frontend**: no se tocó en este slice. El botón de la UI sigue siendo una tarea aparte (abajo);
+  no se ejecutaron sus checks.
+
 ## Next step
 
-**T1-T6 hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3; `01259f2` y `e8e01b1`
-para T4; `b578116` y `3cdb487` para T5; `bc23be8`, `d9ed9ba` y `7fe1f53` para T6; evidencia arriba).
+**T1-T6 y T10 hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3; `01259f2` y
+`e8e01b1` para T4; `b578116` y `3cdb487` para T5; `bc23be8`, `d9ed9ba` y `7fe1f53` para T6;
+`d3011d0` y `6e88902` para T10; evidencia arriba). Con T10, la ventana de gracia ya puede dispararse:
+la acción desatendida ya no se limita al warning de import.
 El siguiente paso es **T7** —**la fila de historial por disparo, con su motivo**— seguida de **T8**
 (los tests de la función pura, que ya están cubiertos por T3 + T5, y la idempotencia de extremo a
 extremo, que T6 ya prueba en `tests_auto_copy_driver.py`: una propuesta no bloquea, una marca
@@ -540,8 +650,9 @@ en el entorno real). En el frontend falta el **botón de la UI** que dispare
 `POST /api/auto-copy/sweep` y muestre el resumen (counts + entradas con su motivo); el backend ya
 devuelve ese resumen y no se tocó el frontend en este slice.
 
-**T8 y T9 siguen sin marcar.** T6 aporta la mitad de idempotencia de extremo a extremo que T8
-esperaba, pero no se reclama T8: la decisión de darlo por cerrado es del padre.
+**T7, T8 y T9 siguen sin marcar.** T6 aporta la mitad de idempotencia de extremo a extremo que T8
+esperaba, pero no se reclama T8: la decisión de darlo por cerrado es del padre. T9 (verificación en
+vivo) sigue pendiente: lo probado es la lógica con tests locales, no el entorno NFS/ZFS real.
 
 - **T1** `copy_files_to_root`: payload en carpeta → copia recursiva del árbol al destino
   **conservando la estructura relativa** y sin sobrescribir lo que ya exista. El camino de un solo
