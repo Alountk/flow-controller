@@ -1,4 +1,9 @@
-import type { AutoCopySweepCounts, AutoCopySweepResult } from '../types'
+import type {
+  AutoCopyHistoryResponse,
+  AutoCopyLogEntry,
+  AutoCopySweepCounts,
+  AutoCopySweepResult,
+} from '../types'
 import { apiFetch, UnauthorizedError } from './auth'
 
 function emptyCounts(): AutoCopySweepCounts {
@@ -70,5 +75,37 @@ export async function runAutoCopySweep(): Promise<AutoCopySweepResult> {
     return (await res.json()) as AutoCopySweepResult
   } catch (err) {
     return failedResult(describeFetchFailure(err))
+  }
+}
+
+/**
+ * Read the auto-copy decision-transition log, newest first.
+ *
+ * A plain GET, unlike the sweep: reading the history writes nothing. It never
+ * rejects — a failed request resolves to an empty list with a reason, so a
+ * `useEffect` that calls it cannot produce an unhandled rejection and the panel
+ * can still tell "nothing happened yet" from "the history could not be read".
+ *
+ * The limit is clamped by the backend, so passing it through is safe.
+ */
+export async function fetchAutoCopyHistory(
+  limit = 20,
+): Promise<AutoCopyHistoryResponse> {
+  let res: Response
+  try {
+    res = await apiFetch(`/api/auto-copy/history?limit=${limit}`)
+  } catch (err) {
+    return { items: [], error: describeFetchFailure(err) }
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    return { items: [], error: msg }
+  }
+  try {
+    const data = (await res.json()) as Partial<AutoCopyHistoryResponse>
+    return { items: (data.items ?? []) as AutoCopyLogEntry[], error: data.error }
+  } catch (err) {
+    return { items: [], error: describeFetchFailure(err) }
   }
 }
