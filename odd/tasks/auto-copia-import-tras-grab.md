@@ -155,7 +155,7 @@ fácil; recortar después de que haya movido algo mal, no.
 
 - [x] **T1** `copy_files`: smart rename para payload en carpeta + recorrido recursivo
 - [x] **T2** Copia con hardlink cuando el volumen coincide; fallback a copia
-- [ ] **T3** Función pura: traza → decisión, con la ventana de gracia
+- [x] **T3** Función pura: traza → decisión, con la ventana de gracia
 - [ ] **T4** Marca de idempotencia persistida + guarda `has_file`
 - [ ] **T5** Registro de grabs propios (id del título + instante) y casamiento posterior por hash exacto
 - [ ] **T6** Driver sobre las trazas existentes + respeto de `SAFE_MODE`
@@ -187,8 +187,8 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`). Checks fun
 
 - [x] Diseño cerrado: los dos desconocidos verificados contra la API real y **D1/D2/D3 validadas por
       el usuario** el 2026-09-22. Mapa de sistemas de ficheros medido.
-- [x] **T1-T2 implementados y verificados** (evidencia abajo). El resto del plan (T3-T9) sigue sin
-      empezar: esto arregla el motor, no el disparador.
+- [x] **T1-T2 implementados y verificados** (evidencia abajo): esto arregla el motor, no el disparador.
+- [x] **T3 implementado y verificado** (evidencia abajo): la decisión pura. **T4-T9** siguen sin empezar.
 
 ## Verification evidence
 
@@ -221,12 +221,52 @@ Alcance verificado y no verificado:
   está probado es la lógica con tests locales, no el entorno NFS/ZFS real.
 - **Frontend**: no se tocó en este slice.
 
+### T3 — la decisión pura (commit `f69c66a`, rama `feat/auto-copy-decision`, base `main`)
+
+`backend/auto_copy.py` (79 líneas) expone `COPY` / `WAIT` / `SKIP`,
+`DEFAULT_GRACE_SECONDS` y `decide_copy(trace, *, now, since, ...)`: nueve reglas en orden,
+primera que casa gana, con la ventana de gracia al final. Importa **nada** con efectos
+secundarios (sin sesión, sin `state`, sin `config`, sin reloj). `backend/tests_auto_copy.py`
+(160 líneas) cubre cada regla, el desempate `queue["status"]`, el fail-closed ante un
+`stage` desconocido y un guard estructural de imports.
+
+Comandos ejecutados en `backend/` (literal, sin recortes):
+
+| Comando | Resultado literal |
+| --- | --- |
+| `python3 -m pytest -q` | `349 passed, 2 warnings in 20.93s` (en `main` eran `330`; este slice añade 19 tests en `backend/tests_auto_copy.py`) |
+| `python3 -m pyflakes *.py routes/*.py` | sin salida, exit 0 |
+| `python3 -m vulture` | sin salida, exit 0 |
+
+Tamaño del slice: `git show --stat f69c66a` → `3 files changed, 248 insertions(+), 1 deletion(-)`
+(248 líneas cambiadas, por debajo del presupuesto de ~400). El commit de documentación no
+cuenta aquí.
+
+Decisiones que este task tuvo que fijar y que el diseño no fijaba:
+
+- **Ventana de gracia por defecto: 30 min** (`DEFAULT_GRACE_SECONDS = 1800.0`). Es el tiempo
+  que se le concede al arr para importar solo antes de dejar de esperar.
+- **`since` lo aporta el llamador, no se deriva de `trace["date"]`.** `date` es el instante
+  del grab, no el de la condición observada; medir la ventana con él mediría lo que no es.
+  Por eso la firma acepta `since=None` y **espera**: la política no adivina.
+
+Cobertura de los 19 tests, regla a regla: `is_own_grab=False`, `already_handled`,
+`arr_has_file=True`, `failed`, `sent`/`downloading`, `importing`, `import_blocked` con
+`queue["status"] == "warning"`, `import_blocked` **sin** warning (el desempate que evita la
+carrera de D2), `downloaded` con la ventana de gracia, el borde por dentro y por fuera,
+`since` futuro (clock skew), `since=None`, `arr_has_file` `False`/`None`, `stage`
+desconocido, traza sin `queue` ni `stage`, no mutación de la traza y el guard de imports.
+
+**T8 sigue sin marcar**: la mitad de "tests de la función pura (los tres resultados)" la cubre
+este slice; la mitad de **idempotencia** pertenece a **T4** (marca persistida), que todavía no
+existe.
+
 ## Next step
 
-**T1-T2 hechos** (commits `f00d620` y `03c70da`; evidencia arriba), en la rama
-`feat/auto-copia-import-tras-grab` (base `main`; la cadena de PRs de "En carpeta" es independiente y
-no debe ser su base). El siguiente paso es **T3-T9**: la decisión pura, la idempotencia, el registro
-de grabs y el driver.
+**T1-T3 hechos** (commits `f00d620`, `03c70da` y `f69c66a`; evidencia arriba), base `main` (la
+cadena de PRs de "En carpeta" es independiente y no debe ser su base; T3 va en la rama
+`feat/auto-copy-decision`). El siguiente paso es **T4-T9**: la idempotencia, el registro de grabs y
+el driver.
 
 - **T1** `copy_files_to_root`: payload en carpeta → copia recursiva del árbol al destino
   **conservando la estructura relativa** y sin sobrescribir lo que ya exista. El camino de un solo
