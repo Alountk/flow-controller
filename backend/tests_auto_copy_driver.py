@@ -77,6 +77,8 @@ class _Calls:
         self.dispatch: list[dict] = []
         self.order: list[tuple[str, str]] = []
         self.seen: list[dict] = []
+        self.log: list[dict] = []
+        self.latest_reads = 0
 
 
 def _install(
@@ -91,16 +93,20 @@ def _install(
     build_exc=None,
     real_marker=False,
     seen=None,
+    latest_outcomes=None,
 ) -> _Calls:
     """Stub every I/O boundary the driver crosses.
 
     `seen` controls what `note_auto_copy_seen` returns: `None` (default) means
     "now" so the grace window is still pending; a number is returned as-is (an
     ancient value makes the window already elapsed); a callable is invoked with
-    (key, stage). `real_marker=True` leaves the marker AND the first-seen store
-    real, for the end-to-end tests that use a real history database.
+    (key, stage). `real_marker=True` leaves the marker, the first-seen store AND
+    the decision log real, for the end-to-end tests that use a real history
+    database. `latest_outcomes` is what `latest_auto_copy_decisions` returns, so
+    a test can pin a key's previously logged outcome.
     """
     calls = _Calls()
+    latest = dict(latest_outcomes or {})
 
     async def build_traces(session):
         # Yield so a concurrently scheduled second sweep sees the lock held.
@@ -157,9 +163,27 @@ def _install(
                 return seen(key, stage)
             return seen
 
+        def latest_decisions():
+            calls.latest_reads += 1
+            return dict(latest)
+
+        def log_decision(key, *, source, title=None, decision, reason=None):
+            calls.log.append(
+                {
+                    "key": key,
+                    "source": source,
+                    "title": title,
+                    "decision": decision,
+                    "reason": reason,
+                }
+            )
+            latest[key] = decision
+
         monkeypatch.setattr(driver, "is_auto_copy_handled", is_handled)
         monkeypatch.setattr(driver, "mark_auto_copy", mark)
         monkeypatch.setattr(driver, "note_auto_copy_seen", note_seen)
+        monkeypatch.setattr(driver, "latest_auto_copy_decisions", latest_decisions)
+        monkeypatch.setattr(driver, "log_auto_copy_decision", log_decision)
 
     return calls
 
@@ -350,7 +374,10 @@ def test_has_file_is_queried_only_for_plausibly_actionable_traces(monkeypatch):
 # ── Nothing durable for transient or changing conditions ─────────────────────
 
 
-def test_waiting_and_skipping_write_nothing(monkeypatch):
+def test_waiting_and_skipping_write_no_marker(monkeypatch):
+    """`WAIT`/`SKIP` write no MARKER: the marker would freeze a condition that
+    may change (a warning that clears, a download still in progress). They DO get
+    a decision-log row — different store, different job; see the log section."""
     waiting = _trace(download_id="a" * 40, stage="downloading", queue_status="ok")
     failing = _trace(download_id="b" * 40, stage="failed")
     calls = _install(
@@ -362,6 +389,84 @@ def test_waiting_and_skipping_write_nothing(monkeypatch):
     assert [e["decision"] for e in summary["entries"]] == [WAIT, SKIP]
     assert calls.mark == []
     assert calls.has_file == 0, "no actionable stage means no probe"
+
+
+# ── The decision-transition log (T7) ─────────────────────────────────────────
+#
+# The log is written from the one place the sweep computes every trace's
+# outcome, so no policy branch can forget. It records the ACTION when there is
+# one and the policy's DECISION otherwise, and it never touches the shared
+# sentinel key.
+
+
+def test_every_trace_outcome_is_logged_once(monkeypatch):
+    waiting = _trace(download_id="a" * 40, movie_id=855, stage="downloading", queue_status="ok")
+    copied = _trace(download_id="b" * 40, movie_id=856)
+    skipped = _trace(download_id="c" * 40, movie_id=999)
+    calls = _install(
+        monkeypatch,
+        traces=[waiting, copied, skipped],
+        own_grabs=[_own_grab(855), _own_grab(856)],
+    )
+
+    summary = _sweep(safe_mode=False)
+
+    by_key = {row["key"]: row for row in calls.log}
+    assert len(calls.log) == 3, "one row per trace outcome, no more"
+    assert summary["counts"]["traces"] == 3
+    assert by_key[auto_copy_key(waiting)]["decision"] == "wait"
+    assert by_key[auto_copy_key(copied)]["decision"] == "copied"
+    assert by_key[auto_copy_key(skipped)]["decision"] == "skip"
+    # The sweep reads the last outcomes in ONE grouped query, not one per trace.
+    assert calls.latest_reads == 1
+
+
+def test_the_logged_outcome_is_the_action_when_there_is_one(monkeypatch):
+    calls = _install(monkeypatch, traces=[_trace()], own_grabs=[_own_grab()])
+
+    _sweep(safe_mode=True)
+
+    assert calls.log[0]["decision"] == "proposed", "not the raw policy 'copy'"
+
+
+def test_a_failed_dispatch_is_logged_as_failed(monkeypatch):
+    calls = _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab()],
+        dispatch_ok=False,
+    )
+
+    _sweep(safe_mode=False)
+
+    assert calls.log[0]["decision"] == "failed"
+
+
+def test_the_unidentified_key_never_reaches_the_log(monkeypatch):
+    trace = _trace(download_id="", movie_id=None)
+    calls = _install(monkeypatch, traces=[trace], own_grabs=[])
+
+    summary = _sweep(safe_mode=False)
+
+    assert summary["entries"][0]["decision"] == SKIP
+    assert calls.log == [], "a shared sentinel must never be logged"
+
+
+def test_a_repeated_outcome_is_not_logged_again(monkeypatch):
+    """The transition rule at the driver's boundary: the previous outcome is
+    read once for the whole sweep and a matching one is skipped."""
+    trace = _trace(stage="downloading", queue_status="ok")
+    calls = _install(
+        monkeypatch,
+        traces=[trace],
+        own_grabs=[_own_grab()],
+        latest_outcomes={auto_copy_key(trace): "wait"},
+    )
+
+    summary = _sweep(safe_mode=False)
+
+    assert summary["entries"][0]["decision"] == WAIT
+    assert calls.log == []
 
 
 # ── The persisted first-seen reference (T10) ─────────────────────────────────
@@ -575,3 +680,32 @@ def test_two_sweeps_past_the_window_copy(monkeypatch, db):
     third = _sweep(safe_mode=False, now=time.time() + DEFAULT_GRACE_SECONDS + 1)
     assert third["entries"][0]["action"] == "copied"
     assert len(calls.dispatch) == 1
+
+
+def test_the_proposed_to_copied_transition_is_logged_end_to_end(monkeypatch, db):
+    """Safe mode on then off: the same candidate moves from a proposal to a real
+    copy, and the log shows both rows. This exercises the store's transition
+    rule through the driver, with the log left real."""
+    _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab()],
+        real_marker=True,
+    )
+
+    _sweep(safe_mode=True)
+    _sweep(safe_mode=False)
+
+    assert [r["decision"] for r in history.recent_auto_copy_log()] == ["copied", "proposed"]
+
+
+def test_two_identical_sweeps_leave_one_log_row(monkeypatch, db):
+    """The readability rule end to end: an unchanged outcome across sweeps is
+    not logged again, or a 15-minute timer would bury the interesting line."""
+    trace = _trace(stage="downloading", queue_status="ok")
+    _install(monkeypatch, traces=[trace], own_grabs=[_own_grab()], real_marker=True)
+
+    _sweep(safe_mode=False)
+    _sweep(safe_mode=False)
+
+    assert [r["decision"] for r in history.recent_auto_copy_log()] == ["wait"]
