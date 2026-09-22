@@ -71,7 +71,7 @@ Fuera:
       `/api/v3/episode?seriesId=`; verificar la forma real de la respuesta antes de fiarse)
 - [x] **T4** Frontend: resolver `S##E##` del nombre del archivo y pintar `s03e07 Título fecha`
 - [x] **T5** Frontend: header del modal con temporada, episodio, título y fecha
-- [ ] **T6** Tests: refetch al navegar, archivos visibles, episodio resuelto por `S##E##`
+- [x] **T6** Tests: refetch al navegar, archivos visibles, episodio resuelto por `S##E##`
 - [ ] **T7** Verificación en vivo: una carpeta/archivo recién creado aparece sin recargar
 
 ## Acceptance criteria
@@ -139,6 +139,18 @@ documentación para encajar**: el presupuesto corta trabajo, no encoge código. 
 número real y queda a criterio del padre decidir si este slice se abre como un solo PR o se
 parte.
 
+### T6 — qué test cubre cada afirmación
+
+T6 pedía tres cosas y las tres ya estaban cubiertas por tests del slice anterior; simplemente no se
+había marcado. El mapeo explícito, para que nadie tenga que fiarse de un check:
+
+| Afirmación de T6 | Test |
+| --- | --- |
+| refetch al navegar (el bug) | `scanFolderNav.test.tsx` → "asks the backend again when the refresh button is clicked", con control negativo documentado: anular el handler del ↻ lo hace fallar |
+| archivos visibles, no solo carpetas | `scanFolderNav.test.tsx` → "shows files alongside folders in the navigator", "shows a file size next to each file", "reports an empty folder" |
+| episodio resuelto por `S##E##` | `scanFolderNav.test.tsx` → "shows the episode a file name resolves to", "adds no episode line when the file name has no tag", "identifies the scanned episode in the modal header"; `episodeTag.test.ts` (parser, incluido el falso positivo `1920x1080`); y en backend los tres tests de `arr_series_episodes` en `tests_wanted_scan.py` |
+| la ruta nueva queda protegida | `test_every_data_route_requires_the_api_key` enumera el esquema OpenAPI **sin** saltarse rutas con parámetros de path. Comprobado a mano, no supuesto: `app.openapi()` declara `['series_id', 'x-api-key']` para `/api/wanted/series/{series_id}/episodes` |
+
 ### Verificación en vivo: NO posible desde este checkout
 
 No se pudo verificar contra el Sonarr real. `backend/.env` es una copia de `.env.example`
@@ -159,15 +171,18 @@ línea— y **nunca** etiquetas incorrectas: un tag sin coincidencia no pinta na
 
 ## Review (RDD)
 
-RDD activo (global). Evaluado el slice con
-`gentle-ai review assess --cwd . --base-ref main --committed-only --json`:
+RDD activo (global). Evaluados los dos slices con
+`gentle-ai review assess --cwd . --base-ref <base> --committed-only --json`:
 
-- `risk: medium`, motivo `executable_change`, 4 ficheros, 376 líneas.
+| Slice | Base | Resultado |
+| --- | --- | --- |
+| T1-T2 | `main` | `risk: medium` (`executable_change`), 4 ficheros, 376 líneas |
+| T3-T5 | rama de T1-T2 | `risk: medium` (`executable_change`), 12 ficheros, 544 líneas |
 
-Por contrato, **medium se difiere al slice**: no se abre transacción de review por este work
-unit; el preflight se lanzará al cerrar el slice. La declaración de no rastreados que exige la
-herramienta se resolvió con `--untracked-scope=exclude` (el `.md` de la otra feature queda fuera
-del candidato a propósito).
+Por contrato, **medium se difiere al slice**: no se abre transacción de review por work unit; el
+preflight se lanzará al cerrar cada slice. La declaración de no rastreados que exige la herramienta
+se resolvió con `--untracked-scope=exclude` (el `.md` de la otra feature queda fuera del candidato
+a propósito).
 
 ## Entrega
 
@@ -185,7 +200,7 @@ rama apuntándolo.
 | [#28](https://github.com/Alountk/flow-controller/pull/28) | T2 — archivos en el navegador + registro | `fix/en-carpeta-refresh` | 271 (257+, 14−) | `bbd5022`, `4797038`, `3071f92`, `2a76bff`, `6ae5ed4` |
 | [#29](https://github.com/Alountk/flow-controller/pull/29) | T3 — endpoint de episodios de una serie | rama de #28 | 119 (118+, 1−) | `ef098c8` |
 | [#30](https://github.com/Alountk/flow-controller/pull/30) | T4 — parser `S##E##` + anotación por archivo | rama de #29 | 289 (270+, 19−) | `91e508c` |
-| [#31](https://github.com/Alountk/flow-controller/pull/31) | T5 — header del episodio + este registro | rama de #30 | 136 (124+, 12−) | `5a36c2e`, `368bdcc`, más el commit de este cuadro |
+| [#31](https://github.com/Alountk/flow-controller/pull/31) | T5 — header del episodio + este registro | rama de #30 | 154 (137+, 17−) y sube con cada commit de registro | `5a36c2e`, `368bdcc`, `f8b60bf`, más los commits de registro posteriores |
 
 Segundo corte, mismo criterio: T3-T5 sumaban **544 líneas** (512+, 32−) y **ningún corte en dos
 bajaba de 400** (`T3+T4` = 408, ocho líneas por encima). El único corte honesto era otra vez por
@@ -209,10 +224,20 @@ reforzaría que el síntoma principal es el punto 1: lo que no se ve son los **a
 
 ## Next step
 
-Seguir con **T6** (tests de refetch al navegar, archivos visibles y episodio resuelto por
-`S##E##`) y **T7** (verificación en vivo: una carpeta o archivo recién creado aparece sin
-recargar). T7 es justamente la que no puede cerrarse desde este checkout, por lo dicho en la
-sección de honestidad de arriba.
+Solo queda **T7** (verificación en vivo). T6 está cerrado, con el mapeo de arriba.
 
-El tercer PR de la cadena (T3-T5, rama `feat/en-carpeta-enriquecido-episodios`) **todavía no
-está abierto**: lo abre el padre. T1-T2 ya están cerrados.
+T7 no puede cerrarse desde este checkout: necesita la app y el backend reales. Pasos para
+cerrarla en el entorno de despliegue:
+
+1. Faltantes → un episodio → 📁 En carpeta, elegir volumen y navegar a una carpeta donde se
+   acabe de descargar algo.
+2. Comprobar que el archivo nuevo aparece **sin recargar ni salir y volver a entrar**.
+3. Pulsar ↻ y comprobar que el listado se refresca de verdad.
+4. Comprobar que un archivo de episodio muestra `S##E07 · <título> · <fecha>` y que uno sin tag
+   no muestra segunda línea.
+5. Si algo no cuadra, lo más informativo es el log del backend y la respuesta cruda de
+   `/api/wanted/series/<id>/episodes`: ahí se ve si la suposición residual (que devuelve todas
+   las temporadas) se cumple.
+
+Los cinco PRs de la cadena (#27 a #31) están abiertos. Al mergear cada padre, GitHub reapunta el
+hijo y ahí sí corre la CI.
