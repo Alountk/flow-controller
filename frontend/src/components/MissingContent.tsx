@@ -30,6 +30,23 @@ function formatSize(bytes: number): string {
   return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
+// Spanish short month names, spelled out rather than read from Intl: the app is
+// Spanish and the label has to read "19 sep 2026" on every runtime, while
+// `toLocaleDateString('es-ES', { month: 'short' })` renders "sept" here.
+const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/**
+ * When the download was requested, as "19 sep 2026".
+ *
+ * A local helper, following FileManager's `formatDate` and TraceView's
+ * `relativeTime`: there is no shared date module and one call site does not
+ * justify inventing one. `grabbed_at` is in unix seconds.
+ */
+function formatGrabbedAt(ts: number): string {
+  const d = new Date(ts * 1000)
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`
+}
+
 interface ScanItem {
   type: 'movie' | 'series'
   id: number
@@ -585,7 +602,13 @@ export function MissingContent() {
               <>
                 <div className="wanted-grid">
                   {allWantedMovies.map((movie) => (
-                    <div key={movie.id} className="wanted-card status-error">
+                    // `status-grabbed` is layered ON TOP of `status-error`: the
+                    // card is still missing, it was also already requested. Two
+                    // facts, neither overwriting the other.
+                    <div
+                      key={movie.id}
+                      className={`wanted-card status-error${movie.grabbed_at != null ? ' status-grabbed' : ''}`}
+                    >
                       {movie.remotePoster && (
                         <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
                       )}
@@ -595,6 +618,11 @@ export function MissingContent() {
                         </div>
                         {movie.overview && (
                           <div className="wanted-overview">{movie.overview.slice(0, 120)}...</div>
+                        )}
+                        {/* Null means never requested: show nothing, not a dash
+                            and not an empty slot. */}
+                        {movie.grabbed_at != null && (
+                          <div className="wanted-grabbed">Pedida el {formatGrabbedAt(movie.grabbed_at)}</div>
                         )}
                         <div className="wanted-card-actions">
                           <button
@@ -735,7 +763,10 @@ export function MissingContent() {
               <>
                 <div className="wanted-list">
                   {allWantedEpisodes.map((ep) => (
-                    <div key={ep.id} className="wanted-row">
+                    <div
+                      key={ep.id}
+                      className={`wanted-row${ep.grabbed_at != null ? ' status-grabbed' : ''}`}
+                    >
                       <div className="wanted-row-info">
                         <span className="wanted-series">{ep.series_title}</span>
                         <span className="wanted-ep">
@@ -743,6 +774,10 @@ export function MissingContent() {
                         </span>
                         <span className="wanted-ep-title">{ep.title}</span>
                         {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
+                        {/* Null means never requested: show nothing at all. */}
+                        {ep.grabbed_at != null && (
+                          <span className="wanted-grabbed">Pedida el {formatGrabbedAt(ep.grabbed_at)}</span>
+                        )}
                       </div>
                       <div className="wanted-row-actions">
                         <button

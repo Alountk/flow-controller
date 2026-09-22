@@ -275,6 +275,9 @@ export interface WantedMovie {
   remotePoster: string
   has_file: boolean
   altTitles: string[]
+  /** Unix seconds when this app asked to download the title, or null when it
+   *  never did (or the grab is older than the backend's lookback window). */
+  grabbed_at?: number | null
 }
 
 export interface AllMovie {
@@ -309,6 +312,9 @@ export interface WantedEpisode {
   air_date: string
   overview: string
   has_file: boolean
+  /** Unix seconds when this app asked to download the episode, or null when it
+   *  never did (or the grab is older than the backend's lookback window). */
+  grabbed_at?: number | null
 }
 
 /** One episode of a series, as returned by /api/wanted/series/{id}/episodes.

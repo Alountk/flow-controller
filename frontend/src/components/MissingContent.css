@@ -179,6 +179,17 @@
   opacity: 0.85;
 }
 
+/* A grabbed title that is STILL missing. Orange is a third state layered on top
+   of the red "missing" state, not a replacement: the red left bar keeps saying
+   "no file" while the orange body says "already requested". Two facts, neither
+   overwriting the other. Declared after `status-error` so it wins at equal
+   specificity. */
+.wanted-card.status-grabbed {
+  border-color: var(--warn);
+  border-left-color: var(--bad);
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg-elev));
+}
+
 .wanted-status-badge {
   font-size: 10px;
 }
@@ -281,6 +292,23 @@
 
 .wanted-row:hover {
   border-color: var(--accent);
+}
+
+/* Same third state as the card, on the episode row. */
+.wanted-row.status-grabbed {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg-elev));
+}
+
+.wanted-row.status-grabbed:hover {
+  border-color: var(--warn);
+}
+
+/* The mark itself: "Pedida el 19 sep 2026". */
+.wanted-grabbed {
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .wanted-row-info {
