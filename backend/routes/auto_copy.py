@@ -14,10 +14,33 @@ from fastapi import APIRouter, Depends
 
 from auto_copy_driver import sweep
 from config import SAFE_MODE
+from history import recent_auto_copy_log, store_available
 from routes.status import verify_api_key
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
+
+
+@router.get("/api/auto-copy/history")
+async def get_auto_copy_history(limit: int = 20, _key: str = Depends(verify_api_key)):
+    """The auto-copy decision-transition log, newest first.
+
+    Read-only and behind the same key as every other data route. An unavailable
+    store is an empty list WITH a reason, never a 500: the UI has to be able to
+    tell "nothing has happened yet" from "the history could not be read", and
+    only the second one is a fault worth showing.
+
+    ``recent_auto_copy_log`` clamps the limit, so a negative query parameter
+    cannot ask SQLite for "no limit".
+    """
+    try:
+        items = recent_auto_copy_log(limit=limit)
+        if not store_available():
+            return {"items": [], "error": "el historial no está disponible"}
+        return {"items": items}
+    except Exception as exc:  # noqa: BLE001 — the route contract is JSON, not 500
+        log.exception("auto-copy history: error inesperado: %s", exc)
+        return {"items": [], "error": f"{type(exc).__name__}: {exc}"}
 
 
 @router.post("/api/auto-copy/sweep")
