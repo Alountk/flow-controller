@@ -96,20 +96,29 @@ def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool
         return {"ok": True, "detail": f"copiado: {final_name} → {dst_dir}", "files_copied": 1}
 
     if src.is_dir():
-        files = [f for f in src.iterdir() if f.is_file()]
-        total_bytes = sum(f.stat().st_size for f in files)
+        # Walk the whole tree, not just the first level: a release folder carries
+        # its payload in subfolders (Sample/, Subs/) and flattening them would
+        # drop files or leave the sample next to the feature as a second video.
+        all_files = sorted(f for f in src.rglob("*") if f.is_file())
+        # Decide which files will actually be copied before reporting any total.
+        # Counting files that already exist would make the progress bar never
+        # reach 100% because those bytes are never written.
+        to_copy = [f for f in all_files if not (dst_dir / f.relative_to(src)).exists()]
+        skipped = len(all_files) - len(to_copy)
+        total_bytes = sum(f.stat().st_size for f in to_copy)
         copied_bytes = 0
         count = 0
-        _update_task(0, total_bytes, 0, len(files))
-        for item in files:
+        _update_task(0, total_bytes, 0, len(to_copy))
+        for item in to_copy:
             if _is_cancelled():
-                return {"ok": False, "detail": f"cancelado por el usuario ({count}/{len(files)} archivos copiados)", "files_copied": count}
-            dst = dst_dir / item.name
+                return {"ok": False, "detail": f"cancelado por el usuario ({count}/{len(to_copy)} archivos copiados)", "files_copied": count}
+            dst = dst_dir / item.relative_to(src)
+            dst.parent.mkdir(parents=True, exist_ok=True)
             written = copy_file_chunked(item, dst, task_id, total_bytes, copied_bytes)
             copied_bytes += written
             count += 1
-            _update_task(copied_bytes, total_bytes, count, len(files))
-        return {"ok": True, "detail": f"copiados {count} archivos a {dst_dir}", "files_copied": count}
+            _update_task(copied_bytes, total_bytes, count, len(to_copy))
+        return {"ok": True, "detail": f"copiados {count} archivos a {dst_dir} ({skipped} ya existían)", "files_copied": count}
 
     return {"ok": False, "detail": f"fuente no es archivo ni directorio: {src}"}
 
