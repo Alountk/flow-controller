@@ -803,7 +803,9 @@ def test_init_db_migrates_a_v3_database_without_an_alter(tmp_path):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     finally:
         conn.close()
-    assert version == 4
+    # A v3 file now advances all the way to the CURRENT schema (it also gains
+    # auto_copy_log), so this is not pinned to 4 any more.
+    assert version == history.SCHEMA_VERSION
 
 
 # ── Grouped own-grab marks for Faltantes ─────────────────────────────────────
@@ -889,3 +891,198 @@ def test_the_latest_map_is_empty_when_the_database_is_unavailable():
     history.close()
 
     assert history.own_grabs_latest_map(0) == {}
+
+
+# ── The decision-transition log (T7) ─────────────────────────────────────────
+#
+# One row per CHANGE of outcome, not one per sweep. The transition rule is the
+# test that keeps the log readable: a sweep every 15 minutes would otherwise
+# bury the interesting line under thousands of identical "wait" rows.
+
+
+def test_a_first_decision_is_logged(db):
+    history.log_auto_copy_decision(
+        "radarr:abc", source="radarr", title="A", decision="wait", reason="sigue en curso"
+    )
+
+    rows = history.recent_auto_copy_log()
+
+    assert len(rows) == 1
+    assert rows[0]["key"] == "radarr:abc"
+    assert rows[0]["source"] == "radarr"
+    assert rows[0]["title"] == "A"
+    assert rows[0]["decision"] == "wait"
+    assert rows[0]["reason"] == "sigue en curso"
+    assert rows[0]["at"] > 0
+
+
+def test_an_identical_repeated_decision_appends_nothing(db):
+    for _ in range(3):
+        history.log_auto_copy_decision(
+            "radarr:abc", source="radarr", decision="wait", reason="sigue en curso"
+        )
+
+    assert len(history.recent_auto_copy_log()) == 1
+
+
+def test_a_changed_decision_appends_exactly_one_row(db):
+    history.log_auto_copy_decision("radarr:abc", source="radarr", decision="wait", reason="uno")
+    history.log_auto_copy_decision("radarr:abc", source="radarr", decision="skip", reason="dos")
+
+    rows = history.recent_auto_copy_log()
+
+    assert [r["decision"] for r in rows] == ["skip", "wait"]
+
+
+def test_the_same_decision_with_a_new_reason_appends_nothing(db):
+    """The rule is about the decision, not the prose: changed wording for the
+    same outcome is not a transition."""
+    history.log_auto_copy_decision("radarr:abc", source="radarr", decision="wait", reason="uno")
+    history.log_auto_copy_decision("radarr:abc", source="radarr", decision="wait", reason="dos")
+
+    assert len(history.recent_auto_copy_log()) == 1
+
+
+def test_wait_and_skip_transitions_are_logged(db):
+    """The "why not" side exists: these are the common outcome and the one a
+    marker would never explain."""
+    history.log_auto_copy_decision(
+        "radarr:a", source="radarr", decision="wait", reason="la descarga sigue en curso"
+    )
+    history.log_auto_copy_decision(
+        "radarr:b", source="radarr", decision="skip", reason="no es un grab lanzado desde la app"
+    )
+
+    assert sorted(r["decision"] for r in history.recent_auto_copy_log()) == ["skip", "wait"]
+
+
+def test_the_proposed_to_copied_transition_is_logged(db):
+    """Safe mode turned off: the same candidate moves from a proposal to a real
+    copy, which is exactly the change worth a row."""
+    history.log_auto_copy_decision(
+        "radarr:a", source="radarr", decision="proposed", reason="modo seguro activo"
+    )
+    history.log_auto_copy_decision("radarr:a", source="radarr", decision="copied", reason="copiada")
+
+    assert [r["decision"] for r in history.recent_auto_copy_log()] == ["copied", "proposed"]
+
+
+def test_the_latest_decisions_map_covers_every_key(db):
+    history.log_auto_copy_decision("radarr:a", source="radarr", decision="wait")
+    history.log_auto_copy_decision("radarr:b", source="radarr", decision="copied")
+    history.log_auto_copy_decision("radarr:a", source="radarr", decision="skip")
+
+    assert history.latest_auto_copy_decisions() == {"radarr:a": "skip", "radarr:b": "copied"}
+
+
+def test_the_log_reader_is_newest_first(db):
+    history.log_auto_copy_decision("radarr:a", source="radarr", decision="wait", reason="1")
+    history.log_auto_copy_decision("radarr:b", source="radarr", decision="wait", reason="2")
+
+    assert [r["reason"] for r in history.recent_auto_copy_log()] == ["2", "1"]
+
+
+def test_the_log_reader_honours_the_limit(db):
+    for i in range(5):
+        history.log_auto_copy_decision(
+            f"radarr:{i}", source="radarr", decision="wait", reason=str(i)
+        )
+
+    assert [r["reason"] for r in history.recent_auto_copy_log(limit=2)] == ["4", "3"]
+
+
+def test_a_negative_limit_is_clamped_instead_of_meaning_no_limit(db):
+    """`LIMIT -1` means "no limit" in SQLite, so an unchecked query parameter
+    must not reach the reader unchecked: it clamps to at least 1."""
+    for i in range(5):
+        history.log_auto_copy_decision(f"radarr:{i}", source="radarr", decision="wait")
+
+    assert len(history.recent_auto_copy_log(limit=-1)) == 1
+    assert len(history.recent_auto_copy_log(limit=0)) == 1
+
+
+def test_a_keyless_decision_is_ignored(db):
+    history.log_auto_copy_decision("", source="radarr", decision="wait")
+
+    assert history.recent_auto_copy_log() == []
+    assert history.latest_auto_copy_decisions() == {}
+
+
+def test_logging_and_reading_are_no_ops_when_the_database_is_unavailable():
+    """The reader runs on the sweep path and behind the endpoint: an unavailable
+    store must never raise, and must report itself as unavailable."""
+    history.close()
+
+    history.log_auto_copy_decision("radarr:a", source="radarr", decision="wait")
+
+    assert history.recent_auto_copy_log() == []
+    assert history.latest_auto_copy_decisions() == {}
+    assert history.store_available() is False
+
+
+# The exact tables a v4 database carried, before auto_copy_log.
+V4_SCHEMA = V3_SCHEMA + """
+CREATE TABLE auto_copy_seen (
+    key           TEXT PRIMARY KEY,
+    stage         TEXT NOT NULL,
+    first_seen_at REAL NOT NULL
+);
+"""
+
+
+def test_init_db_migrates_a_v4_database_without_an_alter(tmp_path):
+    """v5 adds `auto_copy_log`. As with v1->v2, v2->v3 and v3->v4,
+    `executescript` runs the whole schema with CREATE TABLE IF NOT EXISTS on
+    every start, so a real v4 file gains the table with no ALTER; user_version
+    only records that the migration happened."""
+    path = tmp_path / "history.db"
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(V4_SCHEMA)
+        conn.execute(
+            "INSERT INTO operations (id, type, name, src, dst, status, created_at) "
+            "VALUES ('legacy', 'copy', 'old.mkv', '/s', '/d', 'done', 1000.0)"
+        )
+        conn.execute(
+            "INSERT INTO auto_copy_handled (key, source, decision, handled_at) "
+            "VALUES ('k', 'radarr', 'copy', 1000.0)"
+        )
+        conn.execute(
+            "INSERT INTO own_grabs (source, movie_id, guid, indexer_id, grabbed_at) "
+            "VALUES ('radarr', 855, 'g', 1, 1234.0)"
+        )
+        conn.execute(
+            "INSERT INTO auto_copy_seen (key, stage, first_seen_at) "
+            "VALUES ('radarr:abc', 'downloaded', 99.0)"
+        )
+        conn.execute("PRAGMA user_version=4")
+        conn.commit()
+    finally:
+        conn.close()
+
+    history.init_db(path)
+    try:
+        # The new table exists and is usable on the migrated file.
+        history.log_auto_copy_decision(
+            "radarr:abc", source="radarr", decision="wait", reason="r"
+        )
+        rows = history.recent_auto_copy_log()
+        assert len(rows) == 1
+        assert rows[0]["decision"] == "wait"
+        assert history.latest_auto_copy_decisions() == {"radarr:abc": "wait"}
+        # The earlier tables and their rows survived.
+        assert history.is_auto_copy_handled("k") is True
+        assert history.note_auto_copy_seen("radarr:abc", "downloaded") == 99.0
+        assert [r["movie_id"] for r in history.list_own_grabs(0)] == [855]
+        assert [r["id"] for r in history.recent_operations()] == ["legacy"]
+    finally:
+        history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+    assert version == history.SCHEMA_VERSION
