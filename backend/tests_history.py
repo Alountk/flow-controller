@@ -381,6 +381,62 @@ def test_a_keyless_marker_is_ignored(db):
     assert history.is_auto_copy_handled("") is False
 
 
+# ── The marker means "acted", not "a row exists" ─────────────────────────────
+#
+# T6 corrected this. Before, ANY row read as handled, so a SAFE_MODE proposal
+# would have blocked the real copy forever once safe mode was turned off. Both
+# directions matter: a proposal must stay non-blocking, an acted marker must
+# block.
+
+
+def test_an_actioned_marker_counts_as_handled(db):
+    history.mark_auto_copy(
+        "radarr:467250d5", source="radarr", decision=history.DECISION_ACTIONED
+    )
+
+    assert history.is_auto_copy_handled("radarr:467250d5") is True
+
+
+def test_a_proposed_marker_does_not_count_as_handled(db):
+    """A safe-mode proposal must not freeze the work it detected."""
+    history.mark_auto_copy(
+        "radarr:467250d5",
+        source="radarr",
+        decision="proposed",
+        reason="el arr no lo importó en 30 min",
+    )
+
+    assert history.is_auto_copy_handled("radarr:467250d5") is False
+
+
+def test_a_failed_dispatch_does_not_count_as_handled(db):
+    """One transient failure must leave the retry possible."""
+    history.mark_auto_copy(
+        "radarr:467250d5",
+        source="radarr",
+        decision="dispatch_failed",
+        reason="sin output_path",
+    )
+
+    assert history.is_auto_copy_handled("radarr:467250d5") is False
+
+
+def test_an_actioned_marker_can_replace_an_earlier_proposal(db):
+    """The real sequence: propose under safe mode, act with it off."""
+    history.mark_auto_copy("k", source="radarr", decision="proposed")
+    history.mark_auto_copy("k", source="radarr", decision=history.DECISION_ACTIONED)
+
+    assert history.is_auto_copy_handled("k") is True
+
+
+def test_an_actioned_marker_can_replace_an_earlier_failure(db):
+    """The retry sequence: fail, then act on the next sweep."""
+    history.mark_auto_copy("k", source="radarr", decision="dispatch_failed")
+    history.mark_auto_copy("k", source="radarr", decision=history.DECISION_ACTIONED)
+
+    assert history.is_auto_copy_handled("k") is True
+
+
 # The exact operations table a v1 database carried, before auto_copy_handled.
 V1_OPERATIONS_SCHEMA = """
 CREATE TABLE operations (
