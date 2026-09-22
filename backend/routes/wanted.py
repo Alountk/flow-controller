@@ -9,6 +9,7 @@ import unicodedata
 import aiohttp
 from fastapi import APIRouter, Depends
 
+import history
 from config import configured_services, find_service, service_unavailable_reason
 from traces import host_path
 from clients import (
@@ -39,6 +40,46 @@ ALL_ITEMS_PAGE_SIZE = 2000
 # Without this, every keystroke would re-download the full wanted list.
 _ALL_WANTED_TTL = 60.0
 _all_wanted_cache: dict[str, tuple[float, list[dict]]] = {}
+
+# How far back a grab is still worth showing as "Pedida el ...".
+#
+# The trade-off is what a too-long and a too-short window each get wrong. A mark
+# persists only while the title is still missing, so it answers "I asked for
+# this and it has not arrived". Too short and a genuinely stuck download loses
+# its mark after a few days, which is exactly when the signal matters most. Too
+# long and a mark from an old, superseded attempt claims the current missing
+# state was requested when it was not. 90 days covers a slow season pack and a
+# month of retries while staying a statement about the present missing state.
+WANTED_GRAB_LOOKBACK = 90 * 24 * 60 * 60
+
+
+def _attach_grabbed_at(response: dict) -> dict:
+    """Add ``grabbed_at`` to every wanted item, once, on the built response.
+
+    Called on the assembled body rather than inside either branch on purpose:
+    this route has a text-filtered branch and a plain one, and enriching only
+    one of them would silently leave half the items unmarked. Do not move it
+    back into a branch.
+
+    The marks come from ``own_grabs``, re-read per request, and never from
+    ``_fetch_all_wanted``'s cache: that cache holds the arr's data, and this mark
+    is ours. Each item is copied so the cached dicts are never mutated. An item
+    with no mark gets ``grabbed_at: None`` — the field is always present, so the
+    frontend never has to tell "absent" from "unknown".
+    """
+    marks = history.own_grabs_latest_map(time.time() - WANTED_GRAB_LOOKBACK)
+    for source_key, page in (response.get("wanted") or {}).items():
+        items = page.get("items")
+        if not items:
+            continue
+        # Radarr wanted items are movies, Sonarr's are episodes; the own-grab
+        # key records which kind, so the mapping is explicit rather than guessed.
+        kind = "movie" if source_key == "radarr" else "episode"
+        page["items"] = [
+            {**item, "grabbed_at": marks.get((source_key, kind, item.get("id")))}
+            for item in items
+        ]
+    return response
 
 
 def normalize_for_search(value: str) -> str:
@@ -124,7 +165,9 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
                 "page": page,
                 "page_size": page_size,
             }
-        return {"wanted": wanted, "updated_at": int(time.time()), "filtered": True}
+        return _attach_grabbed_at(
+            {"wanted": wanted, "updated_at": int(time.time()), "filtered": True}
+        )
 
     async with aiohttp.ClientSession() as session:
         results = await asyncio.gather(
@@ -138,10 +181,10 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
     wanted = {}
     for service, result in zip(arr_services, results):
         wanted[service["key"]] = result
-    return {
+    return _attach_grabbed_at({
         "wanted": wanted,
         "updated_at": int(time.time()),
-    }
+    })
 
 
 def _empty_page(page: int, page_size: int) -> dict:

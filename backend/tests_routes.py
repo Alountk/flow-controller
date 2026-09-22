@@ -17,6 +17,7 @@ import copy
 import credentials
 import history
 import json
+import time
 from urllib.parse import urlencode
 from unittest.mock import patch
 
@@ -812,6 +813,103 @@ class TestWantedFailuresAreVisible:
 
         assert body["error_kind"] == "auth"
         assert body["items"] == []
+
+
+# ── Faltantes marks a title the app already asked to download ────────────────
+
+
+class TestWantedGrabMarks:
+    """`/api/wanted` carries `grabbed_at` per item.
+
+    The route has TWO branches (text-filtered and plain) that both build a body,
+    and the enrichment runs once on the built body. These tests pin BOTH
+    branches: enriching only one is the realistic half-covered mistake, and the
+    filtered branch is the one that reuses `_fetch_all_wanted`'s cache, so the
+    mark must not be frozen into it either.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolated_history(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        from routes.wanted import _all_wanted_cache
+
+        _all_wanted_cache.clear()
+        yield
+        _all_wanted_cache.clear()
+        history.close()
+
+    def _get(self, q: str = ""):
+        routes = {
+            f"{ARR_BY_KEY['radarr']['url']}/api/v3/wanted/missing": (200, RADARR_PAYLOAD),
+            f"{ARR_BY_KEY['sonarr']['url']}/api/v3/wanted/missing": (200, SONARR_PAYLOAD),
+        }
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get("/api/wanted", params={"q": q})
+
+    def test_the_plain_branch_marks_a_grabbed_movie(self):
+        grabbed_at = time.time() - 3600
+        history.record_own_grab("radarr", movie_id=11, grabbed_at=grabbed_at)
+
+        body = self._get().json()
+
+        assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] == grabbed_at
+
+    def test_the_plain_branch_marks_a_grabbed_episode(self):
+        grabbed_at = time.time() - 3600
+        history.record_own_grab("sonarr", episode_id=7, series_id=3, grabbed_at=grabbed_at)
+
+        body = self._get().json()
+
+        assert body["wanted"]["sonarr"]["items"][0]["grabbed_at"] == grabbed_at
+
+    def test_an_item_without_a_grab_carries_none_not_absent(self):
+        body = self._get().json()
+
+        item = body["wanted"]["radarr"]["items"][0]
+        assert "grabbed_at" in item, "the field must always be present"
+        assert item["grabbed_at"] is None
+
+    def test_the_filtered_branch_marks_a_grabbed_movie(self):
+        grabbed_at = time.time() - 3600
+        history.record_own_grab("radarr", movie_id=11, grabbed_at=grabbed_at)
+
+        body = self._get(q="Wanted").json()
+
+        assert body["filtered"] is True
+        assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] == grabbed_at
+
+    def test_the_filtered_branch_marks_an_ungrabbed_movie_none(self):
+        body = self._get(q="Wanted").json()
+
+        assert body["filtered"] is True
+        assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] is None
+
+    def test_a_mark_is_re_read_even_when_the_arr_result_is_cached(self):
+        """`_all_wanted_cache` holds the arr's data; our mark must not freeze in
+        it. The second request hits the cache and must still see the new grab."""
+        assert self._get(q="Wanted").json()["wanted"]["radarr"]["items"][0]["grabbed_at"] is None
+
+        from routes.wanted import _all_wanted_cache
+
+        assert "radarr" in _all_wanted_cache, "the first call should have cached the arr data"
+
+        grabbed_at = time.time() - 60
+        history.record_own_grab("radarr", movie_id=11, grabbed_at=grabbed_at)
+
+        body = self._get(q="Wanted").json()
+
+        assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] == grabbed_at
+
+    def test_a_grab_outside_the_lookback_window_is_not_marked(self):
+        from routes.wanted import WANTED_GRAB_LOOKBACK
+
+        old = time.time() - WANTED_GRAB_LOOKBACK - 60
+        history.record_own_grab("radarr", movie_id=11, grabbed_at=old)
+
+        body = self._get().json()
+
+        assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] is None
 
 
 # ── Authentication boundary ──────────────────────────────────────────────────
