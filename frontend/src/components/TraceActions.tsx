@@ -46,7 +46,11 @@ function actionsFor(trace: Trace): ActionKey[] {
   switch (trace.stage) {
     case 'import_blocked':
       if (hasHash && trace.category_ok === false) list.push('fix_category')
-      if (queueId) list.push('retry_import')
+      // No `queueId` guard on purpose, unlike `remove_queue` below: this action
+      // sends ProcessMonitoredDownloads, a command with NO arguments, so it uses
+      // no id. Guarding it on the id hid the button exactly when the arr queue
+      // item was gone and the retry was most needed. Do not "restore" the guard.
+      list.push('retry_import')
       if (trace.queue?.output_path) list.push('copy_files')
       if (trace.queue?.output_path) list.push('fix_path_mapping')
       if (hasTarget) list.push('research')
