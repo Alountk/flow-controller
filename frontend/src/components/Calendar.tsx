@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { CalendarItem, CalendarResponse } from '../types'
+import { formatGrabMark } from '../utils/grabMark'
 import { ReleaseSearchModal } from './ReleaseSearchModal'
 import './Calendar.css'
 import { apiFetch } from '../api/auth'
@@ -84,38 +85,43 @@ export function Calendar() {
                 <span className="calendar-day-count">{items.length}</span>
               </div>
               <div className="calendar-day-items">
-                {items.map((item) => (
-                  <div
-                    key={`${item.source}-${item.id}`}
-                    className={`calendar-card ${item.has_file ? 'status-ok' : 'status-pending'}`}
-                    onClick={() => !item.has_file && setScanItem(item)}
-                    style={!item.has_file ? { cursor: 'pointer' } : undefined}
-                  >
-                    {item.remotePoster && (
-                      <img className="calendar-poster" src={item.remotePoster} alt={item.title} />
-                    )}
-                    <div className="calendar-info">
-                      {item.type === 'episode' ? (
-                        <div className="calendar-title">
-                          <span className="calendar-series">{item.series_title}</span>
-                          <span className="calendar-ep">
-                            S{String(item.season_number ?? 0).padStart(2, '0')}E{String(item.episode_number ?? 0).padStart(2, '0')}
-                          </span>
-                          <span className="calendar-ep-title">{item.title}</span>
-                        </div>
-                      ) : (
-                        <div className="calendar-title">
-                          {item.title}
-                          {item.year && <span className="wanted-year"> ({item.year})</span>}
-                        </div>
+                {items.map((item) => {
+                  const grabbed = formatGrabMark(item.grabbed_at)
+                  return (
+                    <div
+                      key={`${item.source}-${item.id}`}
+                      className={`calendar-card ${item.has_file ? 'status-ok' : 'status-pending'}${grabbed ? ' status-grabbed' : ''}`}
+                      onClick={() => !item.has_file && setScanItem(item)}
+                      style={!item.has_file ? { cursor: 'pointer' } : undefined}
+                    >
+                      {item.remotePoster && (
+                        <img className="calendar-poster" src={item.remotePoster} alt={item.title} />
                       )}
-                      <div className="calendar-type-badge">
-                        {item.type === 'movie' ? '🎬 Película' : '📺 Episodio'}
-                        {item.has_file && <span className="badge-ok"> ✓</span>}
+                      <div className="calendar-info">
+                        {item.type === 'episode' ? (
+                          <div className="calendar-title">
+                            <span className="calendar-series">{item.series_title}</span>
+                            <span className="calendar-ep">
+                              S{String(item.season_number ?? 0).padStart(2, '0')}E{String(item.episode_number ?? 0).padStart(2, '0')}
+                            </span>
+                            <span className="calendar-ep-title">{item.title}</span>
+                          </div>
+                        ) : (
+                          <div className="calendar-title">
+                            {item.title}
+                            {item.year && <span className="wanted-year"> ({item.year})</span>}
+                          </div>
+                        )}
+                        <div className="calendar-type-badge">
+                          {item.type === 'movie' ? '🎬 Película' : '📺 Episodio'}
+                          {item.has_file && <span className="badge-ok"> ✓</span>}
+                        </div>
+                        {/* No mark means show nothing at all, not a dash. */}
+                        {grabbed && <div className="calendar-grabbed">{grabbed}</div>}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))}
