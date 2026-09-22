@@ -30,12 +30,27 @@ DEFAULT_GRAB_WINDOW_SECONDS = 120.0
 GRAB_CLOCK_SKEW_SECONDS = 30.0
 
 
-def _grace_gate(now: float, since: float | None, grace_seconds: float) -> dict:
+def _grace_gate(
+    now: float,
+    since: float | None,
+    grace_seconds: float,
+    arr_has_file: bool | None,
+) -> dict:
     """Decide inside the grace window.
 
     `since` is the caller's timestamp for when the currently observed condition
     started. The policy never invents it: without one it waits instead of
     guessing, and a `since` in the future (clock skew) also waits.
+
+    The window expiring is NOT by itself permission to copy. `arr_has_file` is
+    three-valued, and `None` means the arr could not be asked (no id, non-200,
+    timeout, client error) — not "the arr has no file". Once the window can
+    genuinely expire (T10 persists the reference), an unknown guard plus an
+    expired window would copy a file the arr may already have imported: a
+    duplicate in the library, exactly what D2 and the whole guard exist to
+    prevent. So an unknown guard waits for a confident answer. Only `False` — the
+    arr explicitly saying it has no file — copies. (`True` never reaches here:
+    `decide_copy` skips on it before the stage switch.)
     """
     if since is None:
         return {
@@ -50,6 +65,14 @@ def _grace_gate(now: float, since: float | None, grace_seconds: float) -> dict:
             "reason": (
                 f"dentro de la ventana de gracia de {window}: "
                 "el arr puede importarlo solo"
+            ),
+        }
+    if arr_has_file is None:
+        return {
+            "decision": WAIT,
+            "reason": (
+                f"la ventana de gracia de {window} venció, pero no se pudo "
+                "comprobar si el arr ya tiene el fichero"
             ),
         }
     return {"decision": COPY, "reason": f"el arr no lo importó en {window}"}
@@ -91,9 +114,9 @@ def decide_copy(
         # No warning: `importPending` is ALSO the healthy transient state right
         # before the arr imports. It is not proof the arr is stuck, so wait the
         # window out rather than racing it (D2).
-        return _grace_gate(now, since, grace_seconds)
+        return _grace_gate(now, since, grace_seconds, arr_has_file)
     if stage == "downloaded":
-        return _grace_gate(now, since, grace_seconds)
+        return _grace_gate(now, since, grace_seconds, arr_has_file)
     return {"decision": SKIP, "reason": "estado desconocido: no se actúa"}
 
 
