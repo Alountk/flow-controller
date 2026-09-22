@@ -10,7 +10,8 @@ list of names (vulture's generated style) reports as undefined names to every
 other tool.
 """
 
-from auto_copy import decide_copy
+from auto_copy import auto_copy_key, decide_copy
+from history import is_auto_copy_handled, mark_auto_copy
 from media_mixer import select_best_video
 from state import queue_consumer_task
 
@@ -34,10 +35,26 @@ from state import queue_consumer_task
 #   - delete the function and its tests.
 # Until then it is whitelisted so it cannot hide alongside real findings.
 #
-# ── Not yet wired: the pure decision answers before its driver exists ────────
+# ── Not yet wired: the auto-copy policy and marker await their driver ────────
 #
-# `decide_copy` is the T3 pure policy: it reads a trace and returns
-# copy/wait/skip. Nothing in production calls it yet — the driver that feeds it
-# real traces is T6, still to be written. The tests cover it exhaustively, but
-# vulture does not scan tests, so it reads as unused until that driver lands.
-__all__ = ["decide_copy", "queue_consumer_task", "select_best_video"]
+# T4/T6 debt, declared so it stays visible instead of quietly settling. The
+# auto-copy path is built bottom-up: T3 the pure decision, T4 the identity key
+# and the durable marker, T6 the driver that wires them together. Until T6
+# lands nothing in production calls any of these, and vulture does not scan
+# tests, so they read as unused:
+#
+#   - `decide_copy`          T3 pure policy (trace -> copy/wait/skip).
+#   - `auto_copy_key`        T4 stable identity for a candidate download.
+#   - `mark_auto_copy`       T4 writes the idempotency marker.
+#   - `is_auto_copy_handled` T4 reads it back.
+#
+# T6 MUST remove every auto-copy entry from this list once the driver calls
+# them. They are debt, not permanent exceptions.
+__all__ = [
+    "auto_copy_key",
+    "decide_copy",
+    "is_auto_copy_handled",
+    "mark_auto_copy",
+    "queue_consumer_task",
+    "select_best_video",
+]
