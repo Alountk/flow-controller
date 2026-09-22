@@ -10,7 +10,7 @@ list of names (vulture's generated style) reports as undefined names to every
 other tool.
 """
 
-from auto_copy import auto_copy_key, decide_copy
+from auto_copy import auto_copy_key, decide_copy, matches_own_grab
 from clients import arr_has_file
 from history import is_auto_copy_handled, mark_auto_copy
 from media_mixer import select_best_video
@@ -48,6 +48,8 @@ from state import queue_consumer_task
 #   - `auto_copy_key`        T4 stable identity for a candidate download.
 #   - `mark_auto_copy`       T4 writes the idempotency marker.
 #   - `is_auto_copy_handled` T4 reads it back.
+#   - `matches_own_grab`     T5 pure matcher: is this trace one of our grabs?
+#                            Its only caller is the T6 driver.
 #
 # `arr_has_file` (T4, clients.py) has no production caller either, but vulture
 # does NOT report it: `decide_copy` has a parameter of the same name, so the
@@ -63,6 +65,7 @@ __all__ = [
     "decide_copy",
     "is_auto_copy_handled",
     "mark_auto_copy",
+    "matches_own_grab",
     "queue_consumer_task",
     "select_best_video",
 ]
