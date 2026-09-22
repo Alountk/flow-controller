@@ -67,11 +67,11 @@ Fuera:
 
 - [x] **T1** Frontend: `scan-browse` con `staleTime: 0` y `refetchOnMount: 'always'`, más botón ↻
 - [x] **T2** Frontend: listar archivos (además de carpetas) en la navegación del modal
-- [ ] **T3** Backend: traer los episodios de una serie en **una** llamada (Sonarr
+- [x] **T3** Backend: traer los episodios de una serie en **una** llamada (Sonarr
       `/api/v3/episode?seriesId=`; verificar la forma real de la respuesta antes de fiarse)
-- [ ] **T4** Frontend: resolver `S##E##` del nombre del archivo y pintar `s03e07 Título fecha`
-- [ ] **T5** Frontend: header del modal con temporada, episodio, título y fecha
-- [ ] **T6** Tests: refetch al navegar, archivos visibles, episodio resuelto por `S##E##`
+- [x] **T4** Frontend: resolver `S##E##` del nombre del archivo y pintar `s03e07 Título fecha`
+- [x] **T5** Frontend: header del modal con temporada, episodio, título y fecha
+- [x] **T6** Tests: refetch al navegar, archivos visibles, episodio resuelto por `S##E##`
 - [ ] **T7** Verificación en vivo: una carpeta/archivo recién creado aparece sin recargar
 
 ## Acceptance criteria
@@ -113,17 +113,79 @@ El test de refresco se comprobó en negativo: con el handler del botón ↻ sust
 no-op, `src/__tests__/scanFolderNav.test.tsx` falla (el nombre nuevo no aparece y no hay
 segunda petición a `/api/files/browse`).
 
+### Slice T3-T5 (rama `feat/en-carpeta-enriquecido-episodios`, base `feat/en-carpeta-navegacion-y-refresco`)
+
+- Commit T3: `ef098c8` — `feat(wanted): fetch a series' episodes for the "En carpeta" navigator`
+- Commit T4: `91e508c` — `feat(wanted): resolve and show the episode of each file in the navigator`
+- Commit T5: `5a36c2e` — `feat(wanted): identify the scanned episode in the "En carpeta" header`
+
+Comandos y resultados literales:
+
+- `cd backend && python -m pytest -q` → el binario `python` no existe en este checkout
+  (`zsh: command not found: python`). Se ejecutó con el intérprete disponible:
+  `python3 -m pytest -q` → `324 passed, 2 warnings in 13.85s`, exit 0.
+- `cd backend && python -m pyflakes *.py routes/*.py` → mismo problema de binario; con
+  `python3 -m pyflakes *.py routes/*.py` → sin salida, exit 0.
+- `cd backend && python -m vulture` → mismo problema de binario; con `python3 -m vulture` →
+  sin salida, exit 0.
+- `cd frontend && npm test` → `Test Files 24 passed (24)`, `Tests 182 passed (182)`, exit 0.
+- `cd frontend && npm run build` → `tsc -b && vite build` en verde: 130 módulos
+  transformados, `✓ built in 1.88s`, exit 0.
+
+Tamaño del slice: `git diff --shortstat feat/en-carpeta-navegacion-y-refresco...HEAD` →
+`11 files changed, 458 insertions(+), 26 deletions(-)` = **484 líneas cambiadas**, por
+encima del presupuesto blando de ~400. **No se recortaron tests, comentarios ni
+documentación para encajar**: el presupuesto corta trabajo, no encoge código. Se reporta el
+número real y queda a criterio del padre decidir si este slice se abre como un solo PR o se
+parte.
+
+### T6 — qué test cubre cada afirmación
+
+T6 pedía tres cosas y las tres ya estaban cubiertas por tests del slice anterior; simplemente no se
+había marcado. El mapeo explícito, para que nadie tenga que fiarse de un check:
+
+| Afirmación de T6 | Test |
+| --- | --- |
+| refetch al navegar (el bug) | `scanFolderNav.test.tsx` → "asks the backend again when the refresh button is clicked", con control negativo documentado: anular el handler del ↻ lo hace fallar |
+| archivos visibles, no solo carpetas | `scanFolderNav.test.tsx` → "shows files alongside folders in the navigator", "shows a file size next to each file", "reports an empty folder" |
+| episodio resuelto por `S##E##` | `scanFolderNav.test.tsx` → "shows the episode a file name resolves to", "adds no episode line when the file name has no tag", "identifies the scanned episode in the modal header"; `episodeTag.test.ts` (parser, incluido el falso positivo `1920x1080`); y en backend los tres tests de `arr_series_episodes` en `tests_wanted_scan.py` |
+| la ruta nueva queda protegida | `test_every_data_route_requires_the_api_key` enumera el esquema OpenAPI **sin** saltarse rutas con parámetros de path. Comprobado a mano, no supuesto: `app.openapi()` declara `['series_id', 'x-api-key']` para `/api/wanted/series/{series_id}/episodes` |
+
+### Verificación en vivo: NO posible desde este checkout
+
+No se pudo verificar contra el Sonarr real. `backend/.env` es una copia de `.env.example`
+con una dirección de relleno (`111.111.111.111`) y claves ficticias, y la configuración real
+vive en el host de despliegue. No se hizo ninguna llamada de red a un servicio real.
+
+Por qué los nombres de campo **no** son una suposición: `/api/v3/episode` devuelve el mismo
+`EpisodeResource` que `fetch_wanted_episodes` ya consume en producción
+(`seasonNumber`, `episodeNumber`, `title`, `airDateUtc`), y por eso las filas de episodios de
+Faltantes ya pintan `S##E##` correctamente hoy. El mapeo del fetcher nuevo reutiliza
+exactamente esos campos.
+
+**Suposición residual: VERIFICADA contra la API real el 2026-09-22.** `/api/v3/episode?seriesId=1`
+**sin** `seasonNumber` devolvió **204 episodios y las temporadas 0 a 9** de una serie real, así que
+una sola llamada cubre todas las temporadas y no hace falta abanico por temporada. Los campos
+usados quedaron confirmados uno a uno contra la respuesta real: `id`, `seriesId`, `seasonNumber`,
+`episodeNumber`, `title`, `airDateUtc`, `hasFile`.
+
+Lo que sigue sin cerrarse desde este checkout es la comprobación **en la app** (T7): eso necesita
+el backend y el navegador corriendo, no solo la API del arr.
+
 ## Review (RDD)
 
-RDD activo (global). Evaluado el slice con
-`gentle-ai review assess --cwd . --base-ref main --committed-only --json`:
+RDD activo (global). Evaluados los dos slices con
+`gentle-ai review assess --cwd . --base-ref <base> --committed-only --json`:
 
-- `risk: medium`, motivo `executable_change`, 4 ficheros, 376 líneas.
+| Slice | Base | Resultado |
+| --- | --- | --- |
+| T1-T2 | `main` | `risk: medium` (`executable_change`), 4 ficheros, 376 líneas |
+| T3-T5 | rama de T1-T2 | `risk: medium` (`executable_change`), 12 ficheros, 544 líneas |
 
-Por contrato, **medium se difiere al slice**: no se abre transacción de review por este work
-unit; el preflight se lanzará al cerrar el slice. La declaración de no rastreados que exige la
-herramienta se resolvió con `--untracked-scope=exclude` (el `.md` de la otra feature queda fuera
-del candidato a propósito).
+Por contrato, **medium se difiere al slice**: no se abre transacción de review por work unit; el
+preflight se lanzará al cerrar cada slice. La declaración de no rastreados que exige la herramienta
+se resolvió con `--untracked-scope=exclude` (el `.md` de la otra feature queda fuera del candidato
+a propósito).
 
 ## Entrega
 
@@ -138,15 +200,23 @@ rama apuntándolo.
 | PR | Contenido | Base | Líneas | Commits |
 | --- | --- | --- | --- | --- |
 | [#27](https://github.com/Alountk/flow-controller/pull/27) | T1 — refresco del listado | `main` | 146 (145+, 1−) | `d160c29` |
-| [#28](https://github.com/Alountk/flow-controller/pull/28) | T2 — archivos en el navegador + registro | `fix/en-carpeta-refresh` | 264 (250+, 14−) | `bbd5022`, `4797038`, `3071f92`, `2a76bff` |
-| (futuro) | T3-T5 — enriquecido `S##E##` | rama de #28 | — | — |
+| [#28](https://github.com/Alountk/flow-controller/pull/28) | T2 — archivos en el navegador + registro | `fix/en-carpeta-refresh` | 271 (257+, 14−) | `bbd5022`, `4797038`, `3071f92`, `2a76bff`, `6ae5ed4` |
+| [#29](https://github.com/Alountk/flow-controller/pull/29) | T3 — endpoint de episodios de una serie | rama de #28 | 119 (118+, 1−) | `ef098c8` |
+| [#30](https://github.com/Alountk/flow-controller/pull/30) | T4 — parser `S##E##` + anotación por archivo | rama de #29 | 289 (270+, 19−) | `91e508c` |
+| [#31](https://github.com/Alountk/flow-controller/pull/31) | T5 — header del episodio + este registro | rama de #30 | sin cifra fija por diseño: el registro crece con cada commit suyo; la cifra autoritativa está en el PR | `5a36c2e`, `368bdcc`, `f8b60bf`, más los commits de registro posteriores |
+
+Segundo corte, mismo criterio: T3-T5 sumaban **544 líneas** (512+, 32−) y **ningún corte en dos
+bajaba de 400** (`T3+T4` = 408, ocho líneas por encima). El único corte honesto era otra vez por
+unidad de trabajo, que es también como están definidas las tareas. Ramas:
+`feat/en-carpeta-episodios-api` (`ef098c8`), `feat/en-carpeta-episodios-navegador` (`91e508c`) y
+`feat/en-carpeta-enriquecido-episodios` (punta).
 
 Patrón `stacked-to-main` real: cada PR apunta a `main`, pero el hijo se abre con la base del padre
 para que su diff no arrastre el trabajo anterior; al mergear el padre, GitHub reapunta el hijo.
-Consecuencia práctica a recordar: **la CI solo se dispara en PRs con base `main`**, así que #28 no
-tendrá checks hasta ese reapuntado.
+Consecuencia práctica a recordar: **la CI solo se dispara en PRs con base `main`**, así que #28, #29,
+#30 y #31 no tendrán checks hasta su reapuntado.
 
-Push, creación de PR y merge: autorizados por el usuario para este slice.
+Push, creación de PR y merge: autorizados por el usuario para los dos slices.
 
 ## Hipótesis pendiente de confirmar
 
@@ -157,6 +227,20 @@ reforzaría que el síntoma principal es el punto 1: lo que no se ve son los **a
 
 ## Next step
 
-Seguir con T3-T5 (enriquecido de episodios, una llamada por serie). Antes de fiarse de la forma
-de `/api/v3/episode?seriesId=` hay que verificarla contra la API real: qué campos trae cada
-episodio y si el mapeo `S##E##` → título + `airDate` es directo. T1-T2 ya están cerrados.
+Solo queda **T7** (verificación en vivo). T6 está cerrado, con el mapeo de arriba.
+
+T7 no puede cerrarse desde este checkout: necesita la app y el backend reales. Pasos para
+cerrarla en el entorno de despliegue:
+
+1. Faltantes → un episodio → 📁 En carpeta, elegir volumen y navegar a una carpeta donde se
+   acabe de descargar algo.
+2. Comprobar que el archivo nuevo aparece **sin recargar ni salir y volver a entrar**.
+3. Pulsar ↻ y comprobar que el listado se refresca de verdad.
+4. Comprobar que un archivo de episodio muestra `S##E07 · <título> · <fecha>` y que uno sin tag
+   no muestra segunda línea.
+5. Si algo no cuadra, lo más informativo es el log del backend y la respuesta cruda de
+   `/api/wanted/series/<id>/episodes`: ahí se ve si la suposición residual (que devuelve todas
+   las temporadas) se cumple.
+
+Los cinco PRs de la cadena (#27 a #31) están abiertos. Al mergear cada padre, GitHub reapunta el
+hijo y ahí sí corre la CI.
