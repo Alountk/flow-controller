@@ -613,3 +613,50 @@ def test_init_db_migrates_a_v2_database_without_an_alter(tmp_path):
     finally:
         conn.close()
     assert version == 3
+
+
+# ── The own-grab reader (T6) ─────────────────────────────────────────────────
+#
+# The driver reads the registry through this; its shape is the contract T5 wrote
+# down, so the driver can hand the rows straight to `matches_own_grab`.
+
+
+def test_own_grabs_are_read_newest_first_as_plain_dicts(db):
+    history.record_own_grab("radarr", movie_id=1, guid="g1", grabbed_at=100.0)
+    history.record_own_grab("sonarr", episode_id=2, series_id=9, guid="g2", grabbed_at=200.0)
+
+    rows = history.list_own_grabs(0)
+
+    assert [row["grabbed_at"] for row in rows] == [200.0, 100.0]
+    assert set(rows[0]) == {
+        "id", "source", "movie_id", "episode_id", "series_id", "guid",
+        "indexer_id", "grabbed_at",
+    }
+    assert rows[0]["source"] == "sonarr"
+    assert rows[0]["episode_id"] == 2
+
+
+def test_own_grabs_before_since_are_excluded(db):
+    history.record_own_grab("radarr", movie_id=1, grabbed_at=100.0)
+    history.record_own_grab("radarr", movie_id=2, grabbed_at=300.0)
+
+    rows = history.list_own_grabs(200.0)
+
+    assert [row["movie_id"] for row in rows] == [2]
+
+
+def test_own_grabs_respect_the_limit(db):
+    for i in range(5):
+        history.record_own_grab("radarr", movie_id=i, grabbed_at=100.0 + i)
+
+    rows = history.list_own_grabs(0, limit=2)
+
+    assert [row["movie_id"] for row in rows] == [4, 3]
+
+
+def test_list_own_grabs_is_empty_when_the_database_is_unavailable():
+    """The reader runs on the sweep path: an unavailable store must read as
+    "nothing is provably ours", never raise."""
+    history.close()
+
+    assert history.list_own_grabs(0) == []
