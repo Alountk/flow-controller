@@ -10,6 +10,7 @@ import {
   scanForMovies,
 } from '../api/wanted'
 import { episodeTagKey, formatEpisodeLabel, parseEpisodeTag } from '../utils/episodeTag'
+import { formatGrabMark } from '../utils/grabMark'
 import { fetchRoots, browsePath, queueAdd } from '../api/files'
 import { useHashState } from '../hooks/useHashState'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -28,23 +29,6 @@ function formatSize(bytes: number): string {
   let size = bytes
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
   return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
-// Spanish short month names, spelled out rather than read from Intl: the app is
-// Spanish and the label has to read "19 sep 2026" on every runtime, while
-// `toLocaleDateString('es-ES', { month: 'short' })` renders "sept" here.
-const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-
-/**
- * When the download was requested, as "19 sep 2026".
- *
- * A local helper, following FileManager's `formatDate` and TraceView's
- * `relativeTime`: there is no shared date module and one call site does not
- * justify inventing one. `grabbed_at` is in unix seconds.
- */
-function formatGrabbedAt(ts: number): string {
-  const d = new Date(ts * 1000)
-  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`
 }
 
 interface ScanItem {
@@ -601,54 +585,55 @@ export function MissingContent() {
             ) : allWantedMovies.length > 0 ? (
               <>
                 <div className="wanted-grid">
-                  {allWantedMovies.map((movie) => (
-                    // `status-grabbed` is layered ON TOP of `status-error`: the
-                    // card is still missing, it was also already requested. Two
-                    // facts, neither overwriting the other.
-                    <div
-                      key={movie.id}
-                      className={`wanted-card status-error${movie.grabbed_at != null ? ' status-grabbed' : ''}`}
-                    >
-                      {movie.remotePoster && (
-                        <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
-                      )}
-                      <div className="wanted-info">
-                        <div className="wanted-title">
-                          {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
-                        </div>
-                        {movie.overview && (
-                          <div className="wanted-overview">{movie.overview.slice(0, 120)}...</div>
+                  {allWantedMovies.map((movie) => {
+                    const grabbed = formatGrabMark(movie.grabbed_at)
+                    return (
+                      // `status-grabbed` is layered ON TOP of `status-error`: the
+                      // card is still missing, it was also already requested. Two
+                      // facts, neither overwriting the other.
+                      <div
+                        key={movie.id}
+                        className={`wanted-card status-error${grabbed ? ' status-grabbed' : ''}`}
+                      >
+                        {movie.remotePoster && (
+                          <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
                         )}
-                        {/* Null means never requested: show nothing, not a dash
-                            and not an empty slot. */}
-                        {movie.grabbed_at != null && (
-                          <div className="wanted-grabbed">Pedida el {formatGrabbedAt(movie.grabbed_at)}</div>
-                        )}
-                        <div className="wanted-card-actions">
-                          <button
-                            className="action-btn search-item"
-                            onClick={() => setReleaseSearchItem({
-                              type: 'movie',
-                              id: movie.id,
-                              title: movie.title,
-                              year: movie.year,
-                              source: 'radarr',
-                              remotePoster: movie.remotePoster,
-                              has_file: movie.has_file,
-                            })}
-                          >
-                            🔍 Buscar
-                          </button>
-                          <button
-                            className="action-btn scan-folder-btn"
-                            onClick={() => handleScanForMovie(movie)}
-                          >
-                            📁 En carpeta
-                          </button>
+                        <div className="wanted-info">
+                          <div className="wanted-title">
+                            {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
+                          </div>
+                          {movie.overview && (
+                            <div className="wanted-overview">{movie.overview.slice(0, 120)}...</div>
+                          )}
+                          {/* Null means never requested: show nothing, not a dash
+                              and not an empty slot. */}
+                          {grabbed && <div className="wanted-grabbed">{grabbed}</div>}
+                            <div className="wanted-card-actions">
+                              <button
+                                className="action-btn search-item"
+                                onClick={() => setReleaseSearchItem({
+                                  type: 'movie',
+                                  id: movie.id,
+                                  title: movie.title,
+                                  year: movie.year,
+                                  source: 'radarr',
+                                  remotePoster: movie.remotePoster,
+                                  has_file: movie.has_file,
+                                })}
+                              >
+                                🔍 Buscar
+                              </button>
+                              <button
+                                className="action-btn scan-folder-btn"
+                                onClick={() => handleScanForMovie(movie)}
+                              >
+                                📁 En carpeta
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
+                      )
+                    })}
                 </div>
                 <div ref={loadMoreRef} className="wanted-infinite-sentinel">
                   {isFetchingNextPage && <div className="wanted-loading-more">Cargando más películas...</div>}
@@ -762,58 +747,59 @@ export function MissingContent() {
             ) : allWantedEpisodes.length > 0 ? (
               <>
                 <div className="wanted-list">
-                  {allWantedEpisodes.map((ep) => (
-                    <div
-                      key={ep.id}
-                      className={`wanted-row${ep.grabbed_at != null ? ' status-grabbed' : ''}`}
-                    >
-                      <div className="wanted-row-info">
-                        <span className="wanted-series">{ep.series_title}</span>
-                        <span className="wanted-ep">
-                          S{String(ep.season_number ?? 0).padStart(2, '0')}E{String(ep.episode_number ?? 0).padStart(2, '0')}
-                        </span>
-                        <span className="wanted-ep-title">{ep.title}</span>
-                        {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
-                        {/* Null means never requested: show nothing at all. */}
-                        {ep.grabbed_at != null && (
-                          <span className="wanted-grabbed">Pedida el {formatGrabbedAt(ep.grabbed_at)}</span>
-                        )}
+                  {allWantedEpisodes.map((ep) => {
+                    const grabbed = formatGrabMark(ep.grabbed_at)
+                    return (
+                      <div
+                        key={ep.id}
+                        className={`wanted-row${grabbed ? ' status-grabbed' : ''}`}
+                      >
+                        <div className="wanted-row-info">
+                          <span className="wanted-series">{ep.series_title}</span>
+                          <span className="wanted-ep">
+                            S{String(ep.season_number ?? 0).padStart(2, '0')}E{String(ep.episode_number ?? 0).padStart(2, '0')}
+                          </span>
+                          <span className="wanted-ep-title">{ep.title}</span>
+                          {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
+                          {/* Null means never requested: show nothing at all. */}
+                          {grabbed && <span className="wanted-grabbed">{grabbed}</span>}
+                        </div>
+                        <div className="wanted-row-actions">
+                          <button
+                            className="action-btn search-item"
+                            title="Buscar releases"
+                            onClick={() => setReleaseSearchItem({
+                              type: 'episode',
+                              id: ep.id,
+                              title: ep.title,
+                              series_title: ep.series_title,
+                              season_number: ep.season_number,
+                              episode_number: ep.episode_number,
+                              date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
+                              source: 'sonarr',
+                              has_file: false,
+                            })}
+                          >
+                            🔍
+                          </button>
+                          <button
+                            className="action-btn scan-folder-btn"
+                            title="Buscar en carpeta"
+                            onClick={() => handleScanForSeries({
+                              id: ep.series_id,
+                              title: ep.series_title,
+                              season_number: ep.season_number,
+                              episode_number: ep.episode_number,
+                              episode_title: ep.title,
+                              air_date: ep.air_date,
+                            })}
+                          >
+                            📁
+                          </button>
+                        </div>
                       </div>
-                      <div className="wanted-row-actions">
-                        <button
-                          className="action-btn search-item"
-                          title="Buscar releases"
-                          onClick={() => setReleaseSearchItem({
-                            type: 'episode',
-                            id: ep.id,
-                            title: ep.title,
-                            series_title: ep.series_title,
-                            season_number: ep.season_number,
-                            episode_number: ep.episode_number,
-                            date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
-                            source: 'sonarr',
-                            has_file: false,
-                          })}
-                        >
-                          🔍
-                        </button>
-                        <button
-                          className="action-btn scan-folder-btn"
-                          title="Buscar en carpeta"
-                          onClick={() => handleScanForSeries({
-                            id: ep.series_id,
-                            title: ep.series_title,
-                            season_number: ep.season_number,
-                            episode_number: ep.episode_number,
-                            episode_title: ep.title,
-                            air_date: ep.air_date,
-                          })}
-                        >
-                          📁
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 <div ref={loadMoreRef} className="wanted-infinite-sentinel">
                   {isFetchingNextPage && <div className="wanted-loading-more">Cargando más episodios...</div>}
