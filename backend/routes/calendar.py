@@ -8,6 +8,7 @@ import aiohttp
 from fastapi import APIRouter, Depends
 
 from config import find_service, service_unavailable_reason
+from history import record_own_grab
 from clients import (
     fetch_radarr_calendar,
     fetch_sonarr_calendar,
@@ -207,10 +208,23 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
     try:
         async with aiohttp.ClientSession() as session:
             result = await arr_grab_release(session, service, req.guid, req.indexerId, req.movieId, req.episodeId)
-        return result
     except Exception as exc:
         log.exception("calendar_grab error: %s", exc)
         return {"ok": False, "detail": f"Error interno: {exc}"}
+
+    # Only a grab that actually succeeded enters the own-grab registry (D3), and
+    # the recording is best-effort: it must not change the response. `0` is the
+    # request's "not this kind of title" default, so it becomes NULL rather than
+    # a bogus id.
+    if result.get("ok"):
+        record_own_grab(
+            req.source,
+            movie_id=req.movieId or None,
+            episode_id=req.episodeId or None,
+            guid=req.guid,
+            indexer_id=req.indexerId,
+        )
+    return result
 
 
 @router.post("/api/calendar/grab-batch")
@@ -229,6 +243,14 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                 result = await arr_grab_release(session, service, guid, idx_id, req.movieId, req.episodeId)
                 if result.get("ok"):
                     results.append(guid)
+                    # One row per guid that succeeded, not one per request.
+                    record_own_grab(
+                        req.source,
+                        movie_id=req.movieId or None,
+                        episode_id=req.episodeId or None,
+                        guid=guid,
+                        indexer_id=idx_id,
+                    )
                 else:
                     errors.append({"guid": guid, "detail": result.get("detail", "Error desconocido")})
             except Exception as exc:
