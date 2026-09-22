@@ -652,52 +652,59 @@ export function MissingContent() {
           ) : allCatalogMovies.length > 0 ? (
             <>
               <div className="wanted-grid">
-                {allCatalogMovies.map((movie) => (
-                  <div
-                    key={movie.id}
-                    className={`wanted-card ${movie.has_file && movie.path_exists ? 'status-ok' : 'status-error'}`}
-                  >
-                    {movie.remotePoster && (
-                      <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
-                    )}
-                    <div className="wanted-info">
-                      <div className="wanted-title">
-                        {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
-                      </div>
-                      <div className="wanted-status-badge">
-                        {movie.has_file && movie.path_exists ? (
-                          <span className="badge-ok">✓ Configurada</span>
-                        ) : !movie.has_file ? (
-                          <span className="badge-error">✗ Sin archivo</span>
-                        ) : (
-                          <span className="badge-error">✗ Ruta no encontrada</span>
-                        )}
-                      </div>
-                      <div className="wanted-card-actions">
-                        <button
-                          className="action-btn search-item"
-                          onClick={() => setReleaseSearchItem({
-                            type: 'movie',
-                            id: movie.id,
-                            title: movie.title,
-                            year: movie.year,
-                            source: 'radarr',
-                            remotePoster: movie.remotePoster,
-                            has_file: movie.has_file,
-                          })}
-                        >
-                          🔍 Buscar
-                        </button>
-                        <button
-                          className="action-btn scan-folder-btn"
-                          onClick={() => handleScanForMovie({ id: movie.id, title: movie.title, year: movie.year, overview: '', remotePoster: movie.remotePoster, has_file: movie.has_file, altTitles: [] })}
-                        >
-                          📁 En carpeta
-                        </button>
+                {allCatalogMovies.map((movie) => {
+                  const grabbed = formatGrabMark(movie.grabbed_at)
+                  return (
+                    <div
+                      key={movie.id}
+                      className={`wanted-card ${movie.has_file && movie.path_exists ? 'status-ok' : 'status-error'}${grabbed ? ' status-grabbed' : ''}`}
+                    >
+                      {movie.remotePoster && (
+                        <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
+                      )}
+                      <div className="wanted-info">
+                        <div className="wanted-title">
+                          {movie.title} {movie.year && <span className="wanted-year">({movie.year})</span>}
+                        </div>
+                        <div className="wanted-status-badge">
+                          {movie.has_file && movie.path_exists ? (
+                            <span className="badge-ok">✓ Configurada</span>
+                          ) : !movie.has_file ? (
+                            <span className="badge-error">✗ Sin archivo</span>
+                          ) : (
+                            <span className="badge-error">✗ Ruta no encontrada</span>
+                          )}
+                        </div>
+                        {/* Todas shows the whole catalogue, so the mark also
+                            appears on a title that already arrived: it still
+                            answers "did I ask for this?". */}
+                        {grabbed && <div className="wanted-grabbed">{grabbed}</div>}
+                        <div className="wanted-card-actions">
+                          <button
+                            className="action-btn search-item"
+                            onClick={() => setReleaseSearchItem({
+                              type: 'movie',
+                              id: movie.id,
+                              title: movie.title,
+                              year: movie.year,
+                              source: 'radarr',
+                              remotePoster: movie.remotePoster,
+                              has_file: movie.has_file,
+                            })}
+                          >
+                            🔍 Buscar
+                          </button>
+                          <button
+                            className="action-btn scan-folder-btn"
+                            onClick={() => handleScanForMovie({ id: movie.id, title: movie.title, year: movie.year, overview: '', remotePoster: movie.remotePoster, has_file: movie.has_file, altTitles: [] })}
+                          >
+                            📁 En carpeta
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
               <div ref={loadMoreRef} className="wanted-infinite-sentinel">
                 {isFetchingNextPage && <div className="wanted-loading-more">Cargando más películas...</div>}
@@ -820,58 +827,64 @@ export function MissingContent() {
           ) : allCatalogSeries.length > 0 ? (
             <>
               <div className="wanted-grid">
-                {allCatalogSeries.map((series) => (
-                  <div
-                    key={series.id}
-                    className={`wanted-card ${series.has_file && series.path_exists ? 'status-ok' : 'status-error'}`}
-                  >
-                    {series.remotePoster && (
-                      <img className="wanted-poster" src={series.remotePoster} alt={series.title} />
-                    )}
-                    <div className="wanted-info">
-                      <div className="wanted-title">
-                        {series.title} {series.year && <span className="wanted-year">({series.year})</span>}
-                      </div>
-                      <div className="wanted-status-badge">
-                        {series.has_file && series.path_exists ? (
-                          <span className="badge-ok">✓ Configurada</span>
-                        ) : !series.has_file ? (
-                          <span className="badge-error">✗ Sin archivos</span>
-                        ) : (
-                          <span className="badge-error">✗ Ruta no encontrada</span>
-                        )}
-                      </div>
-                      {series.episode_count > 0 && (
-                        <div className="wanted-ep-count">
-                          {series.episode_file_count}/{series.episode_count} episodios
-                        </div>
+                {allCatalogSeries.map((series) => {
+                  const grabbed = formatGrabMark(series.grabbed_at)
+                  return (
+                    <div
+                      key={series.id}
+                      className={`wanted-card ${series.has_file && series.path_exists ? 'status-ok' : 'status-error'}${grabbed ? ' status-grabbed' : ''}`}
+                    >
+                      {series.remotePoster && (
+                        <img className="wanted-poster" src={series.remotePoster} alt={series.title} />
                       )}
-                      <div className="wanted-card-actions">
-                        <button
-                          className="action-btn search-item"
-                          onClick={() => setReleaseSearchItem({
-                            type: 'episode',
-                            id: series.id,
-                            title: series.title,
-                            series_title: series.title,
-                            year: series.year,
-                            source: 'sonarr',
-                            remotePoster: series.remotePoster,
-                            has_file: series.has_file,
-                          })}
-                        >
-                          🔍 Buscar
-                        </button>
-                        <button
-                          className="action-btn scan-folder-btn"
-                          onClick={() => handleScanForSeries({ id: series.id, title: series.title })}
-                        >
-                          📁 En carpeta
-                        </button>
+                      <div className="wanted-info">
+                        <div className="wanted-title">
+                          {series.title} {series.year && <span className="wanted-year">({series.year})</span>}
+                        </div>
+                        <div className="wanted-status-badge">
+                          {series.has_file && series.path_exists ? (
+                            <span className="badge-ok">✓ Configurada</span>
+                          ) : !series.has_file ? (
+                            <span className="badge-error">✗ Sin archivos</span>
+                          ) : (
+                            <span className="badge-error">✗ Ruta no encontrada</span>
+                          )}
+                        </div>
+                        {series.episode_count > 0 && (
+                          <div className="wanted-ep-count">
+                            {series.episode_file_count}/{series.episode_count} episodios
+                          </div>
+                        )}
+                        {/* A series card is marked by a grab of ANY of its
+                            episodes: "we asked for something from this series". */}
+                        {grabbed && <div className="wanted-grabbed">{grabbed}</div>}
+                        <div className="wanted-card-actions">
+                          <button
+                            className="action-btn search-item"
+                            onClick={() => setReleaseSearchItem({
+                              type: 'episode',
+                              id: series.id,
+                              title: series.title,
+                              series_title: series.title,
+                              year: series.year,
+                              source: 'sonarr',
+                              remotePoster: series.remotePoster,
+                              has_file: series.has_file,
+                            })}
+                          >
+                            🔍 Buscar
+                          </button>
+                          <button
+                            className="action-btn scan-folder-btn"
+                            onClick={() => handleScanForSeries({ id: series.id, title: series.title })}
+                          >
+                            📁 En carpeta
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
               <div ref={loadMoreRef} className="wanted-infinite-sentinel">
                 {isFetchingNextPage && <div className="wanted-loading-more">Cargando más series...</div>}

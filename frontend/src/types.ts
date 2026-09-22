@@ -288,6 +288,9 @@ export interface AllMovie {
   has_file: boolean
   path_exists: boolean
   monitored: boolean
+  /** Unix seconds when this app asked to download the title, or null when it
+   *  never did (or the grab is older than the backend's lookback window). */
+  grabbed_at?: number | null
 }
 
 export interface AllSeries {
@@ -300,6 +303,9 @@ export interface AllSeries {
   monitored: boolean
   episode_count: number
   episode_file_count: number
+  /** Unix seconds when this app asked to download ANY of the series' episodes,
+   *  or null when it never did (or the grab is outside the lookback window). */
+  grabbed_at?: number | null
 }
 
 export interface WantedEpisode {
@@ -407,6 +413,9 @@ export interface CalendarItem {
   season_number: number | null
   episode_number: number | null
   source: string
+  /** Unix seconds when this app asked to download this movie or episode, or
+   *  null when it never did (or the grab is outside the lookback window). */
+  grabbed_at?: number | null
 }
 
 export interface CalendarResponse {
