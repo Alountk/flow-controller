@@ -297,12 +297,36 @@ def is_auto_copy_handled(key: str) -> bool:
 # a history failure must never take the app down nor turn a successful grab into
 # a failed response.
 #
-# The reader is intentionally NOT here yet: its only consumer is the T6 driver,
-# and an uncalled public function would force another vulture whitelist entry.
-# T6's contract is newest-first rows as plain dicts carrying the own_grabs
-# columns, i.e. `list_own_grabs(...) -> list[dict]` with keys id, source,
-# movie_id, episode_id, series_id, guid, indexer_id, grabbed_at — ready to hand
-# straight to `auto_copy.matches_own_grab(trace, own_grabs)`.
+# The reader T5 deliberately left out lives below: its only consumer is the T6
+# driver, so it was not written until the driver existed. The contract T5 wrote
+# down is honoured exactly: `list_own_grabs(...) -> list[dict]` with the
+# own_grabs columns (id, source, movie_id, episode_id, series_id, guid,
+# indexer_id, grabbed_at) as plain dicts, newest first, ready to hand straight
+# to `auto_copy.matches_own_grab(trace, own_grabs)`.
+
+
+def list_own_grabs(since: float, limit: int = 200) -> list[dict]:
+    """Own-grab rows grabbed at or after `since`, newest first, as plain dicts.
+
+    `since` bounds the read: a trace's `date` is fixed at the arr's grab instant,
+    so a grab the app launched can still be matched hours later, and the caller
+    chooses how far back that is worth loading. Degrades to [] when the store is
+    unavailable — the caller treats that as "no grab is provably ours", and the
+    policy then skips instead of copying something nobody asked for (D3).
+    """
+    with _lock:
+        if _conn is None:
+            return []
+        try:
+            rows = _conn.execute(
+                "SELECT * FROM own_grabs WHERE grabbed_at >= ? "
+                "ORDER BY grabbed_at DESC LIMIT ?",
+                (since, limit),
+            ).fetchall()
+            return [dict(row) for row in rows]
+        except sqlite3.Error as exc:
+            log.warning("Could not read own grabs: %s", exc)
+            return []
 
 
 def record_own_grab(
