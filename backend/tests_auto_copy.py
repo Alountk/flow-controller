@@ -87,14 +87,34 @@ def test_copies_immediately_on_an_import_warning_without_a_time_reference():
     assert "warning" in result["reason"]
 
 
+def test_an_import_warning_still_copies_when_the_probe_could_not_answer():
+    # The arr has already told us it is stuck, so this path must not depend on
+    # a probe. A transient probe failure here must never disable the one path
+    # that works today.
+    queue = {"state": "importPending", "status": "warning"}
+    result = decide_copy(
+        _trace("import_blocked", queue),
+        now=DEFAULT_GRACE_SECONDS + 1,
+        since=0,
+        arr_has_file=None,
+    )
+    assert result["decision"] == COPY
+    assert "warning" in result["reason"]
+
+
 def test_waits_just_inside_the_grace_window():
     result = decide_copy(_trace("downloaded"), now=DEFAULT_GRACE_SECONDS - 1, since=0)
     assert result["decision"] == WAIT
     assert "ventana de gracia" in result["reason"]
 
 
-def test_copies_just_after_the_grace_window():
-    result = decide_copy(_trace("downloaded"), now=DEFAULT_GRACE_SECONDS + 1, since=0)
+def test_copies_just_after_the_grace_window_when_the_arr_has_no_file():
+    result = decide_copy(
+        _trace("downloaded"),
+        now=DEFAULT_GRACE_SECONDS + 1,
+        since=0,
+        arr_has_file=False,
+    )
     assert result["decision"] == COPY
     assert "no lo importó" in result["reason"]
 
@@ -114,14 +134,19 @@ def test_arr_has_file_false_does_not_skip():
     assert result["decision"] == COPY
 
 
-def test_arr_has_file_unknown_does_not_skip():
+def test_arr_has_file_unknown_waits_after_the_window():
+    # `None` is "the arr could not be asked", NOT "the arr has no file". With a
+    # reference from T10 the window can genuinely expire, so an unknown guard at
+    # that point must wait rather than copy a file the arr may already have
+    # imported (a duplicate in the library). Only a confident `False` copies.
     result = decide_copy(
         _trace("downloaded"),
         now=DEFAULT_GRACE_SECONDS + 1,
         since=0,
         arr_has_file=None,
     )
-    assert result["decision"] == COPY
+    assert result["decision"] == WAIT
+    assert "no se pudo comprobar" in result["reason"]
 
 
 def test_waits_without_a_time_reference():
