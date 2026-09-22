@@ -156,7 +156,7 @@ fácil; recortar después de que haya movido algo mal, no.
 - [x] **T1** `copy_files`: smart rename para payload en carpeta + recorrido recursivo
 - [x] **T2** Copia con hardlink cuando el volumen coincide; fallback a copia
 - [x] **T3** Función pura: traza → decisión, con la ventana de gracia
-- [ ] **T4** Marca de idempotencia persistida + guarda `has_file`
+- [x] **T4** Marca de idempotencia persistida + guarda `has_file`
 - [ ] **T5** Registro de grabs propios (id del título + instante) y casamiento posterior por hash exacto
 - [ ] **T6** Driver sobre las trazas existentes + respeto de `SAFE_MODE`
 - [ ] **T7** Fila de historial por disparo, con su motivo
@@ -188,7 +188,9 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`). Checks fun
 - [x] Diseño cerrado: los dos desconocidos verificados contra la API real y **D1/D2/D3 validadas por
       el usuario** el 2026-09-22. Mapa de sistemas de ficheros medido.
 - [x] **T1-T2 implementados y verificados** (evidencia abajo): esto arregla el motor, no el disparador.
-- [x] **T3 implementado y verificado** (evidencia abajo): la decisión pura. **T4-T9** siguen sin empezar.
+- [x] **T3 implementado y verificado** (evidencia abajo): la decisión pura.
+- [x] **T4 implementado y verificado** (evidencia abajo): la identidad estable, la marca
+      idempotente persistida y la guarda `has_file`. **T5-T9** siguen sin empezar.
 
 ## Verification evidence
 
@@ -258,15 +260,79 @@ carrera de D2), `downloaded` con la ventana de gracia, el borde por dentro y por
 desconocido, traza sin `queue` ni `stage`, no mutación de la traza y el guard de imports.
 
 **T8 sigue sin marcar**: la mitad de "tests de la función pura (los tres resultados)" la cubre
-este slice; la mitad de **idempotencia** pertenece a **T4** (marca persistida), que todavía no
-existe.
+este slice; la mitad de **idempotencia** pertenece a **T4** (marca persistida). El estado actualizado
+de esa mitad está en la sección de T4, abajo.
+
+### T4 — identidad estable, marca persistida y guarda `has_file` (commits `01259f2`, `e8e01b1`)
+
+Rama `feat/auto-copy-decision`, base `main`. `backend/auto_copy.py` (141 líneas) añade
+`auto_copy_key(trace)` y el centinela `UNIDENTIFIED`: la identidad de un candidato, pura y sin
+imports con efectos secundarios (el guard estructural de T3 sigue pasando). `backend/history.py`
+sube `SCHEMA_VERSION` a 2 y añade la tabla `auto_copy_handled` con `mark_auto_copy` /
+`is_auto_copy_handled`. `backend/clients.py` añade `arr_has_file`. Tests: 8 casos en
+`backend/tests_auto_copy.py`, 6 en `backend/tests_history.py` y 9 en el nuevo
+`backend/tests_arr_has_file.py`.
+
+Comandos ejecutados en `backend/` (literal, sin recortes):
+
+| Comando | Resultado literal |
+| --- | --- |
+| `python3 -m pytest -q` | `372 passed, 2 warnings in 16.54s` (en T3 eran `349 passed`; este slice añade 23 tests) |
+| `python3 -m pyflakes *.py routes/*.py` | sin salida, exit 0 |
+| `python3 -m vulture` | sin salida, exit 0 |
+
+Tamaño del slice: `git diff --shortstat 6e7b535..HEAD` → `7 files changed, 531 insertions(+), 12
+deletions(-)` (543 líneas cambiadas). **Por encima de un único PR de ~400**, así que va partido en
+dos unidades de trabajo coherentes y encadenables: commit 1 `368 insertions(+), 12 deletions(-)`
+(380 cambiadas) y commit 2 `163 insertions(+)` (163); cada una por debajo del presupuesto de ~400.
+El commit de documentación no cuenta aquí. No se recortaron tests ni comentarios para caber: el
+número real es el de arriba.
+
+**Deuda de vulture, declarada** (`backend/vulture_whitelist.py`, sección "Not yet wired: the
+auto-copy policy and marker await their driver"): se añaden `auto_copy_key`, `mark_auto_copy` e
+`is_auto_copy_handled` (commit 1) y `arr_has_file` (commit 2); `decide_copy` ya venía de T3. Cada
+entrada dice que es la política/marca de auto-copia a la espera del driver de **T6**. **T6 debe
+eliminar TODAS las entradas de auto-copia** una vez que exista el driver: `decide_copy`,
+`auto_copy_key`, `mark_auto_copy`, `is_auto_copy_handled` y `arr_has_file`. Son deuda declarada, no
+excepciones permanentes. Nota: `arr_has_file` no lo reporta vulture por casualidad —`decide_copy`
+tiene un parámetro con el mismo nombre, así que el nombre ya "aparece referenciado"—; se whitelistea
+explícitamente para que un futuro renombrado de ese parámetro no convierta deuda real en un hallazgo
+sorpresa.
+
+Decisiones que este task tuvo que fijar y que el diseño no fijaba:
+
+- **La regla de normalización de la identidad**: `strip` y minúsculas; si el valor mide **más de
+  40** caracteres y **todo lo que va después del 40 es cero**, se conservan los primeros 40; en
+  cualquier otro caso se conserva entero. Un id genuino de **40** caracteres que termina en ceros
+  **no** se trunca: sus ceros son parte del id, no relleno. Así el hash rellenado y el plano del arr
+  (`467250D5…414A00000000` y `467250d5…414a`) dan la **misma** clave.
+- **El matcher difuso queda prohibido en la identidad**: `traces.hash_matches` acaba en comparación
+  por prefijos. Eso está bien para un humano mirando una pantalla, pero una identidad con un
+  "casi" significa repetir una copia que no debía o saltarse una que tocaba. La clave es
+  determinista y punto; el prefijo no entra aquí.
+- **`arr_has_file` es de tres valores**: `True` si el arr dice que tiene el fichero, `False` solo
+  si dice explícitamente que no, y `None` ante cualquier error, non-200 o campo ausente. El `None`
+  no se colapsa a `False` en ningún punto: si lo hiciera, un fallo transitorio de red parecería
+  "aún no importado" e invitaría a una copia duplicada. El episodio pregunta por
+  `/api/v3/episode/{id}`, no por la serie entera, porque `arr_import_status` lee el primer episodio
+  de una temporada y es demasiado grueso para "este episodio ya está importado".
+
+**T8 sigue sin marcar.** Mitad de función pura: cubierta en T3. Mitad de idempotencia: **parcialmente
+cubierta aquí** — el marcador se escribe y se relee, se re-marca como upsert, una clave desconocida
+lee como no manejada, y la migración v1→v2 existe y es usable (`backend/tests_history.py`); la
+identidad sobre la que se indexa el marcador está cubierta en `backend/tests_auto_copy.py`. Lo que
+**no** está cubierto: el comportamiento de idempotencia **de extremo a extremo** (un driver que
+consulta la marca y se salta la segunda copia tras un reinicio), que necesita a T6. No se reclama
+T8.
 
 ## Next step
 
-**T1-T3 hechos** (commits `f00d620`, `03c70da` y `f69c66a`; evidencia arriba), base `main` (la
-cadena de PRs de "En carpeta" es independiente y no debe ser su base; T3 va en la rama
-`feat/auto-copy-decision`). El siguiente paso es **T4-T9**: la idempotencia, el registro de grabs y
-el driver.
+**T1-T4 hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3; `01259f2` y `e8e01b1`
+para T4; evidencia arriba), base `main` (la cadena de PRs de "En carpeta" es independiente y no debe
+ser su base; T3 y T4 van en la rama `feat/auto-copy-decision`). T4 supera un único PR de ~400 líneas
+(543 cambiadas), así que su slice son dos PR encadenados: el commit 1 (identidad + marca, 380) y el
+commit 2 (guarda `has_file`, 163). El siguiente paso es **T5-T9**: el registro de grabs propios, el
+driver sobre las trazas, la fila de historial por disparo y la verificación en vivo.
 
 - **T1** `copy_files_to_root`: payload en carpeta → copia recursiva del árbol al destino
   **conservando la estructura relativa** y sin sobrescribir lo que ya exista. El camino de un solo
