@@ -6,6 +6,7 @@ pipeline breakage should do.
 """
 
 import sqlite3
+import time
 
 import pytest
 
@@ -612,7 +613,9 @@ def test_init_db_migrates_a_v2_database_without_an_alter(tmp_path):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     finally:
         conn.close()
-    assert version == 3
+    # A v2 file now advances all the way to the CURRENT schema (it also gains
+    # auto_copy_seen), so this is not pinned to 3 any more.
+    assert version == history.SCHEMA_VERSION
 
 
 # ── The own-grab reader (T6) ─────────────────────────────────────────────────
@@ -660,3 +663,144 @@ def test_list_own_grabs_is_empty_when_the_database_is_unavailable():
     history.close()
 
     assert history.list_own_grabs(0) == []
+
+
+# ── First-seen reference for the grace window (T10) ──────────────────────────
+#
+# The durable reference the sweep measures its grace window from. Its semantics
+# are the whole reason it exists: a later sweep must still see the ORIGINAL
+# instant so the window can elapse, and a stage change must start a fresh
+# window at the transition.
+
+
+def _seen_rows(path) -> list[dict]:
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in conn.execute("SELECT * FROM auto_copy_seen ORDER BY key")]
+    finally:
+        conn.close()
+
+
+def test_a_new_key_stores_and_returns_the_reference(db, tmp_path):
+    returned = history.note_auto_copy_seen("radarr:abc", "downloaded", seen_at=1234.5)
+
+    assert returned == 1234.5
+    rows = _seen_rows(tmp_path / "history.db")
+    assert len(rows) == 1
+    assert rows[0]["key"] == "radarr:abc"
+    assert rows[0]["stage"] == "downloaded"
+    assert rows[0]["first_seen_at"] == 1234.5
+
+
+def test_a_new_key_defaults_to_now_when_no_instant_is_given(db, tmp_path):
+    before = time.time()
+
+    returned = history.note_auto_copy_seen("radarr:abc", "downloaded")
+
+    assert before <= returned <= time.time()
+
+
+def test_the_same_key_and_stage_keeps_and_returns_the_original(db, tmp_path):
+    """This is what lets a later sweep observe that the window has elapsed."""
+    first = history.note_auto_copy_seen("radarr:abc", "downloaded", seen_at=100.0)
+    second = history.note_auto_copy_seen("radarr:abc", "downloaded", seen_at=999.0)
+
+    assert first == 100.0
+    assert second == 100.0, "a later sighting must NOT reset the window"
+    rows = _seen_rows(tmp_path / "history.db")
+    assert len(rows) == 1
+    assert rows[0]["first_seen_at"] == 100.0
+
+
+def test_a_stage_change_resets_the_window(db, tmp_path):
+    """A download moving from `downloading` to `downloaded` is a NEW condition:
+    its window starts at the transition, not when it was first seen at all."""
+    history.note_auto_copy_seen("radarr:abc", "downloading", seen_at=100.0)
+
+    returned = history.note_auto_copy_seen("radarr:abc", "downloaded", seen_at=500.0)
+
+    assert returned == 500.0
+    rows = _seen_rows(tmp_path / "history.db")
+    assert len(rows) == 1, "the key is the identity; a stage change upserts"
+    assert rows[0]["stage"] == "downloaded"
+    assert rows[0]["first_seen_at"] == 500.0
+
+
+def test_noting_a_reference_is_a_no_op_when_the_database_is_unavailable():
+    """Degrades to `seen_at`, which reads as "the window just started", so the
+    caller waits instead of acting — the safe direction."""
+    history.close()
+
+    assert history.note_auto_copy_seen("radarr:abc", "downloaded", seen_at=42.0) == 42.0
+
+
+def test_a_keyless_reference_returns_the_given_instant():
+    history.close()
+
+    assert history.note_auto_copy_seen("", "downloaded", seen_at=7.0) == 7.0
+
+
+# The exact tables a v3 database carried, before auto_copy_seen.
+V3_SCHEMA = V2_SCHEMA + """
+CREATE TABLE own_grabs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    source      TEXT NOT NULL,
+    movie_id    INTEGER,
+    episode_id  INTEGER,
+    series_id   INTEGER,
+    guid        TEXT,
+    indexer_id  INTEGER,
+    grabbed_at  REAL NOT NULL
+);
+CREATE INDEX idx_own_grabs_title ON own_grabs (source, movie_id, episode_id);
+"""
+
+
+def test_init_db_migrates_a_v3_database_without_an_alter(tmp_path):
+    """v4 adds `auto_copy_seen`. As with v1->v2 and v2->v3, `executescript` runs
+    the whole schema with CREATE TABLE IF NOT EXISTS on every start, so a real
+    v3 file gains the table with no ALTER; user_version only records it."""
+    path = tmp_path / "history.db"
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(V3_SCHEMA)
+        conn.execute(
+            "INSERT INTO operations (id, type, name, src, dst, status, created_at) "
+            "VALUES ('legacy', 'copy', 'old.mkv', '/s', '/d', 'done', 1000.0)"
+        )
+        conn.execute(
+            "INSERT INTO auto_copy_handled (key, source, decision, handled_at) "
+            "VALUES ('k', 'radarr', 'copy', 1000.0)"
+        )
+        conn.execute(
+            "INSERT INTO own_grabs (source, movie_id, guid, indexer_id, grabbed_at) "
+            "VALUES ('radarr', 855, 'g', 1, 1234.0)"
+        )
+        conn.execute("PRAGMA user_version=3")
+        conn.commit()
+    finally:
+        conn.close()
+
+    history.init_db(path)
+    try:
+        # The new table exists and is usable on the migrated file.
+        assert history.note_auto_copy_seen("radarr:abc", "downloaded", seen_at=99.0) == 99.0
+        rows = _seen_rows(path)
+        assert len(rows) == 1
+        assert rows[0]["first_seen_at"] == 99.0
+        # The earlier tables and their rows survived.
+        assert history.is_auto_copy_handled("k") is True
+        assert [r["movie_id"] for r in history.list_own_grabs(0)] == [855]
+        assert [r["id"] for r in history.recent_operations()] == ["legacy"]
+    finally:
+        history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+    assert version == 4

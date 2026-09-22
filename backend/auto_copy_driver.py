@@ -34,6 +34,7 @@ from history import (
     is_auto_copy_handled,
     list_own_grabs,
     mark_auto_copy,
+    note_auto_copy_seen,
 )
 from traces import build_traces
 
@@ -65,6 +66,24 @@ _ACTIONABLE_STAGES = frozenset({"import_blocked", "downloaded"})
 #: block unrelated downloads; these traces are skipped without reading or
 #: writing a marker.
 _UNIDENTIFIED_SUFFIX = f":title:{UNIDENTIFIED}"
+
+
+def _grace_relevant(stage: str | None, trace: dict) -> bool:
+    """Whether the grace window can decide this trace's outcome.
+
+    Only two branches of the policy call the grace gate: `downloaded` and
+    `import_blocked` WITHOUT an import warning. Every other stage resolves before
+    it (a warning copies at once; an in-progress or failed download resolves
+    earlier), so persisting a first-seen reference for them would only fill the
+    table with rows nothing ever reads.
+    """
+    if stage == "downloaded":
+        return True
+    if stage == "import_blocked":
+        queue = trace.get("queue") or {}
+        return queue.get("status") != "warning"
+    return False
+
 
 #: One sweep at a time. Two concurrent triggers must not both dispatch: the
 #: marker protects against a later sweep, not against a second copy racing the
@@ -277,16 +296,24 @@ async def _handle_trace(
     if is_own and not already and stage in _ACTIONABLE_STAGES:
         has_file = await _arr_probe(session, trace)
 
+    # The reference the grace window is measured from. The trace does not carry
+    # the instant the current condition was first observed, and its only
+    # timestamp — the grab `date` — predates the download, so deriving it from
+    # the trace would start the clock before completion and race the arr (exactly
+    # what T3 warned against). We persist our own first-sighting instead. Only
+    # the grace-gated stages need it, and only when this trace is actually ours
+    # and not yet handled: for anything else the policy resolves before the gate,
+    # so a row would be pure noise. `note_auto_copy_seen` returns the STORED
+    # instant when the key was already seen in the same stage, which is what lets
+    # a later sweep observe the window elapse.
+    since = None
+    if is_own and not already and _grace_relevant(stage, trace):
+        since = note_auto_copy_seen(key, stage)
+
     decision = decide_copy(
         trace,
         now=now,
-        # `since` is deliberately None. The trace does not carry the instant the
-        # current condition was first observed, and its only timestamp — the
-        # grab `date` — predates the download, so measuring the grace from it
-        # would start the clock before completion and race the arr (exactly what
-        # T3 warned against). The policy refuses to guess and waits; the
-        # immediate cases (an import warning) do not need a time reference.
-        since=None,
+        since=since,
         grace_seconds=grace_seconds,
         already_handled=already,
         is_own_grab=is_own,
