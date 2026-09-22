@@ -85,3 +85,63 @@ def test_an_unexpected_driver_error_returns_json_not_a_500():
     body = resp.json()
     assert body["ok"] is False
     assert body["errors"]
+
+
+# ── The history endpoint ─────────────────────────────────────────────────────
+
+
+def test_the_history_endpoint_returns_the_items():
+    items = [
+        {
+            "id": 1,
+            "key": "radarr:abc",
+            "source": "radarr",
+            "title": "Your Name.",
+            "decision": "copied",
+            "reason": "el arr no lo importó en 30 min",
+            "at": 1234.0,
+        }
+    ]
+    with patch.object(route_module, "recent_auto_copy_log", return_value=items), patch.object(
+        route_module, "store_available", return_value=True
+    ):
+        resp = client.get("/api/auto-copy/history")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"items": items}
+
+
+def test_the_history_endpoint_passes_the_limit_through():
+    with patch.object(
+        route_module, "recent_auto_copy_log", return_value=[]
+    ) as reader, patch.object(route_module, "store_available", return_value=True):
+        assert client.get("/api/auto-copy/history?limit=3").status_code == 200
+
+    reader.assert_called_once_with(limit=3)
+
+
+def test_the_history_endpoint_requires_auth():
+    import routes.status as status_module
+
+    with patch("settings.auth_required", return_value=True), patch.object(
+        status_module, "credentials"
+    ) as creds:
+        creds.verify_api_key.return_value = False
+        unauth = TestClient(app, raise_server_exceptions=False)
+        resp = unauth.get("/api/auto-copy/history")
+
+    assert resp.status_code == 401
+
+
+def test_an_unavailable_store_is_not_a_500():
+    """The route contract is JSON: a store that is down is an empty list with a
+    reason, not a 500."""
+    history.close()
+
+    resp = client.get("/api/auto-copy/history")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["items"] == []
+    assert body["error"], "the UI must be able to tell 'no history' from 'unreadable'"
+
