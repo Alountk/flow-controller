@@ -10,13 +10,14 @@ proposal/action distinction end to end.
 """
 
 import asyncio
+import time
 from datetime import datetime, timezone
 
 import pytest
 
 import auto_copy_driver as driver
 import history
-from auto_copy import COPY, SKIP, WAIT, auto_copy_key
+from auto_copy import COPY, DEFAULT_GRACE_SECONDS, SKIP, WAIT, auto_copy_key
 
 GRAB_AT = 10_000.0
 
@@ -75,6 +76,7 @@ class _Calls:
         self.mark: list[dict] = []
         self.dispatch: list[dict] = []
         self.order: list[tuple[str, str]] = []
+        self.seen: list[dict] = []
 
 
 def _install(
@@ -88,8 +90,16 @@ def _install(
     dispatch_exc=None,
     build_exc=None,
     real_marker=False,
+    seen=None,
 ) -> _Calls:
-    """Stub every I/O boundary the driver crosses."""
+    """Stub every I/O boundary the driver crosses.
+
+    `seen` controls what `note_auto_copy_seen` returns: `None` (default) means
+    "now" so the grace window is still pending; a number is returned as-is (an
+    ancient value makes the window already elapsed); a callable is invoked with
+    (key, stage). `real_marker=True` leaves the marker AND the first-seen store
+    real, for the end-to-end tests that use a real history database.
+    """
     calls = _Calls()
 
     async def build_traces(session):
@@ -139,8 +149,17 @@ def _install(
             )
             calls.order.append(("mark", decision))
 
+        def note_seen(key, stage, *, seen_at=None):
+            calls.seen.append({"key": key, "stage": stage})
+            if seen is None:
+                return time.time()
+            if callable(seen):
+                return seen(key, stage)
+            return seen
+
         monkeypatch.setattr(driver, "is_auto_copy_handled", is_handled)
         monkeypatch.setattr(driver, "mark_auto_copy", mark)
+        monkeypatch.setattr(driver, "note_auto_copy_seen", note_seen)
 
     return calls
 
@@ -345,6 +364,59 @@ def test_waiting_and_skipping_write_nothing(monkeypatch):
     assert calls.has_file == 0, "no actionable stage means no probe"
 
 
+# ── The persisted first-seen reference (T10) ─────────────────────────────────
+#
+# T6 passed `since=None` because the trace carries no instant for the observed
+# condition, so the grace window could never fire. The driver now persists that
+# reference itself, per key and stage.
+
+
+def test_the_grace_reference_comes_from_the_store(monkeypatch):
+    """An expired window copies only because `since` came from the store; with
+    the T6 hard-coded `None` the policy would have waited instead."""
+    trace = _trace(stage="downloaded", queue_status="ok")
+    calls = _install(
+        monkeypatch,
+        traces=[trace],
+        own_grabs=[_own_grab()],
+        has_file=False,
+        seen=0,  # an ancient reference: the window is already over
+    )
+
+    summary = _sweep(safe_mode=False)
+
+    assert summary["entries"][0]["action"] == "copied"
+    assert calls.seen == [{"key": auto_copy_key(trace), "stage": "downloaded"}]
+
+
+def test_the_store_is_written_only_for_grace_relevant_stages(monkeypatch):
+    download = _trace(download_id="a" * 40, movie_id=855, stage="downloaded", queue_status="ok")
+    blocked = _trace(download_id="b" * 40, movie_id=856, stage="import_blocked", queue_status="ok")
+    warned = _trace(download_id="c" * 40, movie_id=857, stage="import_blocked", queue_status="warning")
+    downloading = _trace(download_id="d" * 40, movie_id=858, stage="downloading", queue_status="ok")
+    importing = _trace(download_id="e" * 40, movie_id=859, stage="importing", queue_status="ok")
+    failed = _trace(download_id="f" * 40, movie_id=860, stage="failed")
+    calls = _install(
+        monkeypatch,
+        traces=[download, blocked, warned, downloading, importing, failed],
+        own_grabs=[
+            _own_grab(855), _own_grab(856), _own_grab(857),
+            _own_grab(858), _own_grab(859), _own_grab(860),
+        ],
+        has_file=False,
+    )
+
+    _sweep(safe_mode=False)
+
+    written = {(row["key"], row["stage"]) for row in calls.seen}
+    assert written == {
+        (auto_copy_key(download), "downloaded"),
+        (auto_copy_key(blocked), "import_blocked"),
+    }, "only the stages the grace gate can decide earn a row"
+    assert auto_copy_key(downloading) not in {k for k, _ in written}
+    assert auto_copy_key(importing) not in {k for k, _ in written}
+
+
 # ── Concurrency and degradation ──────────────────────────────────────────────
 
 
@@ -475,3 +547,31 @@ def test_a_failed_dispatch_is_retried_on_the_next_sweep(monkeypatch, db):
     second = _sweep(safe_mode=False)
     assert second["entries"][0]["action"] == "failed"
     assert len(calls.dispatch) == 2, "a failed dispatch must stay retryable"
+
+
+def test_two_sweeps_past_the_window_copy(monkeypatch, db):
+    """The gap T6 left open, closed: the same stage observed across two sweeps.
+    The first persists the reference and waits; a later one, past the window,
+    finally copies — the grace window fired.
+
+    The reference is real here, so the first sweep uses the real clock; only the
+    final sweep's `now` is pushed past the window."""
+    calls = _install(
+        monkeypatch,
+        traces=[_trace(stage="downloaded", queue_status="ok")],
+        own_grabs=[_own_grab()],
+        has_file=False,
+        real_marker=True,
+    )
+
+    first = _sweep(safe_mode=False)
+    assert first["entries"][0]["decision"] == WAIT
+
+    # A second sighting inside the window must NOT reset the reference.
+    second = _sweep(safe_mode=False)
+    assert second["entries"][0]["decision"] == WAIT
+    assert calls.dispatch == []
+
+    third = _sweep(safe_mode=False, now=time.time() + DEFAULT_GRACE_SECONDS + 1)
+    assert third["entries"][0]["action"] == "copied"
+    assert len(calls.dispatch) == 1

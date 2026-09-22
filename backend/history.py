@@ -24,7 +24,7 @@ from pathlib import Path
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -84,6 +84,25 @@ CREATE TABLE IF NOT EXISTS own_grabs (
     grabbed_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_own_grabs_title ON own_grabs (source, movie_id, episode_id);
+-- v4: the "first time we saw this candidate in this condition" reference. Same
+-- migration discipline as v2/v3: `CREATE TABLE IF NOT EXISTS` inside the script
+-- `init_db` runs on every start, so a real v3 file gains the table with no ALTER
+-- and the version bump only records it.
+--
+-- Why it exists: the sweep's grace window ("the download finished and the arr
+-- never noticed") cannot be measured from the trace. Its only timestamp is the
+-- grab `date`, which PRECEDES the download, so starting the clock there would
+-- race the arr (D2). The reference has to be persisted the first time we observe
+-- the condition. Ours, unlike the arr's, starts where it should.
+--
+-- `stage` is part of the identity, not decoration: a download that moves from
+-- `downloading` to `downloaded` is a NEW condition, and its window must start at
+-- that transition. `note_auto_copy_seen` resets `first_seen_at` when it changes.
+CREATE TABLE IF NOT EXISTS auto_copy_seen (
+    key           TEXT PRIMARY KEY,
+    stage         TEXT NOT NULL,
+    first_seen_at REAL NOT NULL
+);
 """
 
 # Columns mirrored from the in-memory op. Kept explicit so an unexpected key
@@ -368,6 +387,65 @@ def record_own_grab(
             # handler that has ALREADY grabbed successfully, so an escaping error
             # would turn a completed grab into an HTTP 500.
             log.warning("Could not record own grab (%s/%s): %s", source, guid, exc)
+
+
+# ── First-seen reference for the grace window (T10) ──────────────────────────
+#
+# The durable half of "wait N minutes before acting". The sweep cannot derive
+# this instant from the trace (its `date` is the grab, which precedes the
+# download), so the reference is persisted here the first time a candidate is
+# seen in a given condition. See the schema comment on `auto_copy_seen`.
+
+
+def note_auto_copy_seen(
+    key: str, stage: str, *, seen_at: float | None = None
+) -> float:
+    """Record and return the instant `key` was first seen in `stage`.
+
+    The return value is the reference the caller must measure the grace window
+    from, and its semantics are the whole point:
+
+      - new key            → store `seen_at` (default: now) and return it;
+      - same key, same stage → keep the stored instant and return THAT, so a
+        later sweep can still see that the window has elapsed;
+      - same key, different stage → the condition changed, so reset the instant
+        to `seen_at` and return it: a download moving from `downloading` to
+        `downloaded` starts its window at the transition, not when it was first
+        seen at all.
+
+    One atomic upsert, not a read then a write: two concurrent sweeps must not
+    both see "new" and reset each other's window. The single statement below
+    both stores and returns the effective value.
+
+    Degrades to `seen_at` when the store is unavailable. That reads as "the
+    window just started", so the caller waits instead of acting — the safe
+    direction, because acting on a missing reference would race the arr (D2).
+    """
+    when = time.time() if seen_at is None else seen_at
+    if not key:
+        return when
+    with _lock:
+        if _conn is None:
+            return when
+        try:
+            row = _conn.execute(
+                "INSERT INTO auto_copy_seen (key, stage, first_seen_at) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET "
+                "    first_seen_at = CASE "
+                "        WHEN auto_copy_seen.stage = excluded.stage "
+                "        THEN auto_copy_seen.first_seen_at "
+                "        ELSE excluded.first_seen_at "
+                "    END, "
+                "    stage = excluded.stage "
+                "RETURNING first_seen_at",
+                (key, stage, when),
+            ).fetchone()
+            _conn.commit()
+            return float(row[0])
+        except sqlite3.Error as exc:
+            log.warning("Could not note auto-copy first seen %s: %s", key, exc)
+            return when
 
 
 def mark_interrupted() -> int:
