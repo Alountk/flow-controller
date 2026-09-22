@@ -448,7 +448,12 @@ async def arr_movie_root_folder(session: aiohttp.ClientSession, service: dict, m
 async def arr_episode_metadata(
     session: aiohttp.ClientSession, service: dict, episode_id: int
 ) -> dict:
-    """Devuelve metadatos completos de un episodio: season_number, episode_number, title."""
+    """Full metadata for one episode: season, episode, title and series id.
+
+    `copy_engine` reads season_number/episode_number/title for its smart rename
+    and ignores the extra key; the calendar grab route reads `series_id` to
+    record which series a grabbed episode belongs to.
+    """
     headers = arr_headers(service["api_key"])
     try:
         async with session.get(
