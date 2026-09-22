@@ -84,6 +84,7 @@ Fuera:
 - [x] **T8** Extraer `utils/grabMark.ts` y usarlo en Faltantes sin cambiar su comportamiento
 - [x] **T9** Marca en las cards de "Todas" (película y serie) y del Calendario + tests
 - [x] **T10** Registrar la ampliación de alcance y su evidencia (este documento)
+- [x] **T11** Resolver el `series_id` en el path de escritura del grab del Calendario + tests de ida y vuelta (ruta → fila → mapa)
 
 ## Acceptance criteria
 
@@ -116,6 +117,9 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`). Checks fun
 - [x] T6-T9 implementados y verificados tras la **ampliación de alcance pedida por el usuario**
   (marca también en "Todas" y en el Calendario); T10 es este registro. La rama de la ampliación es
   `feat/marca-todas-calendario`, con base explícita en `origin/main` (no en un `main` local).
+- [x] T11 implementado y verificado: el path de escritura del grab resuelve y guarda el `series_id`,
+  así que la marca de serie de "Todas" ya puede encenderse en producción. Cierra el hueco que
+  registraban las notas honestas de T6-T9.
 
 ## Evidencia de implementación
 
@@ -182,6 +186,52 @@ Faltantes (`grabbedMark.test.tsx`) siguen pasando sin cambios.
 
 Los dos comandos de frontend se ejecutaron en pasos separados, nunca en paralelo.
 
+### Fix del `series_id` en el path de escritura (T11)
+
+**Commit:** `af123ef` — `fix(calendar): record the series id a grabbed episode belongs to`.
+**Tamaño:** **181 líneas cambiadas** (180 inserciones + 1 eliminación) en 3 archivos:
+`backend/clients.py` (7), `backend/routes/calendar.py` (47), `backend/tests_routes.py` (127). Por
+debajo del presupuesto (~400) en un solo slice.
+
+**Qué faltaba.** `own_grabs_latest_map` solo emite la clave `(source, "series", id)` si la fila
+lleva `series_id`, pero el **único** escritor de `own_grabs` — la ruta de grab del Calendario — no
+lo enviaba: `grep -n "series_id" backend/routes/calendar.py` no devolvía nada. En producción
+`series_id` era siempre NULL, la clave de serie no existía y las cards de serie de "Todas" no podían
+encenderse nunca. `arr_episode_metadata` ya devolvía `seriesId` (desde `b02d222`; solo faltaba
+documentarlo), así que el arreglo no necesitó tocar el cliente.
+
+**Qué se hizo.** No se añadió `seriesId` a los modelos de request ni se tocó el frontend: los items
+del Calendario no llevan id de serie, así que un valor enviado por el frontend habría dejado ese
+camino roto igual. El arr ya conoce la serie, así que se pregunta una vez, en el grab: la ruta lee
+`seriesId` tras un grab de episodio con éxito y lo pasa a `record_own_grab(..., series_id=...)`. La
+consulta va **dentro de la misma sesión** del grab (un GET al mismo arr; abrir otra sesión solo
+añadiría una conexión). Si la consulta falla, **degrada a `None`**: el grab se registra igual y la
+respuesta sigue siendo `ok` — una descarga que funcionó no puede parecer fallida por una consulta de
+seguimiento. Un grab de película pasa `None` y no emite clave de serie. La batch resuelve la serie
+**una vez por petición** (todos los guids apuntan al mismo título) y la reutiliza para cada guid con
+éxito.
+
+**Cobertura nueva (+4 backend, `tests_routes.py::TestGrabWritesSeriesId`):** ida y vuelta por la
+ruta (grab de episodio → fila con `series_id` real → `own_grabs_latest_map` emite la clave de
+serie); película sin clave de serie; lookup fallido que aun así registra y responde `ok`; y la batch
+registrando la serie por cada guid con éxito.
+
+**Verificación (resultado literal, estado final de la rama):**
+- `cd backend && python3 -m pytest -q` → `464 passed, 2 warnings in 57.32s` (antes: 460; +4 pruebas)
+- `cd backend && python3 -m pyflakes *.py routes/*.py` → sin salida, exit 0
+- `cd backend && python3 -m vulture` → sin salida, exit 0 (sin entradas nuevas en el whitelist)
+- Frontend **no tocado** por este fix: no se ejecutaron sus checks.
+
+**La lección (mismo modo de fallo que el bug de `altTitles`).** El lector estaba cubierto a nivel de
+mapa (`tests_history.py`) y de endpoint (`tests_routes.py`), pero **cada test sembraba la fila con
+`record_own_grab`** — escribía él mismo el `series_id` que el path real nunca escribía. El test
+**estaba de acuerdo con el bug**: verde mientras producción tenía `series_id` siempre NULL,
+exactamente el patrón del fixture de `altTitles` que declaraba el nombre equivocado que el código
+leía. Los tests nuevos atraviesan la ruta y **después** leen el mapa, así que la marca de serie solo
+puede ser un hecho de ida y vuelta. Comprobado en rojo: con la ruta importando el lookup pero sin
+guardar su resultado, el test de ida y vuelta falla en `assert rows[0]["series_id"] == 99`; con el
+fix, pasa.
+
 ### Decisiones que el plan no fijaba
 
 - **Ventana de lookback** (`WANTED_GRAB_LOOKBACK = 90 días`, en `routes/wanted.py`). Compromiso:
@@ -213,16 +263,13 @@ Los dos comandos de frontend se ejecutaron en pasos separados, nunca en paralelo
 
 - **Las marcas empiezan vacías.** `own_grabs` solo escribe desde que T5 esté desplegado; las
   descargas pedidas antes no aparecerán marcadas y no se rellenan hacia atrás (fuera de alcance).
-- **La marca de serie depende de que la fila guarde `series_id`, y hoy no se escribe.** El lector
-  emite la clave de serie solo cuando la fila trae `series_id` (verificado). Pero la **única** ruta
-  que llama a `record_own_grab` es el grab del Calendario (`routes/calendar.py`), y **no envía
-  `series_id`**: `CalendarGrabRequest` solo lleva `movieId` y `episodeId`, y el item del Calendario
-  no incluye el id de serie. Consecuencia: la marca de serie de "Todas" está **cubierta por tests a
-  nivel de mapa (`tests_history.py`) y de endpoint (`tests_routes.py`, sembrando la fila
-  directamente)**, pero **no se encenderá en producción** hasta que el path de escritura lleve el
-  id de serie (añadir `seriesId` al modelo de grab, propagarlo en el frontend y, si acaso, exponer
-  `seriesId` en `fetch_sonarr_calendar`). Se deja fuera de esta ampliación por alcance y se documenta
-  para no dar por hecho algo que no lo está. Es el hueco más importante que queda abierto.
+- **La marca de serie se cerró arreglando el path de escritura, no el frontend.** El hueco que
+  dejaron T6-T9 — `series_id` siempre NULL porque el único escritor, el grab del Calendario, no lo
+  enviaba — está resuelto en T11: la ruta resuelve el id de serie preguntándoselo al arr en el
+  momento del grab y lo guarda. No se añadió `seriesId` a los modelos de request ni se tocó el
+  frontend, porque los items del Calendario no llevan id de serie y un valor enviado desde ahí
+  habría dejado ese camino roto. Detalle y evidencia en "Fix del `series_id` en el path de
+  escritura (T11)".
 - **`grabbed_at` siempre está presente** en `/api/wanted`, `/api/wanted/all`,
   `/api/wanted/series/all` y `/api/calendar` (`None` cuando no hay marca), para que el frontend no
   tenga que distinguir "ausente" de "desconocido".
@@ -233,5 +280,5 @@ Los dos comandos de frontend se ejecutaron en pasos separados, nunca en paralelo
 
 Cerrar la tarea. Los commits de la ampliación están en `feat/marca-todas-calendario` (base
 `origin/main`); el padre decide el troceado en PRs (cada commit es un slice por debajo de 400
-líneas). No se ha hecho push ni PR. Queda abierto, fuera de alcance, el `series_id` del path de
-escritura del grab descrito arriba.
+líneas). No se ha hecho push ni PR. El hueco del `series_id` en el path de escritura del grab quedó
+cerrado en T11 (`af123ef`, 181 líneas); ya no queda ningún hueco conocido abierto.
