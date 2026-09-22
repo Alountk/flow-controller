@@ -95,6 +95,20 @@
   border-color: var(--border);
 }
 
+/* A calendar item the app already asked to download. Its OWN class, not
+   MissingContent's `.wanted-grabbed`: that stylesheet belongs to another
+   component and only happens to be loaded globally. */
+.calendar-card.status-grabbed {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, var(--surface));
+}
+
+.calendar-grabbed {
+  color: var(--warn);
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .calendar-poster {
   width: 40px;
   height: 60px;
