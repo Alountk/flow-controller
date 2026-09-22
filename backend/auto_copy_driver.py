@@ -32,7 +32,9 @@ from copy_engine import do_action
 from history import (
     DECISION_ACTIONED,
     is_auto_copy_handled,
+    latest_auto_copy_decisions,
     list_own_grabs,
+    log_auto_copy_decision,
     mark_auto_copy,
     note_auto_copy_seen,
 )
@@ -224,6 +226,9 @@ async def _run_sweep(
     # An unavailable registry degrades to []: nothing is provably ours, so the
     # policy skips instead of copying on a guess.
     own_grabs = list_own_grabs(current - OWN_GRAB_LOOKBACK_SECONDS, limit=OWN_GRAB_LIMIT)
+    # The last logged outcome per key, read in ONE grouped query for the whole
+    # sweep. The transition log below only appends when this differs.
+    last_outcomes = latest_auto_copy_decisions()
 
     for trace in traces:
         try:
@@ -249,6 +254,7 @@ async def _run_sweep(
             counts["proposed"] += 1
         elif entry["action"] == "failed":
             counts["failed"] += 1
+        _log_outcome(entry, last_outcomes)
 
     return _summary(
         ok=True,
@@ -259,6 +265,37 @@ async def _run_sweep(
         errors=errors,
         detail="",
         started_at=int(started),
+    )
+
+
+def _log_outcome(entry: dict, last_outcomes: dict[str, str]) -> None:
+    """Append one history row when this trace's outcome changed.
+
+    Called from the ONE place the sweep computes every trace's outcome (the loop
+    in ``_run_sweep``), so no policy branch can forget to record something. The
+    log is history, not state: it claims nothing and blocks nothing, so unlike
+    the marker it also records ``wait`` and ``skip`` — they are the "why not"
+    answer this log exists to give.
+
+    The shared sentinel key is never logged. Every unidentified trace shares it,
+    so a row for it would describe no particular download. ``last_outcomes``
+    comes from one grouped read for the whole sweep, so the transition check is
+    not one query per trace.
+    """
+    key = entry.get("key") or ""
+    if not key or key.endswith(_UNIDENTIFIED_SUFFIX):
+        return
+    # The action when there is one, the policy's decision otherwise. One value,
+    # so the UI needs no second lookup.
+    outcome = entry.get("action") or entry.get("decision")
+    if not outcome or last_outcomes.get(key) == outcome:
+        return
+    log_auto_copy_decision(
+        key,
+        source=entry.get("source") or "",
+        title=entry.get("title"),
+        decision=outcome,
+        reason=entry.get("reason"),
     )
 
 

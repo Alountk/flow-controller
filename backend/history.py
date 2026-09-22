@@ -24,7 +24,7 @@ from pathlib import Path
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -103,6 +103,39 @@ CREATE TABLE IF NOT EXISTS auto_copy_seen (
     stage         TEXT NOT NULL,
     first_seen_at REAL NOT NULL
 );
+-- v5: append-only log of auto-copy DECISION TRANSITIONS — one row each time a
+-- candidate's outcome CHANGES. Same migration discipline as v2/v3/v4:
+-- `CREATE TABLE IF NOT EXISTS` inside the script `init_db` runs on every start,
+-- so a real v4 file gains the table with no ALTER and the version bump only
+-- records it.
+--
+-- Why a transition log and not a row per sweep: a sweep can run every 15
+-- minutes, so a row per sweep would bury the interesting line under thousands
+-- of identical "wait" rows. One row per change keeps the history readable.
+--
+-- Why `wait` and `skip` are logged too: they are the answer to "why did it NOT
+-- copy this?", which is the most common outcome and the least explained. This
+-- does NOT contradict "`WAIT` writes nothing": that rule governs the handled
+-- MARKER (`auto_copy_handled`), which exists to stop a second copy. A log row
+-- claims nothing and blocks nothing — it only records that the outcome was
+-- observed to be `wait`/`skip` at that instant. The marker and the log have
+-- different jobs and the difference is deliberate.
+--
+-- The stored `decision` is the sweep's OUTCOME, not the raw policy verdict: the
+-- action when there is one (`copied`/`proposed`/`failed`) and the policy's
+-- decision otherwise (`wait`/`skip`). One field, so the UI needs no second
+-- lookup — and the `proposed` -> `copied` transition (safe mode turned off) is
+-- exactly the kind of change worth a row.
+CREATE TABLE IF NOT EXISTS auto_copy_log (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    key       TEXT NOT NULL,
+    source    TEXT,
+    title     TEXT,
+    decision  TEXT NOT NULL,
+    reason    TEXT,
+    at        REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auto_copy_log_newest ON auto_copy_log (at DESC, id DESC);
 """
 
 # Columns mirrored from the in-memory op. Kept explicit so an unexpected key
@@ -510,6 +543,117 @@ def note_auto_copy_seen(
         except sqlite3.Error as exc:
             log.warning("Could not note auto-copy first seen %s: %s", key, exc)
             return when
+
+
+# ── Decision-transition log (T7) ─────────────────────────────────────────────
+#
+# The append-only counterpart of the marker above. The marker answers "is the
+# work done?" and is state; this log answers "what changed, and why?" and is
+# history. Same degrade-not-raise discipline as the rest of the module: a store
+# failure must never take down a sweep nor turn the endpoint into a 500.
+
+
+def latest_auto_copy_decisions() -> dict[str, str]:
+    """The most recent logged outcome per key, in ONE grouped query for all keys.
+
+    The sweep reads this once per run, so the transition check costs one query
+    per sweep instead of one per trace. Keys with no row yet are simply absent,
+    which the caller reads as "no previous outcome".
+
+    Degrades to ``{}`` when the store is unavailable: the caller then treats
+    every candidate as new, and because the writer is a no-op too, nothing is
+    silently lost by the missing map.
+    """
+    with _lock:
+        if _conn is None:
+            return {}
+        try:
+            rows = _conn.execute(
+                "SELECT key, decision FROM auto_copy_log "
+                "WHERE id IN (SELECT MAX(id) FROM auto_copy_log GROUP BY key)"
+            ).fetchall()
+            return {row["key"]: row["decision"] for row in rows}
+        except sqlite3.Error as exc:
+            log.warning("Could not read last auto-copy decisions: %s", exc)
+            return {}
+
+
+def log_auto_copy_decision(
+    key: str,
+    *,
+    source: str,
+    title: str | None = None,
+    decision: str,
+    reason: str | None = None,
+) -> None:
+    """Append one row when this key's last logged decision differs.
+
+    An identical repeated outcome appends NOTHING. Without that rule a sweep
+    every 15 minutes would bury the interesting transition under thousands of
+    identical rows — the whole reason this is a transition log and not a row per
+    sweep.
+
+    One statement, not a read followed by a write: the "last decision per key"
+    is a grouped subquery inside the INSERT, so two writers cannot both observe
+    the old value and both append. The subquery covers all keys — the same shape
+    the sweep's batched read uses — while the writer keeps its own check so its
+    contract holds for any caller.
+    """
+    if not key:
+        return
+    with _lock:
+        if _conn is None:
+            return
+        try:
+            _conn.execute(
+                "INSERT INTO auto_copy_log (key, source, title, decision, reason, at) "
+                "SELECT ?, ?, ?, ?, ?, ? "
+                "WHERE NOT EXISTS ("
+                "    SELECT 1 FROM ("
+                "        SELECT key, decision FROM auto_copy_log "
+                "        WHERE id IN (SELECT MAX(id) FROM auto_copy_log GROUP BY key)"
+                "    ) AS latest "
+                "    WHERE latest.key = ? AND latest.decision = ?"
+                ")",
+                (key, source, title, decision, reason, time.time(), key, decision),
+            )
+            _conn.commit()
+        except sqlite3.Error as exc:
+            log.warning("Could not log auto-copy decision %s: %s", key, exc)
+
+
+def recent_auto_copy_log(limit: int = 20) -> list[dict]:
+    """The log's newest-first rows as plain dicts.
+
+    ``limit`` is clamped to a sane range: a negative value means "no limit" in
+    SQLite, so an unchecked query parameter could dump the whole log. Degrades
+    to ``[]`` when the store is unavailable; the endpoint reports that honestly
+    instead of turning it into a 500.
+    """
+    limit = max(1, min(int(limit), 200))
+    with _lock:
+        if _conn is None:
+            return []
+        try:
+            rows = _conn.execute(
+                "SELECT * FROM auto_copy_log ORDER BY at DESC, id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+        except sqlite3.Error as exc:
+            log.warning("Could not read auto-copy log: %s", exc)
+            return []
+
+
+def store_available() -> bool:
+    """Whether the history database is open.
+
+    The reader's ``[]`` cannot tell "nothing logged yet" from "store down", and
+    the endpoint must report those differently, so it asks this instead of
+    guessing from an empty list.
+    """
+    with _lock:
+        return _conn is not None
 
 
 def mark_interrupted() -> int:
