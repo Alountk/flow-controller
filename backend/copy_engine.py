@@ -1,4 +1,5 @@
 import asyncio
+import errno
 import logging
 import os
 import tempfile
@@ -41,6 +42,23 @@ def cleanup_tasks():
 
 
 def copy_file_chunked(src: Path, dst: Path, task_id: str | None = None, total_bytes: int = 0, copied_bytes: int = 0) -> int:
+    # A hardlink is instant, costs no extra space and keeps the download seeding
+    # from the same inode, so try it before streaming any bytes. Only the
+    # filesystem decides: same device links, a different one raises EXDEV.
+    try:
+        os.link(src, dst)
+        return src.stat().st_size
+    except OSError as exc:
+        if exc.errno == errno.EXDEV:
+            # Expected: source and destination live on different filesystems.
+            log.debug("copy_file_chunked: %s and %s are on different filesystems, copying", src, dst)
+        else:
+            log.warning(
+                "copy_file_chunked: hardlink failed (errno %s %s) for %s, falling back to copy",
+                exc.errno,
+                errno.errorcode.get(exc.errno, "unknown"),
+                src,
+            )
     written = 0
     tmp_path = None
     try:

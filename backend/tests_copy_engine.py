@@ -1,9 +1,11 @@
-"""Tests for the copy engine's recursive folder copy.
+"""Tests for the copy engine's recursive copy and hardlink behaviour.
 
-A folder payload used to lose every subfolder: only the first level was copied
-and it was flattened into the destination root. These tests pin the fixed
-behaviour — full tree mirrored, relative structure preserved, no overwrites.
+These cover the two defects fixed in the T1/T2 slice: a folder payload used to
+lose every subfolder, and every byte was copied even when a hardlink was free.
 """
+import errno
+import os
+
 from copy_engine import copy_files_to_root, copy_tasks
 
 
@@ -61,6 +63,46 @@ class TestRecursiveStructurePreserved:
             assert task["copied_bytes"] == task["total_bytes"] == 4
         finally:
             del copy_tasks._tasks[task_id]
+
+
+class TestHardlinkBeforeCopy:
+    def test_same_filesystem_creates_a_hardlink(self, tmp_path):
+        src = tmp_path / "release"
+        src.mkdir()
+        src_file = src / "movie.mkv"
+        src_file.write_bytes(b"movie bytes")
+
+        dst = tmp_path / "library"
+        result = copy_files_to_root(str(src), str(dst), is_host_path=True)
+
+        assert result["ok"] is True
+        dst_file = dst / "movie.mkv"
+        assert dst_file.exists()
+        # Same inode and nlink 2 prove a link, not a plain copy.
+        assert os.stat(dst_file).st_ino == os.stat(src_file).st_ino
+        assert os.stat(dst_file).st_nlink == 2
+
+    def test_exdev_falls_back_to_a_real_copy(self, tmp_path, monkeypatch):
+        def _raise_exdev(src, dst):
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+        monkeypatch.setattr(os, "link", _raise_exdev)
+
+        src = tmp_path / "release"
+        src.mkdir()
+        (src / "movie.mkv").write_bytes(b"movie bytes")
+
+        dst = tmp_path / "library"
+        result = copy_files_to_root(str(src), str(dst), is_host_path=True)
+
+        assert result["ok"] is True
+        src_file = src / "movie.mkv"
+        dst_file = dst / "movie.mkv"
+        assert dst_file.exists()
+        assert dst_file.read_bytes() == b"movie bytes"
+        assert src_file.exists()
+        # The fallback copied bytes, so the inodes differ.
+        assert os.stat(dst_file).st_ino != os.stat(src_file).st_ino
 
 
 class TestSingleFileSmartName:
