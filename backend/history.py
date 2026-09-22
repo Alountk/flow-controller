@@ -198,12 +198,30 @@ def recent_operations(limit: int = 10, offset: int = 0, status: str | None = Non
 
 # ── Auto-copy idempotency markers ────────────────────────────────────────────
 #
-# One row per candidate the app decided to copy. The key is `auto_copy_key`'s
-# output. Without a durable record, the window between "copied" and "the arr
-# sees it" (a rescan/refresh is not instant) would make the next sweep copy the
-# same file again. The module that fails must never be the reason the app goes
-# down, so both functions follow the same degrade-not-raise discipline as the
-# rest of the module.
+# One row per candidate the app evaluated. The key is `auto_copy_key`'s output.
+# Without a durable record, the window between "copied" and "the arr sees it" (a
+# rescan/refresh is not instant) would make the next sweep copy the same file
+# again. The module that fails must never be the reason the app goes down, so
+# both functions follow the same degrade-not-raise discipline as the rest of the
+# module.
+
+#: Stored `decision` value that means the app ACTUALLY acted.
+#:
+#: `is_auto_copy_handled` counts only rows carrying this value. The marker's
+#: question is "did the app actually copy this?", not "is there a row?". A
+#: SAFE_MODE sweep records its proposal under a different decision, and a failed
+#: dispatch under another; neither may count as handled:
+#:
+#:   - If a proposal counted, turning safe mode off would make the next sweep
+#:     believe the work was done and silently never act — the proposal would
+#:     become a permanent lie.
+#:   - If a failed dispatch counted, one transient failure would forbid the
+#:     retry the operation needs.
+#:
+#: Before this, `is_auto_copy_handled` returned True for ANY row. The driver
+#: (T6) needs the distinction, so the semantics were corrected here. The driver
+#: owns the labels it writes for the other two outcomes.
+DECISION_ACTIONED = "copy"
 
 
 def mark_auto_copy(
@@ -214,7 +232,12 @@ def mark_auto_copy(
     decision: str,
     reason: str | None = None,
 ) -> None:
-    """Record that this key was handled. Re-marking is an upsert, not an error."""
+    """Record the outcome for this key. Re-marking is an upsert, not an error.
+
+    `decision` distinguishes an action taken (`DECISION_ACTIONED`) from a
+    proposal made under safe mode (`DECISION_PROPOSED`) or a failed dispatch
+    (`DECISION_FAILED`); only the first counts as handled when read back.
+    """
     if not key:
         return
     with _lock:
@@ -239,12 +262,16 @@ def mark_auto_copy(
 
 
 def is_auto_copy_handled(key: str) -> bool:
-    """Whether a marker exists for this key.
+    """Whether an ACTIONED marker exists for this key.
+
+    Only a row recorded as `DECISION_ACTIONED` counts. A SAFE_MODE proposal or
+    a failed dispatch must not read as handled, or the earlier sweep's intent
+    would suppress the later copy that is actually due — exactly the failure the
+    marker exists to prevent.
 
     Degrades to False when the store is unreadable: the honest reading is "not
     handled", whose worst case is a repeated copy. Reporting True would silently
-    skip a copy that is actually due, which is the failure this marker exists to
-    prevent.
+    skip a copy that is actually due.
     """
     if not key:
         return False
@@ -253,7 +280,8 @@ def is_auto_copy_handled(key: str) -> bool:
             return False
         try:
             row = _conn.execute(
-                "SELECT 1 FROM auto_copy_handled WHERE key = ?", (key,)
+                "SELECT 1 FROM auto_copy_handled WHERE key = ? AND decision = ?",
+                (key, DECISION_ACTIONED),
             ).fetchone()
             return row is not None
         except sqlite3.Error as exc:
