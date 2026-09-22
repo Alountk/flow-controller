@@ -804,3 +804,53 @@ def test_init_db_migrates_a_v3_database_without_an_alter(tmp_path):
     finally:
         conn.close()
     assert version == 4
+
+
+# ── Grouped own-grab marks for Faltantes ─────────────────────────────────────
+#
+# The Faltantes cards need one instant per title, not the raw rows. A LIMIT here
+# would drop marks silently, so the grouping is done in SQL and capped only by
+# the time window.
+
+
+def test_the_latest_grab_wins_per_title(db):
+    history.record_own_grab("radarr", movie_id=11, grabbed_at=100.0)
+    history.record_own_grab("radarr", movie_id=11, grabbed_at=300.0)
+
+    marks = history.own_grabs_latest_map(0)
+
+    assert marks == {("radarr", "movie", 11): 300.0}
+
+
+def test_a_movie_and_an_episode_with_the_same_id_do_not_collide(db):
+    """The kind is in the key precisely so this cannot merge into one entry."""
+    history.record_own_grab("radarr", movie_id=5, grabbed_at=100.0)
+    history.record_own_grab("radarr", episode_id=5, series_id=1, grabbed_at=200.0)
+
+    marks = history.own_grabs_latest_map(0)
+
+    assert marks[("radarr", "movie", 5)] == 100.0
+    assert marks[("radarr", "episode", 5)] == 200.0
+
+
+def test_grabs_before_since_are_excluded(db):
+    history.record_own_grab("radarr", movie_id=1, grabbed_at=100.0)
+    history.record_own_grab("radarr", movie_id=2, grabbed_at=300.0)
+
+    marks = history.own_grabs_latest_map(200.0)
+
+    assert ("radarr", "movie", 1) not in marks
+    assert marks[("radarr", "movie", 2)] == 300.0
+
+
+def test_a_grab_without_a_title_id_is_skipped(db):
+    history.record_own_grab("radarr", guid="orphan-grab", grabbed_at=100.0)
+
+    assert history.own_grabs_latest_map(0) == {}
+
+
+def test_the_latest_map_is_empty_when_the_database_is_unavailable():
+    """It runs inside the Faltantes request: it must never take the page down."""
+    history.close()
+
+    assert history.own_grabs_latest_map(0) == {}

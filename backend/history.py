@@ -348,6 +348,53 @@ def list_own_grabs(since: float, limit: int = 200) -> list[dict]:
             return []
 
 
+def own_grabs_latest_map(since: float) -> dict[tuple[str, str, int], float]:
+    """Latest own-grab instant per title, for marking wanted items.
+
+    One query aggregates ``MAX(grabbed_at)`` per ``(source, movie_id,
+    episode_id)``. There is deliberately NO ``LIMIT``: the sibling reader caps at
+    200 rows, and applying a cap here would silently drop marks for every title
+    past it. A dropped mark reads as "never requested", which is a wrong answer
+    on screen, and a wrong answer is worse than a slower query. The result is
+    bounded by how many distinct titles were grabbed in the window, not by the
+    raw number of grabs.
+
+    Keys are ``(source, kind, id)`` with ``kind`` in ``{"movie", "episode"}``.
+    The kind is part of the key because a movie and an episode can carry the
+    same numeric id and must not collide. A row with neither id cannot be keyed
+    and is skipped.
+
+    Degrades to ``{}`` when the store is unavailable: the caller treats that as
+    "no marks", which is the safe direction — an unmarked card is the status quo
+    and never a claim that the title was not requested.
+    """
+    with _lock:
+        if _conn is None:
+            return {}
+        try:
+            rows = _conn.execute(
+                "SELECT source, movie_id, episode_id, MAX(grabbed_at) AS grabbed_at "
+                "FROM own_grabs WHERE grabbed_at >= ? "
+                "GROUP BY source, movie_id, episode_id",
+                (since,),
+            ).fetchall()
+        except sqlite3.Error as exc:
+            log.warning("Could not read own grab marks: %s", exc)
+            return {}
+
+    marks: dict[tuple[str, str, int], float] = {}
+    for row in rows:
+        source = row["source"]
+        # movie_id wins when both are set, matching how the app records a grab:
+        # a movie grab carries no episode. A row with neither id has nothing to
+        # key a mark to and is skipped.
+        if row["movie_id"] is not None:
+            marks[(source, "movie", int(row["movie_id"]))] = float(row["grabbed_at"])
+        elif row["episode_id"] is not None:
+            marks[(source, "episode", int(row["episode_id"]))] = float(row["grabbed_at"])
+    return marks
+
+
 def record_own_grab(
     source: str,
     *,
