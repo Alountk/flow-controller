@@ -161,7 +161,9 @@ fácil; recortar después de que haya movido algo mal, no.
       — ver la corrección de alcance en la evidencia: el "hash exacto" del enunciado es
       `auto_copy_key` de **T4**; T5 cubre el registro y el casamiento por (id del título + instante)
 - [x] **T6** Driver sobre las trazas existentes + respeto de `SAFE_MODE`
-- [ ] **T7** Fila de historial por disparo, con su motivo
+- [x] **T7** Log de transiciones de decisión, con su motivo — ver la corrección de alcance en la
+      evidencia: no es "una fila por disparo" sino una fila por **cambio** de resultado, y cubre
+      también `wait`/`skip`
 - [ ] **T8** Tests de la función pura (los tres resultados) y de la idempotencia
 - [ ] **T9** Verificación en vivo en el entorno real
 - [x] **T10** Referencia temporal persistida para que la ventana de gracia pueda dispararse
@@ -200,7 +202,11 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`). Checks fun
       explícito, la corrección de la semántica de la marca y la deuda de vulture saldada.
 - [x] **T10 implementado y verificado** (evidencia abajo): la referencia temporal persistida que
       cierra el hueco que T6 dejó abierto, y el arreglo del guard `arr_has_file=None` que solo se
-      vuelve alcanzable con ella. **T7-T9** siguen sin empezar.
+      vuelve alcanzable con ella.
+- [x] **T7 implementado y verificado** (evidencia abajo): el log append-only de transiciones de
+      decisión (una fila por **cambio** de resultado, `wait`/`skip` incluidos), el cableado del
+      driver, el endpoint `GET /api/auto-copy/history` y el panel de historial en Trazabilidad.
+      **T8 y T9** siguen sin marcar.
 
 ## Verification evidence
 
@@ -714,21 +720,125 @@ Alcance verificado y no verificado:
 - **No verificado**: la ejecución contra el backend real (T9). Lo probado es el panel con un fetch
   stub, no un barrido real con `SAFE_MODE` en el entorno del usuario.
 
+### T7 — el log de transiciones de decisión (commits `197bfa9`, `32e7a8a`, `d4bf175`)
+
+Rama `feat/auto-copy-history`, **cortada explícitamente de `origin/main`** (`git fetch origin` +
+`git checkout -b feat/auto-copy-history origin/main`; `origin/main` = `ce0669d`, el merge de
+`feat/marca-todas-calendario`; se comprobó con `git ls-tree origin/main backend/auto_copy_driver.py`
+que el driver existe en esa base antes de empezar). No se ramificó de `main` local.
+
+**Refinamiento del plan, y por qué.** T7 decía "fila de historial por disparo, con su motivo". Dos
+problemas al tomarlo al pie de la letra:
+
+1. **`auto_copy_handled` hace upsert por clave**, así que contiene *estado* (lo que la marca sabe
+   ahora), no un historial: no puede dar una fila por disparo.
+2. Un log que solo registrara lo que la app **hace** no respondería a la pregunta que toda esta
+   feature plantea: *¿por qué no copió esto?* Un "esperar" silencioso es el resultado más común y el
+   menos explicado.
+
+Lo entregado es un **log append-only de transiciones de decisión**, por candidato: una fila cada vez
+que su resultado **cambia**, no una por barrido. Con un temporizador de 15 minutos, una fila por
+barrido enterraría la línea interesante bajo miles de "wait" idénticos. Se incluyen `wait` y `skip`
+porque sus transiciones **son** la respuesta al "por qué no".
+
+**"`WAIT` no escribe nada" no se contradice.** Esa regla gobierna la **marca de manejado**
+(`auto_copy_handled`), que existe para impedir una segunda copia. Una fila del log no afirma nada y
+no bloquea nada: solo deja constancia de que en ese instante el resultado observado era
+`wait`/`skip`. La marca y el log tienen trabajos distintos, y la diferencia es deliberada.
+
+**El valor registrado es el RESULTADO del barrido**, no el veredicto crudo de la política: la acción
+cuando la hay (`copied`/`proposed`/`failed`) y la decisión de la política en caso contrario
+(`wait`/`skip`). Un solo campo, así la UI no necesita una segunda consulta — y la transición
+`proposed` → `copied` al apagar el modo seguro queda visible, que es justo el tipo de cambio que
+merece una fila.
+
+**El driver registra desde UN solo sitio**, el bucle de `_run_sweep` donde ya se calcula el resultado
+de cada traza, para que ninguna rama de la política pueda olvidarse. El centinela compartido
+`UNIDENTIFIED` nunca llega al log: todas las trazas sin identificar comparten esa clave, así que una
+fila suya no describiría ninguna descarga concreta. El "último resultado por clave" se lee en **una
+sola consulta agrupada por barrido** (`latest_auto_copy_decisions`), no una por traza; el escritor
+(`log_auto_copy_decision`) mantiene su propia comprobación dentro del `INSERT` para que su contrato
+valga para cualquier llamante. `recent_auto_copy_log` lee más-nuevo-primero y acota el `limit` (el
+`LIMIT -1` de SQLite significa "sin límite"); `GET /api/auto-copy/history` va tras
+`Depends(verify_api_key)` y devuelve `{items, error?}`: un almacén no disponible es una lista vacía
+con el motivo, nunca un 500.
+
+Tres unidades de trabajo, cada una por debajo del presupuesto de ~400 salvo la primera, que queda
+~1% por encima:
+
+| Commit | Qué entrega | Líneas cambiadas (add+del) |
+| --- | --- | --- |
+| `197bfa9` | `feat(auto-copy)`: la tabla `auto_copy_log` (v5), `log_auto_copy_decision`, `latest_auto_copy_decisions`, `recent_auto_copy_log`, `store_available`, el cableado del driver, el endpoint y los tests del store | `403 insertions(+), 2 deletions(-)` → **405** |
+| `32e7a8a` | `test(auto-copy)`: los tests del cableado del driver y del endpoint | `197 insertions(+), 3 deletions(-)` → **200** |
+| `d4bf175` | `feat(trace)`: los tipos, el cliente, el panel de historial y sus tests | `363 insertions(+), 3 deletions(-)` → **366** |
+
+Total del slice: **971 líneas cambiadas**. `197bfa9` (405) queda marginalmente por encima del
+presupuesto de ~400; los otros dos, por debajo. No se recortaron tests ni comentarios para caber: el
+número real es el de arriba. El commit de documentación no cuenta aquí.
+
+Comandos ejecutados (literal, sin recortes):
+
+| Comando | Resultado literal |
+| --- | --- |
+| `cd backend && python3 -m pytest -q` | `489 passed, 2 warnings in 41.73s` (en `origin/main` eran `464 passed`; este slice añade **25 tests**) |
+| `cd backend && python3 -m pyflakes *.py routes/*.py` | sin salida, exit 0 |
+| `cd backend && python3 -m vulture` | sin salida, exit 0 |
+| `cd frontend && npm test` | `Test Files 31 passed (31)` / `Tests 209 passed (209)` (en `origin/main` eran `Test Files 30` / `205 passed`; este slice añade **4 tests**) |
+| `cd frontend && npm run build` | `tsc -b && vite build` → `✓ 132 modules transformed` / `✓ built in 1.79s` |
+
+Reparto de los 25 tests nuevos del backend: **24 explícitos** —13 en `backend/tests_history.py` (la
+regla de transición en las dos direcciones, la misma decisión con otro motivo que no añade fila,
+`wait`/`skip`, `proposed` → `copied`, el mapa de últimos resultados, el lector más-nuevo-primero, el
+límite y su acotado, la clave vacía, la degradación y la migración v4→v5 sobre una base v4 construida
+a mano; 7 en `backend/tests_auto_copy_driver.py` (una fila por resultado, la acción gana al veredicto,
+`dispatch_failed`, el centinela nunca llega, un resultado repetido no se registra, `proposed` →
+`copied` de extremo a extremo y dos barridos idénticos dejan una sola fila; y 4 en
+`backend/tests_auto_copy_routes.py` (items, pass-through del límite, auth y almacén no disponible sin
+500)— más **1 caso parametrizado** que aparece solo: el guard genérico
+`tests_routes.py::test_get_route_does_not_500_when_network_is_down` se parametriza sobre
+`_get_paths()`, que lee el OpenAPI, así que la ruta nueva suma un caso. También se actualizó la
+aserción de la migración v3 en `backend/tests_history.py` (`user_version == 4` →
+`history.SCHEMA_VERSION`), igual que T5 y T10 hicieron con v1 y v2.
+
+**No se añadió ninguna entrada a `backend/vulture_whitelist.py`.** `log_auto_copy_decision`,
+`latest_auto_copy_decisions` y `recent_auto_copy_log` tienen llamador de producción en el driver y la
+ruta; `store_available` lo tiene en la ruta. `auto_copy_log` es v5 y sigue la disciplina de migración
+de v2/v3/v4: `CREATE TABLE IF NOT EXISTS` dentro del `executescript` que `init_db` corre en cada
+arranque, así que un fichero v4 real gana la tabla sin ALTER y el bump solo lo registra.
+
+Alcance verificado y no verificado:
+
+- **Verificado**: el árbol final pasa pytest/pyflakes/vulture y `npm test`/`npm run build`. El
+  conteo sube en ambos lados: backend 464 → 489 y frontend 205 → 209.
+- **Verificado**: la regla de transición en las dos direcciones, con store real, tanto a nivel de
+  store como de extremo a extremo con el driver (`proposed` → `copied`; dos barridos idénticos dejan
+  una fila).
+- **Verificado**: la migración v4→v5 sobre una base v4 construida a mano; las tablas y filas
+  anteriores (`operations`, `auto_copy_handled`, `own_grabs`, `auto_copy_seen`) sobreviven.
+- **Verificado**: el panel de historial carga con la página, refresca tras un barrido, rotula cada
+  resultado en español y muestra un estado vacío honesto (o el motivo si el store no se puede leer).
+- **No verificado**: la ejecución contra el backend real (T9). Lo probado es el panel con un fetch
+  stub, no un historial real del entorno NFS/ZFS.
+- **No verificado / abierto**: la suite completa no se corrió en cada commit intermedio de forma
+  aislada; se corrió sobre el árbol final, y pyflakes/vulture (que no dependen de tests ni del
+  frontend) dan limpio en ese mismo árbol. `197bfa9` (405 líneas) queda marginalmente por encima del
+  presupuesto de ~400 por commit; el padre puede partirlo si lo prefiere.
+
 ## Next step
 
-**T1-T6, T10 y la mitad de UI hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3;
+**T1-T6, T7, T10 y la UI hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3;
 `01259f2` y `e8e01b1` para T4; `b578116` y `3cdb487` para T5; `bc23be8`, `d9ed9ba` y `7fe1f53` para
-T6; `d3011d0` y `6e88902` para T10; `226ee62`, `9795351` y `ec53b75` para la UI; evidencia arriba).
+T6; `d3011d0` y `6e88902` para T10; `226ee62`, `9795351` y `ec53b75` para la UI; `197bfa9`,
+`32e7a8a` y `d4bf175` para T7; evidencia arriba).
 
-El siguiente trabajo es **T7** —**la fila de historial por disparo, con su motivo**— y **T9**
-(**verificación en vivo en el entorno real**), que es segura de ejecutar con `SAFE_MODE` activo
-porque en ese modo el barrido solo propone y no toca la biblioteca. **T8** sigue como estaba: la
-mitad de función pura está cubierta por T3 + T5 y la idempotencia de extremo a extremo por T6
-(`tests_auto_copy_driver.py`: una propuesta no bloquea, una marca actuada sí, y un fallo se
-reintenta), pero darlo por cerrado es decisión del padre.
+El siguiente trabajo es **T9** —**verificación en vivo en el entorno real**—, que es segura de
+ejecutar con `SAFE_MODE` activo porque en ese modo el barrido solo propone y no toca la biblioteca.
+**T8** sigue como estaba: la mitad de función pura está cubierta por T3 + T5 y la idempotencia de
+extremo a extremo por T6 (`tests_auto_copy_driver.py`: una propuesta no bloquea, una marca actuada
+sí, y un fallo se reintenta), pero darlo por cerrado es decisión del padre.
 
-**T7, T8 y T9 siguen sin marcar.** Lo probado hasta ahora es la lógica y el panel con tests
-locales, no el entorno NFS/ZFS real.
+**T8 y T9 siguen sin marcar.** Lo probado hasta ahora es la lógica y los paneles con tests locales,
+no el entorno NFS/ZFS real.
 
 - **T1** `copy_files_to_root`: payload en carpeta → copia recursiva del árbol al destino
   **conservando la estructura relativa** y sin sobrescribir lo que ya exista. El camino de un solo
