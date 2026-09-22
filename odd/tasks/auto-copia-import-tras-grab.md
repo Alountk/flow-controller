@@ -160,7 +160,7 @@ fácil; recortar después de que haya movido algo mal, no.
 - [x] **T5** Registro de grabs propios (id del título + instante) y casamiento posterior por hash exacto
       — ver la corrección de alcance en la evidencia: el "hash exacto" del enunciado es
       `auto_copy_key` de **T4**; T5 cubre el registro y el casamiento por (id del título + instante)
-- [ ] **T6** Driver sobre las trazas existentes + respeto de `SAFE_MODE`
+- [x] **T6** Driver sobre las trazas existentes + respeto de `SAFE_MODE`
 - [ ] **T7** Fila de historial por disparo, con su motivo
 - [ ] **T8** Tests de la función pura (los tres resultados) y de la idempotencia
 - [ ] **T9** Verificación en vivo en el entorno real
@@ -194,7 +194,10 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`). Checks fun
 - [x] **T4 implementado y verificado** (evidencia abajo): la identidad estable, la marca
       idempotente persistida y la guarda `has_file`.
 - [x] **T5 implementado y verificado** (evidencia abajo): el registro de grabs propios, la
-      grabación en las rutas y el matcher puro. **T6-T9** siguen sin empezar.
+      grabación en las rutas y el matcher puro.
+- [x] **T6 implementado y verificado** (evidencia abajo): el driver del barrido, el disparador POST
+      explícito, la corrección de la semántica de la marca y la deuda de vulture saldada.
+      **T7-T9** siguen sin empezar.
 
 ## Verification evidence
 
@@ -430,19 +433,115 @@ pero la mitad de **idempotencia de extremo a extremo** (un driver que consulta l
 la segunda copia tras un reinicio) sigue necesitando a T6. El registro de T5 aporta la materia
 prima del casamiento, no el comportamiento de idempotencia completo.
 
+### T6 — el driver, el disparador y la marca (commits `bc23be8`, `d9ed9ba`, `7fe1f53`)
+
+Rama `feat/auto-copy-sweep`, **cortada explícitamente de `origin/main`** (`git fetch origin` +
+`git checkout -b feat/auto-copy-sweep origin/main`; `origin/main` = `85c92ce`, el merge de T5, y se
+comprobó con `git merge-base --is-ancestor origin/feat/auto-copy-own-grabs origin/main` antes de
+empezar). No se ramificó de `main` local.
+
+Tres unidades de trabajo, cada una con el árbol en verde (se verificó cada commit de forma aislada):
+
+| Commit | Qué entrega | Líneas cambiadas (add+del) |
+| --- | --- | --- |
+| `bc23be8` | `fix(history)`: la marca solo cuenta como "hecha" si se actuó | `95 insertions(+), 11 deletions(-)` → **106** |
+| `d9ed9ba` | `feat(auto-copy)`: el driver `auto_copy_driver.sweep`, el lector `list_own_grabs`, el POST `/api/auto-copy/sweep`, la deuda de vulture saldada | `536 insertions(+), 38 deletions(-)` → **574** |
+| `7fe1f53` | `test(auto-copy)`: los tests del driver y de la ruta | `564 insertions(+)` → **564** |
+
+El commit de producción (`d9ed9ba`) y el de sus tests (`7fe1f53`) van separados por una restricción
+real, no por gusto: `backend/tests_static.py::test_backend_has_no_dead_code` ejecuta vulture, y
+`auto_copy_driver.sweep` no tiene llamador de producción hasta que existe la ruta, así que el driver
+no puede aterrizar antes que el endpoint. Con eso, la unidad código+tests del driver+endpoint serían
+~1138 líneas cambiadas, muy por encima del presupuesto. El corte honesto más pequeño es
+producción (`574`) y luego sus tests (`564`); ambos commits dejan el árbol en verde. Si el padre
+prefiere tests junto al código, `d9ed9ba`+`7fe1f53` son un mismo slice de PR de ~1138 líneas.
+
+Comandos ejecutados en `backend/` (literal, sin recortes):
+
+| Comando | Resultado literal |
+| --- | --- |
+| `python3 -m pytest -q` | `426 passed, 2 warnings in 18.63s` (en `main` eran `393 passed`; este slice añade **33 tests**) |
+| `python3 -m pyflakes *.py routes/*.py` | sin salida, exit 0 |
+| `python3 -m vulture` | sin salida, exit 0 |
+
+Reparto de los 33 tests nuevos: 9 en `backend/tests_history.py` (5 de la semántica de la marca + 4
+del lector `list_own_grabs`), 19 en `backend/tests_auto_copy_driver.py` y 5 en
+`backend/tests_auto_copy_routes.py`.
+
+**El disparador es una acción explícita, no un efecto de leer.** Es `POST /api/auto-copy/sweep`,
+tras `Depends(verify_api_key)`, en un router propio (`routes/auto_copy.py`) registrado como los
+demás. La operación desatendida es responsabilidad del usuario con un temporizador externo
+(cron/systemd) que llame a ese endpoint: **no se añade bucle de fondo** (D1 lo rechazó) y **no se
+engancha `GET /api/trace`**, que la UI sondea cada 15 s — engancharlo convertiría un GET en una
+escritura de la biblioteca y dos pestañas abiertas en dos barridos.
+
+**Arreglo de la semántica de la marca.** `is_auto_copy_handled` devolvía `True` para *cualquier*
+fila de `auto_copy_handled`. Como un barrido con `SAFE_MODE` ahora registra una propuesta, esa fila
+habría leído como "ya hecho" y, al apagar el modo seguro, el barrido siguiente habría creído que el
+trabajo estaba hecho y **no habría copiado nunca, en silencio**. El arreglo: la `decision` guardada
+distingue una acción tomada de una propuesta, y `is_auto_copy_handled` cuenta solo las actuadas.
+`history.py` posee la etiqueta que él lee (`DECISION_ACTIONED`); el driver posee las que él escribe
+(`proposed`, `dispatch_failed`). Un `dispatch_failed` tampoco bloquea, para que un fallo transitorio
+no prohíba el reintento. Los tests prueban las dos direcciones: una propuesta **no** bloquea un
+barrido posterior que actúa; una marca actuada **sí** bloquea; y un fallo se reintenta.
+
+**El sentinela compartido no se toca.** Si `auto_copy_key` devuelve la forma `:title:unidentified`
+(la traza no lleva ningún identificador), el barrido la salta sin leer ni escribir marca: todas las
+trazas sin identificar comparten esa clave y una marca ahí suprimiría descargas no relacionadas.
+El test lo prueba (`mark_auto_copy` y `is_auto_copy_handled` no se llaman).
+
+**`has_file` se pregunta solo si la respuesta puede cambiar el resultado.** Se envía la sonda al
+arr solo para trazas plausiblemente accionables (nuestro grab, no ya tratado y una etapa que pueda
+llevar a una copia: `import_blocked`, `downloaded`); en cualquier otro caso se pasa `None`, que la
+política trata como desconocido, nunca como "no hay fichero". El test cuenta las llamadas (una por
+barrido con una traza accionable). Preguntarlo por cada traza sería una petición por traza y barrido.
+
+**Un solo vuelo.** Un `asyncio.Lock` a nivel de módulo hace que un segundo barrido concurrente
+devuelva un resultado honesto con `running=True` en vez de encolarse; el test lanza dos barridos
+concurrentes y comprueba que solo hay un dispatch.
+
+**Deuda de vulture saldada.** Se eliminaron las **seis** entradas de auto-copia de
+`backend/vulture_whitelist.py` (`decide_copy`, `auto_copy_key`, `mark_auto_copy`,
+`is_auto_copy_handled`, `arr_has_file`, `matches_own_grab`); las seis tienen ya llamador de
+producción en `auto_copy_driver.py` y `vulture` pasa limpio. En el whitelist solo quedan
+`queue_consumer_task` (referencia intencional para el GC) y `select_best_video` (decisión de
+producto pendiente, ajena a este trabajo).
+
+Alcance verificado y no verificado:
+
+- **Verificado**: el árbol final pasa pytest/pyflakes/vulture. Cada uno de los tres commits se
+  comprobó de forma aislada (con `git stash` ocultando lo posterior): `bc23be8` → `398 passed`;
+  `d9ed9ba` → `402 passed`; `7fe1f53` → `426 passed`; los tres con pyflakes y vulture limpios.
+- **La ruta tiene su propio router**, no se metió en `routes/actions.py`: `sweep` no es una acción
+  del registro `ACTIONS` (no toma un `ActionRequest`) y el módulo de rutas sigue el patrón de "cada
+  módulo registra su APIRouter". Así el feature puede crecer (la fila de historial de T7) sin tocar
+  el ejecutor de acciones.
+- **No verificado / abierto — la ventana de gracia temporizada espera.** El driver pasa
+  `since=None` a propósito: la traza no lleva el instante en que se observó por primera vez la
+  condición actual, y su único timestamp —el `date` del grab— es *anterior* a la descarga, así que
+  medir la gracia con él arrancaría el reloj antes de que la descarga terminara y competiría con el
+  arr (lo que T3 advirtió). Consecuencia honesta: hoy la acción desatendida es el **warning de
+  import** del arr (copia inmediata); `downloaded` y `importPending` sin warning esperan. Dar una
+  referencia temporal real ("primera vez visto") necesita persistencia, que ni T6 pide ni "WAIT no
+  escribe nada" permite; es el paso natural siguiente junto con T7.
+- **No verificado — la FK de la función pura** no se toca: `backend/auto_copy.py` sigue sin imports
+  con efectos secundarios y su guard estructural sigue pasando.
+- **Frontend**: no se tocó en este slice. El botón de la UI es una tarea aparte (abajo).
+
 ## Next step
 
-**T1-T5 hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3; `01259f2` y `e8e01b1`
-para T4; `b578116` y `3cdb487` para T5; evidencia arriba), base `main` (la cadena de PRs de "En
-carpeta" es independiente y no debe ser su base; T3 y T4 van en la rama `feat/auto-copy-decision`,
-**desde la que se corta `feat/auto-copy-own-grabs` para T5**, porque `main` no los lleva). T4 supera
-un único PR de ~400 líneas (543 cambiadas), así que su slice son dos PR encadenados: el commit 1
-(identidad + marca, 380) y el commit 2 (guarda `has_file`, 163). T5 también supera ~400 en total
-(576), así que va en dos unidades: registro + ruta (327) y matcher (249). El siguiente paso es
-**T6-T9**: el driver sobre las trazas (que debe añadir el lector `list_own_grabs` sobre `own_grabs`
-y llamar a `matches_own_grab`, eliminando de paso todas las entradas de auto-copia del whitelist de
-vulture), la fila de historial por disparo y la verificación en vivo. **T8** sigue sin marcar: la
-idempotencia de extremo a extremo depende de T6.
+**T1-T6 hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3; `01259f2` y `e8e01b1`
+para T4; `b578116` y `3cdb487` para T5; `bc23be8`, `d9ed9ba` y `7fe1f53` para T6; evidencia arriba).
+El siguiente paso es **T7** —**la fila de historial por disparo, con su motivo**— seguida de **T8**
+(los tests de la función pura, que ya están cubiertos por T3 + T5, y la idempotencia de extremo a
+extremo, que T6 ya prueba en `tests_auto_copy_driver.py`: una propuesta no bloquea, una marca
+actuada sí, y un fallo se reintenta; queda decidir si eso cierra T8) y **T9** (verificación en vivo
+en el entorno real). En el frontend falta el **botón de la UI** que dispare
+`POST /api/auto-copy/sweep` y muestre el resumen (counts + entradas con su motivo); el backend ya
+devuelve ese resumen y no se tocó el frontend en este slice.
+
+**T8 y T9 siguen sin marcar.** T6 aporta la mitad de idempotencia de extremo a extremo que T8
+esperaba, pero no se reclama T8: la decisión de darlo por cerrado es del padre.
 
 - **T1** `copy_files_to_root`: payload en carpeta → copia recursiva del árbol al destino
   **conservando la estructura relativa** y sin sobrescribir lo que ya exista. El camino de un solo
