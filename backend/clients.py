@@ -1032,6 +1032,39 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
         return {**_empty_page(page, page_size), **arr_failure(service, exc=exc)}
 
 
+async def arr_series_episodes(session: aiohttp.ClientSession, service: dict, series_id: int) -> dict:
+    """Episodios de una serie: la materia prima para resolver S##E## en el navegador.
+
+    Sonarr devuelve el mismo EpisodeResource que ya consume `fetch_wanted_episodes`,
+    así que los nombres de campo no son una suposición.
+    """
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/episode",
+            params={"seriesId": str(series_id)},
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return {"episodes": [], **arr_failure(service, status=resp.status)}
+            data = await resp.json(content_type=None)
+            episodes = [
+                {
+                    "id": ep.get("id"),
+                    "season_number": ep.get("seasonNumber"),
+                    "episode_number": ep.get("episodeNumber"),
+                    "title": ep.get("title", ""),
+                    "air_date": ep.get("airDateUtc", ""),
+                }
+                for ep in data
+                if isinstance(ep, dict)
+            ]
+            return {"episodes": episodes}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"episodes": [], **arr_failure(service, exc=exc)}
+
+
 async def arr_search_missing_movies(session: aiohttp.ClientSession, service: dict) -> dict:
     """Lanza búsqueda masiva de todas las películas faltantes."""
     return await arr_command(session, service, {"name": "MissingMoviesSearch"})
