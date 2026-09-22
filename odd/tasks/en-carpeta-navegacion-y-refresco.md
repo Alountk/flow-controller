@@ -163,11 +163,14 @@ Por qué los nombres de campo **no** son una suposición: `/api/v3/episode` devu
 Faltantes ya pintan `S##E##` correctamente hoy. El mapeo del fetcher nuevo reutiliza
 exactamente esos campos.
 
-Suposición residual única sin probar: que `/api/v3/episode?seriesId=` **sin** `seasonNumber`
-devuelve todas las temporadas. El call site existente (`clients.py:571`) nunca lo demostró
-porque siempre pasó `seasonNumber`. Si Sonarr devolviera solo una temporada, el enriquecido
-mostraría etiquetas parciales —los archivos de otras temporadas se quedarían sin segunda
-línea— y **nunca** etiquetas incorrectas: un tag sin coincidencia no pinta nada.
+**Suposición residual: VERIFICADA contra la API real el 2026-09-22.** `/api/v3/episode?seriesId=1`
+**sin** `seasonNumber` devolvió **204 episodios y las temporadas 0 a 9** de una serie real, así que
+una sola llamada cubre todas las temporadas y no hace falta abanico por temporada. Los campos
+usados quedaron confirmados uno a uno contra la respuesta real: `id`, `seriesId`, `seasonNumber`,
+`episodeNumber`, `title`, `airDateUtc`, `hasFile`.
+
+Lo que sigue sin cerrarse desde este checkout es la comprobación **en la app** (T7): eso necesita
+el backend y el navegador corriendo, no solo la API del arr.
 
 ## Review (RDD)
 
