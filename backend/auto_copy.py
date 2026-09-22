@@ -4,12 +4,30 @@ No I/O and no clock of its own: every fact arrives as an argument, so the policy
 can be tested exhaustively and the driver keeps ownership of time and storage.
 """
 
+from datetime import datetime, timezone
+
 COPY = "copy"
 WAIT = "wait"
 SKIP = "skip"
 
 #: How long the arr gets to import on its own before the app stops waiting.
 DEFAULT_GRACE_SECONDS = 1800.0
+
+#: How long after our grab a history trace is still attributed to us. The arr
+#: writes its grab row within seconds of our request, so this is a tolerance,
+#: not a search range. The trade-off is real: too narrow and a slow arr's grab
+#: is missed (the app stays hands-off — the status quo), too wide and a LATER,
+#: unrelated manual grab of the same title is attributed to us and copied. It
+#: leans deliberately narrow, per D3 ("widen once this is boringly reliable;
+#: shrinking after it has moved something wrong is not"). Two minutes absorbs a
+#: slow arr without opening a realistic misattribution window.
+DEFAULT_GRAB_WINDOW_SECONDS = 120.0
+
+#: Tolerance for this host's clock running ahead of the arr's. The arr stamps
+#: the grab AFTER our request, so its `date` normally lands just after
+#: `grabbed_at`; this only covers the arr's clock being slightly behind ours, so
+#: the lower bound is `grabbed_at - skew` rather than exact equality.
+GRAB_CLOCK_SKEW_SECONDS = 30.0
 
 
 def _grace_gate(now: float, since: float | None, grace_seconds: float) -> dict:
@@ -139,3 +157,88 @@ def auto_copy_key(trace: dict) -> str:
     if episode_id is not None:
         return f"{source}:title:episode:{episode_id}"
     return f"{source}:title:{UNIDENTIFIED}"
+
+
+def _parse_trace_date(value) -> float | None:
+    """Epoch seconds for the arr's ISO timestamp, or None when it cannot be read.
+
+    Never guesses: an absent or malformed value returns None, and the matcher
+    turns a None into a non-match. The arr sends UTC with a `Z` suffix; a naive
+    value is treated as UTC rather than local time, because assuming a timezone
+    is a smaller error than silently shifting the instant.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
+def matches_own_grab(
+    trace: dict,
+    own_grabs: list[dict],
+    *,
+    window_seconds: float = DEFAULT_GRAB_WINDOW_SECONDS,
+) -> bool:
+    """Whether an arr-history trace is one of the grabs this app launched.
+
+    This is a yes/no question, so selecting the newest matching row is not
+    needed. It answers it honestly:
+
+    - same `source` as the registry row;
+    - same title identity — movie ids when the trace carries
+      `ids["movie_id"]`, episode ids when it carries `ids["episode_id"]`. A
+      trace with neither does NOT match: it is not provably ours, and the
+      policy already treats a non-match as "skip";
+    - the trace's `date` inside `[grabbed_at - GRAB_CLOCK_SKEW_SECONDS,
+      grabbed_at + window_seconds]`. The arr records the row moments AFTER our
+      request, so it lands just past `grabbed_at`; requiring exact equality
+      would match nothing;
+    - an unparseable or absent `date` is a non-match, never a guess and never a
+      raise.
+
+    The release `guid` is deliberately NOT used here: in a grabbed history
+    record `data.guid` is the download client's hash, not the indexer's release
+    guid, so it cannot be matched against the arr's history (see history.py).
+    """
+    if not own_grabs:
+        return False
+
+    source = (trace.get("source") or "").strip()
+    ids = trace.get("ids") or {}
+    movie_id = ids.get("movie_id")
+    episode_id = ids.get("episode_id")
+    if movie_id is None and episode_id is None:
+        return False
+
+    when = _parse_trace_date(trace.get("date"))
+    if when is None:
+        return False
+
+    for row in own_grabs:
+        if (row.get("source") or "").strip() != source:
+            continue
+        if movie_id is not None:
+            if row.get("movie_id") != movie_id:
+                continue
+        elif row.get("episode_id") != episode_id:
+            continue
+
+        grabbed_at = row.get("grabbed_at")
+        if not isinstance(grabbed_at, (int, float)):
+            continue
+        if when < grabbed_at - GRAB_CLOCK_SKEW_SECONDS:
+            continue
+        if when > grabbed_at + window_seconds:
+            continue
+        return True
+    return False

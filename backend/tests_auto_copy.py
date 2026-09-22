@@ -9,12 +9,15 @@ from pathlib import Path
 
 from auto_copy import (
     COPY,
+    DEFAULT_GRAB_WINDOW_SECONDS,
     DEFAULT_GRACE_SECONDS,
+    GRAB_CLOCK_SKEW_SECONDS,
     SKIP,
     UNIDENTIFIED,
     WAIT,
     auto_copy_key,
     decide_copy,
+    matches_own_grab,
 )
 
 MODULE_PATH = Path(__file__).resolve().parent / "auto_copy.py"
@@ -240,4 +243,142 @@ def test_the_policy_module_has_no_side_effect_imports():
     assert not found, (
         "the pure policy must not grow a session, a clock or configuration; "
         f"found: {found}"
+    )
+
+
+# ── Matching a trace against our own grabs (T5) ──────────────────────────────
+#
+# The arr's history is the input; this answers one yes/no question: did THIS app
+# ask for that grab? The release guid cannot be used (in a grabbed record it is
+# the client hash, not the indexer's guid), so the match is by title id + time.
+# A false negative just leaves the status quo; a false positive makes the app
+# act on a grab nobody asked it to touch (D3), so honest non-matches matter.
+
+GRAB_AT = 10_000.0
+
+
+def _iso(epoch: float) -> str:
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _own_grab(
+    *,
+    source="radarr",
+    movie_id=None,
+    episode_id=None,
+    series_id=None,
+    guid="release-guid",
+    indexer_id=1,
+    grabbed_at=GRAB_AT,
+):
+    row = {"source": source, "guid": guid, "indexer_id": indexer_id, "grabbed_at": grabbed_at}
+    if movie_id is not None:
+        row["movie_id"] = movie_id
+    if episode_id is not None:
+        row["episode_id"] = episode_id
+    if series_id is not None:
+        row["series_id"] = series_id
+    return row
+
+
+def _trace_for(*, source="radarr", movie_id=None, episode_id=None, date=None):
+    ids = {}
+    if movie_id is not None:
+        ids["movie_id"] = movie_id
+    if episode_id is not None:
+        ids["episode_id"] = episode_id
+    trace = {"source": source, "ids": ids}
+    if date is not None:
+        trace["date"] = date
+    return trace
+
+
+def test_matches_a_trace_for_the_same_movie():
+    assert matches_own_grab(
+        _trace_for(movie_id=855, date=_iso(GRAB_AT + 3)),
+        [_own_grab(movie_id=855)],
+    )
+
+
+def test_matches_a_trace_for_the_same_episode():
+    assert matches_own_grab(
+        _trace_for(source="sonarr", episode_id=2286, date=_iso(GRAB_AT + 3)),
+        [_own_grab(source="sonarr", episode_id=2286, series_id=28)],
+    )
+
+
+def test_a_different_source_does_not_match():
+    assert not matches_own_grab(
+        _trace_for(source="sonarr", movie_id=855, date=_iso(GRAB_AT + 3)),
+        [_own_grab(source="radarr", movie_id=855)],
+    )
+
+
+def test_a_different_title_id_does_not_match():
+    assert not matches_own_grab(
+        _trace_for(movie_id=856, date=_iso(GRAB_AT + 3)),
+        [_own_grab(movie_id=855)],
+    )
+
+
+def test_a_trace_just_inside_the_window_matches():
+    # The arr stamps the row AFTER our request, so the upper bound is inclusive.
+    assert matches_own_grab(
+        _trace_for(movie_id=855, date=_iso(GRAB_AT + DEFAULT_GRAB_WINDOW_SECONDS)),
+        [_own_grab(movie_id=855)],
+    )
+
+
+def test_a_trace_just_outside_the_window_does_not_match():
+    # A later, unrelated grab of the same title must not be attributed to us.
+    assert not matches_own_grab(
+        _trace_for(movie_id=855, date=_iso(GRAB_AT + DEFAULT_GRAB_WINDOW_SECONDS + 1)),
+        [_own_grab(movie_id=855)],
+    )
+
+
+def test_a_trace_just_inside_the_clock_skew_matches():
+    assert matches_own_grab(
+        _trace_for(movie_id=855, date=_iso(GRAB_AT - GRAB_CLOCK_SKEW_SECONDS)),
+        [_own_grab(movie_id=855)],
+    )
+
+
+def test_a_trace_older_than_the_clock_skew_does_not_match():
+    assert not matches_own_grab(
+        _trace_for(movie_id=855, date=_iso(GRAB_AT - GRAB_CLOCK_SKEW_SECONDS - 1)),
+        [_own_grab(movie_id=855)],
+    )
+
+
+def test_a_trace_with_no_date_does_not_match():
+    assert not matches_own_grab(_trace_for(movie_id=855), [_own_grab(movie_id=855)])
+
+
+def test_a_trace_with_an_unparseable_date_does_not_match():
+    assert not matches_own_grab(
+        _trace_for(movie_id=855, date="no-es-una-fecha"),
+        [_own_grab(movie_id=855)],
+    )
+
+
+def test_a_trace_with_no_title_identity_does_not_match():
+    # Not provably ours is answered honestly: no match, never a guess.
+    trace = _trace_for(date=_iso(GRAB_AT + 3))
+
+    assert not matches_own_grab(trace, [_own_grab(movie_id=855)])
+
+
+def test_an_empty_registry_does_not_match():
+    assert not matches_own_grab(
+        _trace_for(movie_id=855, date=_iso(GRAB_AT + 3)), []
+    )
+
+
+def test_a_row_without_a_grabbed_at_does_not_match():
+    assert not matches_own_grab(
+        _trace_for(movie_id=855, date=_iso(GRAB_AT + 3)),
+        [_own_grab(movie_id=855, grabbed_at=None)],
     )
