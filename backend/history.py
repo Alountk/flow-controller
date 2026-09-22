@@ -24,7 +24,7 @@ from pathlib import Path
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -62,6 +62,28 @@ CREATE TABLE IF NOT EXISTS auto_copy_handled (
     reason      TEXT,
     handled_at  REAL NOT NULL
 );
+-- v3: registry of the grabs this app itself launched (decision D3: act only on
+-- our own grabs). Same migration discipline as v2 — `CREATE TABLE IF NOT
+-- EXISTS` inside the script `init_db` runs on every start, so a real v2 file
+-- gains the table with no ALTER and the version bump only records it.
+--
+-- `guid` is stored for AUDIT ONLY, and this is the trap: in a grabbed history
+-- record `data.guid` is the DOWNLOAD CLIENT's hash, NOT the indexer's release
+-- guid (measured against the real API, 2026-09-22). So the release guid cannot
+-- be joined against the arr's history. The own-grab match is by (title id +
+-- time); `auto_copy.matches_own_grab` implements it. Do not "optimise" this
+-- into a guid join.
+CREATE TABLE IF NOT EXISTS own_grabs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    source      TEXT NOT NULL,
+    movie_id    INTEGER,
+    episode_id  INTEGER,
+    series_id   INTEGER,
+    guid        TEXT,
+    indexer_id  INTEGER,
+    grabbed_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_own_grabs_title ON own_grabs (source, movie_id, episode_id);
 """
 
 # Columns mirrored from the in-memory op. Kept explicit so an unexpected key
@@ -237,6 +259,63 @@ def is_auto_copy_handled(key: str) -> bool:
         except sqlite3.Error as exc:
             log.warning("Could not read auto-copy marker %s: %s", key, exc)
             return False
+
+
+# ── Own-grab registry (T5) ───────────────────────────────────────────────────
+#
+# One row per grab the APP launched, so a later sweep can tell whether a grab in
+# the arr's history is one we asked for (decision D3). Same degrade-not-raise
+# discipline as the rest of the module: this runs inside a request handler, and
+# a history failure must never take the app down nor turn a successful grab into
+# a failed response.
+#
+# The reader is intentionally NOT here yet: its only consumer is the T6 driver,
+# and an uncalled public function would force another vulture whitelist entry.
+# T6's contract is newest-first rows as plain dicts carrying the own_grabs
+# columns, i.e. `list_own_grabs(...) -> list[dict]` with keys id, source,
+# movie_id, episode_id, series_id, guid, indexer_id, grabbed_at — ready to hand
+# straight to `auto_copy.matches_own_grab(trace, own_grabs)`.
+
+
+def record_own_grab(
+    source: str,
+    *,
+    movie_id: int | None = None,
+    episode_id: int | None = None,
+    series_id: int | None = None,
+    guid: str = "",
+    indexer_id: int = 0,
+    grabbed_at: float | None = None,
+) -> None:
+    """Record one grab this app launched. Best-effort: never raises.
+
+    `guid` is audit only: the release guid cannot be matched against the arr's
+    history (see the schema comment). Matching is by title id + time.
+    """
+    with _lock:
+        if _conn is None:
+            return
+        try:
+            _conn.execute(
+                "INSERT INTO own_grabs "
+                "(source, movie_id, episode_id, series_id, guid, indexer_id, grabbed_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    source,
+                    movie_id,
+                    episode_id,
+                    series_id,
+                    guid or "",
+                    indexer_id or 0,
+                    time.time() if grabbed_at is None else grabbed_at,
+                ),
+            )
+            _conn.commit()
+        except (sqlite3.Error, TypeError, ValueError) as exc:
+            # Broader than the other writers on purpose: the caller is a request
+            # handler that has ALREADY grabbed successfully, so an escaping error
+            # would turn a completed grab into an HTTP 500.
+            log.warning("Could not record own grab (%s/%s): %s", source, guid, exc)
 
 
 def mark_interrupted() -> int:

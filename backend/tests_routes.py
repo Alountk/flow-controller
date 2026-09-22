@@ -15,6 +15,7 @@ body itself was never executed.
 import asyncio
 import copy
 import credentials
+import history
 import json
 from urllib.parse import urlencode
 from unittest.mock import patch
@@ -397,6 +398,111 @@ class TestGrabBatchErrorReporting:
         )
 
         assert resp.json()["ok"] is False
+
+
+# ── POST /api/calendar/grab(-batch) — the own-grab registry (T5) ─────────────
+
+
+class TestGrabOwnRegistry:
+    """A grab from the app enters the own-grab registry (D3); a failed grab does
+    not, and the batch records one row per successful guid, not one per request.
+
+    The registry must not change the response at all: an unavailable history
+    database is a silent no-op and the grab still succeeds.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolated_history(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        self._db_path = tmp_path / "history.db"
+        yield
+        history.close()
+
+    def _rows(self) -> list[dict]:
+        import sqlite3
+
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            return [dict(r) for r in conn.execute("SELECT * FROM own_grabs ORDER BY id")]
+        finally:
+            conn.close()
+
+    def test_a_successful_grab_is_recorded(self):
+        from unittest.mock import AsyncMock
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={"source": "radarr", "guid": "g1", "indexerId": 7, "movieId": 855},
+            )
+
+        assert resp.json()["ok"] is True
+        rows = self._rows()
+        assert len(rows) == 1
+        assert rows[0]["source"] == "radarr"
+        assert rows[0]["movie_id"] == 855
+        assert rows[0]["episode_id"] is None, "0 means 'not a movie', not a title id"
+        assert rows[0]["guid"] == "g1"
+        assert rows[0]["indexer_id"] == 7
+
+    def test_a_failed_grab_is_not_recorded(self):
+        from unittest.mock import AsyncMock
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": False, "detail": "HTTP 404: not found"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={"source": "radarr", "guid": "bad-guid", "movieId": 855},
+            )
+
+        assert resp.json()["ok"] is False
+        assert self._rows() == []
+
+    def test_the_batch_records_each_successful_guid(self):
+        from unittest.mock import AsyncMock
+
+        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
+            return {"ok": guid != "g2", "detail": "ok" if guid != "g2" else "rechazado"}
+
+        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
+            resp = client.post(
+                "/api/calendar/grab-batch",
+                json={
+                    "source": "radarr",
+                    "guids": ["g1", "g2", "g3"],
+                    "indexerIds": [1, 2, 3],
+                    "movieId": 855,
+                },
+            )
+
+        assert resp.json()["ok"] is False
+        rows = self._rows()
+        assert [r["guid"] for r in rows] == ["g1", "g3"]
+        assert [r["indexer_id"] for r in rows] == [1, 3]
+
+    def test_an_unavailable_history_does_not_fail_the_grab(self):
+        from unittest.mock import AsyncMock
+
+        history.close()  # no database: the recording must be a silent no-op
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={"source": "radarr", "guid": "g1", "movieId": 855},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
 
 
 # ── Text filter on wanted / all listings ─────────────────────────────────────

@@ -442,4 +442,118 @@ def test_init_db_migrates_a_v1_database_without_an_alter(tmp_path):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     finally:
         conn.close()
-    assert version == 2
+    # A v1 file advances all the way to the CURRENT schema (it gained both
+    # auto_copy_handled and own_grabs), so this is not pinned to 2 any more.
+    assert version == history.SCHEMA_VERSION
+
+
+# ── Own-grab registry (T5) ───────────────────────────────────────────────────
+#
+# The rows that let a later sweep tell whether an arr-history grab is one this
+# app launched (D3). The reader does not exist yet (T6 owns it), so these read
+# the table directly with sqlite3.
+
+
+def _own_grab_rows(path) -> list[dict]:
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in conn.execute("SELECT * FROM own_grabs ORDER BY id")]
+    finally:
+        conn.close()
+
+
+def test_an_own_grab_round_trips(db, tmp_path):
+    history.record_own_grab(
+        "radarr",
+        movie_id=855,
+        guid="release-guid-123",
+        indexer_id=7,
+        grabbed_at=1234.5,
+    )
+
+    rows = _own_grab_rows(tmp_path / "history.db")
+
+    assert len(rows) == 1
+    assert rows[0]["source"] == "radarr"
+    assert rows[0]["movie_id"] == 855
+    assert rows[0]["episode_id"] is None
+    assert rows[0]["guid"] == "release-guid-123"
+    assert rows[0]["indexer_id"] == 7
+    assert rows[0]["grabbed_at"] == 1234.5
+
+
+def test_an_own_grab_defaults_to_now_when_no_instant_is_given(db, tmp_path):
+    history.record_own_grab("sonarr", episode_id=2286, series_id=28)
+
+    rows = _own_grab_rows(tmp_path / "history.db")
+
+    assert len(rows) == 1
+    assert rows[0]["episode_id"] == 2286
+    assert rows[0]["series_id"] == 28
+    assert rows[0]["grabbed_at"] > 0
+
+
+def test_recording_an_own_grab_is_a_no_op_when_the_database_is_unavailable():
+    """It runs inside a request handler: it must never raise, and must never
+    turn a successful grab into a failed response."""
+    history.close()
+
+    history.record_own_grab("radarr", movie_id=1, guid="g", grabbed_at=1.0)
+
+
+# The exact tables a v2 database carried, before own_grabs.
+V2_SCHEMA = V1_OPERATIONS_SCHEMA + """
+CREATE TABLE auto_copy_handled (
+    key         TEXT PRIMARY KEY,
+    source      TEXT NOT NULL,
+    title       TEXT,
+    decision    TEXT NOT NULL,
+    reason      TEXT,
+    handled_at  REAL NOT NULL
+);
+"""
+
+
+def test_init_db_migrates_a_v2_database_without_an_alter(tmp_path):
+    """v3 adds `own_grabs`. As with v1->v2, `executescript` runs the whole
+    schema with CREATE TABLE IF NOT EXISTS on every start, so a real v2 file
+    gains the table with no ALTER; user_version only records the migration."""
+    path = tmp_path / "history.db"
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(V2_SCHEMA)
+        conn.execute(
+            "INSERT INTO operations (id, type, name, src, dst, status, created_at) "
+            "VALUES ('legacy', 'copy', 'old.mkv', '/s', '/d', 'done', 1000.0)"
+        )
+        conn.execute(
+            "INSERT INTO auto_copy_handled (key, source, decision, handled_at) "
+            "VALUES ('k', 'radarr', 'copy', 1000.0)"
+        )
+        conn.execute("PRAGMA user_version=2")
+        conn.commit()
+    finally:
+        conn.close()
+
+    history.init_db(path)
+    try:
+        # The new table exists and is usable on the migrated file.
+        history.record_own_grab("radarr", movie_id=855, guid="g", grabbed_at=1234.0)
+        rows = _own_grab_rows(path)
+        assert len(rows) == 1
+        assert rows[0]["movie_id"] == 855
+        # The earlier tables and their rows survived.
+        assert history.is_auto_copy_handled("k") is True
+        assert [r["id"] for r in history.recent_operations()] == ["legacy"]
+    finally:
+        history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+    assert version == 3
