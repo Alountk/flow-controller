@@ -190,6 +190,14 @@
   background: color-mix(in srgb, var(--warn) 8%, var(--bg-elev));
 }
 
+/* On the "Todas" cards the left bar reports the FILE state, not the missing
+   state, so an orange card that already arrived keeps its green bar. Higher
+   specificity than the rule above on purpose: without this, a configured card
+   would get a red left bar and claim a problem it does not have. */
+.wanted-card.status-ok.status-grabbed {
+  border-left-color: var(--ok);
+}
+
 .wanted-status-badge {
   font-size: 10px;
 }
