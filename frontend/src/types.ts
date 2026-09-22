@@ -169,6 +169,56 @@ export const STAGE_LABELS: Record<TraceStage, string> = {
   failed: 'Fallida',
 }
 
+/* ---- Auto-copy sweep ---- */
+
+/** Per-trace verdict of the auto-copy policy (`auto_copy.py`). `copy` means the
+ *  policy wants the download in the library; whether it acted depends on
+ *  `safe_mode` and is read from the entry's `action`. */
+export type AutoCopyDecision = 'copy' | 'wait' | 'skip'
+
+/** What the driver did for an entry. `null` when it only decided (wait/skip). */
+export type AutoCopyAction = 'copied' | 'proposed' | 'failed'
+
+/** Mirrors `_zero_counts()` in `backend/auto_copy_driver.py`. `copy` counts the
+ *  traces the policy wanted to copy; `copied`/`proposed`/`failed` break that
+ *  set into what actually happened. */
+export interface AutoCopySweepCounts {
+  traces: number
+  copy: number
+  copied: number
+  proposed: number
+  wait: number
+  skip: number
+  failed: number
+}
+
+/** Mirrors `_entry()` in `backend/auto_copy_driver.py`. `reason` is user-facing
+ *  Spanish text written to be read by a human. */
+export interface AutoCopySweepEntry {
+  key: string
+  source: string
+  title: string
+  decision: AutoCopyDecision
+  reason: string
+  action: AutoCopyAction | null
+  detail: string | null
+}
+
+/** Mirrors `_summary()` in `backend/auto_copy_driver.py`. `started_at` and
+ *  `finished_at` are absent in the route's last-resort error body, and
+ *  `counts` may be `{}` there, so callers must read counts defensively. */
+export interface AutoCopySweepResult {
+  ok: boolean
+  running: boolean
+  safe_mode: boolean | null
+  detail: string
+  counts: AutoCopySweepCounts
+  entries: AutoCopySweepEntry[]
+  errors: string[]
+  started_at?: number | null
+  finished_at?: number | null
+}
+
 /* ---- Config / Developer ---- */
 
 export interface ConfigResponse {
