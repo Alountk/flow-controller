@@ -327,3 +327,119 @@ class TestUnavailableDatabase:
 
         assert history.recent_operations() == []
         history.close()
+
+
+# ── Auto-copy idempotency markers ────────────────────────────────────────────
+#
+# The key is `auto_copy_key`'s output; these tests pin the durable half of the
+# idempotency promise: once handled, always handled, across a restart.
+
+
+def test_a_marker_is_written_and_read_back(db):
+    history.mark_auto_copy(
+        "radarr:467250d5",
+        source="radarr",
+        title="Your Name.",
+        decision="copy",
+        reason="el arr no lo importó",
+    )
+
+    assert history.is_auto_copy_handled("radarr:467250d5") is True
+
+
+def test_an_unknown_key_reads_as_not_handled(db):
+    assert history.is_auto_copy_handled("radarr:never-seen") is False
+
+
+def test_re_marking_the_same_key_updates_instead_of_raising(db, tmp_path):
+    history.mark_auto_copy("k", source="radarr", title="A", decision="copy", reason="r1")
+    history.mark_auto_copy("k", source="radarr", title="B", decision="skip", reason="r2")
+
+    conn = sqlite3.connect(tmp_path / "history.db")
+    try:
+        rows = conn.execute(
+            "SELECT decision, title, reason FROM auto_copy_handled"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert len(rows) == 1, "re-marking must upsert, not insert a second row"
+    assert rows[0] == ("skip", "B", "r2")
+
+
+def test_marking_is_a_no_op_when_the_database_is_unavailable():
+    history.close()
+
+    # Must not raise: a marker is bookkeeping, not a reason to stop the app.
+    history.mark_auto_copy("k", source="radarr", decision="copy")
+    assert history.is_auto_copy_handled("k") is False
+
+
+def test_a_keyless_marker_is_ignored(db):
+    history.mark_auto_copy("", source="radarr", decision="copy")
+
+    assert history.is_auto_copy_handled("") is False
+
+
+# The exact operations table a v1 database carried, before auto_copy_handled.
+V1_OPERATIONS_SCHEMA = """
+CREATE TABLE operations (
+    id            TEXT PRIMARY KEY,
+    type          TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    src           TEXT NOT NULL,
+    dst           TEXT NOT NULL,
+    status        TEXT NOT NULL,
+    detail        TEXT,
+    import_status TEXT,
+    arr_source    TEXT,
+    movie_id      INTEGER,
+    series_id     INTEGER,
+    size_bytes    INTEGER DEFAULT 0,
+    copied_bytes  INTEGER DEFAULT 0,
+    files_total   INTEGER DEFAULT 0,
+    files_done    INTEGER DEFAULT 0,
+    created_at    REAL NOT NULL,
+    started_at    REAL,
+    finished_at   REAL
+);
+CREATE INDEX idx_operations_created ON operations (created_at DESC);
+CREATE INDEX idx_operations_status ON operations (status);
+"""
+
+
+def test_init_db_migrates_a_v1_database_without_an_alter(tmp_path):
+    """v2 adds `auto_copy_handled`. `executescript` runs the whole schema with
+    CREATE TABLE IF NOT EXISTS on every start, so a real v1 file gains the table
+    with no ALTER; user_version only records that the migration happened."""
+    path = tmp_path / "history.db"
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(V1_OPERATIONS_SCHEMA)
+        conn.execute(
+            "INSERT INTO operations (id, type, name, src, dst, status, created_at) "
+            "VALUES ('legacy', 'copy', 'old.mkv', '/s', '/d', 'done', 1000.0)"
+        )
+        conn.execute("PRAGMA user_version=1")
+        conn.commit()
+    finally:
+        conn.close()
+
+    history.init_db(path)
+    try:
+        # The new table exists and is usable on the migrated file.
+        history.mark_auto_copy("k", source="radarr", decision="copy")
+        assert history.is_auto_copy_handled("k") is True
+        # The v1 data survived the migration.
+        assert [r["id"] for r in history.recent_operations()] == ["legacy"]
+    finally:
+        history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+    assert version == 2
