@@ -636,23 +636,99 @@ Alcance verificado y no verificado:
 - **Frontend**: no se tocó en este slice. El botón de la UI sigue siendo una tarea aparte (abajo);
   no se ejecutaron sus checks.
 
+### UI — el disparador explícito en Trazabilidad (commits `226ee62`, `9795351`, `ec53b75`)
+
+Rama `feat/auto-copy-ui`, **cortada explícitamente de `origin/main`** (`git fetch origin` +
+`git checkout -b feat/auto-copy-ui origin/main`; `origin/main` = `16ae45b`, el merge de T10; se
+comprobó con `git ls-tree origin/main backend/auto_copy_driver.py` que el driver existe en esa base
+antes de empezar). No se ramificó de `main` local. **Nada bajo `backend/` se tocó.**
+
+Tres unidades de trabajo, cada una por debajo del presupuesto de ~400:
+
+| Commit | Qué entrega | Líneas cambiadas (add+del) |
+| --- | --- | --- |
+| `226ee62` | `feat(auto-copy)`: los tipos y el cliente de la API | `124 insertions(+)` → **124** |
+| `9795351` | `feat(trace)`: el botón "Revisar descargas" y el panel de resumen | `324 insertions(+)` → **324** |
+| `ec53b75` | `test(trace)`: los tests del disparador y sus estados | `237 insertions(+)` → **237** |
+
+Total del slice: **685 líneas cambiadas**, por encima de un único PR de ~400. Se parte en tres
+unidades de trabajo coherentes y encadenables. Los tests van en un commit propio por una
+consecuencia aritmética, no por preferencia: el código de UI son 324 líneas, así que UI + tests
+juntos serían 561 y rebasarían el presupuesto; separarlos mantiene cada commit revisable sin
+recortar ni un test. El commit de documentación no cuenta aquí.
+
+**Los tipos espejan la forma exacta del resumen, sin inventar campos.** `AutoCopySweepCounts` son
+las claves de `_zero_counts()` (`traces`, `copy`, `copied`, `proposed`, `wait`, `skip`, `failed`);
+`AutoCopySweepEntry` son las de `_entry()` (`key`, `source`, `title`, `decision`, `reason`,
+`action`, `detail`); `AutoCopySweepResult` es la de `_summary()` (`ok`, `running`, `safe_mode`,
+`detail`, `counts`, `entries`, `errors`, `started_at`, `finished_at`). `started_at`/`finished_at`
+son opcionales porque el cuerpo de último recurso de `routes/auto_copy.py` no los trae, y `counts`
+puede llegar como `{}` ahí: el panel los lee de forma defensiva (`?? 0`) en vez de confiar en el
+tipo en tiempo de ejecución. Los nombres salen del driver, no de lo que un resumen "debería" tener
+—la lección registrada de no construir un mock desde una suposición.
+
+**`api/autoCopy.ts` es total: nunca rechaza.** `runAutoCopySweep()` hace `POST` a
+`/api/auto-copy/sweep` por `apiFetch`, como el resto de módulos de api, y convierte un fetch
+rechazado (offline, abortado, DNS), un non-2xx o un cuerpo ilegible en un resumen fallido con
+`ok: false` y `errors`. Es el patrón de `grabCalendarRelease` en `api/calendar.ts`, y existe por la
+misma razón: un spinner atascado fue un bug real y el botón no puede quedarse en "Revisando…".
+
+**El botón reutiliza `actions.safe_mode`, no inventa una segunda fuente de verdad.** La página ya
+recibe ese campo, y es la señal honesta de lo que el barrido hará; el panel lo usa para el aviso
+destacado ("Modo seguro activo: no se ha copiado nada. Lo que sigue es lo que el barrido haría.").
+Esa frase es lo que separa "la biblioteca se escribió" de "no se escribió", y tiene un test
+dedicado que la afirma literal. Con `running: true` el panel dice que ya hay un barrido en curso en
+vez de mostrar los ceros de la negativa; con `errors` no vacía los muestra, porque la ruta está
+construida para no devolver 500 y esa lista **es** la señal de fallo; las entradas
+`copied`/`proposed`/`failed` se listan con su `title` y su `reason` en español, mientras que las
+`wait`/`skip` son solo un número para no llenar el panel de ruido; y cuando no hay nada accionable
+hay un estado vacío honesto, no un panel en blanco.
+
+**El componente no necesita `QueryClientProvider`.** Se comprobó renderizando `TraceView` con
+props planas (`data={null}`): sin trazas no se monta `TraceActions`, que es el único hijo que
+consulta. Los tests lo renderizan así, con `vi.stubGlobal('fetch', …)` y el mismo stub `ok/json` de
+`__tests__/scanFolderNav.test.tsx`.
+
+Cobertura de los 8 tests (`frontend/src/__tests__/traceAutoCopy.test.tsx`): el POST a la URL y el
+método, los counts renderizados, la frase de modo seguro literal, el `reason` de una entrada, la
+negativa por barrido en curso (sin ceros), la lista de `errors`, el estado vacío y el botón
+deshabilitado durante la petición.
+
+Comandos ejecutados en `frontend/` (literal, sin recortes):
+
+| Comando | Resultado literal |
+| --- | --- |
+| `npm test` | `Test Files 25 passed (25)` / `Tests 190 passed (190)` (en `origin/main` eran `Test Files 24` / `182 passed`; este slice añade **8 tests**) |
+| `npm run build` | `tsc -b && vite build` → `✓ 131 modules transformed` / `✓ built in 2.02s` |
+
+También se ejecutó, sin tocarlo, el suite de backend para confirmar que sigue intacto:
+`cd backend && python3 -m pytest -q` → `437 passed, 2 warnings in 19.59s`. `git status --short
+backend` no devuelve nada: **el backend no se tocó**.
+
+Alcance verificado y no verificado:
+
+- **Verificado**: el árbol final pasa `npm test` y `npm run build` (que incluye `tsc -b`, así que
+  cubre los errores de tipo). El conteo de tests sube: 182 → 190.
+- **Verificado**: el botón solo dispara el `POST` explícito; no engancha el `GET /api/trace` que la
+  UI sondea, así que leer trazas sigue siendo un GET.
+- **No verificado**: la ejecución contra el backend real (T9). Lo probado es el panel con un fetch
+  stub, no un barrido real con `SAFE_MODE` en el entorno del usuario.
+
 ## Next step
 
-**T1-T6 y T10 hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3; `01259f2` y
-`e8e01b1` para T4; `b578116` y `3cdb487` para T5; `bc23be8`, `d9ed9ba` y `7fe1f53` para T6;
-`d3011d0` y `6e88902` para T10; evidencia arriba). Con T10, la ventana de gracia ya puede dispararse:
-la acción desatendida ya no se limita al warning de import.
-El siguiente paso es **T7** —**la fila de historial por disparo, con su motivo**— seguida de **T8**
-(los tests de la función pura, que ya están cubiertos por T3 + T5, y la idempotencia de extremo a
-extremo, que T6 ya prueba en `tests_auto_copy_driver.py`: una propuesta no bloquea, una marca
-actuada sí, y un fallo se reintenta; queda decidir si eso cierra T8) y **T9** (verificación en vivo
-en el entorno real). En el frontend falta el **botón de la UI** que dispare
-`POST /api/auto-copy/sweep` y muestre el resumen (counts + entradas con su motivo); el backend ya
-devuelve ese resumen y no se tocó el frontend en este slice.
+**T1-T6, T10 y la mitad de UI hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3;
+`01259f2` y `e8e01b1` para T4; `b578116` y `3cdb487` para T5; `bc23be8`, `d9ed9ba` y `7fe1f53` para
+T6; `d3011d0` y `6e88902` para T10; `226ee62`, `9795351` y `ec53b75` para la UI; evidencia arriba).
 
-**T7, T8 y T9 siguen sin marcar.** T6 aporta la mitad de idempotencia de extremo a extremo que T8
-esperaba, pero no se reclama T8: la decisión de darlo por cerrado es del padre. T9 (verificación en
-vivo) sigue pendiente: lo probado es la lógica con tests locales, no el entorno NFS/ZFS real.
+El siguiente trabajo es **T7** —**la fila de historial por disparo, con su motivo**— y **T9**
+(**verificación en vivo en el entorno real**), que es segura de ejecutar con `SAFE_MODE` activo
+porque en ese modo el barrido solo propone y no toca la biblioteca. **T8** sigue como estaba: la
+mitad de función pura está cubierta por T3 + T5 y la idempotencia de extremo a extremo por T6
+(`tests_auto_copy_driver.py`: una propuesta no bloquea, una marca actuada sí, y un fallo se
+reintenta), pero darlo por cerrado es decisión del padre.
+
+**T7, T8 y T9 siguen sin marcar.** Lo probado hasta ahora es la lógica y el panel con tests
+locales, no el entorno NFS/ZFS real.
 
 - **T1** `copy_files_to_root`: payload en carpeta → copia recursiva del árbol al destino
   **conservando la estructura relativa** y sin sobrescribir lo que ya exista. El camino de un solo
