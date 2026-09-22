@@ -912,6 +912,139 @@ class TestWantedGrabMarks:
         assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] is None
 
 
+# ── "Todas" and the calendar mark their own items ────────────────────────────
+#
+# Same mark, three more surfaces. `/api/wanted/all` lists movies, `/api/wanted/
+# series/all` lists SERIES (marked by any episode grab of that series) and
+# `/api/calendar` lists both kinds, each keyed by its own source and type.
+
+ALL_MOVIES_PAYLOAD = [
+    {"id": 855, "title": "All Movie", "year": 2026, "hasFile": False,
+     "path": "/movies/All Movie", "monitored": True},
+]
+
+ALL_SERIES_PAYLOAD = [
+    {"id": 3, "title": "All Series", "year": 2020, "path": "/series/All Series",
+     "monitored": True, "statistics": {"episodeCount": 10, "episodeFileCount": 4}},
+]
+
+
+class TestAllListingsGrabMarks:
+    """`/api/wanted/all` and `/api/wanted/series/all` carry `grabbed_at`."""
+
+    @pytest.fixture(autouse=True)
+    def _isolated_history(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        yield
+        history.close()
+
+    def _get_movies(self):
+        routes = {f"{CONFIGURED_RADARR_URL}/api/v3/movie": (200, ALL_MOVIES_PAYLOAD)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get("/api/wanted/all")
+
+    def _get_series(self):
+        routes = {f"{ARR_BY_KEY['sonarr']['url']}/api/v3/series": (200, ALL_SERIES_PAYLOAD)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get("/api/wanted/series/all")
+
+    def test_all_movies_marks_a_grabbed_movie(self):
+        grabbed_at = time.time() - 3600
+        history.record_own_grab("radarr", movie_id=855, grabbed_at=grabbed_at)
+
+        body = self._get_movies().json()
+
+        assert body["items"][0]["grabbed_at"] == grabbed_at
+
+    def test_all_movies_unmarked_carries_none_not_absent(self):
+        item = self._get_movies().json()["items"][0]
+
+        assert "grabbed_at" in item, "the field must always be present"
+        assert item["grabbed_at"] is None
+
+    def test_all_series_is_marked_by_a_grab_of_one_of_its_episodes(self):
+        grabbed_at = time.time() - 3600
+        history.record_own_grab("sonarr", episode_id=7, series_id=3, grabbed_at=grabbed_at)
+
+        body = self._get_series().json()
+
+        assert body["items"][0]["id"] == 3
+        assert body["items"][0]["grabbed_at"] == grabbed_at
+
+    def test_all_series_unmarked_carries_none_not_absent(self):
+        item = self._get_series().json()["items"][0]
+
+        assert "grabbed_at" in item, "the field must always be present"
+        assert item["grabbed_at"] is None
+
+    def test_a_movie_grab_does_not_mark_a_series_with_the_same_id(self):
+        """A movie and a series can share a numeric id; the key's kind keeps the
+        movie mark off the series card."""
+        history.record_own_grab("radarr", movie_id=3, grabbed_at=time.time() - 60)
+
+        body = self._get_series().json()
+
+        assert body["items"][0]["grabbed_at"] is None
+
+
+class TestCalendarGrabMarks:
+    """`/api/calendar` marks each item by its own `source` and `type`."""
+
+    RADARR_ITEM = {
+        "id": 7, "title": "Calendar Movie", "year": 2026, "hasFile": False,
+        "physicalRelease": "2026-09-19",
+    }
+    SONARR_ITEM = {
+        "id": 7, "title": "Calendar Episode", "airDate": "2026-09-19",
+        "seasonNumber": 1, "episodeNumber": 1, "hasFile": False,
+        "series": {"title": "Some Show", "year": 2020},
+    }
+
+    @pytest.fixture(autouse=True)
+    def _isolated_history(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        yield
+        history.close()
+
+    def _get(self):
+        routes = {
+            f"{ARR_BY_KEY['radarr']['url']}/api/v3/calendar": (200, [self.RADARR_ITEM]),
+            f"{ARR_BY_KEY['sonarr']['url']}/api/v3/calendar": (200, [self.SONARR_ITEM]),
+        }
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get("/api/calendar")
+
+    @staticmethod
+    def _item(body, item_type):
+        return next(i for i in body["items"] if i["type"] == item_type)
+
+    def test_the_movie_is_marked_by_its_own_source_and_type(self):
+        grabbed_at = time.time() - 3600
+        history.record_own_grab("radarr", movie_id=7, grabbed_at=grabbed_at)
+
+        body = self._get().json()
+
+        # Both items carry id 7: only the movie's own source/type may match.
+        assert self._item(body, "movie")["grabbed_at"] == grabbed_at
+        assert self._item(body, "episode")["grabbed_at"] is None
+
+    def test_the_episode_is_marked_by_its_own_source_and_type(self):
+        grabbed_at = time.time() - 3600
+        history.record_own_grab("sonarr", episode_id=7, series_id=3, grabbed_at=grabbed_at)
+
+        body = self._get().json()
+
+        assert self._item(body, "episode")["grabbed_at"] == grabbed_at
+        assert self._item(body, "movie")["grabbed_at"] is None
+
+    def test_an_unmarked_item_carries_none_not_absent(self):
+        for item in self._get().json()["items"]:
+            assert "grabbed_at" in item, "the field must always be present"
+            assert item["grabbed_at"] is None
+
+
 # ── Authentication boundary ──────────────────────────────────────────────────
 
 

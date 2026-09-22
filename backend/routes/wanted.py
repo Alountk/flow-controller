@@ -53,30 +53,63 @@ _all_wanted_cache: dict[str, tuple[float, list[dict]]] = {}
 WANTED_GRAB_LOOKBACK = 90 * 24 * 60 * 60
 
 
-def _attach_grabbed_at(response: dict) -> dict:
-    """Add ``grabbed_at`` to every wanted item, once, on the built response.
+def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> dict:
+    """Add ``grabbed_at`` to every item on a built response.
 
-    Called on the assembled body rather than inside either branch on purpose:
-    this route has a text-filtered branch and a plain one, and enriching only
-    one of them would silently leave half the items unmarked. Do not move it
-    back into a branch.
+    Shared by every surface that shows the mark — ``/api/wanted``,
+    ``/api/wanted/all``, ``/api/wanted/series/all`` and ``/api/calendar`` — so
+    there is one enrichment rather than one per route. It handles both body
+    shapes this app returns:
+
+      - the grouped ``{"wanted": {service: {"items": [...]}}}`` shape, whose kind
+        follows the service (``radarr`` → movie, ``sonarr`` → episode);
+      - a flat ``{"items": [...]}`` shape, where the caller names the ``source``
+        and ``kind`` because the items do not carry them — except the calendar,
+        whose items already carry both ``source`` and ``type``, so it passes
+        neither and the key is read per item.
+
+    Called on the assembled body rather than inside either branch of
+    ``/api/wanted`` on purpose: that route has a text-filtered branch and a plain
+    one, and enriching only one of them would silently leave half the items
+    unmarked. Do not move it back into a branch.
 
     The marks come from ``own_grabs``, re-read per request, and never from
     ``_fetch_all_wanted``'s cache: that cache holds the arr's data, and this mark
-    is ours. Each item is copied so the cached dicts are never mutated. An item
-    with no mark gets ``grabbed_at: None`` — the field is always present, so the
-    frontend never has to tell "absent" from "unknown".
+    is ours. Each item is copied so a cached or caller-owned dict is never
+    mutated. An item with no mark gets ``grabbed_at: None`` — the field is always
+    present, so the frontend never has to tell "absent" from "unknown".
     """
     marks = history.own_grabs_latest_map(time.time() - WANTED_GRAB_LOOKBACK)
-    for source_key, page in (response.get("wanted") or {}).items():
-        items = page.get("items")
-        if not items:
-            continue
-        # Radarr wanted items are movies, Sonarr's are episodes; the own-grab
-        # key records which kind, so the mapping is explicit rather than guessed.
-        kind = "movie" if source_key == "radarr" else "episode"
-        page["items"] = [
-            {**item, "grabbed_at": marks.get((source_key, kind, item.get("id")))}
+
+    wanted = response.get("wanted")
+    if wanted:
+        for source_key, page in wanted.items():
+            items = page.get("items")
+            if not items:
+                continue
+            # Radarr wanted items are movies, Sonarr's are episodes; the own-grab
+            # key records which kind, so the mapping is explicit rather than
+            # guessed.
+            item_kind = "movie" if source_key == "radarr" else "episode"
+            page["items"] = [
+                {**item, "grabbed_at": marks.get((source_key, item_kind, item.get("id")))}
+                for item in items
+            ]
+        return response
+
+    items = response.get("items")
+    if items:
+        response["items"] = [
+            {
+                **item,
+                # The item's own source and type win when present (the calendar
+                # carries both); otherwise the caller's explicit source/kind.
+                "grabbed_at": marks.get((
+                    item.get("source") or source,
+                    item.get("type") or kind,
+                    item.get("id"),
+                )),
+            }
             for item in items
         ]
     return response
@@ -236,7 +269,10 @@ async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: 
     fetch_size = 0 if normalize_for_search(q) else page_size
     async with aiohttp.ClientSession() as session:
         result = await fetch_all_movies_detailed(session, service, page, fetch_size)
-    return _filter_all_endpoint(result, q, page, page_size)
+    # Every /api/wanted/all item is a Radarr movie, so the key is explicit.
+    return _attach_grabbed_at(
+        _filter_all_endpoint(result, q, page, page_size), source="radarr", kind="movie"
+    )
 
 
 @router.get("/api/wanted/series/all")
@@ -248,7 +284,10 @@ async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: 
     fetch_size = 0 if normalize_for_search(q) else page_size
     async with aiohttp.ClientSession() as session:
         result = await fetch_all_series_detailed(session, service, page, fetch_size)
-    return _filter_all_endpoint(result, q, page, page_size)
+    # A series card is marked by any episode grab of that series.
+    return _attach_grabbed_at(
+        _filter_all_endpoint(result, q, page, page_size), source="sonarr", kind="series"
+    )
 
 
 @router.get("/api/wanted/series/{series_id}/episodes")
