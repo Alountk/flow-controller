@@ -219,6 +219,35 @@ export interface AutoCopySweepResult {
   finished_at?: number | null
 }
 
+/* ---- Auto-copy decision history ---- */
+
+/** The sweep's OUTCOME for one candidate, as stored in `auto_copy_log`. The
+ *  action when there is one (`copied`/`proposed`/`failed`) and the policy's
+ *  decision otherwise (`wait`/`skip`). One field, so the UI needs no second
+ *  lookup. */
+export type AutoCopyLogDecision = 'copied' | 'proposed' | 'wait' | 'skip' | 'failed'
+
+/** Mirrors one `auto_copy_log` row. It exists only when the outcome CHANGED, so
+ *  the list reads as a timeline of transitions, not a sweep-by-sweep dump.
+ *  `reason` is the same user-facing Spanish text the sweep panel shows. */
+export interface AutoCopyLogEntry {
+  id: number
+  key: string
+  source: string | null
+  title: string | null
+  decision: AutoCopyLogDecision
+  reason: string | null
+  at: number
+}
+
+/** Mirrors GET /api/auto-copy/history. `error` is present when the store could
+ *  not be read, so the panel can tell "nothing happened" from "unreadable". */
+export interface AutoCopyHistoryResponse {
+  items: AutoCopyLogEntry[]
+  error?: string
+}
+
+
 /* ---- Config / Developer ---- */
 
 export interface ConfigResponse {

@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   ActionKey,
   ActionMeta,
   ActionsResponse,
   AutoCopyAction,
+  AutoCopyLogDecision,
+  AutoCopyLogEntry,
   AutoCopySweepEntry,
   AutoCopySweepResult,
   Trace,
@@ -11,7 +13,7 @@ import type {
   TraceStage,
 } from '../types'
 import { STAGE_LABELS } from '../types'
-import { runAutoCopySweep } from '../api/autoCopy'
+import { fetchAutoCopyHistory, runAutoCopySweep } from '../api/autoCopy'
 import { TraceActions } from './TraceActions'
 import './TraceView.css'
 
@@ -184,6 +186,66 @@ const AUTO_COPY_ACTION_LABELS: Record<AutoCopyAction, string> = {
   failed: 'Falló',
 }
 
+/** Readable Spanish label for a logged decision. The log stores the sweep's
+ *  outcome, so `wait` and `skip` need a label too — they are the "why not". */
+const AUTO_COPY_LOG_LABELS: Record<AutoCopyLogDecision, string> = {
+  copied: 'Copiada',
+  proposed: 'Propuesta',
+  wait: 'Esperando',
+  skip: 'Omitida',
+  failed: 'Falló',
+}
+
+function formatLogTime(epoch: number): string {
+  const then = new Date(epoch * 1000)
+  if (Number.isNaN(then.getTime())) return '—'
+  return then.toLocaleString()
+}
+
+/**
+ * The append-only decision log, newest first.
+ *
+ * Every row is a transition — the outcome changed since the previous sweep — so
+ * the list reads as a timeline, not a sweep-by-sweep dump. `reason` is the same
+ * Spanish text the sweep panel shows, written for a human.
+ */
+function AutoCopyHistory({
+  entries,
+  error,
+}: {
+  entries: AutoCopyLogEntry[]
+  error: string | null
+}) {
+  return (
+    <div className="auto-copy-history">
+      <h3 className="auto-copy-history-title">Historial de auto-copia</h3>
+      {error ? (
+        <p className="auto-copy-history-error">{error}</p>
+      ) : entries.length === 0 ? (
+        <p className="auto-copy-history-empty">
+          Todavía no hay movimientos. Cuando un barrido cambie el estado de una
+          descarga, aparecerá aquí.
+        </p>
+      ) : (
+        <ul className="auto-copy-history-list">
+          {entries.map((row) => (
+            <li key={row.id} className="auto-copy-history-row">
+              <span className="auto-copy-history-date">{formatLogTime(row.at)}</span>
+              <span className={`auto-copy-badge ${row.decision}`}>
+                {AUTO_COPY_LOG_LABELS[row.decision]}
+              </span>
+              <span className="auto-copy-history-row-title" title={row.title ?? ''}>
+                {row.title ?? '—'}
+              </span>
+              <span className="auto-copy-history-reason">{row.reason ?? ''}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function AutoCopyErrors({ errors }: { errors: string[] }) {
   if (errors.length === 0) return null
   return (
@@ -297,6 +359,20 @@ export function TraceView({ data, loading, actions, onActionDone }: Props) {
   const [search, setSearch] = useState('')
   const [sweepResult, setSweepResult] = useState<AutoCopySweepResult | null>(null)
   const [sweeping, setSweeping] = useState(false)
+  const [history, setHistory] = useState<AutoCopyLogEntry[]>([])
+  const [historyError, setHistoryError] = useState<string | null>(null)
+
+  // Loads with the page and again after every sweep: the trigger is the only
+  // thing that can add rows, so the list would otherwise be stale until reload.
+  const loadHistory = useCallback(async () => {
+    const { items, error } = await fetchAutoCopyHistory()
+    setHistory(items)
+    setHistoryError(error ?? null)
+  }, [])
+
+  useEffect(() => {
+    void loadHistory()
+  }, [loadHistory])
 
   async function runSweep() {
     setSweeping(true)
@@ -304,6 +380,7 @@ export function TraceView({ data, loading, actions, onActionDone }: Props) {
       // The api module turns a rejected fetch into a failed summary, so this
       // never throws and the button can never get stuck on "Revisando…".
       setSweepResult(await runAutoCopySweep())
+      await loadHistory()
     } finally {
       setSweeping(false)
     }
@@ -371,6 +448,8 @@ export function TraceView({ data, loading, actions, onActionDone }: Props) {
           <AutoCopyResult result={sweepResult} safeMode={Boolean(actions?.safe_mode)} />
         )}
       </div>
+
+      <AutoCopyHistory entries={history} error={historyError} />
 
       {summary && (
         <div className="trace-summary">
