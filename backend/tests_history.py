@@ -803,7 +803,9 @@ def test_init_db_migrates_a_v3_database_without_an_alter(tmp_path):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     finally:
         conn.close()
-    assert version == 4
+    # A v4 file advances to the CURRENT schema, not to 4. Pinning the literal
+    # meant a schema bump broke this test rather than the migration it guards.
+    assert version == history.SCHEMA_VERSION
 
 
 # ── Grouped own-grab marks for Faltantes ─────────────────────────────────────
