@@ -352,17 +352,25 @@ def own_grabs_latest_map(since: float) -> dict[tuple[str, str, int], float]:
     """Latest own-grab instant per title, for marking wanted items.
 
     One query aggregates ``MAX(grabbed_at)`` per ``(source, movie_id,
-    episode_id)``. There is deliberately NO ``LIMIT``: the sibling reader caps at
-    200 rows, and applying a cap here would silently drop marks for every title
-    past it. A dropped mark reads as "never requested", which is a wrong answer
-    on screen, and a wrong answer is worse than a slower query. The result is
-    bounded by how many distinct titles were grabbed in the window, not by the
-    raw number of grabs.
+    episode_id, series_id)``. There is deliberately NO ``LIMIT``: the sibling
+    reader caps at 200 rows, and applying a cap here would silently drop marks
+    for every title past it. A dropped mark reads as "never requested", which is
+    a wrong answer on screen, and a wrong answer is worse than a slower query.
+    The result is bounded by how many distinct titles were grabbed in the window,
+    not by the raw number of grabs.
 
-    Keys are ``(source, kind, id)`` with ``kind`` in ``{"movie", "episode"}``.
-    The kind is part of the key because a movie and an episode can carry the
-    same numeric id and must not collide. A row with neither id cannot be keyed
-    and is skipped.
+    Keys are ``(source, kind, id)`` with ``kind`` in ``{"movie", "episode",
+    "series"}``. The kind is part of the key because a movie, an episode and a
+    series can carry the same numeric id and must not collide.
+
+    One row can contribute MORE THAN ONE key: an episode grab records both the
+    episode and its series, because the "Todas" tab shows series cards and a
+    series card has to read "we asked for something from this series". The
+    series mark is the newest episode grab for that series, computed here rather
+    than left to SQL: the grouping is per episode, so several rows can share a
+    series and the last row read would otherwise win by accident.
+
+    A row with no movie, episode or series id cannot be keyed and is skipped.
 
     Degrades to ``{}`` when the store is unavailable: the caller treats that as
     "no marks", which is the safe direction — an unmarked card is the status quo
@@ -373,9 +381,10 @@ def own_grabs_latest_map(since: float) -> dict[tuple[str, str, int], float]:
             return {}
         try:
             rows = _conn.execute(
-                "SELECT source, movie_id, episode_id, MAX(grabbed_at) AS grabbed_at "
+                "SELECT source, movie_id, episode_id, series_id, "
+                "       MAX(grabbed_at) AS grabbed_at "
                 "FROM own_grabs WHERE grabbed_at >= ? "
-                "GROUP BY source, movie_id, episode_id",
+                "GROUP BY source, movie_id, episode_id, series_id",
                 (since,),
             ).fetchall()
         except sqlite3.Error as exc:
@@ -385,13 +394,21 @@ def own_grabs_latest_map(since: float) -> dict[tuple[str, str, int], float]:
     marks: dict[tuple[str, str, int], float] = {}
     for row in rows:
         source = row["source"]
+        grabbed_at = float(row["grabbed_at"])
         # movie_id wins when both are set, matching how the app records a grab:
-        # a movie grab carries no episode. A row with neither id has nothing to
-        # key a mark to and is skipped.
+        # a movie grab carries no episode.
         if row["movie_id"] is not None:
-            marks[(source, "movie", int(row["movie_id"]))] = float(row["grabbed_at"])
+            marks[(source, "movie", int(row["movie_id"]))] = grabbed_at
         elif row["episode_id"] is not None:
-            marks[(source, "episode", int(row["episode_id"]))] = float(row["grabbed_at"])
+            marks[(source, "episode", int(row["episode_id"]))] = grabbed_at
+        # Independent of the branch above: an episode grab also marks its series.
+        # Keep the newest, because one series is a single key shared by all of
+        # its episodes and the rows are not ordered.
+        if row["series_id"] is not None:
+            series_key = (source, "series", int(row["series_id"]))
+            previous = marks.get(series_key)
+            if previous is None or grabbed_at > previous:
+                marks[series_key] = grabbed_at
     return marks
 
 

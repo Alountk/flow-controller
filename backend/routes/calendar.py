@@ -33,6 +33,7 @@ from models import (
     CalendarGrabBatchRequest,
 )
 from routes.status import verify_api_key
+from routes.wanted import _attach_grabbed_at
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
@@ -62,7 +63,9 @@ async def get_calendar(start: str = "", end: str = "", _key: str = Depends(verif
                 all_items.extend(r)
 
     all_items.sort(key=lambda x: x.get("date") or "9999")
-    return {"items": all_items, "start": start, "end": end}
+    # Each item carries its own `source` and `type`, so the shared helper reads
+    # the mark key from the item instead of being told which one it is.
+    return _attach_grabbed_at({"items": all_items, "start": start, "end": end})
 
 
 @router.post("/api/calendar/search")

@@ -833,6 +833,41 @@ def test_a_movie_and_an_episode_with_the_same_id_do_not_collide(db):
     assert marks[("radarr", "episode", 5)] == 200.0
 
 
+def test_an_episode_grab_also_marks_its_series(db):
+    """The "Todas" tab shows series cards, so an episode grab marks the series
+    too: the card must read "we asked for something from this series"."""
+    history.record_own_grab("sonarr", episode_id=7, series_id=3, grabbed_at=200.0)
+
+    marks = history.own_grabs_latest_map(0)
+
+    assert marks[("sonarr", "episode", 7)] == 200.0
+    assert marks[("sonarr", "series", 3)] == 200.0
+
+
+def test_a_series_key_does_not_collide_with_a_movie_or_episode_key(db):
+    """Same numeric id, three kinds: the kind is in the key so they stay apart."""
+    history.record_own_grab("radarr", movie_id=5, grabbed_at=100.0)
+    history.record_own_grab("sonarr", episode_id=5, series_id=5, grabbed_at=200.0)
+
+    marks = history.own_grabs_latest_map(0)
+
+    assert marks[("radarr", "movie", 5)] == 100.0
+    assert marks[("sonarr", "episode", 5)] == 200.0
+    assert marks[("sonarr", "series", 5)] == 200.0
+    assert len(marks) == 3
+
+
+def test_a_series_mark_is_the_newest_of_its_episode_grabs(db):
+    """A series is one mark shared by many episodes, and the SQL groups per
+    episode, so a naive "last row wins" would depend on row order."""
+    history.record_own_grab("sonarr", episode_id=7, series_id=3, grabbed_at=500.0)
+    history.record_own_grab("sonarr", episode_id=8, series_id=3, grabbed_at=100.0)
+
+    marks = history.own_grabs_latest_map(0)
+
+    assert marks[("sonarr", "series", 3)] == 500.0
+
+
 def test_grabs_before_since_are_excluded(db):
     history.record_own_grab("radarr", movie_id=1, grabbed_at=100.0)
     history.record_own_grab("radarr", movie_id=2, grabbed_at=300.0)
