@@ -157,7 +157,9 @@ fácil; recortar después de que haya movido algo mal, no.
 - [x] **T2** Copia con hardlink cuando el volumen coincide; fallback a copia
 - [x] **T3** Función pura: traza → decisión, con la ventana de gracia
 - [x] **T4** Marca de idempotencia persistida + guarda `has_file`
-- [ ] **T5** Registro de grabs propios (id del título + instante) y casamiento posterior por hash exacto
+- [x] **T5** Registro de grabs propios (id del título + instante) y casamiento posterior por hash exacto
+      — ver la corrección de alcance en la evidencia: el "hash exacto" del enunciado es
+      `auto_copy_key` de **T4**; T5 cubre el registro y el casamiento por (id del título + instante)
 - [ ] **T6** Driver sobre las trazas existentes + respeto de `SAFE_MODE`
 - [ ] **T7** Fila de historial por disparo, con su motivo
 - [ ] **T8** Tests de la función pura (los tres resultados) y de la idempotencia
@@ -190,7 +192,9 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`). Checks fun
 - [x] **T1-T2 implementados y verificados** (evidencia abajo): esto arregla el motor, no el disparador.
 - [x] **T3 implementado y verificado** (evidencia abajo): la decisión pura.
 - [x] **T4 implementado y verificado** (evidencia abajo): la identidad estable, la marca
-      idempotente persistida y la guarda `has_file`. **T5-T9** siguen sin empezar.
+      idempotente persistida y la guarda `has_file`.
+- [x] **T5 implementado y verificado** (evidencia abajo): el registro de grabs propios, la
+      grabación en las rutas y el matcher puro. **T6-T9** siguen sin empezar.
 
 ## Verification evidence
 
@@ -293,7 +297,8 @@ auto-copy policy and marker await their driver"): se añaden `auto_copy_key`, `m
 `is_auto_copy_handled` (commit 1) y `arr_has_file` (commit 2); `decide_copy` ya venía de T3. Cada
 entrada dice que es la política/marca de auto-copia a la espera del driver de **T6**. **T6 debe
 eliminar TODAS las entradas de auto-copia** una vez que exista el driver: `decide_copy`,
-`auto_copy_key`, `mark_auto_copy`, `is_auto_copy_handled` y `arr_has_file`. Son deuda declarada, no
+`auto_copy_key`, `mark_auto_copy`, `is_auto_copy_handled`, `arr_has_file` y `matches_own_grab`
+(esta última añadida por T5). Son deuda declarada, no
 excepciones permanentes. Nota: `arr_has_file` no lo reporta vulture por casualidad —`decide_copy`
 tiene un parámetro con el mismo nombre, así que el nombre ya "aparece referenciado"—; se whitelistea
 explícitamente para que un futuro renombrado de ese parámetro no convierta deuda real en un hallazgo
@@ -325,14 +330,119 @@ identidad sobre la que se indexa el marcador está cubierta en `backend/tests_au
 consulta la marca y se salta la segunda copia tras un reinicio), que necesita a T6. No se reclama
 T8.
 
+### T5 — saber qué grabs son nuestros (commits `b578116`, `3cdb487`)
+
+Rama `feat/auto-copy-own-grabs`, base `feat/auto-copy-decision`. Nota honesta de base: **`main`
+todavía NO lleva T3/T4** (`backend/auto_copy.py` no existe ahí y su `history.py` es
+`SCHEMA_VERSION = 1`), así que ramificar desde `main` habría exigido reimplementar T3/T4 —
+justo lo prohibido. La rama se corta desde la rama que de verdad los lleva.
+
+`backend/history.py` sube `SCHEMA_VERSION` a 3 y añade la tabla `own_grabs` con la misma
+disciplina que v2 (`CREATE TABLE IF NOT EXISTS` dentro del `executescript` que `init_db` corre en
+cada arranque, así que un v2 real gana la tabla sin ALTER) más el escritor `record_own_grab`.
+Es best-effort: bloqueo del módulo, log de aviso y retorno; nunca excepción, porque corre dentro
+del handler del grab y **no puede** tumbar la app ni convertir un grab correcto en un fallo.
+**No** se añade el lector todavía: su único consumidor es el driver de T6 y una función pública
+sin llamador sería otra entrada de vulture. El contrato que T6 debe implementar queda escrito en
+un comentario: `list_own_grabs(...) -> list[dict]`, filas más nuevas primero con las columnas de
+`own_grabs` (`id`, `source`, `movie_id`, `episode_id`, `series_id`, `guid`, `indexer_id`,
+`grabbed_at`), listas para pasar a `matches_own_grab`. `backend/routes/calendar.py` registra en
+`calendar_grab` y en `calendar_grab_batch` cada grab que de verdad tuvo éxito —una fila por guid
+en el lote— sin cambiar la respuesta ni el comportamiento de la ruta.
+
+**Corrección de alcance, explícita.** La mitad del enunciado "casamiento posterior por **hash
+exacto**" **ya estaba entregada por T4**: `auto_copy_key` normaliza el id de descarga de forma
+determinista (40 caracteres más cola de ceros, matcher difuso prohibido) y es la identidad del
+marcador de idempotencia. T5 **no** la reimplementa ni la toca. T5 cubre las otras dos mitades:
+**el registro** de grabs propios y **el casamiento por (id del título + instante)**. Que nadie
+lea la fila de T5 y crea que se saltó algo: el "casamiento por hash" del enunciado es
+`auto_copy_key`, de T4.
+
+**El `guid` es solo auditoría.** En un registro de grab del arr, `data.guid` es el hash del
+**cliente de descarga**, no el guid del release del indexador (medido contra la API real). Por eso
+no se puede casar el grab de la app contra el historial por el guid del release; el casamiento es
+por (id del título + instante). El `guid` se guarda para auditoría y el comentario del esquema
+avisa de que no se "optimice" a un join por guid.
+
+### T5 — el matcher puro (`backend/auto_copy.py`)
+
+`matches_own_grab(trace, own_grabs, *, window_seconds=DEFAULT_GRAB_WINDOW_SECONDS) -> bool` es
+puro y mantiene la regla estructural del módulo: sigue sin `aiohttp`, `state`, `history`,
+`config`, `os` ni `time` (el guard de imports de T3 sigue pasando); solo añade `datetime`.
+Responde sí/no:
+
+- mismo `source` que la fila del registro;
+- misma identidad de título: `ids["movie_id"]` compara movie ids, `ids["episode_id"]` compara
+  episode ids; una traza sin ninguna de las dos **no casa** (respuesta honesta; la política ya
+  trata un no-casamiento como "skip");
+- el `date` de la traza dentro de
+  `[grabbed_at - GRAB_CLOCK_SKEW_SECONDS, grabbed_at + DEFAULT_GRAB_WINDOW_SECONDS]`. El arr
+  escribe su fila momentos **después** de nuestra petición, así que cae justo pasado `grabbed_at`;
+  exigir igualdad exacta no casaría nada;
+- un `date` ausente o no parseable es un no-casamiento: nunca adivina y nunca lanza.
+
+**Constantes y por qué**:
+
+- `DEFAULT_GRAB_WINDOW_SECONDS = 120.0` (2 min): tolerancia, no rango de búsqueda. Demasiado
+  estrecha y se pierde el grab de un arr lento (la app no actúa: el statu quo); demasiado ancha y
+  un grab manual **posterior** del mismo título se nos atribuye y la app lo copia. Se inclina a
+  estrecha por D3 ("ampliar cuando lo actual sea aburrido de fiable es fácil; recortar después de
+  que haya movido algo mal, no"). El límite superior es inclusivo y está probado por dentro y por
+  fuera.
+- `GRAB_CLOCK_SKEW_SECONDS = 30.0`: si el reloj de este host va por delante del del arr, el `date`
+  del arr puede caer antes de `grabbed_at`; esto solo cubre ese desfase, y por eso el límite
+  inferior es `grabbed_at - skew`, no igualdad exacta.
+
+Tests: 13 casos en `backend/tests_auto_copy.py` (mismo movie, mismo episode, source distinto, id
+distinto, borde por dentro/por fuera de la ventana, borde de skew, fecha ausente, fecha no
+parseable, sin identidad de título, registro vacío, fila sin `grabbed_at`), 4 en
+`backend/tests_history.py` (round-trip, instante por defecto, no-op con la BD no disponible,
+migración v2→v3 sobre una base v2 construida a mano) y 4 en `backend/tests_routes.py` (grab OK
+registra ids y source, grab fallido no registra nada, el lote registra uno por guid OK, BD no
+disponible no hace fallar el grab). Un test existente (`test_init_db_migrates_a_v1_database...`)
+afirmaba `user_version == 2`; se actualizó a `history.SCHEMA_VERSION` porque un fichero v1 ahora
+avanza hasta la versión actual. El resto de sus aserciones (tabla nueva usable, fila legacy
+intacta) siguen igual.
+
+Comandos ejecutados en `backend/` (literal, sin recortes):
+
+| Comando | Resultado literal |
+| --- | --- |
+| `python3 -m pytest -q` | `393 passed, 2 warnings in 17.08s` (en T4 eran `372 passed`; este slice añade 21 tests) |
+| `python3 -m pyflakes *.py routes/*.py` | sin salida, exit 0 |
+| `python3 -m vulture` | sin salida, exit 0 |
+
+Tamaño del slice: `git diff --shortstat b580f33..3cdb487` → `7 files changed, 572 insertions(+), 4
+deletions(-)` (576 líneas cambiadas), **por encima del presupuesto de ~400**. Se parte en dos
+unidades de trabajo coherentes y encadenables, cada una por debajo del presupuesto: commit 1
+`b578116` `324 insertions(+), 3 deletions(-)` (327 cambiadas: el registro + la ruta) y commit 2
+`3cdb487` `248 insertions(+), 1 deletion(-)` (249 cambiadas: el matcher). El commit de
+documentación no cuenta aquí. No se recortaron tests ni comentarios para caber: el número real es
+el de arriba.
+
+**Deuda de vulture declarada**: se añade `matches_own_grab` a `backend/vulture_whitelist.py` (su
+único llamador es el driver de T6). Con esto, **T6 debe eliminar TODAS las entradas de auto-copia**
+una vez que exista el driver: `decide_copy`, `auto_copy_key`, `mark_auto_copy`,
+`is_auto_copy_handled`, `arr_has_file` y **`matches_own_grab`**.
+
+**T8 sigue sin marcar.** La mitad de función pura está más cubierta ahora (T3 + el matcher de T5),
+pero la mitad de **idempotencia de extremo a extremo** (un driver que consulta la marca y se salta
+la segunda copia tras un reinicio) sigue necesitando a T6. El registro de T5 aporta la materia
+prima del casamiento, no el comportamiento de idempotencia completo.
+
 ## Next step
 
-**T1-T4 hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3; `01259f2` y `e8e01b1`
-para T4; evidencia arriba), base `main` (la cadena de PRs de "En carpeta" es independiente y no debe
-ser su base; T3 y T4 van en la rama `feat/auto-copy-decision`). T4 supera un único PR de ~400 líneas
-(543 cambiadas), así que su slice son dos PR encadenados: el commit 1 (identidad + marca, 380) y el
-commit 2 (guarda `has_file`, 163). El siguiente paso es **T5-T9**: el registro de grabs propios, el
-driver sobre las trazas, la fila de historial por disparo y la verificación en vivo.
+**T1-T5 hechos** (commits `f00d620` y `03c70da` para T1/T2; `f69c66a` para T3; `01259f2` y `e8e01b1`
+para T4; `b578116` y `3cdb487` para T5; evidencia arriba), base `main` (la cadena de PRs de "En
+carpeta" es independiente y no debe ser su base; T3 y T4 van en la rama `feat/auto-copy-decision`,
+**desde la que se corta `feat/auto-copy-own-grabs` para T5**, porque `main` no los lleva). T4 supera
+un único PR de ~400 líneas (543 cambiadas), así que su slice son dos PR encadenados: el commit 1
+(identidad + marca, 380) y el commit 2 (guarda `has_file`, 163). T5 también supera ~400 en total
+(576), así que va en dos unidades: registro + ruta (327) y matcher (249). El siguiente paso es
+**T6-T9**: el driver sobre las trazas (que debe añadir el lector `list_own_grabs` sobre `own_grabs`
+y llamar a `matches_own_grab`, eliminando de paso todas las entradas de auto-copia del whitelist de
+vulture), la fila de historial por disparo y la verificación en vivo. **T8** sigue sin marcar: la
+idempotencia de extremo a extremo depende de T6.
 
 - **T1** `copy_files_to_root`: payload en carpeta → copia recursiva del árbol al destino
   **conservando la estructura relativa** y sin sobrescribir lo que ya exista. El camino de un solo
