@@ -3,11 +3,15 @@ import type {
   ActionKey,
   ActionMeta,
   ActionsResponse,
+  AutoCopyAction,
+  AutoCopySweepEntry,
+  AutoCopySweepResult,
   Trace,
   TraceResponse,
   TraceStage,
 } from '../types'
 import { STAGE_LABELS } from '../types'
+import { runAutoCopySweep } from '../api/autoCopy'
 import { TraceActions } from './TraceActions'
 import './TraceView.css'
 
@@ -174,9 +178,136 @@ function TraceRow({
   )
 }
 
+const AUTO_COPY_ACTION_LABELS: Record<AutoCopyAction, string> = {
+  copied: 'Copiada',
+  proposed: 'Propuesta',
+  failed: 'Falló',
+}
+
+function AutoCopyErrors({ errors }: { errors: string[] }) {
+  if (errors.length === 0) return null
+  return (
+    <div className="auto-copy-errors">
+      <span className="auto-copy-errors-label">Errores</span>
+      {errors.map((e, i) => (
+        <div key={i} className="auto-copy-error">{e}</div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Result of the last sweep, as returned by POST /api/auto-copy/sweep.
+ *
+ * `safeMode` is the page's `actions.safe_mode` — the same signal the rest of
+ * the UI trusts — not a second source read from this response.
+ */
+function AutoCopyResult({
+  result,
+  safeMode,
+}: {
+  result: AutoCopySweepResult
+  safeMode: boolean
+}) {
+  // `counts` can be `{}` in the route's last-resort error body, so read every
+  // field defensively instead of trusting the type at runtime.
+  const counts = result.counts ?? {}
+  const actionable = result.entries.filter(
+    (e): e is AutoCopySweepEntry & { action: AutoCopyAction } => e.action !== null,
+  )
+
+  if (result.running) {
+    // A sweep was already in flight. Showing the zero counts of that refusal
+    // would look like "nothing needed doing", which is not what happened.
+    return (
+      <div className="auto-copy-result">
+        <p className="auto-copy-running">
+          Ya hay un barrido en curso. Espera a que termine y vuelve a intentarlo.
+        </p>
+        <AutoCopyErrors errors={result.errors} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="auto-copy-result">
+      {safeMode && (
+        <p className="auto-copy-safe-banner">
+          Modo seguro activo: no se ha copiado nada. Lo que sigue es lo que el
+          barrido haría.
+        </p>
+      )}
+      <AutoCopyErrors errors={result.errors} />
+
+      {!result.ok ? (
+        !result.errors.length && result.detail && (
+          <p className="auto-copy-running">{result.detail}</p>
+        )
+      ) : (
+        <>
+          <div className="auto-copy-counts">
+            <div className="auto-copy-count">
+              <span className="auto-copy-count-value">{counts.traces ?? 0}</span>
+              <span className="auto-copy-count-label">Trazas revisadas</span>
+            </div>
+            <div className="auto-copy-count">
+              <span className="auto-copy-count-value">{counts.copied ?? 0}</span>
+              <span className="auto-copy-count-label">Copiadas</span>
+            </div>
+            <div className="auto-copy-count">
+              <span className="auto-copy-count-value">{counts.proposed ?? 0}</span>
+              <span className="auto-copy-count-label">Propuestas</span>
+            </div>
+            <div className="auto-copy-count">
+              <span className="auto-copy-count-value">{counts.wait ?? 0}</span>
+              <span className="auto-copy-count-label">En espera</span>
+            </div>
+          </div>
+
+          {actionable.length === 0 ? (
+            <p className="auto-copy-empty">
+              No hay nada que copiar: ninguna descarga necesita intervención.
+            </p>
+          ) : (
+            <ul className="auto-copy-entries">
+              {actionable.map((e, i) => (
+                <li key={`${e.source}-${e.key}-${i}`} className="auto-copy-entry">
+                  <div className="auto-copy-entry-head">
+                    <span className={`auto-copy-badge ${e.action}`}>
+                      {AUTO_COPY_ACTION_LABELS[e.action]}
+                    </span>
+                    <span className="auto-copy-entry-title" title={e.title}>
+                      {e.title}
+                    </span>
+                  </div>
+                  <p className="auto-copy-entry-reason">{e.reason}</p>
+                  {e.detail && <p className="auto-copy-entry-detail">{e.detail}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export function TraceView({ data, loading, actions, onActionDone }: Props) {
   const [filter, setFilter] = useState<'all' | TraceStage>('all')
   const [search, setSearch] = useState('')
+  const [sweepResult, setSweepResult] = useState<AutoCopySweepResult | null>(null)
+  const [sweeping, setSweeping] = useState(false)
+
+  async function runSweep() {
+    setSweeping(true)
+    try {
+      // The api module turns a rejected fetch into a failed summary, so this
+      // never throws and the button can never get stuck on "Revisando…".
+      setSweepResult(await runAutoCopySweep())
+    } finally {
+      setSweeping(false)
+    }
+  }
 
   const traces = data?.traces ?? []
   const summary = data?.summary
@@ -220,6 +351,24 @@ export function TraceView({ data, loading, actions, onActionDone }: Props) {
             Modo seguro activo: las acciones destructivas (eliminar/blocklist) están
             bloqueadas en el servidor.
           </p>
+        )}
+      </div>
+
+      <div className="auto-copy">
+        <div className="auto-copy-bar">
+          <button
+            className="auto-copy-btn"
+            onClick={() => void runSweep()}
+            disabled={sweeping}
+          >
+            {sweeping ? 'Revisando…' : 'Revisar descargas'}
+          </button>
+          <span className="auto-copy-hint">
+            Revisa las descargas completadas que Sonarr/Radarr no hayan importado.
+          </span>
+        </div>
+        {sweepResult && (
+          <AutoCopyResult result={sweepResult} safeMode={Boolean(actions?.safe_mode)} />
         )}
       </div>
 
