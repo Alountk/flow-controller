@@ -11,6 +11,7 @@ other tool.
 """
 
 from auto_copy import auto_copy_key, decide_copy
+from clients import arr_has_file
 from history import is_auto_copy_handled, mark_auto_copy
 from media_mixer import select_best_video
 from state import queue_consumer_task
@@ -48,9 +49,16 @@ from state import queue_consumer_task
 #   - `mark_auto_copy`       T4 writes the idempotency marker.
 #   - `is_auto_copy_handled` T4 reads it back.
 #
+# `arr_has_file` (T4, clients.py) has no production caller either, but vulture
+# does NOT report it: `decide_copy` has a parameter of the same name, so the
+# name already reads as "referenced". That is a coincidence, not a caller. It is
+# whitelisted explicitly so a future rename of that parameter cannot turn this
+# real debt into a surprise finding.
+#
 # T6 MUST remove every auto-copy entry from this list once the driver calls
 # them. They are debt, not permanent exceptions.
 __all__ = [
+    "arr_has_file",
     "auto_copy_key",
     "decide_copy",
     "is_auto_copy_handled",

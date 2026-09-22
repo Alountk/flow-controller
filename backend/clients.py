@@ -604,6 +604,55 @@ async def arr_import_status(
     return result
 
 
+async def arr_has_file(
+    session: aiohttp.ClientSession,
+    service: dict,
+    *,
+    movie_id: int | None = None,
+    episode_id: int | None = None,
+) -> bool | None:
+    """Ask the arr whether it already holds this specific item.
+
+    Three-valued on purpose: `True` when the arr says it has the file, `False`
+    only when it explicitly says it does not, and `None` when the answer is
+    unknown (no id, a non-200, a missing field, a timeout or any client error).
+    The policy skips on `True` only, so collapsing `None` into `False` would
+    turn a transient failure into "not imported yet" and invite a duplicate
+    copy — the exact race this guard exists to prevent.
+
+    An episode asks `/api/v3/episode/{id}` rather than `arr_import_status`, which
+    checks a Sonarr series a season at a time and reads the first episode's
+    flag: too coarse to answer whether *this* episode is imported.
+    """
+    if movie_id is not None:
+        endpoint = f"{service['url']}/api/v3/movie/{movie_id}"
+    elif episode_id is not None:
+        endpoint = f"{service['url']}/api/v3/episode/{episode_id}"
+    else:
+        return None
+
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            endpoint,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json(content_type=None)
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    value = data.get("hasFile")
+    if value is None:
+        # Field absent or explicitly null: unknown, not "no file".
+        return None
+    return bool(value)
+
+
 async def fetch_arr_all_series(session: aiohttp.ClientSession, service: dict) -> dict[int, str]:
     headers = arr_headers(service["api_key"])
     try:
