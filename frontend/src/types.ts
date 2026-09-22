@@ -261,6 +261,16 @@ export interface WantedEpisode {
   has_file: boolean
 }
 
+/** One episode of a series, as returned by /api/wanted/series/{id}/episodes.
+ *  Used to resolve the `S##E##` in a file name to its title and air date. */
+export interface SeriesEpisode {
+  id: number | null
+  season_number: number | null
+  episode_number: number | null
+  title: string
+  air_date: string
+}
+
 export interface WantedService {
   items: (WantedMovie | WantedEpisode)[]
   total: number
