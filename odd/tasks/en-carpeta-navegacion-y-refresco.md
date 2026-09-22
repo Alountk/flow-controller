@@ -200,7 +200,7 @@ rama apuntándolo.
 | [#28](https://github.com/Alountk/flow-controller/pull/28) | T2 — archivos en el navegador + registro | `fix/en-carpeta-refresh` | 271 (257+, 14−) | `bbd5022`, `4797038`, `3071f92`, `2a76bff`, `6ae5ed4` |
 | [#29](https://github.com/Alountk/flow-controller/pull/29) | T3 — endpoint de episodios de una serie | rama de #28 | 119 (118+, 1−) | `ef098c8` |
 | [#30](https://github.com/Alountk/flow-controller/pull/30) | T4 — parser `S##E##` + anotación por archivo | rama de #29 | 289 (270+, 19−) | `91e508c` |
-| [#31](https://github.com/Alountk/flow-controller/pull/31) | T5 — header del episodio + este registro | rama de #30 | 154 (137+, 17−) y sube con cada commit de registro | `5a36c2e`, `368bdcc`, `f8b60bf`, más los commits de registro posteriores |
+| [#31](https://github.com/Alountk/flow-controller/pull/31) | T5 — header del episodio + este registro | rama de #30 | sin cifra fija por diseño: el registro crece con cada commit suyo; la cifra autoritativa está en el PR | `5a36c2e`, `368bdcc`, `f8b60bf`, más los commits de registro posteriores |
 
 Segundo corte, mismo criterio: T3-T5 sumaban **544 líneas** (512+, 32−) y **ningún corte en dos
 bajaba de 400** (`T3+T4` = 408, ocho líneas por encima). El único corte honesto era otra vez por
