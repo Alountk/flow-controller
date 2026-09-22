@@ -506,6 +506,133 @@ class TestGrabOwnRegistry:
         assert resp.json()["ok"] is True
 
 
+# ── The grab route WRITES the series id the mark reader needs ────────────────
+#
+# The reader emits a `(source, "series", id)` key only when a row carries
+# `series_id`, but the calendar grab route used to record the row without it.
+# Every earlier test seeded the row with `record_own_grab` itself, so the map
+# tests agreed with the broken write path: they proved the reader, never the
+# writer, and a green suite hid an always-NULL `series_id` in production. These
+# tests go through the route and then read the map, so a series mark can only be
+# an end-to-end fact.
+
+
+class TestGrabWritesSeriesId:
+    """The grab route stores the series id the mark reader needs.
+
+    The reader (`own_grabs_latest_map`) can only emit a series key from a row
+    that carries `series_id`; seeding the row directly cannot prove the writer
+    fills it, so every test here drives `/api/calendar/grab(-batch)`.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolated_history(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        self._db_path = tmp_path / "history.db"
+        yield
+        history.close()
+
+    def _rows(self) -> list[dict]:
+        import sqlite3
+
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            return [dict(r) for r in conn.execute("SELECT * FROM own_grabs ORDER BY id")]
+        finally:
+            conn.close()
+
+    def _post(self, payload, *, metadata=None):
+        from unittest.mock import AsyncMock
+
+        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
+            return {"ok": True, "detail": "ok"}
+
+        async def _fake_metadata(session, service, episode_id):
+            if isinstance(metadata, Exception):
+                raise metadata
+            return metadata if metadata is not None else {}
+
+        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
+             patch("routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
+            return client.post("/api/calendar/grab", json=payload)
+
+    def test_an_episode_grab_records_its_real_series_and_the_reader_emits_the_key(self):
+        """Write then read through the route: the series mark this feature was
+        requested for must survive a real grab, not a hand-seeded row."""
+        resp = self._post(
+            {"source": "sonarr", "guid": "g1", "indexerId": 7, "episodeId": 42},
+            metadata={"season_number": 2, "episode_number": 5, "title": "Pilot", "series_id": 99},
+        )
+
+        assert resp.json()["ok"] is True
+        rows = self._rows()
+        assert len(rows) == 1
+        assert rows[0]["episode_id"] == 42
+        assert rows[0]["series_id"] == 99, "the route must store the arr's real series id"
+
+        marks = history.own_grabs_latest_map(time.time() - 60)
+        assert ("sonarr", "series", 99) in marks, (
+            "a series card can only be marked if the write path stored series_id"
+        )
+        assert ("sonarr", "episode", 42) in marks
+
+    def test_a_movie_grab_stores_no_series_and_emits_no_series_key(self):
+        resp = self._post({"source": "radarr", "guid": "g1", "indexerId": 7, "movieId": 855})
+
+        assert resp.json()["ok"] is True
+        rows = self._rows()
+        assert rows[0]["movie_id"] == 855
+        assert rows[0]["series_id"] is None
+
+        marks = history.own_grabs_latest_map(time.time() - 60)
+        assert ("radarr", "movie", 855) in marks
+        assert ("radarr", "series", 855) not in marks
+
+    def test_a_failed_series_lookup_still_records_the_grab_and_succeeds(self):
+        resp = self._post(
+            {"source": "sonarr", "guid": "g1", "indexerId": 7, "episodeId": 42},
+            metadata=RuntimeError("sonarr timed out"),
+        )
+
+        assert resp.json()["ok"] is True, "a follow-up lookup must never fail the grab"
+        rows = self._rows()
+        assert len(rows) == 1
+        assert rows[0]["episode_id"] == 42
+        assert rows[0]["series_id"] is None
+        marks = history.own_grabs_latest_map(time.time() - 60)
+        assert ("sonarr", "episode", 42) in marks
+        assert not any(kind == "series" for _, kind, _ in marks)
+
+    def test_the_batch_records_the_series_for_each_successful_episode_guid(self):
+        from unittest.mock import AsyncMock
+
+        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
+            return {"ok": guid != "g2", "detail": "ok" if guid != "g2" else "rechazado"}
+
+        async def _fake_metadata(session, service, episode_id):
+            return {"series_id": 99}
+
+        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
+             patch("routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
+            resp = client.post(
+                "/api/calendar/grab-batch",
+                json={
+                    "source": "sonarr",
+                    "guids": ["g1", "g2", "g3"],
+                    "indexerIds": [1, 2, 3],
+                    "episodeId": 42,
+                },
+            )
+
+        assert resp.json()["ok"] is False
+        rows = self._rows()
+        assert [r["guid"] for r in rows] == ["g1", "g3"]
+        assert [r["series_id"] for r in rows] == [99, 99]
+        assert ("sonarr", "series", 99) in history.own_grabs_latest_map(time.time() - 60)
+
+
 # ── Text filter on wanted / all listings ─────────────────────────────────────
 
 

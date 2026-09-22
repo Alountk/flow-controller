@@ -14,6 +14,7 @@ from clients import (
     fetch_sonarr_calendar,
     arr_search_movie,
     arr_search_episode,
+    arr_episode_metadata,
     arr_add_movie,
     arr_add_series,
     arr_fetch_releases,
@@ -201,6 +202,29 @@ async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(ve
         return {"releases": [], "detail": f"Error interno: {exc}"}
 
 
+async def _resolve_series_id(
+    session: aiohttp.ClientSession, service: dict, source: str, episode_id: int
+) -> int | None:
+    """Best-effort series id for a Sonarr episode grab.
+
+    The "Todas" series card is marked from the `series_id` an own-grab row
+    carries, so an episode grab has to resolve it while it still has the arr
+    open. This runs AFTER a grab already succeeded, which fixes its failure
+    contract: it must never raise, because a completed grab reaching the user as
+    an error is a worse lie than a missing series mark. Any failure — timeout,
+    malformed body, arr that does not know the episode — degrades to None, and
+    that only skips the series mark; the grab itself is already recorded.
+    """
+    if source != "sonarr" or not episode_id:
+        return None
+    try:
+        meta = await arr_episode_metadata(session, service, episode_id)
+    except Exception as exc:
+        log.warning("Series lookup failed for episode %s: %s", episode_id, exc)
+        return None
+    return meta.get("series_id")
+
+
 @router.post("/api/calendar/grab")
 async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api_key)):
     """Descarga un release específico."""
@@ -209,8 +233,17 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
     try:
+        # The series lookup rides the grab's own session: it is a single GET to
+        # the arr the grab just hit, so a second session would only add another
+        # connection. `_resolve_series_id` cannot raise, so a failed lookup can
+        # never turn this successful grab into the error response below.
         async with aiohttp.ClientSession() as session:
             result = await arr_grab_release(session, service, req.guid, req.indexerId, req.movieId, req.episodeId)
+            series_id = (
+                await _resolve_series_id(session, service, req.source, req.episodeId)
+                if result.get("ok")
+                else None
+            )
     except Exception as exc:
         log.exception("calendar_grab error: %s", exc)
         return {"ok": False, "detail": f"Error interno: {exc}"}
@@ -224,6 +257,7 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
             req.source,
             movie_id=req.movieId or None,
             episode_id=req.episodeId or None,
+            series_id=series_id,
             guid=req.guid,
             indexer_id=req.indexerId,
         )
@@ -239,6 +273,13 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
 
     results = []
     errors = []
+    # Every guid in one batch targets the same title, so the series is resolved
+    # once for the request and reused. `series_resolved` is the "already asked"
+    # flag on purpose: `series_id is None` would re-ask the arr per guid after a
+    # lookup that legitimately found no series, turning a slow arr into N slow
+    # lookups. A failed lookup still leaves every successful grab recorded.
+    series_id: int | None = None
+    series_resolved = False
     async with aiohttp.ClientSession() as session:
         for i, guid in enumerate(req.guids):
             idx_id = req.indexerIds[i] if i < len(req.indexerIds) else 0
@@ -246,11 +287,17 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                 result = await arr_grab_release(session, service, guid, idx_id, req.movieId, req.episodeId)
                 if result.get("ok"):
                     results.append(guid)
+                    if not series_resolved:
+                        series_id = await _resolve_series_id(
+                            session, service, req.source, req.episodeId
+                        )
+                        series_resolved = True
                     # One row per guid that succeeded, not one per request.
                     record_own_grab(
                         req.source,
                         movie_id=req.movieId or None,
                         episode_id=req.episodeId or None,
+                        series_id=series_id,
                         guid=guid,
                         indexer_id=idx_id,
                     )
