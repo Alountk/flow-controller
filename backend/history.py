@@ -416,15 +416,19 @@ def list_own_grabs(since: float, limit: int = 200) -> list[dict]:
             return []
 
 
-def own_grabs_latest_map(since: float) -> dict[tuple[str, str, int], float]:
-    """Latest own-grab instant per title, for marking wanted items.
+def own_grabs_latest_rows(since: float) -> dict[tuple[str, str, int], dict]:
+    """Newest own-grab row per title, carrying both WHEN and WHERE.
 
-    One query aggregates ``MAX(grabbed_at)`` per ``(source, movie_id,
-    episode_id, series_id)``. There is deliberately NO ``LIMIT``: the sibling
-    reader caps at 200 rows, and applying a cap here would silently drop marks
-    for every title past it. A dropped mark reads as "never requested", which is
-    a wrong answer on screen, and a wrong answer is worse than a slower query.
-    The result is bounded by how many distinct titles were grabbed in the window,
+    The single reader behind every own-grab mark. It returns full rows rather
+    than only the instant so a surface can render the date and the destination
+    from ONE row: mixing a date from one grab with a folder from another is the
+    exact wrong answer this shape makes impossible.
+
+    There is deliberately NO ``LIMIT``: the sibling reader `list_own_grabs` caps
+    at 200 rows, and applying a cap here would silently drop marks for every
+    title past it. A dropped mark reads as "never requested", which is a wrong
+    answer on screen, and a wrong answer is worse than a slower query. The
+    result is bounded by how many distinct titles were grabbed in the window,
     not by the raw number of grabs.
 
     Keys are ``(source, kind, id)`` with ``kind`` in ``{"movie", "episode",
@@ -433,10 +437,11 @@ def own_grabs_latest_map(since: float) -> dict[tuple[str, str, int], float]:
 
     One row can contribute MORE THAN ONE key: an episode grab records both the
     episode and its series, because the "Todas" tab shows series cards and a
-    series card has to read "we asked for something from this series". The
-    series mark is the newest episode grab for that series, computed here rather
-    than left to SQL: the grouping is per episode, so several rows can share a
-    series and the last row read would otherwise win by accident.
+    series card has to read "we asked for something from this series". Rows are
+    read oldest-first and a later row overwrites an earlier one, so the series
+    mark is the newest episode grab for that series even though one series is a
+    single key shared by many episodes; `id` breaks same-instant ties so the
+    winner is deterministic.
 
     A row with no movie, episode or series id cannot be keyed and is skipped.
 
@@ -450,34 +455,51 @@ def own_grabs_latest_map(since: float) -> dict[tuple[str, str, int], float]:
         try:
             rows = _conn.execute(
                 "SELECT source, movie_id, episode_id, series_id, "
-                "       MAX(grabbed_at) AS grabbed_at "
+                "       grabbed_at, destination "
                 "FROM own_grabs WHERE grabbed_at >= ? "
-                "GROUP BY source, movie_id, episode_id, series_id",
+                "ORDER BY grabbed_at ASC, id ASC",
                 (since,),
             ).fetchall()
         except sqlite3.Error as exc:
             log.warning("Could not read own grab marks: %s", exc)
             return {}
 
-    marks: dict[tuple[str, str, int], float] = {}
+    marks: dict[tuple[str, str, int], dict] = {}
     for row in rows:
         source = row["source"]
         grabbed_at = float(row["grabbed_at"])
+        destination = row["destination"]
+        keys: list[tuple[str, str, int]] = []
         # movie_id wins when both are set, matching how the app records a grab:
         # a movie grab carries no episode.
         if row["movie_id"] is not None:
-            marks[(source, "movie", int(row["movie_id"]))] = grabbed_at
+            keys.append((source, "movie", int(row["movie_id"])))
         elif row["episode_id"] is not None:
-            marks[(source, "episode", int(row["episode_id"]))] = grabbed_at
+            keys.append((source, "episode", int(row["episode_id"])))
         # Independent of the branch above: an episode grab also marks its series.
-        # Keep the newest, because one series is a single key shared by all of
-        # its episodes and the rows are not ordered.
         if row["series_id"] is not None:
-            series_key = (source, "series", int(row["series_id"]))
-            previous = marks.get(series_key)
-            if previous is None or grabbed_at > previous:
-                marks[series_key] = grabbed_at
+            keys.append((source, "series", int(row["series_id"])))
+        for key in keys:
+            marks[key] = {"grabbed_at": grabbed_at, "destination": destination}
     return marks
+
+
+def own_grabs_latest_map(
+    since: float,
+    *,
+    rows: dict[tuple[str, str, int], dict] | None = None,
+) -> dict[tuple[str, str, int], float]:
+    """Latest own-grab instant per title, for callers that only need the date.
+
+    A projection of `own_grabs_latest_rows`, not a second query, so the instant
+    and the destination a surface renders can never come from two different
+    rows. Pass `rows` when the caller already read them (a route that also
+    renders the destination) so one request reads the store once instead of
+    twice; the default re-reads for the date-only callers.
+    """
+    if rows is None:
+        rows = own_grabs_latest_rows(since)
+    return {key: row["grabbed_at"] for key, row in rows.items()}
 
 
 def record_own_grab(

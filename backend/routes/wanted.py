@@ -53,8 +53,29 @@ _all_wanted_cache: dict[str, tuple[float, list[dict]]] = {}
 WANTED_GRAB_LOOKBACK = 90 * 24 * 60 * 60
 
 
+def _mark_fields(
+    rows: dict[tuple[str, str, int], dict],
+    marks: dict[tuple[str, str, int], float],
+    key: tuple[str, str, int],
+) -> dict:
+    """The two own-grab fields for one item, both read from the same newest row.
+
+    The instant comes from the date-only `marks` and the destination from the
+    matching `rows` entry; both are projections of the same
+    `own_grabs_latest_rows` result, so a payload can never pair a date from one
+    grab with a folder from another. An item with no mark gets `None` for both
+    rather than an absent field, so the frontend never has to tell "absent" from
+    "unknown".
+    """
+    row = rows.get(key)
+    return {
+        "grabbed_at": marks.get(key),
+        "grabbed_destination": row["destination"] if row else None,
+    }
+
+
 def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> dict:
-    """Add ``grabbed_at`` to every item on a built response.
+    """Add ``grabbed_at`` and ``grabbed_destination`` to every item on a body.
 
     Shared by every surface that shows the mark — ``/api/wanted``,
     ``/api/wanted/all``, ``/api/wanted/series/all`` and ``/api/calendar`` — so
@@ -76,10 +97,16 @@ def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> d
     The marks come from ``own_grabs``, re-read per request, and never from
     ``_fetch_all_wanted``'s cache: that cache holds the arr's data, and this mark
     is ours. Each item is copied so a cached or caller-owned dict is never
-    mutated. An item with no mark gets ``grabbed_at: None`` — the field is always
-    present, so the frontend never has to tell "absent" from "unknown".
+    mutated. An item with no mark gets ``grabbed_at: None`` and
+    ``grabbed_destination: None`` — the fields are always present, so the
+    frontend never has to tell "absent" from "unknown". The date and the
+    destination always describe the same grab row (see ``_mark_fields``).
     """
-    marks = history.own_grabs_latest_map(time.time() - WANTED_GRAB_LOOKBACK)
+    # One read for both fields: `rows` carries the destination and `marks` is
+    # its date-only projection, so the two can never disagree.
+    since = time.time() - WANTED_GRAB_LOOKBACK
+    rows = history.own_grabs_latest_rows(since)
+    marks = history.own_grabs_latest_map(since, rows=rows)
 
     wanted = response.get("wanted")
     if wanted:
@@ -92,7 +119,10 @@ def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> d
             # guessed.
             item_kind = "movie" if source_key == "radarr" else "episode"
             page["items"] = [
-                {**item, "grabbed_at": marks.get((source_key, item_kind, item.get("id")))}
+                {
+                    **item,
+                    **_mark_fields(rows, marks, (source_key, item_kind, item.get("id"))),
+                }
                 for item in items
             ]
         return response
@@ -104,11 +134,15 @@ def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> d
                 **item,
                 # The item's own source and type win when present (the calendar
                 # carries both); otherwise the caller's explicit source/kind.
-                "grabbed_at": marks.get((
-                    item.get("source") or source,
-                    item.get("type") or kind,
-                    item.get("id"),
-                )),
+                **_mark_fields(
+                    rows,
+                    marks,
+                    (
+                        item.get("source") or source,
+                        item.get("type") or kind,
+                        item.get("id"),
+                    ),
+                ),
             }
             for item in items
         ]
