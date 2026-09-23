@@ -141,7 +141,28 @@ def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool
     return {"ok": False, "detail": f"fuente no es archivo ni directorio: {src}"}
 
 
-async def run_copy_background(task_id: str, src_path: str, dst_root: str, service: dict, source: str, ids: dict | None = None, target_name: str | None = None):
+async def run_copy_background(
+    task_id: str,
+    src_path: str,
+    dst_root: str,
+    service: dict,
+    source: str,
+    ids: dict | None = None,
+    target_name: str | None = None,
+    *,
+    import_after_copy: bool = True,
+):
+    """Copy one download into ``dst_root`` in the background.
+
+    ``import_after_copy`` defaults to ``True``: after a successful copy the arr
+    is asked to import the new files and the result is polled until it has them
+    — the behaviour for a copy into the arr's own library.
+
+    A copy into a FOREIGN folder must pass ``False``. There the arr must NOT
+    import: ``ProcessMonitoredDownloads`` would move the content into the
+    library, exactly the duplicate this feature exists to avoid. With ``False``
+    a successful copy ends ``done`` and nothing is asked of the arr.
+    """
     ids = ids or {}
     try:
         copy_tasks.update(task_id, detail="copiando archivos...")
@@ -160,6 +181,12 @@ async def run_copy_background(task_id: str, src_path: str, dst_root: str, servic
             detail=result.get("detail", ""),
             files_copied=result.get("files_copied", 0),
         )
+        if result["ok"] and not import_after_copy:
+            copy_tasks.update(task_id,
+                status="done",
+                detail="copiado a la carpeta elegida; el arr no lo tocará",
+            )
+            return
         if result["ok"]:
             copy_tasks.update(task_id, detail="importando...", status="importing")
             async with aiohttp.ClientSession() as session:
@@ -220,7 +247,7 @@ async def verify_import(task_id: str, service: dict, source: str, ids: dict):
 
 
 async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) -> dict:
-    from config import EXPECTED_CATEGORY
+    from config import EXPECTED_CATEGORY, path_is_allowed
 
     def _service_by_key(key: str) -> dict | None:
         for service in SERVICES:
@@ -369,21 +396,74 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         if not output_path:
             log.warning("copy_files: sin output_path en payload")
             return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "sin output_path"}]}
-        if source == "sonarr" and ids.get("series_id"):
-            root = await arr_series_root_folder(session, service, ids["series_id"])
-            if root and ids.get("episode_id"):
-                season_num = await arr_episode_season(session, service, ids["episode_id"])
-                if season_num is not None:
-                    root = str(Path(root) / f"Season {season_num}")
-                    log.info("copy_files: season folder → %s", root)
-        elif source == "radarr" and ids.get("movie_id"):
-            root = await arr_movie_root_folder(session, service, ids["movie_id"])
+        dest_root = payload.get("dest_root") or ""
+        if dest_root:
+            # Defence in depth: the combo is fed by the arr's roots and the
+            # app's allowed roots, but the payload is untrusted here, so a
+            # foreign folder is re-validated before writing a single byte.
+            if not path_is_allowed(dest_root):
+                log.warning("copy_files: destino no permitido: %s", dest_root)
+                return {
+                    "ok": False,
+                    "steps": [
+                        {"target": source, "ok": False, "detail": f"destino no permitido: {dest_root}"}
+                    ],
+                }
+            # Take the item out of the arr's queue BEFORE copying, so the arr
+            # cannot import it into the library behind our back. A failure here
+            # fails the whole action: the hard constraint is that a folder
+            # outside the arr's roots is never catalogued by the arr.
+            if not queue_id:
+                log.warning("copy_files: destino ajeno sin queue_id")
+                return {
+                    "ok": False,
+                    "steps": [
+                        {
+                            "target": source,
+                            "ok": False,
+                            "detail": "no se puede garantizar que el arr no importe la copia: falta el id de la cola",
+                        }
+                    ],
+                }
+            from clients import arr_delete_queue
+            removal = await arr_delete_queue(
+                session,
+                service,
+                int(queue_id),
+                blocklist=False,
+                remove_from_client=False,
+            )
+            # A 404 means the arr is not tracking it: there is nothing left to
+            # prevent, so the copy may proceed. Any other failure is real.
+            if not (removal.get("ok") or removal.get("not_found")):
+                detail = removal.get("detail") or "error desconocido"
+                log.error("copy_files: no se pudo quitar la cola del arr: %s", detail)
+                return {
+                    "ok": False,
+                    "steps": [
+                        {"target": source, "ok": False, "detail": f"no se pudo quitar de la cola del arr: {detail}"}
+                    ],
+                }
+            # The foreign destination is used exactly as given: no arr root and
+            # no `Season XX` subfolder, which only belongs to the library layout.
+            root = dest_root
+            log.info("copy_files: destino ajeno=%s", root)
         else:
-            root = ""
-        log.info("copy_files: output_path=%s  root=%s", output_path, root)
-        if not root:
-            log.error("copy_files: no se pudo obtener root folder para %s (series_id=%s, movie_id=%s)", source, ids.get("series_id"), ids.get("movie_id"))
-            return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
+            if source == "sonarr" and ids.get("series_id"):
+                root = await arr_series_root_folder(session, service, ids["series_id"])
+                if root and ids.get("episode_id"):
+                    season_num = await arr_episode_season(session, service, ids["episode_id"])
+                    if season_num is not None:
+                        root = str(Path(root) / f"Season {season_num}")
+                        log.info("copy_files: season folder → %s", root)
+            elif source == "radarr" and ids.get("movie_id"):
+                root = await arr_movie_root_folder(session, service, ids["movie_id"])
+            else:
+                root = ""
+            log.info("copy_files: output_path=%s  root=%s", output_path, root)
+            if not root:
+                log.error("copy_files: no se pudo obtener root folder para %s (series_id=%s, movie_id=%s)", source, ids.get("series_id"), ids.get("movie_id"))
+                return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
 
         # --- Smart rename: construir nombre correcto antes de copiar ---
         _src_path = Path(output_path)
@@ -432,7 +512,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
             files_total=0,
             detail="preparando copia...",
         )
-        asyncio.create_task(run_copy_background(task_id, output_path, root, service, source, ids, target_name=smart_name))
+        asyncio.create_task(run_copy_background(task_id, output_path, root, service, source, ids, target_name=smart_name, import_after_copy=not dest_root))
         return {"ok": True, "needs_polling": True, "task_id": task_id, "src_path": output_path, "dst_path": dst_path}
 
     else:
