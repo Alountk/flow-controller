@@ -14,7 +14,7 @@ import { Calendar } from '../components/Calendar'
 // Noon UTC on 19 September 2026, so the local date is the same in any timezone.
 const GRABBED_AT = Date.UTC(2026, 8, 19, 12, 0, 0) / 1000
 
-function calendarItem(grabbedAt: number | null) {
+function calendarItem(grabbedAt: number | null, destination: string | null = null) {
   return {
     type: 'movie',
     id: 855,
@@ -28,6 +28,7 @@ function calendarItem(grabbedAt: number | null) {
     episode_number: null,
     source: 'radarr',
     grabbed_at: grabbedAt,
+    grabbed_destination: destination,
   }
 }
 
@@ -74,6 +75,18 @@ describe('Calendar "descarga pedida" mark', () => {
     expect(await screen.findByText(expectedLabel(GRABBED_AT))).toBeInTheDocument()
     expect(document.querySelector('.calendar-card.status-grabbed')).not.toBeNull()
     expect(document.querySelector('.calendar-grabbed')).not.toBeNull()
+  })
+
+  it('shows where the download was sent on a grabbed item', async () => {
+    mockFetch(calendarItem(GRABBED_AT, '/mnt/storage/movies/_manual'))
+    renderCalendar()
+
+    await screen.findByText('Calendar Movie')
+    const mark = document.querySelector('.calendar-grabbed')
+
+    expect(mark?.textContent).toContain(expectedLabel(GRABBED_AT))
+    expect(mark?.textContent).toContain('→ _manual')
+    expect(mark?.getAttribute('title')).toBe('/mnt/storage/movies/_manual')
   })
 
   it('shows nothing for an unmarked item', async () => {

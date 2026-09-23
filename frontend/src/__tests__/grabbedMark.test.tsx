@@ -14,7 +14,7 @@ import { MissingContent } from '../components/MissingContent'
 // Noon UTC on 19 September 2026, so the local date is the same in any timezone.
 const GRABBED_AT = Date.UTC(2026, 8, 19, 12, 0, 0) / 1000
 
-function movie(grabbedAt: number | null) {
+function movie(grabbedAt: number | null, destination: string | null = null) {
   return {
     id: 411,
     title: 'Your Name.',
@@ -24,10 +24,11 @@ function movie(grabbedAt: number | null) {
     has_file: false,
     altTitles: [],
     grabbed_at: grabbedAt,
+    grabbed_destination: destination,
   }
 }
 
-function episode(grabbedAt: number | null) {
+function episode(grabbedAt: number | null, destination: string | null = null) {
   return {
     id: 7,
     title: 'Of Ice Men',
@@ -39,6 +40,7 @@ function episode(grabbedAt: number | null) {
     overview: '',
     has_file: false,
     grabbed_at: grabbedAt,
+    grabbed_destination: destination,
   }
 }
 
@@ -111,6 +113,43 @@ describe('Faltantes "descarga pedida" mark', () => {
 
     expect(await screen.findByText(expectedLabel(GRABBED_AT))).toBeInTheDocument()
     expect(document.querySelector('.wanted-row.status-grabbed')).not.toBeNull()
+  })
+
+  it('shows where the download was sent on a grabbed movie card', async () => {
+    mockFetch(movie(GRABBED_AT, '/mnt/storage/movies/_manual'), episode(null))
+    renderWanted()
+
+    await screen.findByText('Your Name.')
+    const mark = document.querySelector('.wanted-card.status-grabbed .wanted-grabbed')
+
+    expect(mark?.textContent).toContain(expectedLabel(GRABBED_AT))
+    expect(mark?.textContent).toContain('→ _manual')
+    expect(mark?.getAttribute('title')).toBe('/mnt/storage/movies/_manual')
+  })
+
+  it('shows where the download was sent on a grabbed episode row', async () => {
+    mockFetch(movie(null), episode(GRABBED_AT, '/mnt/storage/series/_manual'))
+    renderWanted()
+
+    await screen.findByText('Your Name.')
+    fireEvent.click(screen.getByText(/Episodios/))
+    await screen.findByText('Of Ice Men')
+
+    const mark = document.querySelector('.wanted-row.status-grabbed .wanted-grabbed')
+
+    expect(mark?.textContent).toContain('→ _manual')
+    expect(mark?.getAttribute('title')).toBe('/mnt/storage/series/_manual')
+  })
+
+  it('keeps the mark unchanged when the grab went to the library', async () => {
+    mockFetch(movie(GRABBED_AT, null), episode(null))
+    renderWanted()
+
+    await screen.findByText('Your Name.')
+    const mark = document.querySelector('.wanted-card.status-grabbed .wanted-grabbed')
+
+    expect(mark?.textContent).toBe(expectedLabel(GRABBED_AT))
+    expect(mark?.getAttribute('title')).toBeNull()
   })
 
   it('shows nothing for an unmarked movie', async () => {

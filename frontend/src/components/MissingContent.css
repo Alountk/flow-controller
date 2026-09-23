@@ -312,11 +312,14 @@
   border-color: var(--warn);
 }
 
-/* The mark itself: "Pedida el 19 sep 2026". */
+/* The mark itself: "Pedida el 19 sep 2026 → <carpeta>". */
 .wanted-grabbed {
   color: var(--warn);
   font-size: 11px;
   font-weight: 600;
+  /* The destination is a folder name: break it rather than let a long one
+     push the card wider than its grid cell. */
+  overflow-wrap: anywhere;
 }
 
 .wanted-row-info {

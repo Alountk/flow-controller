@@ -86,7 +86,7 @@ export function Calendar() {
               </div>
               <div className="calendar-day-items">
                 {items.map((item) => {
-                  const grabbed = formatGrabMark(item.grabbed_at)
+                  const grabbed = formatGrabMark(item.grabbed_at, item.grabbed_destination)
                   return (
                     <div
                       key={`${item.source}-${item.id}`}
@@ -117,7 +117,11 @@ export function Calendar() {
                           {item.has_file && <span className="badge-ok"> ✓</span>}
                         </div>
                         {/* No mark means show nothing at all, not a dash. */}
-                        {grabbed && <div className="calendar-grabbed">{grabbed}</div>}
+                        {grabbed && (
+                          <div className="calendar-grabbed" title={item.grabbed_destination ?? undefined}>
+                            {grabbed}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

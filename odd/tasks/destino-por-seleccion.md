@@ -96,12 +96,12 @@ subdirectorio `Season XX` que sí se aplica en la biblioteca.
 ## Tasks
 
 - [x] **T1** `own_grabs` con la columna de destino + migración v6 (S1) — hecho en `72357ae`
-- [ ] **T2** `copy_files` aceptando un destino explícito (S2)
-- [ ] **T3** variante de quitar de la cola del arr **sin** borrar del cliente (S2)
-- [ ] **T4** UI: combo de carpeta aplicado a la selección (S3)
-- [ ] **T5** la marca muestra el destino (S3)
-- [ ] **T6** tests (persistencia, destino explícito, la orden al arr, la UI) (S4)
-- [ ] **T7** verificación en vivo con `SAFE_MODE` (S4)
+- [x] **T2** `copy_files` aceptando un destino explícito (S2) — hecho en `3dca56c` (motor) + `0faf775` (enganche)
+- [x] **T3** variante de quitar de la cola del arr **sin** borrar del cliente (S2) — hecho en `53658ca`
+- [x] **T4** UI: combo de carpeta aplicado a la selección (S3a) — hecho en `b99d29b`
+- [x] **T5** la marca muestra el destino (S3b) — hecho en `38da715` (backend) + `e92093c` (UI)
+- [x] **T6** tests (persistencia, destino explícito, la orden al arr, la UI) — repartidos por slice
+- [ ] **T7** verificación en vivo con `SAFE_MODE` (S4) — pendiente del despliegue
 
 ## Constraints
 
@@ -131,12 +131,15 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
 | 3 | T3: quitar de la cola sin borrar del cliente | 107 |
 | 4 | T2a: el motor de copia con destino explícito | ~371 |
 | 5 | T2b: el enganche en el driver (`find_own_grab` → `dest_root`) | ~161 |
-| 6 | S3a / T4: el combo de carpeta | por medir |
-| 7 | S3b / T5: la marca muestra el destino | por medir |
+| 6 | S3a / T4: el combo de carpeta (backend + UI) | 293 |
+| 7 | S3b-backend / T5: `grabbed_destination` en las superficies marcadas | 257 |
+| 8 | S3b-UI / T5: la marca muestra el destino | 187 |
 
 - **T2 se corta en motor (T2a) y enganche (T2b)**: es un corte **por ficheros** y por tanto limpio
   (`copy_engine.py` + `tests_copy_engine.py` van a T2a; `auto_copy.py`, `auto_copy_driver.py` y sus
   tests van a T2b). T2a se sostiene solo: su capacidad ya está cubierta por sus propios tests.
+- **S3b también se corta en dos** (444 líneas, backend y UI), y el corte ya existe: son los dos
+  commits `38da715` y `e92093c`.
 - **El documento de feature va en su propio PR**, porque con S1 ya sumaba 448 y pasaba el presupuesto.
 - S4 (verificación en vivo) no genera PR de código: es evidencia en este documento.
 
@@ -158,20 +161,31 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
   la política normal del repo.
 - [x] **S2 cerrada** (misma rama), en dos commits porque T2 solo ya pasaba de 400:
   - `53658ca` feat(clients): quitar de la cola del arr sin borrar del cliente (97+/10−).
-  - `11ac52e` feat(auto-copy): copiar a un destino explícito que el arr no importa (501+/31−).
+  - `3dca56c` (motor) + `0faf775` (enganche) feat(auto-copy): copiar a un destino explícito que el arr no importa (501+/31−).
   - Verificación: `pytest -q` → **517 passed** (base 489), `pyflakes` y `vulture` sin salida.
   - La trampa de `ProcessMonitoredDownloads` quedó cerrada: en carpeta ajena no se dispara la
     importación ni se sondea; y la copia es fail-closed si no se puede garantizar que el arr no la toque.
   - Test que el writer no añadió (anotado, no escondido): fuente **archivo** + `dest_root` end-to-end.
 - [x] **Revisión nativa del candidato S2: saltada por el usuario** (`declined_this_candidate`, sin
   registro de revisión, revisiones futuras siguen activas).
-- [!] **Decisión de entrega pendiente**: el candidato acumulado son **1117 líneas en 15 ficheros**.
-  T3 (107) cabe en un PR; **T2 (532) no cabe sin partirse o sin `size:exception`**.
-- [ ] S3 pendiente: T4 + T5 (UI).
+- [x] **Reparto en PRs decidido**: cadena `stacked-to-main` (ver tabla arriba).
+- [x] **S3a cerrada** — `b99d29b` feat(calendar): elegir la carpeta destino en el buscador de
+  releases (293 líneas). Endpoint `GET /api/calendar/destinations` con las raíces reales (root folders
+  del arr + `config.ALLOWED_ROOTS`, deduplicadas) y el combo en el modal, con `Biblioteca (la del
+  arr)` por defecto (sin destino = petición idéntica a la de antes). Verificación: `pytest -q` →
+  **522 passed**, `pyflakes`/`vulture` limpios, `npm test` → **212 passed**, `npm run build` → OK.
+  - Gotcha del writer: `arr_root_folders` devuelve `[]` tanto si el arr no responde como si no tiene
+    raíces; se trató como degradación y se dice en el `detail`, sin cambiar el contrato de la función.
+- [x] **S3b cerrada** — `38da715` feat(wanted): exponer el destino en las superficies marcadas
+  (257) + `e92093c` feat(ui): la marca muestra a dónde se mandó (187). Campo `grabbed_destination`
+  (NULL = biblioteca), leído de la **misma fila** que `grabbed_at` (`own_grabs_latest_rows`, con
+  `own_grabs_latest_map` como proyección). En la marca se ve el último tramo de la carpeta y la ruta
+  completa en el `title`; **sin destino la marca queda igual que antes**. Verificación: `pytest -q` →
+  **535 passed**, `pyflakes`/`vulture` limpios, `npm test` → **220 passed**, `npm run build` → OK.
+- [ ] **T7 / S4 pendiente**: verificación en vivo con `SAFE_MODE` (necesita desplegar la rama).
 - [ ] Tras la feature: el *check de los dos `.env`* (`FC_SECRET` vs `API_KEY`, raíz y `backend/`).
 
 ## Next step
 
-S3a (T4): el combo de carpeta aplicado a la selección. Necesita exponer al frontend las opciones
-reales —los root folders del arr (`arr_root_folders`, `clients.py`) más `config.ALLOWED_ROOTS`— y
-mandar el `destination` elegido en `grabCalendarRelease`/`grabCalendarReleaseBatch`.
+El código de la feature está completo. Quedan: **S4** (desplegar y verificar en vivo con `SAFE_MODE`,
+que propone y no escribe), **la cadena de PRs** de la tabla de arriba, y el **check de los dos `.env`**.
