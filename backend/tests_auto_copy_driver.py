@@ -54,7 +54,7 @@ def _trace(
     }
 
 
-def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT):
+def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT, destination=None):
     return {
         "id": 1,
         "source": source,
@@ -64,6 +64,7 @@ def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT):
         "guid": "g",
         "indexer_id": 1,
         "grabbed_at": grabbed_at,
+        "destination": destination,
     }
 
 
@@ -261,6 +262,39 @@ def test_safe_mode_off_dispatches_and_marks(monkeypatch):
     }
     assert [m["decision"] for m in calls.mark] == [history.DECISION_ACTIONED]
     assert summary["counts"]["copied"] == 1
+
+
+def test_a_foreign_destination_travels_into_the_copy_payload(monkeypatch):
+    calls = _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab(destination="/mnt/storage-6tb/other")],
+    )
+
+    summary = _sweep(safe_mode=False)
+
+    payload = calls.dispatch[0]["payload"]
+    assert payload["dest_root"] == "/mnt/storage-6tb/other"
+    assert summary["entries"][0]["action"] == "copied"
+
+
+def test_a_null_destination_keeps_the_payload_unchanged(monkeypatch):
+    calls = _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab(destination=None)],
+    )
+
+    summary = _sweep(safe_mode=False)
+
+    payload = calls.dispatch[0]["payload"]
+    assert payload == {
+        "source": "radarr",
+        "ids": {"movie_id": 855, "episode_id": None, "series_id": None, "queue_id": 1},
+        "output_path": "/mnt/storage/downloads/qbittorrent/completed/Your.Name",
+    }
+    assert "dest_root" not in payload
+    assert summary["entries"][0]["action"] == "copied"
 
 
 def test_the_marker_is_persisted_before_dispatching(monkeypatch):

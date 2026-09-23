@@ -24,6 +24,7 @@ from auto_copy import (
     WAIT,
     auto_copy_key,
     decide_copy,
+    find_own_grab,
     matches_own_grab,
 )
 from clients import arr_has_file
@@ -375,7 +376,7 @@ async def _handle_trace(
         )
         return _entry(key, source, title, result, reason, action="proposed")
 
-    return await _dispatch(session, trace, key, source, title, reason)
+    return await _dispatch(session, trace, key, source, title, reason, own_grabs=own_grabs)
 
 
 async def _arr_probe(session, trace: dict) -> bool | None:
@@ -407,6 +408,8 @@ async def _dispatch(
     source: str,
     title: str,
     reason: str,
+    *,
+    own_grabs: list[dict],
 ) -> dict:
     torrent = trace.get("torrent") or {}
     output_path = torrent.get("content_path")
@@ -422,6 +425,14 @@ async def _dispatch(
         "ids": trace.get("ids") or {},
         "output_path": output_path,
     }
+
+    # The matched registry row carries the destination the user picked. When it
+    # is NULL the payload stays exactly as before: the copy goes to the arr's
+    # library, and the engine resolves that root itself.
+    own_grab = find_own_grab(trace, own_grabs)
+    destination = own_grab.get("destination") if own_grab else None
+    if destination:
+        payload["dest_root"] = destination
 
     # Claim before acting: persist the marker FIRST, then dispatch. If the
     # process dies mid-copy the marker already blocks a second sweep; the

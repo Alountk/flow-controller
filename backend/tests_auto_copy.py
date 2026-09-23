@@ -17,6 +17,7 @@ from auto_copy import (
     WAIT,
     auto_copy_key,
     decide_copy,
+    find_own_grab,
     matches_own_grab,
 )
 
@@ -297,8 +298,9 @@ def _own_grab(
     guid="release-guid",
     indexer_id=1,
     grabbed_at=GRAB_AT,
+    destination=None,
 ):
-    row = {"source": source, "guid": guid, "indexer_id": indexer_id, "grabbed_at": grabbed_at}
+    row = {"source": source, "guid": guid, "indexer_id": indexer_id, "grabbed_at": grabbed_at, "destination": destination}
     if movie_id is not None:
         row["movie_id"] = movie_id
     if episode_id is not None:
@@ -407,3 +409,49 @@ def test_a_row_without_a_grabbed_at_does_not_match():
         _trace_for(movie_id=855, date=_iso(GRAB_AT + 3)),
         [_own_grab(movie_id=855, grabbed_at=None)],
     )
+
+
+# ── Resolving the matched row itself (S2) ────────────────────────────────────
+#
+# The driver needs the row, not just the answer: it reads `destination` from it
+# to send the copy to the folder the user picked. `find_own_grab` returns the
+# first match in the registry's newest-first order, and `matches_own_grab`
+# delegates to it so the two can never disagree.
+
+
+def test_find_own_grab_returns_the_newest_matching_row_with_its_destination():
+    trace = _trace_for(movie_id=855, date=_iso(GRAB_AT + 3))
+    newest = _own_grab(movie_id=855, guid="newest", destination="/mnt/other")
+    older = _own_grab(
+        movie_id=855, guid="older", grabbed_at=GRAB_AT - 60, destination="/mnt/old"
+    )
+
+    row = find_own_grab(trace, [newest, older])
+
+    assert row is newest
+    assert row["destination"] == "/mnt/other"
+
+
+def test_find_own_grab_returns_none_for_a_non_matching_trace():
+    trace = _trace_for(movie_id=999, date=_iso(GRAB_AT + 3))
+
+    assert find_own_grab(trace, [_own_grab(movie_id=855)]) is None
+
+
+def test_find_own_grab_returns_a_row_whose_destination_is_null():
+    trace = _trace_for(movie_id=855, date=_iso(GRAB_AT + 3))
+
+    row = find_own_grab(trace, [_own_grab(movie_id=855, destination=None)])
+
+    assert row is not None
+    assert row["destination"] is None
+
+
+def test_matches_own_grab_agrees_with_find_own_grab():
+    matching = _trace_for(movie_id=855, date=_iso(GRAB_AT + 3))
+    not_matching = _trace_for(movie_id=999, date=_iso(GRAB_AT + 3))
+    rows = [_own_grab(movie_id=855)]
+
+    assert matches_own_grab(matching, rows) is (find_own_grab(matching, rows) is not None)
+    assert matches_own_grab(not_matching, rows) is (find_own_grab(not_matching, rows) is not None)
+
