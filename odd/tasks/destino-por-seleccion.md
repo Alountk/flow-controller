@@ -96,10 +96,10 @@ subdirectorio `Season XX` que sí se aplica en la biblioteca.
 ## Tasks
 
 - [x] **T1** `own_grabs` con la columna de destino + migración v6 (S1) — hecho en `72357ae`
-- [x] **T2** `copy_files` aceptando un destino explícito (S2) — hecho en `11ac52e`
+- [x] **T2** `copy_files` aceptando un destino explícito (S2) — hecho en `3dca56c` (motor) + `0faf775` (enganche)
 - [x] **T3** variante de quitar de la cola del arr **sin** borrar del cliente (S2) — hecho en `53658ca`
-- [x] **T4** UI: combo de carpeta aplicado a la selección (S3a) — hecho en `c3ed9ee`
-- [x] **T5** la marca muestra el destino (S3b) — hecho en `4f11504` (backend) + `2ce37c4` (UI)
+- [x] **T4** UI: combo de carpeta aplicado a la selección (S3a) — hecho en `b99d29b`
+- [x] **T5** la marca muestra el destino (S3b) — hecho en `38da715` (backend) + `e92093c` (UI)
 - [x] **T6** tests (persistencia, destino explícito, la orden al arr, la UI) — repartidos por slice
 - [ ] **T7** verificación en vivo con `SAFE_MODE` (S4) — pendiente del despliegue
 
@@ -139,7 +139,7 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
   (`copy_engine.py` + `tests_copy_engine.py` van a T2a; `auto_copy.py`, `auto_copy_driver.py` y sus
   tests van a T2b). T2a se sostiene solo: su capacidad ya está cubierta por sus propios tests.
 - **S3b también se corta en dos** (444 líneas, backend y UI), y el corte ya existe: son los dos
-  commits `4f11504` y `2ce37c4`.
+  commits `38da715` y `e92093c`.
 - **El documento de feature va en su propio PR**, porque con S1 ya sumaba 448 y pasaba el presupuesto.
 - S4 (verificación en vivo) no genera PR de código: es evidencia en este documento.
 
@@ -161,7 +161,7 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
   la política normal del repo.
 - [x] **S2 cerrada** (misma rama), en dos commits porque T2 solo ya pasaba de 400:
   - `53658ca` feat(clients): quitar de la cola del arr sin borrar del cliente (97+/10−).
-  - `11ac52e` feat(auto-copy): copiar a un destino explícito que el arr no importa (501+/31−).
+  - `3dca56c` (motor) + `0faf775` (enganche) feat(auto-copy): copiar a un destino explícito que el arr no importa (501+/31−).
   - Verificación: `pytest -q` → **517 passed** (base 489), `pyflakes` y `vulture` sin salida.
   - La trampa de `ProcessMonitoredDownloads` quedó cerrada: en carpeta ajena no se dispara la
     importación ni se sondea; y la copia es fail-closed si no se puede garantizar que el arr no la toque.
@@ -169,15 +169,15 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
 - [x] **Revisión nativa del candidato S2: saltada por el usuario** (`declined_this_candidate`, sin
   registro de revisión, revisiones futuras siguen activas).
 - [x] **Reparto en PRs decidido**: cadena `stacked-to-main` (ver tabla arriba).
-- [x] **S3a cerrada** — `c3ed9ee` feat(calendar): elegir la carpeta destino en el buscador de
+- [x] **S3a cerrada** — `b99d29b` feat(calendar): elegir la carpeta destino en el buscador de
   releases (293 líneas). Endpoint `GET /api/calendar/destinations` con las raíces reales (root folders
   del arr + `config.ALLOWED_ROOTS`, deduplicadas) y el combo en el modal, con `Biblioteca (la del
   arr)` por defecto (sin destino = petición idéntica a la de antes). Verificación: `pytest -q` →
   **522 passed**, `pyflakes`/`vulture` limpios, `npm test` → **212 passed**, `npm run build` → OK.
   - Gotcha del writer: `arr_root_folders` devuelve `[]` tanto si el arr no responde como si no tiene
     raíces; se trató como degradación y se dice en el `detail`, sin cambiar el contrato de la función.
-- [x] **S3b cerrada** — `4f11504` feat(wanted): exponer el destino en las superficies marcadas
-  (257) + `2ce37c4` feat(ui): la marca muestra a dónde se mandó (187). Campo `grabbed_destination`
+- [x] **S3b cerrada** — `38da715` feat(wanted): exponer el destino en las superficies marcadas
+  (257) + `e92093c` feat(ui): la marca muestra a dónde se mandó (187). Campo `grabbed_destination`
   (NULL = biblioteca), leído de la **misma fila** que `grabbed_at` (`own_grabs_latest_rows`, con
   `own_grabs_latest_map` como proyección). En la marca se ve el último tramo de la carpeta y la ruta
   completa en el `title`; **sin destino la marca queda igual que antes**. Verificación: `pytest -q` →
