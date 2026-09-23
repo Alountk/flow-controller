@@ -73,14 +73,29 @@ subdirectorio `Season XX` que sí se aplica en la biblioteca.
   ausente/NULL = biblioteca.
 - **S2 — T2 + T3: copiar a un destino explícito y que el arr no la toque.** `copy_files` acepta
   `dest_root`; `arr_delete_queue` gana `remove_from_client`; el driver resuelve el destino del grab
-  y quita la cola del arr antes de copiar.
+  y quita la cola del arr antes de copiar. Detalles que S2 tiene que respetar:
+  - **Trampa detectada (crítica)**: `run_copy_background` hoy, tras copiar, lanza
+    `ProcessMonitoredDownloads` al arr y sondea con `verify_import` hasta que el arr tiene el
+    fichero. En un destino ajeno eso es **justo lo contrario** de lo pedido: haría que el arr
+    importara a la biblioteca. La copia a carpeta ajena **no** debe disparar la importación ni
+    sondearla; termina en `done` con un motivo que diga que el arr no la toca.
+  - **Orden y fail-closed**: quitar de la cola **antes** de copiar, de forma síncrona en
+    `do_action("copy_files")`, para que un fallo devuelva `ok:false` y el sweep lo reintente sin
+    haber copiado. Si el ítem ya no está en la cola (404) no hay nada que impedir: se copia. Cualquier
+    otro error es real y **no** se copia (honra "no catalogado por el arr").
+  - **De dónde sale el destino**: el driver necesita la fila del propio grab, no un booleano. Se
+    añade un buscador que devuelve la fila (la más reciente que casa) y `matches_own_grab` pasa a
+    delegar en él para no cambiar los 16 puntos que ya lo usan. `destination` NULL = biblioteca =
+    comportamiento de hoy.
+  - **Defensa en profundidad**: `copy_files` vuelve a validar `dest_root` contra las raíces
+    permitidas antes de escribir nada.
 - **S3 — T4 + T5: la UI.** Combo de carpeta aplicado a la selección (root folders del arr +
   `ALLOWED_ROOTS`) y la marca mostrando el destino.
 - **S4 — T6 + T7: tests transversales y verificación en vivo** con `SAFE_MODE` (propone y no escribe).
 
 ## Tasks
 
-- [ ] **T1** `own_grabs` con la columna de destino + migración v6 (S1)
+- [x] **T1** `own_grabs` con la columna de destino + migración v6 (S1) — hecho en `72357ae`
 - [ ] **T2** `copy_files` aceptando un destino explícito (S2)
 - [ ] **T3** variante de quitar de la cola del arr **sin** borrar del cliente (S2)
 - [ ] **T4** UI: combo de carpeta aplicado a la selección (S3)
@@ -108,8 +123,23 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
 ## Progress
 
 - [x] Diseño cerrado (el timing quedó resuelto: se actúa al copiar, no al hacer el grab).
-- [ ] S1 en curso: T1 (persistencia del destino). Sin commits todavía.
+- [x] **S1 cerrada** (rama `feat/destino-por-seleccion`, desde `main` = `193b430`):
+  - `421b8ca` docs(odd): el documento de feature.
+  - `72357ae` feat(calendar): persistir el destino opcional en los propios grabs.
+  - 333 líneas autoradas. Verificación: `pytest -q` → **499 passed** (base 489), `pyflakes` y
+    `vulture` sin salida.
+  - Deuda anotada: la lista de raíces permitidas sigue **duplicada literal** en `routes/files.py`,
+    `routes/wanted.py` y `routes_mixer.py`; existe ya una autoridad única (`config.ALLOWED_ROOTS` +
+    `path_is_allowed`) a la que se pueden migrar, fuera del alcance de esta feature.
+- [!] **Revisión nativa de S1: parada, no cerrada.** Linaje `review-9545e53c1d8e3453` (riesgo medio,
+  una lente: `review-reliability`). La lente devolvió resultado vacío dos veces
+  (`opencode_task_output_empty`), se declaró el slot inalcanzable y Go devolvió
+  `stop / unachievable_lens_slot`. **S1 queda sin revisar**; la entrega es decisión del usuario bajo
+  la política normal del repo.
+- [ ] S2 pendiente: T2 + T3.
+- [ ] Tras la feature: el *check de los dos `.env`* (`FC_SECRET` vs `API_KEY`, raíz y `backend/`).
 
 ## Next step
 
-Cerrar S1 (T1) con su commit de unidad de trabajo, y seguir con S2, que es donde está el riesgo real.
+S2 (T2 + T3): destino explícito en la copia y quitar la cola del arr sin borrar del cliente. Es
+donde está el riesgo real y donde está la trampa de `ProcessMonitoredDownloads`.
