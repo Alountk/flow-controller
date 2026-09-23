@@ -33,8 +33,12 @@ function derivePathMapping(trace: Trace) {
   const host = trace.download_client_host || ''
   const output = trace.queue?.output_path || ''
   const remote_path = output.substring(0, output.lastIndexOf('/')) || ''
-  const local_path = '/downloads/incoming'
-  return { host, remote_path, local_path }
+  // No local_path on purpose: the backend owns the container→host translation
+  // (_VOLUME_MAP). Pre-filling it here with the download client's own namespace
+  // produced a self-mapping (/downloads/incoming → /downloads/incoming) that
+  // fixed nothing and stayed in the arr. An empty field lets the user override
+  // it; otherwise the backend resolves it.
+  return { host, remote_path }
 }
 
 function actionsFor(trace: Trace): ActionKey[] {

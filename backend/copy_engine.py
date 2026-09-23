@@ -359,10 +359,29 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                     }
                 ],
             }
-        if not local_path and remote_path.startswith("/data/"):
-            local_path = "/mnt/storage/" + remote_path[len("/data/"):]
-        elif not local_path:
-            local_path = remote_path
+        if not local_path:
+            # The app owns the container→host translation (_VOLUME_MAP), so a
+            # caller that sends only the remote path gets it resolved here
+            # instead of writing a self-mapping that maps nothing. The old
+            # `/data/`-only special case is a subset of this general rule.
+            local_path = host_path(remote_path)
+        if local_path.rstrip("/") == remote_path.rstrip("/"):
+            # No known translation: remote and local are the same path, so the
+            # mapping would be a no-op. Refuse loudly instead of persisting a
+            # useless entry that keeps the arr failing at the same path.
+            return {
+                "ok": False,
+                "steps": [
+                    {
+                        "target": source,
+                        "ok": False,
+                        "detail": (
+                            f"no hay una traducción conocida para '{remote_path}': "
+                            "no se creó ningún mapeo de rutas"
+                        ),
+                    }
+                ],
+            }
         from clients import arr_remote_paths, arr_add_remote_path
         existing = await arr_remote_paths(session, service)
         rp = remote_path.rstrip("/")
@@ -466,11 +485,17 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                 return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
 
         # --- Smart rename: construir nombre correcto antes de copiar ---
-        _src_path = Path(output_path)
+        # Resolve the container path to a host path ONCE, through the app's
+        # single authority. An absolute container path like
+        # /downloads/incoming/x.mkv is not a host path; using it as one looked
+        # up a file that does not exist. host_path is a no-op for a path that
+        # matches no container prefix, so a real host path passes untouched.
+        resolved_src = host_path(output_path)
+        _src_path = Path(resolved_src)
         smart_name = _src_path.name  # fallback: nombre original
         ext = _src_path.suffix
 
-        src_path_obj = Path(output_path if os.path.isabs(output_path) else host_path(output_path))
+        src_path_obj = Path(resolved_src)
         if src_path_obj.is_file():
             if source == "sonarr" and ids.get("episode_id") and ids.get("series_id"):
                 ep_meta = await arr_episode_metadata(session, service, ids["episode_id"])
@@ -504,7 +529,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         task_id = str(uuid.uuid4())
         copy_tasks.create(task_id,
             status="running",
-            src_path=output_path,
+            src_path=resolved_src,
             dst_path=dst_path,
             copied_bytes=0,
             total_bytes=0,
@@ -512,8 +537,8 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
             files_total=0,
             detail="preparando copia...",
         )
-        asyncio.create_task(run_copy_background(task_id, output_path, root, service, source, ids, target_name=smart_name, import_after_copy=not dest_root))
-        return {"ok": True, "needs_polling": True, "task_id": task_id, "src_path": output_path, "dst_path": dst_path}
+        asyncio.create_task(run_copy_background(task_id, resolved_src, root, service, source, ids, target_name=smart_name, import_after_copy=not dest_root))
+        return {"ok": True, "needs_polling": True, "task_id": task_id, "src_path": resolved_src, "dst_path": dst_path}
 
     else:
         return {"ok": False, "steps": [{"target": "?", "ok": False, "detail": f"acción desconocida: {action}"}]}
