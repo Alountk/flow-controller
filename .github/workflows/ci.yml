@@ -3,8 +3,21 @@ name: CI — Build, Test & Verify
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'odd/**'
+      - '**/*.md'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'odd/**'
+      - '**/*.md'
+
+# One run per ref: a newer push cancels the run it supersedes. Without this a
+# stacked chain (one run per PR, one per merge) pays for every run to the end,
+# and two publishers race to overwrite the same image tag.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   PYTHON_VERSION: "3.12"
@@ -132,4 +145,18 @@ jobs:
           IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           docker compose -f docker-compose.yml -f docker-compose.ci.yml build --no-cache
           docker compose -f docker-compose.yml -f docker-compose.ci.yml push
-          echo "✅ Image pushed to $IMAGE:latest"
+          # An immutable tag per commit. `:latest` moves, so without this there
+          # is no way to tell which commit an image holds once a later run has
+          # published over it.
+          SHORT_SHA="$(echo '${{ github.sha }}' | cut -c1-7)"
+          docker tag "$IMAGE:latest" "$IMAGE:sha-$SHORT_SHA"
+          docker push "$IMAGE:sha-$SHORT_SHA"
+          echo "✅ Image pushed: $IMAGE:latest and $IMAGE:sha-$SHORT_SHA"
+
+      - name: Keep only 5 latest versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: flow-controller
+          package-type: container
+          min-versions-to-keep: 5
+          delete-only-pre-release-versions: false
