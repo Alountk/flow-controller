@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import aiohttp
 from fastapi import APIRouter, Depends
 
-from config import find_service, service_unavailable_reason
+from config import find_service, service_unavailable_reason, path_is_allowed
 from history import record_own_grab
 from clients import (
     fetch_radarr_calendar,
@@ -232,6 +232,13 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
     if not service:
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
+    # Reject an invalid destination BEFORE the grab, so nothing is sent to the
+    # arr and no own-grab row is written. The check uses the app's configured
+    # allowed roots (`path_is_allowed`); it never trusts the path to be safe.
+    # Absent (None) is the library default and skips the check entirely.
+    if req.destination is not None and not path_is_allowed(req.destination):
+        return {"ok": False, "detail": f"Destino no permitido: {req.destination}"}
+
     try:
         # The series lookup rides the grab's own session: it is a single GET to
         # the arr the grab just hit, so a second session would only add another
@@ -260,6 +267,7 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
             series_id=series_id,
             guid=req.guid,
             indexer_id=req.indexerId,
+            destination=req.destination,
         )
     return result
 
@@ -270,6 +278,18 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
     service = find_service(req.source, "arr")
     if not service:
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
+
+    # Same guard as the single grab, applied once for the whole batch: an
+    # invalid destination rejects the request before any guid is sent to the
+    # arr, so no own-grab row is written either. The frontend groups rows by
+    # destination and calls this once per group, so one value covers the batch.
+    if req.destination is not None and not path_is_allowed(req.destination):
+        return {
+            "ok": False,
+            "detail": f"Destino no permitido: {req.destination}",
+            "downloaded": [],
+            "errors": [],
+        }
 
     results = []
     errors = []
@@ -300,6 +320,7 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                         series_id=series_id,
                         guid=guid,
                         indexer_id=idx_id,
+                        destination=req.destination,
                     )
                 else:
                     errors.append({"guid": guid, "detail": result.get("detail", "Error desconocido")})

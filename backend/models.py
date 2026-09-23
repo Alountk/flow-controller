@@ -41,6 +41,8 @@ class CalendarGrabRequest(BaseModel):
     indexerId: int = 0
     movieId: int = 0
     episodeId: int = 0
+    # Chosen destination folder; None/absent means the arr's library.
+    destination: str | None = None
 
 
 class CalendarGrabBatchRequest(BaseModel):
@@ -49,3 +51,6 @@ class CalendarGrabBatchRequest(BaseModel):
     indexerIds: list[int] = []
     movieId: int = 0
     episodeId: int = 0
+    # One destination for the whole batch: the UI groups rows by destination and
+    # issues one call per group. None/absent means the arr's library.
+    destination: str | None = None
