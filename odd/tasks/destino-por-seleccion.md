@@ -120,6 +120,26 @@ subdirectorio `Season XX` que sí se aplica en la biblioteca.
 
 Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
 
+## Reparto en PRs (decidido 2026-09-23)
+
+**Cadena `stacked-to-main`**: cada PR entra en `main` en orden. Ninguno pasa de 400 líneas.
+
+| PR | Contenido | Líneas aprox. |
+| -- | --------- | ------------- |
+| 1 | El documento de feature (la propuesta) | 145 |
+| 2 | S1 / T1: persistencia del destino | 333 |
+| 3 | T3: quitar de la cola sin borrar del cliente | 107 |
+| 4 | T2a: el motor de copia con destino explícito | ~371 |
+| 5 | T2b: el enganche en el driver (`find_own_grab` → `dest_root`) | ~161 |
+| 6 | S3a / T4: el combo de carpeta | por medir |
+| 7 | S3b / T5: la marca muestra el destino | por medir |
+
+- **T2 se corta en motor (T2a) y enganche (T2b)**: es un corte **por ficheros** y por tanto limpio
+  (`copy_engine.py` + `tests_copy_engine.py` van a T2a; `auto_copy.py`, `auto_copy_driver.py` y sus
+  tests van a T2b). T2a se sostiene solo: su capacidad ya está cubierta por sus propios tests.
+- **El documento de feature va en su propio PR**, porque con S1 ya sumaba 448 y pasaba el presupuesto.
+- S4 (verificación en vivo) no genera PR de código: es evidencia en este documento.
+
 ## Progress
 
 - [x] Diseño cerrado (el timing quedó resuelto: se actúa al copiar, no al hacer el grab).
@@ -152,5 +172,6 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
 
 ## Next step
 
-Resolver el reparto en PRs (presupuesto de 400) y seguir con S3 (T4 + T5: el combo de carpeta
-aplicado a la selección y la marca mostrando el destino).
+S3a (T4): el combo de carpeta aplicado a la selección. Necesita exponer al frontend las opciones
+reales —los root folders del arr (`arr_root_folders`, `clients.py`) más `config.ALLOWED_ROOTS`— y
+mandar el `destination` elegido en `grabCalendarRelease`/`grabCalendarReleaseBatch`.
