@@ -136,10 +136,21 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
   (`opencode_task_output_empty`), se declaró el slot inalcanzable y Go devolvió
   `stop / unachievable_lens_slot`. **S1 queda sin revisar**; la entrega es decisión del usuario bajo
   la política normal del repo.
-- [ ] S2 pendiente: T2 + T3.
+- [x] **S2 cerrada** (misma rama), en dos commits porque T2 solo ya pasaba de 400:
+  - `53658ca` feat(clients): quitar de la cola del arr sin borrar del cliente (97+/10−).
+  - `11ac52e` feat(auto-copy): copiar a un destino explícito que el arr no importa (501+/31−).
+  - Verificación: `pytest -q` → **517 passed** (base 489), `pyflakes` y `vulture` sin salida.
+  - La trampa de `ProcessMonitoredDownloads` quedó cerrada: en carpeta ajena no se dispara la
+    importación ni se sondea; y la copia es fail-closed si no se puede garantizar que el arr no la toque.
+  - Test que el writer no añadió (anotado, no escondido): fuente **archivo** + `dest_root` end-to-end.
+- [x] **Revisión nativa del candidato S2: saltada por el usuario** (`declined_this_candidate`, sin
+  registro de revisión, revisiones futuras siguen activas).
+- [!] **Decisión de entrega pendiente**: el candidato acumulado son **1117 líneas en 15 ficheros**.
+  T3 (107) cabe en un PR; **T2 (532) no cabe sin partirse o sin `size:exception`**.
+- [ ] S3 pendiente: T4 + T5 (UI).
 - [ ] Tras la feature: el *check de los dos `.env`* (`FC_SECRET` vs `API_KEY`, raíz y `backend/`).
 
 ## Next step
 
-S2 (T2 + T3): destino explícito en la copia y quitar la cola del arr sin borrar del cliente. Es
-donde está el riesgo real y donde está la trampa de `ProcessMonitoredDownloads`.
+Resolver el reparto en PRs (presupuesto de 400) y seguir con S3 (T4 + T5: el combo de carpeta
+aplicado a la selección y la marca mostrando el destino).
