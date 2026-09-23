@@ -22,8 +22,21 @@ describe('formatGrabMark', () => {
     expect(formatGrabMark(GRABBED_AT)).toBe(expectedLabel(GRABBED_AT))
   })
 
+  it('appends the destination folder when the grab went somewhere else', () => {
+    expect(formatGrabMark(GRABBED_AT, '/mnt/storage/movies/_manual')).toBe(
+      `${expectedLabel(GRABBED_AT)} → _manual`,
+    )
+  })
+
+  it('is exactly the date label when the destination is the library', () => {
+    expect(formatGrabMark(GRABBED_AT, null)).toBe(expectedLabel(GRABBED_AT))
+    expect(formatGrabMark(GRABBED_AT, undefined)).toBe(expectedLabel(GRABBED_AT))
+    expect(formatGrabMark(GRABBED_AT, '')).toBe(expectedLabel(GRABBED_AT))
+  })
+
   it('returns null when there is no timestamp', () => {
     expect(formatGrabMark(null)).toBeNull()
     expect(formatGrabMark(undefined)).toBeNull()
+    expect(formatGrabMark(null, '/mnt/storage/movies/_manual')).toBeNull()
   })
 })

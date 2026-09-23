@@ -107,6 +107,9 @@
   color: var(--warn);
   font-size: 10px;
   font-weight: 600;
+  /* Same as MissingContent's mark: a folder name may be long, so break it
+     instead of letting it widen the calendar cell. */
+  overflow-wrap: anywhere;
 }
 
 .calendar-poster {

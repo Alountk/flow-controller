@@ -586,7 +586,7 @@ export function MissingContent() {
               <>
                 <div className="wanted-grid">
                   {allWantedMovies.map((movie) => {
-                    const grabbed = formatGrabMark(movie.grabbed_at)
+                    const grabbed = formatGrabMark(movie.grabbed_at, movie.grabbed_destination)
                     return (
                       // `status-grabbed` is layered ON TOP of `status-error`: the
                       // card is still missing, it was also already requested. Two
@@ -607,7 +607,11 @@ export function MissingContent() {
                           )}
                           {/* Null means never requested: show nothing, not a dash
                               and not an empty slot. */}
-                          {grabbed && <div className="wanted-grabbed">{grabbed}</div>}
+                          {grabbed && (
+                            <div className="wanted-grabbed" title={movie.grabbed_destination ?? undefined}>
+                              {grabbed}
+                            </div>
+                          )}
                             <div className="wanted-card-actions">
                               <button
                                 className="action-btn search-item"
@@ -653,7 +657,7 @@ export function MissingContent() {
             <>
               <div className="wanted-grid">
                 {allCatalogMovies.map((movie) => {
-                  const grabbed = formatGrabMark(movie.grabbed_at)
+                  const grabbed = formatGrabMark(movie.grabbed_at, movie.grabbed_destination)
                   return (
                     <div
                       key={movie.id}
@@ -678,7 +682,11 @@ export function MissingContent() {
                         {/* Todas shows the whole catalogue, so the mark also
                             appears on a title that already arrived: it still
                             answers "did I ask for this?". */}
-                        {grabbed && <div className="wanted-grabbed">{grabbed}</div>}
+                        {grabbed && (
+                          <div className="wanted-grabbed" title={movie.grabbed_destination ?? undefined}>
+                            {grabbed}
+                          </div>
+                        )}
                         <div className="wanted-card-actions">
                           <button
                             className="action-btn search-item"
@@ -755,7 +763,7 @@ export function MissingContent() {
               <>
                 <div className="wanted-list">
                   {allWantedEpisodes.map((ep) => {
-                    const grabbed = formatGrabMark(ep.grabbed_at)
+                    const grabbed = formatGrabMark(ep.grabbed_at, ep.grabbed_destination)
                     return (
                       <div
                         key={ep.id}
@@ -769,7 +777,11 @@ export function MissingContent() {
                           <span className="wanted-ep-title">{ep.title}</span>
                           {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
                           {/* Null means never requested: show nothing at all. */}
-                          {grabbed && <span className="wanted-grabbed">{grabbed}</span>}
+                          {grabbed && (
+                            <span className="wanted-grabbed" title={ep.grabbed_destination ?? undefined}>
+                              {grabbed}
+                            </span>
+                          )}
                         </div>
                         <div className="wanted-row-actions">
                           <button
@@ -828,7 +840,7 @@ export function MissingContent() {
             <>
               <div className="wanted-grid">
                 {allCatalogSeries.map((series) => {
-                  const grabbed = formatGrabMark(series.grabbed_at)
+                  const grabbed = formatGrabMark(series.grabbed_at, series.grabbed_destination)
                   return (
                     <div
                       key={series.id}
@@ -857,7 +869,11 @@ export function MissingContent() {
                         )}
                         {/* A series card is marked by a grab of ANY of its
                             episodes: "we asked for something from this series". */}
-                        {grabbed && <div className="wanted-grabbed">{grabbed}</div>}
+                        {grabbed && (
+                          <div className="wanted-grabbed" title={series.grabbed_destination ?? undefined}>
+                            {grabbed}
+                          </div>
+                        )}
                         <div className="wanted-card-actions">
                           <button
                             className="action-btn search-item"

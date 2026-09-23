@@ -307,6 +307,8 @@ export interface WantedMovie {
   /** Unix seconds when this app asked to download the title, or null when it
    *  never did (or the grab is older than the backend's lookback window). */
   grabbed_at?: number | null
+  /** Folder the grab was sent to, or null when it went to the arr's library. */
+  grabbed_destination?: string | null
 }
 
 export interface AllMovie {
@@ -320,6 +322,8 @@ export interface AllMovie {
   /** Unix seconds when this app asked to download the title, or null when it
    *  never did (or the grab is older than the backend's lookback window). */
   grabbed_at?: number | null
+  /** Folder the grab was sent to, or null when it went to the arr's library. */
+  grabbed_destination?: string | null
 }
 
 export interface AllSeries {
@@ -335,6 +339,8 @@ export interface AllSeries {
   /** Unix seconds when this app asked to download ANY of the series' episodes,
    *  or null when it never did (or the grab is outside the lookback window). */
   grabbed_at?: number | null
+  /** Folder the newest episode grab was sent to, or null for the arr's library. */
+  grabbed_destination?: string | null
 }
 
 export interface WantedEpisode {
@@ -350,6 +356,8 @@ export interface WantedEpisode {
   /** Unix seconds when this app asked to download the episode, or null when it
    *  never did (or the grab is older than the backend's lookback window). */
   grabbed_at?: number | null
+  /** Folder the grab was sent to, or null when it went to the arr's library. */
+  grabbed_destination?: string | null
 }
 
 /** One episode of a series, as returned by /api/wanted/series/{id}/episodes.
@@ -445,6 +453,8 @@ export interface CalendarItem {
   /** Unix seconds when this app asked to download this movie or episode, or
    *  null when it never did (or the grab is outside the lookback window). */
   grabbed_at?: number | null
+  /** Folder the grab was sent to, or null when it went to the arr's library. */
+  grabbed_destination?: string | null
 }
 
 export interface CalendarResponse {
