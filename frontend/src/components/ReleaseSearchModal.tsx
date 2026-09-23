@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   addCalendarItem,
   fetchCalendarReleases,
+  fetchCalendarDestinations,
   grabCalendarRelease,
   grabCalendarReleaseBatch,
   type Release,
@@ -74,6 +75,8 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   const [selectedIndexer, setSelectedIndexer] = useState<string>('all')
   const [releases, setReleases] = useState<Release[]>([])
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
+  const [destinations, setDestinations] = useState<string[]>([])
+  const [destination, setDestination] = useState('')
   const [filters, setFilters] = useState<ReleaseFilters>(NO_RELEASE_FILTERS)
   const [grabErrors, setGrabErrors] = useState<{ guid: string; detail: string }[]>([])
   const [elapsed, setElapsed] = useState(0)
@@ -95,6 +98,14 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
     apiFetch(`/api/calendar/indexers?source=${item.source}`, {})
       .then((r) => r.json())
       .then((data: { indexers: Indexer[] }) => setIndexers(data.indexers || []))
+      .catch(() => {})
+  }, [item.source])
+
+  // Fetch destination folders on mount. A failed load is not fatal: the combo
+  // keeps its built-in library default, so searching and grabbing still work.
+  useEffect(() => {
+    fetchCalendarDestinations(item.source)
+      .then((data) => setDestinations(data.folders))
       .catch(() => {})
   }, [item.source])
 
@@ -173,12 +184,15 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
     setGrabErrors([])
     setMessage('Descargando...')
     const release = releases.find(r => r.guid === guid)
+    // An empty `destination` means the arr's library and must stay absent from
+    // the request, exactly as it was before the combo existed.
     const result = await grabCalendarRelease(
       item.source,
       guid,
       release?.indexerId || 0,
       item.type === 'movie' ? item.id : 0,
       item.type === 'episode' ? item.id : 0,
+      destination || undefined,
     )
     if (result.ok) {
       setStep('done')
@@ -220,6 +234,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
       indexerIds,
       item.type === 'movie' ? item.id : 0,
       item.type === 'episode' ? item.id : 0,
+      destination || undefined,
     )
     setGrabErrors(result.errors ?? [])
     if (result.ok) {
@@ -409,6 +424,23 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
                     🔄 Refrescar
                   </button>
                 </div>
+              </div>
+
+              {/* The chosen folder applies to the marked rows (per-row and batch
+                  grabs). The library default sends no destination at all. */}
+              <div className="calendar-indexer-select">
+                <label className="calendar-indexer-label" htmlFor="release-destination">Destino:</label>
+                <select
+                  id="release-destination"
+                  className="calendar-indexer-dropdown"
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                >
+                  <option value="">Biblioteca (la del arr)</option>
+                  {destinations.map((folder) => (
+                    <option key={folder} value={folder}>{folder}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="release-filters">

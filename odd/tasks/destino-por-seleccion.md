@@ -120,6 +120,26 @@ subdirectorio `Season XX` que sí se aplica en la biblioteca.
 
 Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
 
+## Reparto en PRs (decidido 2026-09-23)
+
+**Cadena `stacked-to-main`**: cada PR entra en `main` en orden. Ninguno pasa de 400 líneas.
+
+| PR | Contenido | Líneas aprox. |
+| -- | --------- | ------------- |
+| 1 | El documento de feature (la propuesta) | 145 |
+| 2 | S1 / T1: persistencia del destino | 333 |
+| 3 | T3: quitar de la cola sin borrar del cliente | 107 |
+| 4 | T2a: el motor de copia con destino explícito | ~371 |
+| 5 | T2b: el enganche en el driver (`find_own_grab` → `dest_root`) | ~161 |
+| 6 | S3a / T4: el combo de carpeta | por medir |
+| 7 | S3b / T5: la marca muestra el destino | por medir |
+
+- **T2 se corta en motor (T2a) y enganche (T2b)**: es un corte **por ficheros** y por tanto limpio
+  (`copy_engine.py` + `tests_copy_engine.py` van a T2a; `auto_copy.py`, `auto_copy_driver.py` y sus
+  tests van a T2b). T2a se sostiene solo: su capacidad ya está cubierta por sus propios tests.
+- **El documento de feature va en su propio PR**, porque con S1 ya sumaba 448 y pasaba el presupuesto.
+- S4 (verificación en vivo) no genera PR de código: es evidencia en este documento.
+
 ## Progress
 
 - [x] Diseño cerrado (el timing quedó resuelto: se actúa al copiar, no al hacer el grab).
@@ -136,10 +156,22 @@ Desactivado (`strict_tdd: false`, origen `sdd-init/flow-controller`).
   (`opencode_task_output_empty`), se declaró el slot inalcanzable y Go devolvió
   `stop / unachievable_lens_slot`. **S1 queda sin revisar**; la entrega es decisión del usuario bajo
   la política normal del repo.
-- [ ] S2 pendiente: T2 + T3.
+- [x] **S2 cerrada** (misma rama), en dos commits porque T2 solo ya pasaba de 400:
+  - `53658ca` feat(clients): quitar de la cola del arr sin borrar del cliente (97+/10−).
+  - `11ac52e` feat(auto-copy): copiar a un destino explícito que el arr no importa (501+/31−).
+  - Verificación: `pytest -q` → **517 passed** (base 489), `pyflakes` y `vulture` sin salida.
+  - La trampa de `ProcessMonitoredDownloads` quedó cerrada: en carpeta ajena no se dispara la
+    importación ni se sondea; y la copia es fail-closed si no se puede garantizar que el arr no la toque.
+  - Test que el writer no añadió (anotado, no escondido): fuente **archivo** + `dest_root` end-to-end.
+- [x] **Revisión nativa del candidato S2: saltada por el usuario** (`declined_this_candidate`, sin
+  registro de revisión, revisiones futuras siguen activas).
+- [!] **Decisión de entrega pendiente**: el candidato acumulado son **1117 líneas en 15 ficheros**.
+  T3 (107) cabe en un PR; **T2 (532) no cabe sin partirse o sin `size:exception`**.
+- [ ] S3 pendiente: T4 + T5 (UI).
 - [ ] Tras la feature: el *check de los dos `.env`* (`FC_SECRET` vs `API_KEY`, raíz y `backend/`).
 
 ## Next step
 
-S2 (T2 + T3): destino explícito en la copia y quitar la cola del arr sin borrar del cliente. Es
-donde está el riesgo real y donde está la trampa de `ProcessMonitoredDownloads`.
+S3a (T4): el combo de carpeta aplicado a la selección. Necesita exponer al frontend las opciones
+reales —los root folders del arr (`arr_root_folders`, `clients.py`) más `config.ALLOWED_ROOTS`— y
+mandar el `destination` elegido en `grabCalendarRelease`/`grabCalendarReleaseBatch`.
