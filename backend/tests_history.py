@@ -938,6 +938,39 @@ def test_the_latest_grab_wins_per_title(db):
     assert marks == {("radarr", "movie", 11): 300.0}
 
 
+def test_the_latest_rows_reader_carries_the_instant_and_destination_of_one_row(db):
+    """The mark's date and its destination must come from the SAME row: the
+    newest grab, never the newest date paired with another row's folder."""
+    history.record_own_grab("radarr", movie_id=11, grabbed_at=100.0, destination="/mnt/old")
+    history.record_own_grab("radarr", movie_id=11, grabbed_at=300.0, destination="/mnt/new")
+
+    rows = history.own_grabs_latest_rows(0)
+
+    assert rows[("radarr", "movie", 11)] == {"grabbed_at": 300.0, "destination": "/mnt/new"}
+
+
+def test_the_latest_rows_reader_keeps_the_series_destination_of_its_newest_episode(db):
+    """A series is one key fed by many episode grabs, so its destination has to
+    be the one from the newest episode grab, not the last row read."""
+    history.record_own_grab(
+        "sonarr", episode_id=7, series_id=3, grabbed_at=100.0, destination="/mnt/old"
+    )
+    history.record_own_grab(
+        "sonarr", episode_id=8, series_id=3, grabbed_at=500.0, destination="/mnt/new"
+    )
+
+    rows = history.own_grabs_latest_rows(0)
+
+    assert rows[("sonarr", "series", 3)] == {"grabbed_at": 500.0, "destination": "/mnt/new"}
+
+
+def test_the_latest_rows_reader_is_empty_when_the_database_is_unavailable():
+    """It runs inside the Faltantes request: it must never take the page down."""
+    history.close()
+
+    assert history.own_grabs_latest_rows(0) == {}
+
+
 def test_a_movie_and_an_episode_with_the_same_id_do_not_collide(db):
     """The kind is in the key precisely so this cannot merge into one entry."""
     history.record_own_grab("radarr", movie_id=5, grabbed_at=100.0)

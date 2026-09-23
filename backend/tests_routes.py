@@ -1097,6 +1097,56 @@ class TestWantedGrabMarks:
 
         assert body["wanted"]["sonarr"]["items"][0]["grabbed_at"] == grabbed_at
 
+    def test_the_plain_branch_surfaces_a_movie_destination(self):
+        history.record_own_grab(
+            "radarr", movie_id=11, grabbed_at=time.time() - 3600,
+            destination="/mnt/storage/movies/_manual",
+        )
+
+        item = self._get().json()["wanted"]["radarr"]["items"][0]
+
+        assert item["grabbed_destination"] == "/mnt/storage/movies/_manual"
+
+    def test_the_plain_branch_surfaces_an_episode_destination(self):
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=3, grabbed_at=time.time() - 3600,
+            destination="/mnt/storage/series/_manual",
+        )
+
+        item = self._get().json()["wanted"]["sonarr"]["items"][0]
+
+        assert item["grabbed_destination"] == "/mnt/storage/series/_manual"
+
+    def test_an_item_without_a_grab_carries_destination_none(self):
+        item = self._get().json()["wanted"]["radarr"]["items"][0]
+
+        assert "grabbed_destination" in item, "the field must always be present"
+        assert item["grabbed_destination"] is None
+
+    def test_the_filtered_branch_surfaces_the_destination(self):
+        history.record_own_grab(
+            "radarr", movie_id=11, grabbed_at=time.time() - 3600,
+            destination="/mnt/storage/movies/_manual",
+        )
+
+        item = self._get(q="Wanted").json()["wanted"]["radarr"]["items"][0]
+
+        assert item["grabbed_destination"] == "/mnt/storage/movies/_manual"
+
+    def test_the_date_and_the_destination_come_from_the_same_newest_row(self):
+        """The real risk of this task: pairing the newest date with an OLDER
+        grab's folder. Both fields must describe one and the same row."""
+        history.record_own_grab(
+            "radarr", movie_id=11, grabbed_at=time.time() - 7200, destination="/mnt/old"
+        )
+        newest = time.time() - 3600
+        history.record_own_grab("radarr", movie_id=11, grabbed_at=newest, destination="/mnt/new")
+
+        item = self._get().json()["wanted"]["radarr"]["items"][0]
+
+        assert item["grabbed_at"] == newest
+        assert item["grabbed_destination"] == "/mnt/new"
+
     def test_an_item_without_a_grab_carries_none_not_absent(self):
         body = self._get().json()
 
@@ -1212,6 +1262,39 @@ class TestAllListingsGrabMarks:
         assert "grabbed_at" in item, "the field must always be present"
         assert item["grabbed_at"] is None
 
+    def test_all_movies_surfaces_the_destination(self):
+        history.record_own_grab(
+            "radarr", movie_id=855, grabbed_at=time.time() - 3600,
+            destination="/mnt/storage/movies/_manual",
+        )
+
+        item = self._get_movies().json()["items"][0]
+
+        assert item["grabbed_destination"] == "/mnt/storage/movies/_manual"
+
+    def test_all_movies_unmarked_carries_destination_none(self):
+        item = self._get_movies().json()["items"][0]
+
+        assert "grabbed_destination" in item, "the field must always be present"
+        assert item["grabbed_destination"] is None
+
+    def test_all_series_date_and_destination_come_from_its_newest_episode_grab(self):
+        """A series card is one key fed by many episode grabs: its date and its
+        destination must both come from the newest of them."""
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=3, grabbed_at=time.time() - 7200,
+            destination="/mnt/old",
+        )
+        newest = time.time() - 3600
+        history.record_own_grab(
+            "sonarr", episode_id=8, series_id=3, grabbed_at=newest, destination="/mnt/new"
+        )
+
+        item = self._get_series().json()["items"][0]
+
+        assert item["grabbed_at"] == newest
+        assert item["grabbed_destination"] == "/mnt/new"
+
     def test_a_movie_grab_does_not_mark_a_series_with_the_same_id(self):
         """A movie and a series can share a numeric id; the key's kind keeps the
         movie mark off the series card."""
@@ -1272,6 +1355,23 @@ class TestCalendarGrabMarks:
 
         assert self._item(body, "episode")["grabbed_at"] == grabbed_at
         assert self._item(body, "movie")["grabbed_at"] is None
+
+    def test_a_calendar_item_surfaces_its_destination_by_its_own_key(self):
+        history.record_own_grab(
+            "radarr", movie_id=7, grabbed_at=time.time() - 3600,
+            destination="/mnt/storage/movies/_manual",
+        )
+
+        body = self._get().json()
+
+        # Both items carry id 7: only the movie's own source/type may match.
+        assert self._item(body, "movie")["grabbed_destination"] == "/mnt/storage/movies/_manual"
+        assert self._item(body, "episode")["grabbed_destination"] is None
+
+    def test_an_unmarked_item_carries_destination_none_not_absent(self):
+        for item in self._get().json()["items"]:
+            assert "grabbed_destination" in item, "the field must always be present"
+            assert item["grabbed_destination"] is None
 
     def test_an_unmarked_item_carries_none_not_absent(self):
         for item in self._get().json()["items"]:
