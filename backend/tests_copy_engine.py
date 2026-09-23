@@ -397,3 +397,133 @@ class TestCopyFilesForeignDestination:
         assert result["dst_path"] == "/mnt/library/Movies/release"
         del copy_tasks._tasks[result["task_id"]]
 
+
+# ── fix_path_mapping resolves the local path through the app's authority ──────
+#
+# The frontend used to send a hardcoded local_path of /downloads/incoming, so
+# the mapping was /downloads/incoming → /downloads/incoming: a mapping that maps
+# nothing, persisted in the arr while the import kept failing. The backend now
+# owns the translation and refuses a mapping that would be a no-op.
+
+
+class TestFixPathMappingResolution:
+    def _run(self, monkeypatch, payload):
+        added: list[dict] = []
+        retries: list[dict] = []
+
+        async def fake_paths(session, service):
+            return []
+
+        async def fake_add(session, service, host, remote_path, local_path):
+            added.append({"host": host, "remote_path": remote_path, "local_path": local_path})
+            return {"ok": True, "detail": "mapeo creado"}
+
+        async def fake_command(session, service, body):
+            retries.append(body)
+            return {"ok": True, "detail": "ok"}
+
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(clients, "arr_remote_paths", fake_paths)
+        monkeypatch.setattr(clients, "arr_add_remote_path", fake_add)
+        monkeypatch.setattr(copy_engine, "arr_command", fake_command)
+
+        result = asyncio.run(do_action(None, "fix_path_mapping", payload))
+        return result, added, retries
+
+    def test_amule_path_resolves_to_the_configured_host_folder(self, monkeypatch):
+        payload = {
+            "source": "radarr",
+            "host": "amule-host",
+            "remote_path": "/downloads/incoming",
+        }
+        result, added, _ = self._run(monkeypatch, payload)
+
+        assert result["ok"] is True
+        assert added[0]["local_path"] == config.FOLDER_DOWNLOAD_AMULE
+        assert added[0]["local_path"] == "/mnt/storage-6tb/shared-downloads/amule"
+
+    def test_data_prefix_still_resolves_to_the_storage_root(self, monkeypatch):
+        payload = {
+            "source": "radarr",
+            "host": "arr-host",
+            "remote_path": "/data/movies/Some.Movie",
+        }
+        result, added, _ = self._run(monkeypatch, payload)
+
+        assert result["ok"] is True
+        assert added[0]["local_path"] == "/mnt/storage/movies/Some.Movie"
+
+    def test_unknown_path_does_not_write_a_self_mapping(self, monkeypatch):
+        payload = {
+            "source": "radarr",
+            "host": "amule-host",
+            "remote_path": "/opt/files/movie.mkv",
+        }
+        result, added, retries = self._run(monkeypatch, payload)
+
+        assert result["ok"] is False
+        assert added == [], "a self-mapping must never reach the arr"
+        assert retries == [], "no import retry without a mapping to fix"
+        detail = result["steps"][0]["detail"]
+        assert "no hay una traducción conocida" in detail
+        assert "/opt/files/movie.mkv" in detail
+
+    def test_an_explicit_local_path_is_still_respected(self, monkeypatch):
+        payload = {
+            "source": "radarr",
+            "host": "amule-host",
+            "remote_path": "/downloads/incoming",
+            "local_path": "/mnt/custom/amule",
+        }
+        result, added, _ = self._run(monkeypatch, payload)
+
+        assert result["ok"] is True
+        assert added[0]["local_path"] == "/mnt/custom/amule"
+
+
+# ── copy_files translates the container path before the copy runs ─────────────
+#
+# An absolute container path (/downloads/incoming/...) is not a host path. It
+# used to be used as-is, so the copy looked up a file that does not exist. The
+# path is resolved once, and the copy worker — which runs with is_host_path=True
+# — must receive the already-translated path.
+
+
+class TestCopyFilesTranslatesContainerPath:
+    def _dispatch(self, monkeypatch, output_path):
+        dispatches: list[dict] = []
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(copy_engine, "run_copy_background", _run_recorder(dispatches))
+
+        async def fake_root(session, service, movie_id):
+            return "/mnt/library/Movies"
+
+        monkeypatch.setattr(copy_engine, "arr_movie_root_folder", fake_root)
+        payload = {
+            "source": "radarr",
+            "ids": {"movie_id": 855},
+            "output_path": output_path,
+        }
+        result = asyncio.run(do_action(None, "copy_files", payload))
+        return result, dispatches
+
+    def test_absolute_container_path_is_translated(self, monkeypatch):
+        result, dispatches = self._dispatch(
+            monkeypatch,
+            "/downloads/incoming/Wonder.Woman.(2017)/Wonder.Woman.(2017).mkv",
+        )
+
+        assert result["ok"] is True
+        expected = "/mnt/storage-6tb/shared-downloads/amule/Wonder.Woman.(2017)/Wonder.Woman.(2017).mkv"
+        assert dispatches[0]["args"][1] == expected
+        assert result["src_path"] == expected
+        del copy_tasks._tasks[result["task_id"]]
+
+    def test_a_real_host_path_passes_through_untouched(self, tmp_path, monkeypatch):
+        output = str(tmp_path / "release" / "movie.mkv")
+        result, dispatches = self._dispatch(monkeypatch, output)
+
+        assert result["ok"] is True
+        assert dispatches[0]["args"][1] == output
+        assert result["src_path"] == output
+        del copy_tasks._tasks[result["task_id"]]

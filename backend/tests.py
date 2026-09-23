@@ -26,12 +26,15 @@ class TestHostPath:
         assert _host_path("/data-6tb/shared-media/movies") == "/mnt/storage-6tb/shared-media/movies"
 
     def test_downloads_incoming_amule(self):
-        # _host_path requiere trailing slash para matchear /downloads/incoming/
         assert _host_path("/downloads/incoming/") == "/mnt/storage-6tb/shared-downloads/amule/"
 
     def test_downloads_incoming_no_slash(self):
-        # Sin trailing slash, matchea /downloads/ → shared-downloads/
-        assert _host_path("/downloads/incoming") == "/mnt/storage-6tb/shared-downloads/incoming"
+        # The old expectation here was the defect: without a trailing slash the
+        # path fell through to the shorter /downloads/ prefix and became
+        # /mnt/storage-6tb/shared-downloads/incoming. The exact container root
+        # must map to its OWN replacement, .../amule — that is the path the
+        # aMule download actually lives at on the host.
+        assert _host_path("/downloads/incoming") == "/mnt/storage-6tb/shared-downloads/amule"
 
     def test_downloads_other(self):
         result = _host_path("/downloads/torrents/completed")
@@ -42,6 +45,36 @@ class TestHostPath:
 
     def test_empty_string(self):
         assert _host_path("") == ""
+
+    def test_every_prefix_maps_with_its_trailing_slash(self):
+        for prefix, replacement in _VOLUME_MAP:
+            assert _host_path(prefix) == replacement
+
+    def test_every_exact_root_maps_without_its_trailing_slash(self):
+        # The boundary defect affected every entry, not just aMule's. An exact
+        # root (prefix minus "/") maps to the replacement minus "/".
+        for prefix, replacement in _VOLUME_MAP:
+            assert _host_path(prefix.rstrip("/")) == replacement.rstrip("/")
+
+    def test_every_child_path_keeps_its_suffix(self):
+        for prefix, replacement in _VOLUME_MAP:
+            child = "Show/movie.mkv"
+            assert _host_path(prefix + child) == replacement + child
+
+    def test_exact_container_roots(self):
+        # The named roots the boundary fix must handle, pinned explicitly.
+        assert _host_path("/downloads/incoming") == "/mnt/storage-6tb/shared-downloads/amule"
+        assert _host_path("/downloads") == "/mnt/storage-6tb/shared-downloads"
+        assert _host_path("/data") == "/mnt/storage"
+        assert _host_path("/data-6tb") == "/mnt/storage-6tb"
+
+    def test_no_prefix_match_passes_through(self):
+        # A real host path must not be rewritten: host_path is a no-op when
+        # nothing in _VOLUME_MAP matches.
+        assert _host_path("/mnt/storage-6tb/library/Show/movie.mkv") == (
+            "/mnt/storage-6tb/library/Show/movie.mkv"
+        )
+        assert _host_path("/tmp/some/file.mkv") == "/tmp/some/file.mkv"
 
 
 # ── _resolve_current_path ───────────────────────────────────────────────────
