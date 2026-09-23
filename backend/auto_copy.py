@@ -206,16 +206,20 @@ def _parse_trace_date(value) -> float | None:
     return parsed.timestamp()
 
 
-def matches_own_grab(
+def find_own_grab(
     trace: dict,
     own_grabs: list[dict],
     *,
     window_seconds: float = DEFAULT_GRAB_WINDOW_SECONDS,
-) -> bool:
-    """Whether an arr-history trace is one of the grabs this app launched.
+) -> dict | None:
+    """Return the first registry row this trace is provably one of our grabs.
 
-    This is a yes/no question, so selecting the newest matching row is not
-    needed. It answers it honestly:
+    `list_own_grabs` returns rows newest-first, and the first match wins, so the
+    returned row is the most recent matching grab. The row is needed when more
+    than the yes/no answer matters: the driver reads its `destination` to send
+    the copy to the folder the user picked.
+
+    Matching rules (the boolean form delegates to this, so both agree):
 
     - same `source` as the registry row;
     - same title identity — movie ids when the trace carries
@@ -234,18 +238,18 @@ def matches_own_grab(
     guid, so it cannot be matched against the arr's history (see history.py).
     """
     if not own_grabs:
-        return False
+        return None
 
     source = (trace.get("source") or "").strip()
     ids = trace.get("ids") or {}
     movie_id = ids.get("movie_id")
     episode_id = ids.get("episode_id")
     if movie_id is None and episode_id is None:
-        return False
+        return None
 
     when = _parse_trace_date(trace.get("date"))
     if when is None:
-        return False
+        return None
 
     for row in own_grabs:
         if (row.get("source") or "").strip() != source:
@@ -263,5 +267,19 @@ def matches_own_grab(
             continue
         if when > grabbed_at + window_seconds:
             continue
-        return True
-    return False
+        return row
+    return None
+
+
+def matches_own_grab(
+    trace: dict,
+    own_grabs: list[dict],
+    *,
+    window_seconds: float = DEFAULT_GRAB_WINDOW_SECONDS,
+) -> bool:
+    """Whether an arr-history trace is one of the grabs this app launched.
+
+    This is the yes/no form of `find_own_grab`, kept because most callers only
+    need the answer. It delegates, so the two can never disagree.
+    """
+    return find_own_grab(trace, own_grabs, window_seconds=window_seconds) is not None
