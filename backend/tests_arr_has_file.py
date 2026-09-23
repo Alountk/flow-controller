@@ -1,10 +1,15 @@
-"""Tests for `clients.arr_has_file`, the cheap "does the arr already have it?" guard.
+"""Tests for `clients.py`'s arr transport helpers.
 
-Only the HTTP transport is faked, so the real function body runs. The point of
-these tests is the three-valued answer: `True` (has it), `False` (explicitly
-not), `None` (could not tell). Collapsing `None` into `False` would turn a
-transient network failure into "not imported yet" and invite a duplicate copy —
-the failure the guard exists to prevent.
+`arr_has_file` is the cheap "does the arr already have it?" guard: only the HTTP
+transport is faked, so the real function body runs, and the point is its
+three-valued answer — `True` (has it), `False` (explicitly not), `None` (could
+not tell). Collapsing `None` into `False` would turn a transient network failure
+into "not imported yet" and invite a duplicate copy, the failure the guard
+exists to prevent.
+
+`arr_delete_queue` is covered here too because it shares the same transport
+stub: the tests pin the `removeFromClient` flag (a foreign destination must keep
+the files in the client) and the `not_found` answer for a 404.
 """
 
 import asyncio
@@ -12,7 +17,7 @@ import asyncio
 import aiohttp
 import pytest
 
-from clients import arr_has_file
+from clients import arr_delete_queue, arr_has_file
 from tests_routes import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
@@ -104,3 +109,61 @@ def test_without_any_id_the_answer_is_unknown():
 
     assert result is None
     assert session.calls == [], "no id means no request to make"
+
+
+# ── arr_delete_queue ──────────────────────────────────────────────────────────
+
+
+def test_delete_queue_defaults_to_removing_from_the_client():
+    """The historical behaviour must stay bit-for-bit: no caller changes."""
+    routes = {f"{RADARR_URL}/api/v3/queue/7": (200, {})}
+    session = _StubSession(routes)
+
+    result = asyncio.run(arr_delete_queue(session, _service(RADARR_URL), 7, False))
+
+    assert result == {"ok": True, "detail": "Item eliminado de la cola"}
+    assert "removeFromClient=true" in session.calls[0][0]
+    assert "blocklist=false" in session.calls[0][0]
+
+
+def test_delete_queue_keeps_the_files_in_the_client_when_asked():
+    """A foreign destination must never delete the download: the user seeds."""
+    routes = {f"{RADARR_URL}/api/v3/queue/7": (204, {})}
+    session = _StubSession(routes)
+
+    result = asyncio.run(
+        arr_delete_queue(
+            session, _service(RADARR_URL), 7, blocklist=False, remove_from_client=False
+        )
+    )
+
+    assert result["ok"] is True
+    assert "removeFromClient=false" in session.calls[0][0]
+    assert "blocklist=false" in session.calls[0][0]
+
+
+def test_delete_queue_reports_not_found_on_a_404():
+    routes = {f"{RADARR_URL}/api/v3/queue/7": (404, {})}
+    session = _StubSession(routes)
+
+    result = asyncio.run(
+        arr_delete_queue(
+            session, _service(RADARR_URL), 7, blocklist=False, remove_from_client=False
+        )
+    )
+
+    assert result == {"ok": False, "not_found": True, "detail": "HTTP 404"}
+
+
+def test_delete_queue_keeps_the_shape_for_other_errors():
+    routes = {f"{RADARR_URL}/api/v3/queue/7": (500, {})}
+    session = _StubSession(routes)
+
+    result = asyncio.run(
+        arr_delete_queue(
+            session, _service(RADARR_URL), 7, blocklist=True, remove_from_client=False
+        )
+    )
+
+    assert result == {"ok": False, "detail": "HTTP 500"}
+    assert "not_found" not in result

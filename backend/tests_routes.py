@@ -107,6 +107,9 @@ class _StubSession:
     def put(self, url, **kwargs):
         return self._resolve(str(url))
 
+    def delete(self, url, **kwargs):
+        return self._resolve(str(url))
+
     def request(self, method, url, **kwargs):
         return self._resolve(str(url))
 

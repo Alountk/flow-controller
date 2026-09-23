@@ -339,17 +339,38 @@ def amu_ws_items(matched_hash: str, *, client: str = "amule", instance_id: str |
     return [item]
 
 
-async def arr_delete_queue(session: aiohttp.ClientSession, service: dict, queue_id: int, blocklist: bool) -> dict:
+async def arr_delete_queue(
+    session: aiohttp.ClientSession,
+    service: dict,
+    queue_id: int,
+    blocklist: bool,
+    *,
+    remove_from_client: bool = True,
+) -> dict:
+    """Remove one item from the arr's queue.
+
+    ``remove_from_client`` defaults to ``True`` (the historical behaviour: the
+    arr also deletes the download from the client). A foreign destination must
+    pass ``False``: the arr stops tracking the item but the client keeps the
+    files, so the user keeps seeding.
+
+    A 404 is reported as ``not_found`` in ADDITION to the usual keys: it means
+    the arr was not tracking the item, which is not a failure for a caller that
+    only wanted it gone.
+    """
     headers = arr_headers(service["api_key"])
     url = (
         f"{service['url']}/api/v3/queue/{queue_id}"
-        f"?removeFromClient=true&blocklist={'true' if blocklist else 'false'}"
+        f"?removeFromClient={'true' if remove_from_client else 'false'}"
+        f"&blocklist={'true' if blocklist else 'false'}"
     )
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
     try:
         async with session.delete(url, headers=headers, timeout=timeout) as resp:
             if resp.status in (200, 204):
                 return {"ok": True, "detail": "Item eliminado de la cola"}
+            if resp.status == 404:
+                return {"ok": False, "not_found": True, "detail": "HTTP 404"}
             return {"ok": False, "detail": f"HTTP {resp.status}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
