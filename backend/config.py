@@ -44,6 +44,13 @@ DEVELOPER = get_setting("developer", default=False)
 FOLDER_DOWNLOAD_AMULE = get_setting("paths", "download_amule", default="/mnt/storage-6tb/shared-downloads/amule")
 FOLDER_DOWNLOAD_TORRENT = get_setting("paths", "download_torrent", default="/mnt/storage/downloads/qbittorrent/completed")
 
+#: Filesystem roots the app is allowed to write to, read from the configured
+#: `paths.allowed_roots` (settings.py owns the default). This is the ONE
+#: authority for the list: routes validate against it instead of each carrying
+#: its own hardcoded copy, and the release-destination combo sources its
+#: non-arr options from the same value.
+ALLOWED_ROOTS: list[str] = get_setting("paths", "allowed_roots", default=[])
+
 ACTIONS: dict[str, dict] = {
     "fix_category": {
         "label": "Corregir categoría",
@@ -120,6 +127,28 @@ def service_is_configured(url: str, api_key: str) -> bool:
     cannot act on, for a service they never set up.
     """
     return bool(url) and bool(api_key)
+
+
+def path_is_allowed(path: str) -> bool:
+    """Whether ``path`` is a non-empty absolute path inside an allowed root.
+
+    The roots come from the configured ``paths.allowed_roots`` (see
+    ``ALLOWED_ROOTS``), so there is a single authority instead of a hardcoded
+    copy per route. Both the path and the roots are resolved before comparing
+    (symlinks, ``..``), and a match must land on a path-separator boundary —
+    otherwise ``/mnt/storage-6tb-evil`` would pass as ``/mnt/storage-6tb``.
+
+    A relative or empty path is rejected: a destination is only ever a concrete
+    absolute folder, and ``""`` must read as invalid rather than as the default.
+    """
+    if not path or not os.path.isabs(path):
+        return False
+    resolved = os.path.realpath(path)
+    for root in ALLOWED_ROOTS:
+        resolved_root = os.path.realpath(root)
+        if resolved == resolved_root or resolved.startswith(resolved_root + os.sep):
+            return True
+    return False
 
 
 SERVICES = [

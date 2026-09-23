@@ -559,6 +559,40 @@ def test_recording_an_own_grab_is_a_no_op_when_the_database_is_unavailable():
     history.record_own_grab("radarr", movie_id=1, guid="g", grabbed_at=1.0)
 
 
+def test_an_own_grab_persists_its_destination(db, tmp_path):
+    history.record_own_grab(
+        "radarr",
+        movie_id=855,
+        grabbed_at=1234.5,
+        destination="/mnt/storage/movies/_manual",
+    )
+
+    rows = _own_grab_rows(tmp_path / "history.db")
+
+    assert rows[0]["destination"] == "/mnt/storage/movies/_manual"
+
+
+def test_an_own_grab_without_a_destination_stores_null(db, tmp_path):
+    """NULL is the whole "library" meaning: no sentinel string is written, so a
+    reader can treat a missing value as the default without decoding a word."""
+    history.record_own_grab("radarr", movie_id=855, grabbed_at=1234.5)
+
+    rows = _own_grab_rows(tmp_path / "history.db")
+
+    assert rows[0]["destination"] is None
+
+
+def test_the_own_grab_reader_returns_the_destination(db):
+    """The reader selects * so the new column reaches its consumers untouched."""
+    history.record_own_grab(
+        "radarr", movie_id=855, grabbed_at=1234.5, destination="/mnt/storage/x"
+    )
+
+    rows = history.list_own_grabs(0)
+
+    assert rows[0]["destination"] == "/mnt/storage/x"
+
+
 # The exact tables a v2 database carried, before own_grabs.
 V2_SCHEMA = V1_OPERATIONS_SCHEMA + """
 CREATE TABLE auto_copy_handled (
@@ -618,6 +652,86 @@ def test_init_db_migrates_a_v2_database_without_an_alter(tmp_path):
     assert version == history.SCHEMA_VERSION
 
 
+# The exact own_grabs table a v5 database carried, before the destination column.
+V5_OWN_GRABS_SCHEMA = """
+CREATE TABLE own_grabs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    source      TEXT NOT NULL,
+    movie_id    INTEGER,
+    episode_id  INTEGER,
+    series_id   INTEGER,
+    guid        TEXT,
+    indexer_id  INTEGER,
+    grabbed_at  REAL NOT NULL
+);
+"""
+
+
+def test_init_db_migrates_a_v5_database_by_adding_the_destination_column(tmp_path):
+    """v6 adds a COLUMN, which is the one change `CREATE TABLE IF NOT EXISTS`
+    cannot deliver: the table already exists, so the explicit ALTER has to run
+    and the pre-existing rows have to survive it."""
+    path = tmp_path / "history.db"
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(V5_OWN_GRABS_SCHEMA)
+        conn.execute(
+            "INSERT INTO own_grabs (source, movie_id, guid, indexer_id, grabbed_at) "
+            "VALUES ('radarr', 855, 'legacy-guid', 7, 1000.0)"
+        )
+        conn.execute("PRAGMA user_version=5")
+        conn.commit()
+    finally:
+        conn.close()
+
+    history.init_db(path)
+    try:
+        # The old row survived with its values, and the new column is NULL.
+        rows = _own_grab_rows(path)
+        assert len(rows) == 1
+        assert rows[0]["guid"] == "legacy-guid"
+        assert rows[0]["movie_id"] == 855
+        assert rows[0]["indexer_id"] == 7
+        assert rows[0]["grabbed_at"] == 1000.0
+        assert rows[0]["destination"] is None, "an old grab has no chosen folder"
+        # The migrated table accepts a destination from then on.
+        history.record_own_grab(
+            "radarr", movie_id=1, grabbed_at=2000.0, destination="/mnt/storage/y"
+        )
+        assert _own_grab_rows(path)[1]["destination"] == "/mnt/storage/y"
+    finally:
+        history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(own_grabs)")]
+    finally:
+        conn.close()
+    assert version == history.SCHEMA_VERSION
+    assert "destination" in columns
+
+
+def test_a_fresh_database_is_created_with_the_destination_column(tmp_path):
+    """A fresh file lands on v6 directly: `SCHEMA` already creates the column,
+    so the ALTER must be skipped instead of raising duplicate-column."""
+    path = tmp_path / "history.db"
+    history.close()
+    history.init_db(path)
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(own_grabs)")]
+    finally:
+        conn.close()
+    assert version == 6
+    assert "destination" in columns
+
+
 # ── The own-grab reader (T6) ─────────────────────────────────────────────────
 #
 # The driver reads the registry through this; its shape is the contract T5 wrote
@@ -633,7 +747,7 @@ def test_own_grabs_are_read_newest_first_as_plain_dicts(db):
     assert [row["grabbed_at"] for row in rows] == [200.0, 100.0]
     assert set(rows[0]) == {
         "id", "source", "movie_id", "episode_id", "series_id", "guid",
-        "indexer_id", "grabbed_at",
+        "indexer_id", "grabbed_at", "destination",
     }
     assert rows[0]["source"] == "sonarr"
     assert rows[0]["episode_id"] == 2

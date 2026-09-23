@@ -24,7 +24,7 @@ from pathlib import Path
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -73,6 +73,14 @@ CREATE TABLE IF NOT EXISTS auto_copy_handled (
 -- be joined against the arr's history. The own-grab match is by (title id +
 -- time); `auto_copy.matches_own_grab` implements it. Do not "optimise" this
 -- into a guid join.
+-- v6: `own_grabs` gains `destination`, the folder the user picked for the
+-- release (NULL = the arr's library, which is the only other meaning). This is
+-- the one column the CREATE-IF-NOT-EXISTS discipline cannot deliver: the table
+-- already exists in a v5 file, so `CREATE TABLE IF NOT EXISTS` is a no-op and
+-- the column has to arrive through the explicit ALTER in `_apply_migrations`.
+-- The column stays in this definition too so a FRESH database is created at v6
+-- directly. `_has_column` guards the ALTER so that fresh path is a no-op
+-- instead of a duplicate-column error.
 CREATE TABLE IF NOT EXISTS own_grabs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     source      TEXT NOT NULL,
@@ -81,7 +89,8 @@ CREATE TABLE IF NOT EXISTS own_grabs (
     series_id   INTEGER,
     guid        TEXT,
     indexer_id  INTEGER,
-    grabbed_at  REAL NOT NULL
+    grabbed_at  REAL NOT NULL,
+    destination TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_own_grabs_title ON own_grabs (source, movie_id, episode_id);
 -- v4: the "first time we saw this candidate in this condition" reference. Same
@@ -154,6 +163,31 @@ def _default_path() -> Path:
     return Path(os.environ.get("CONFIG_DIR", "/app/config")) / "history.db"
 
 
+def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    """Whether ``table`` already carries ``column``. PRAGMA rows are
+    ``(cid, name, type, notnull, dflt_value, pk)``.
+
+    `table` is never user input — it is a literal from this module — so the
+    interpolation cannot be an injection path.
+    """
+    return any(row[1] == column for row in conn.execute(f"PRAGMA table_info({table})"))
+
+
+def _apply_migrations(conn: sqlite3.Connection, from_version: int) -> None:
+    """Apply the per-version changes ``SCHEMA`` cannot express.
+
+    Tables added by later versions arrive for free: ``executescript(SCHEMA)``
+    runs ``CREATE TABLE IF NOT EXISTS`` on every start, so an older file simply
+    gains them and the version bump only records it. A new COLUMN on an existing
+    table is different — ``CREATE TABLE IF NOT EXISTS`` is a no-op once the table
+    exists — so v6 needs the explicit ``ALTER`` below. The ``_has_column`` guard
+    makes it idempotent: a fresh database, whose ``SCHEMA`` already created the
+    table WITH the column, skips it instead of raising duplicate-column.
+    """
+    if from_version < 6 and not _has_column(conn, "own_grabs", "destination"):
+        conn.execute("ALTER TABLE own_grabs ADD COLUMN destination TEXT")
+
+
 def init_db(path: Path | None = None) -> None:
     """Open the database and apply the schema. Safe to call more than once."""
     global _conn
@@ -180,6 +214,7 @@ def init_db(path: Path | None = None) -> None:
 
             version = conn.execute("PRAGMA user_version").fetchone()[0]
             if version < SCHEMA_VERSION:
+                _apply_migrations(conn, version)
                 conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
             conn.commit()
             _conn = conn
@@ -353,8 +388,8 @@ def is_auto_copy_handled(key: str) -> bool:
 # driver, so it was not written until the driver existed. The contract T5 wrote
 # down is honoured exactly: `list_own_grabs(...) -> list[dict]` with the
 # own_grabs columns (id, source, movie_id, episode_id, series_id, guid,
-# indexer_id, grabbed_at) as plain dicts, newest first, ready to hand straight
-# to `auto_copy.matches_own_grab(trace, own_grabs)`.
+# indexer_id, grabbed_at, destination) as plain dicts, newest first, ready to
+# hand straight to `auto_copy.matches_own_grab(trace, own_grabs)`.
 
 
 def list_own_grabs(since: float, limit: int = 200) -> list[dict]:
@@ -454,11 +489,18 @@ def record_own_grab(
     guid: str = "",
     indexer_id: int = 0,
     grabbed_at: float | None = None,
+    destination: str | None = None,
 ) -> None:
     """Record one grab this app launched. Best-effort: never raises.
 
     `guid` is audit only: the release guid cannot be matched against the arr's
     history (see the schema comment). Matching is by title id + time.
+
+    `destination` is the folder the user picked for THIS release, or ``None``
+    for the arr's library. ``None``/NULL is the whole "library" meaning — there
+    is deliberately no sentinel string, so a later reader can treat a missing
+    value as the default without decoding a magic word. The route validates the
+    path before it reaches here; this writer only stores it.
     """
     with _lock:
         if _conn is None:
@@ -466,8 +508,9 @@ def record_own_grab(
         try:
             _conn.execute(
                 "INSERT INTO own_grabs "
-                "(source, movie_id, episode_id, series_id, guid, indexer_id, grabbed_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "(source, movie_id, episode_id, series_id, guid, indexer_id, "
+                " grabbed_at, destination) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     source,
                     movie_id,
@@ -476,6 +519,7 @@ def record_own_grab(
                     guid or "",
                     indexer_id or 0,
                     time.time() if grabbed_at is None else grabbed_at,
+                    destination or None,
                 ),
             )
             _conn.commit()
