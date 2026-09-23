@@ -44,11 +44,27 @@ const indexers = {
   indexers: [{ id: 1, name: 'aMuTorrent', implementation: 'Torznab', enableSearch: true }],
 }
 
-function mockFetch() {
+const destinationFolders = {
+  folders: ['/mnt/storage/movies/_manual'],
+  arr_available: true,
+  detail: '',
+}
+
+interface MockOptions {
+  destinationsFail?: boolean
+}
+
+function mockFetch(options: MockOptions = {}) {
   const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.includes('/api/calendar/indexers')) {
       return Promise.resolve({ ok: true, json: async () => indexers } as Response)
+    }
+    if (url.includes('/api/calendar/destinations')) {
+      if (options.destinationsFail) {
+        return Promise.reject(new Error('destinations unavailable'))
+      }
+      return Promise.resolve({ ok: true, json: async () => destinationFolders } as Response)
     }
     if (url.includes('/api/calendar/releases')) {
       return Promise.resolve({
@@ -56,11 +72,26 @@ function mockFetch() {
         json: async () => ({ releases, detail: '2 releases encontrados' }),
       } as Response)
     }
+    if (url.includes('/api/calendar/grab')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ ok: true, detail: 'Descarga iniciada', downloaded: [], errors: [] }),
+      } as Response)
+    }
     void init
     return Promise.resolve({ ok: true, json: async () => ({}) } as Response)
   })
   vi.stubGlobal('fetch', fn)
   return fn
+}
+
+type FetchMock = ReturnType<typeof mockFetch>
+
+/** Every grab request body the modal has sent, in order. */
+function grabBodies(fn: FetchMock): Record<string, unknown>[] {
+  return fn.mock.calls
+    .filter(([input]) => String(input).includes('/api/calendar/grab'))
+    .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>)
 }
 
 async function openResults() {
@@ -195,3 +226,56 @@ describe('ReleaseSearchModal filter bar', () => {
     expect(groups).toHaveLength(1)
     expect(within(groups[0] as HTMLElement).getByText(/Todo a la vez/)).toBeInTheDocument()
   })})
+
+/**
+ * The destination combo. Its default is the arr's library, which must reach the
+ * grab endpoints as NO `destination` field at all — absent is what "library"
+ * means end to end. A chosen folder applies to the marked rows.
+ */
+describe('ReleaseSearchModal destination combo', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('defaults to the library and sends no destination on a single grab', async () => {
+    const fn = mockFetch()
+    await openResults()
+
+    expect(await screen.findByRole('combobox', { name: /Destino/ })).toHaveValue('')
+
+    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    expect(grabBodies(fn)[0]).not.toHaveProperty('destination')
+  })
+
+  it('sends the chosen folder with a batch grab', async () => {
+    const fn = mockFetch()
+    await openResults()
+
+    await screen.findByRole('option', { name: '/mnt/storage/movies/_manual' })
+    fireEvent.change(screen.getByRole('combobox', { name: /Destino/ }), {
+      target: { value: '/mnt/storage/movies/_manual' },
+    })
+
+    fireEvent.click(document.querySelector('.release-checkbox input') as HTMLInputElement)
+    fireEvent.click(screen.getByRole('button', { name: /Descargar \(1\)/ }))
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    expect(grabBodies(fn)[0].destination).toBe('/mnt/storage/movies/_manual')
+  })
+
+  it('still grabs when the destination options fail to load', async () => {
+    const fn = mockFetch({ destinationsFail: true })
+    await openResults()
+
+    // The library default stays available even though the options load failed.
+    expect(await screen.findByRole('combobox', { name: /Destino/ })).toHaveValue('')
+    expect(screen.queryByRole('option', { name: '/mnt/storage/movies/_manual' })).toBeNull()
+
+    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    expect(grabBodies(fn)[0]).not.toHaveProperty('destination')
+  })
+})

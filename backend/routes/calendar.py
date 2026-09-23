@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import aiohttp
 from fastapi import APIRouter, Depends
 
-from config import find_service, service_unavailable_reason, path_is_allowed
+from config import find_service, service_unavailable_reason, path_is_allowed, ALLOWED_ROOTS
 from history import record_own_grab
 from clients import (
     fetch_radarr_calendar,
@@ -349,6 +349,59 @@ async def calendar_indexers(source: str = "radarr", _key: str = Depends(verify_a
     async with aiohttp.ClientSession() as session:
         indexers = await arr_indexers(session, service)
     return {"indexers": indexers}
+
+
+def _merge_destination_folders(arr_roots: list[str], app_roots: list[str]) -> list[str]:
+    """Merge the arr's root folders and the app's allowed roots, in that order.
+
+    The arr's own roots come first because that is the library the user already
+    knows; the app's roots follow, but only when they were not already offered.
+    Empty entries are dropped and duplicates collapse, so the combo never lists
+    the same folder twice and never offers a blank value.
+    """
+    merged: list[str] = []
+    seen: set[str] = set()
+    for folder in (*arr_roots, *app_roots):
+        name = (folder or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        merged.append(name)
+    return merged
+
+
+@router.get("/api/calendar/destinations")
+async def calendar_destinations(source: str = "radarr", _key: str = Depends(verify_api_key)):
+    """Carpetas destino que el usuario puede elegir para sus descargas.
+
+    Combines the arr's real root folders (`/api/v3/rootfolder`) with the app's
+    configured allowed roots. The arr's roots come first, then the app roots
+    that were not already listed. Never invents a folder and never fails the
+    modal: if the arr is unavailable it still returns the app's allowed roots
+    and reports the degradation in `detail`.
+    """
+    service = find_service(source, "arr")
+    if not service:
+        return {
+            "folders": _merge_destination_folders([], ALLOWED_ROOTS),
+            "arr_available": False,
+            "detail": service_unavailable_reason(source),
+        }
+
+    async with aiohttp.ClientSession() as session:
+        arr_roots = await arr_root_folders(session, service)
+
+    folders = _merge_destination_folders(arr_roots, ALLOWED_ROOTS)
+    if not arr_roots:
+        # Either the arr is unreachable or it has no root folder configured;
+        # `arr_root_folders` cannot tell them apart and neither can we. Say what
+        # actually happened instead of claiming success with a short list.
+        return {
+            "folders": folders,
+            "arr_available": False,
+            "detail": f"{source} no devolvió carpetas raíz; se muestran solo las raíces de la app.",
+        }
+    return {"folders": folders, "arr_available": True, "detail": ""}
 
 
 @router.get("/api/disk")

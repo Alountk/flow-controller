@@ -453,6 +453,17 @@ export interface CalendarResponse {
   end: string
 }
 
+/** Mirrors GET /api/calendar/destinations. `folders` is the ordered, deduped
+ *  list the release-search combo offers (arr roots first). `arr_available` is
+ *  false when the arr's root folders could not be read, so only the app's
+ *  allowed roots are present; `detail` is the Spanish reason for that
+ *  degradation, empty when nothing degraded. */
+export interface DestinationOptions {
+  folders: string[]
+  arr_available: boolean
+  detail: string
+}
+
 export interface DiskVolume {
   name: string
   path: string

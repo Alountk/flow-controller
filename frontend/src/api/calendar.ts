@@ -1,4 +1,5 @@
 import { apiFetch, UnauthorizedError } from './auth'
+import type { DestinationOptions } from '../types'
 
 export interface Release {
   guid: string
@@ -101,27 +102,59 @@ function describeFetchFailure(err: unknown): string {
   return err instanceof Error ? `${err.name}: ${err.message}` : String(err)
 }
 
+/**
+ * The folders the user may choose as a grab destination.
+ *
+ * Never rejects: the combo has a built-in library default, so a failure here
+ * must leave the modal usable rather than block searching or grabbing. A
+ * failed load resolves to an empty list (plus the reason in `detail`).
+ */
+export async function fetchCalendarDestinations(source: string): Promise<DestinationOptions> {
+  try {
+    const res = await apiFetch(
+      `/api/calendar/destinations?source=${encodeURIComponent(source)}`,
+      {},
+    )
+    if (!res.ok) {
+      return { folders: [], arr_available: false, detail: `HTTP ${res.status}` }
+    }
+    const body = await res.json() as Partial<DestinationOptions>
+    return {
+      folders: Array.isArray(body.folders) ? body.folders : [],
+      arr_available: body.arr_available === true,
+      detail: typeof body.detail === 'string' ? body.detail : '',
+    }
+  } catch (err) {
+    return { folders: [], arr_available: false, detail: describeFetchFailure(err) }
+  }
+}
+
 export async function grabCalendarRelease(
   source: string,
   guid: string,
   indexerId: number = 0,
   movieId: number = 0,
   episodeId: number = 0,
+  destination?: string,
 ): Promise<{ ok: boolean; detail: string }> {
   // A rejected fetch (offline, aborted, DNS) must surface as a failed result,
   // not as an unhandled rejection that leaves the modal stuck on "Descargando".
+  // `destination` is only added when set, so a library grab (the default) sends
+  // the same body as before this option existed.
+  const body: Record<string, unknown> = { source, guid, indexerId, movieId, episodeId }
+  if (destination) body.destination = destination
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab', {
       method: 'POST',
-      body: JSON.stringify({ source, guid, indexerId, movieId, episodeId }),
+      body: JSON.stringify(body),
     })
   } catch (err) {
     return { ok: false, detail: describeFetchFailure(err) }
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>
-    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    const errorBody = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof errorBody.detail === 'string' ? errorBody.detail : null) || `HTTP ${res.status}`
     return { ok: false, detail: msg }
   }
   return res.json() as Promise<{ ok: boolean; detail: string }>
@@ -133,19 +166,22 @@ export async function grabCalendarReleaseBatch(
   indexerIds: number[] = [],
   movieId: number = 0,
   episodeId: number = 0,
+  destination?: string,
 ): Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }> {
+  const body: Record<string, unknown> = { source, guids, indexerIds, movieId, episodeId }
+  if (destination) body.destination = destination
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab-batch', {
       method: 'POST',
-      body: JSON.stringify({ source, guids, indexerIds, movieId, episodeId }),
+      body: JSON.stringify(body),
     })
   } catch (err) {
     return { ok: false, detail: describeFetchFailure(err), downloaded: [], errors: [] }
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>
-    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    const errorBody = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof errorBody.detail === 'string' ? errorBody.detail : null) || `HTTP ${res.status}`
     return { ok: false, detail: msg, downloaded: [], errors: [] }
   }
   return res.json() as Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }>

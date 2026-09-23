@@ -26,7 +26,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import app
-from config import SERVICES
+from config import SERVICES, ALLOWED_ROOTS
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -1277,6 +1277,65 @@ class TestCalendarGrabMarks:
         for item in self._get().json()["items"]:
             assert "grabbed_at" in item, "the field must always be present"
             assert item["grabbed_at"] is None
+
+
+# ── GET /api/calendar/destinations — the combo's real options ────────────────
+
+
+class TestCalendarDestinations:
+    """The release combo's options are real folders only: the arr's root folders
+    plus the app's allowed roots. The endpoint never invents a path and never
+    fails the modal — when the arr side cannot be read it still returns the app
+    roots and states the degradation.
+    """
+
+    def _get(self, source: str = "radarr", routes: dict | None = None):
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes or {})):
+            return client.get("/api/calendar/destinations", params={"source": source})
+
+    def test_merges_the_arr_roots_first_without_duplicating_the_app_roots(self):
+        routes = {
+            f"{ARR_BY_KEY['radarr']['url']}/api/v3/rootfolder": (
+                200,
+                [{"path": "/mnt/storage/movies"}, {"path": "/mnt/storage"}],
+            ),
+        }
+
+        body = self._get(routes=routes).json()
+
+        assert body["arr_available"] is True
+        assert body["detail"] == ""
+        # Arr roots come first, in the arr's own order.
+        assert body["folders"][:2] == ["/mnt/storage/movies", "/mnt/storage"]
+        # Every app root is offered, and the one the arr already listed is not
+        # repeated.
+        assert set(ALLOWED_ROOTS).issubset(set(body["folders"]))
+        assert body["folders"].count("/mnt/storage") == 1
+        assert len(body["folders"]) == len(set(body["folders"]))
+
+    def test_degrades_to_the_app_roots_when_the_arr_is_unavailable(self):
+        routes = {f"{ARR_BY_KEY['radarr']['url']}/api/v3/rootfolder": (503, {})}
+
+        body = self._get(routes=routes).json()
+
+        assert body["folders"] == ALLOWED_ROOTS, "the app roots are the honest fallback"
+        assert body["arr_available"] is False
+        assert body["detail"], "the degradation must be stated, not hidden"
+
+    def test_an_unknown_source_still_returns_the_app_roots(self):
+        body = self._get(source="nope").json()
+
+        assert body["folders"] == ALLOWED_ROOTS
+        assert body["arr_available"] is False
+        assert "servicio desconocido" in body["detail"]
+
+    def test_empty_and_duplicate_entries_are_dropped_in_arr_order(self):
+        from routes.calendar import _merge_destination_folders
+
+        assert _merge_destination_folders(
+            ["/arr/a", "/arr/a", ""],
+            ["/app/b", "/arr/a", "   "],
+        ) == ["/arr/a", "/app/b"]
 
 
 # ── Authentication boundary ──────────────────────────────────────────────────
