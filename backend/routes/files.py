@@ -124,7 +124,7 @@ async def file_rename(req: ActionRequest, _key: str = Depends(verify_api_key)):
     if blocked:
         return {"ok": False, "detail": blocked}
     try:
-        os.rename(src, dst)
+        await asyncio.to_thread(os.rename, src, dst)
         return {"ok": True, "detail": f"Renombrado: {Path(src).name} → {Path(dst).name}"}
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
@@ -136,10 +136,12 @@ async def file_delete(req: ActionRequest, _key: str = Depends(verify_api_key)):
     target = _validate_path(req.remote_path or "")
     try:
         p = Path(target)
+        # Both branches are unbounded: a recursive delete or an unlink over a
+        # stalled mount must not hold the loop hostage.
         if p.is_dir():
-            shutil.rmtree(p)
+            await asyncio.to_thread(shutil.rmtree, p)
         else:
-            p.unlink()
+            await asyncio.to_thread(p.unlink)
         return {"ok": True, "detail": f"Eliminado: {p.name}"}
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
@@ -153,9 +155,9 @@ async def file_copy(req: ActionRequest, _key: str = Depends(verify_api_key)):
     try:
         src_path = Path(src)
         if src_path.is_dir():
-            shutil.copytree(src, dst, copy_function=_link_or_copy)
+            await asyncio.to_thread(shutil.copytree, src, dst, copy_function=_link_or_copy)
         else:
-            shutil.copy2(src, dst)
+            await asyncio.to_thread(shutil.copy2, src, dst)
         return {"ok": True, "detail": f"Copiado: {src_path.name} → {dst}"}
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}

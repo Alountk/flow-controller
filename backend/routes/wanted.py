@@ -445,6 +445,54 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
         return {"ok": False, "detail": f"Error interno: {exc}", "matches": [], "scanned_files": 0}
 
 
+def _score_target(target: str, title_map: dict) -> tuple[list[dict], int]:
+    """Walk `target` and score every video against every wanted title.
+
+    CPU-bound (O(videos x titles) `SequenceMatcher.ratio()`) and pure
+    filesystem work: a folder of a few thousand files against a couple of
+    hundred titles is millions of ratio() calls. Kept off the event loop
+    because there is only one loop and it does not preempt -- inline, every
+    other request waits for the whole walk.
+    """
+    # Escaneo recursivo de archivos de video
+    video_exts = {'.mkv', '.mp4', '.avi', '.wmv', '.flv', '.mov', '.m4v', '.ts', '.mpg', '.mpeg'}
+    scanned_files = 0
+    matches = []
+
+    for root, _dirs, files in os.walk(target):
+        for fname in files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in video_exts:
+                continue
+            scanned_files += 1
+            full_path = os.path.join(root, fname)
+
+            best_score = 0.0
+            best_match = None
+            for norm_title, info in title_map.items():
+                score = _match_score(fname, info["title_used"])
+                if score > best_score:
+                    best_score = score
+                    best_match = info
+
+            if best_match and best_score >= 0.5:
+                target_path = best_match.get("movie_path", "")
+                matches.append({
+                    "file_path": full_path,
+                    "file_name": fname,
+                    "movie_id": best_match["movie_id"],
+                    "movie_title": best_match["movie_title"],
+                    "movie_year": best_match["movie_year"],
+                    "target_path": target_path,
+                    "score": best_score,
+                    "matched_title": best_match["title_used"],
+                })
+
+    matches.sort(key=lambda m: m["score"], reverse=True)
+    matches.sort(key=lambda m: m["score"], reverse=True)
+    return matches, scanned_files
+
+
 async def _scan_for_movies_inner(req: ActionRequest) -> dict:
     """Lógica interna de escaneo de contenido faltante."""
     source = req.source
@@ -546,41 +594,9 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
         item_title = f"{len(wanted_movies)} películas faltantes"
         item_year = None
 
-    # Escaneo recursivo de archivos de video
-    video_exts = {'.mkv', '.mp4', '.avi', '.wmv', '.flv', '.mov', '.m4v', '.ts', '.mpg', '.mpeg'}
-    scanned_files = 0
-    matches = []
+    # Walk + score off the loop: this is the O(videos x titles) CPU cost.
+    matches, scanned_files = await asyncio.to_thread(_score_target, target, title_map)
 
-    for root, _dirs, files in os.walk(target):
-        for fname in files:
-            ext = os.path.splitext(fname)[1].lower()
-            if ext not in video_exts:
-                continue
-            scanned_files += 1
-            full_path = os.path.join(root, fname)
-
-            best_score = 0.0
-            best_match = None
-            for norm_title, info in title_map.items():
-                score = _match_score(fname, info["title_used"])
-                if score > best_score:
-                    best_score = score
-                    best_match = info
-
-            if best_match and best_score >= 0.5:
-                target_path = best_match.get("movie_path", "")
-                matches.append({
-                    "file_path": full_path,
-                    "file_name": fname,
-                    "movie_id": best_match["movie_id"],
-                    "movie_title": best_match["movie_title"],
-                    "movie_year": best_match["movie_year"],
-                    "target_path": target_path,
-                    "score": best_score,
-                    "matched_title": best_match["title_used"],
-                })
-
-    matches.sort(key=lambda m: m["score"], reverse=True)
 
     return {
         "ok": True,
