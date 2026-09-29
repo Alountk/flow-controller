@@ -129,6 +129,30 @@
   border-color: var(--accent);
 }
 
+.calendar-indexer-error {
+  font-size: 11px;
+  color: var(--bad, #f85149);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.calendar-indexer-retry {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.calendar-indexer-retry:hover {
+  border-color: var(--accent);
+}
+
 .calendar-indexer-count {
   font-size: 11px;
   color: var(--text-secondary);

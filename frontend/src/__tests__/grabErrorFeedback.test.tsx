@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { ReleaseSearchModal } from '../components/ReleaseSearchModal'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Release } from '../api/calendar'
 
 /**
@@ -55,13 +56,21 @@ function mockFetch(grabBatch: () => Response | Promise<Response>) {
   return fn
 }
 
-async function openAndSelect() {
-  render(
-    <ReleaseSearchModal
-      item={{ type: 'movie', id: 411, title: 'Everything Everywhere All at Once', source: 'radarr' }}
-      onClose={() => {}}
-    />,
+// The modal reads the indexer list through react-query, so it needs a client.
+function renderModal() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <ReleaseSearchModal
+        item={{ type: 'movie', id: 411, title: 'Everything Everywhere All at Once', source: 'radarr' }}
+        onClose={() => {}}
+      />
+    </QueryClientProvider>,
   )
+}
+
+async function openAndSelect() {
+  renderModal()
 
   fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
   const selectAll = await screen.findByRole('checkbox', { name: /1 releases encontrados/ })
