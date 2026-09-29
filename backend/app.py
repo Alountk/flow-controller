@@ -9,7 +9,6 @@ import asyncio
 import logging
 import os
 
-import aiohttp
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -44,19 +43,20 @@ for entry in _load_log_file():
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
-
-_http_session: aiohttp.ClientSession | None = None
-
+#
+# No shared ClientSession lives here on purpose. Every route module opens its
+# own (`async with aiohttp.ClientSession()`), and the one that used to be held
+# in this file was never read by anything — which is how a route ended up
+# importing `_http_session` from `state`, where it did not exist, and 500ing on
+# every action. Reintroducing a shared session belongs with the connector-limit
+# work (one session + TCPConnector for every route), not as a private global.
 
 async def lifespan(_app: FastAPI):
-    global _http_session
-
     # Open the durable history before serving, and record honestly that any
     # operation still marked running did not survive the previous process.
     history.init_db()
     history.mark_interrupted()
 
-    _http_session = aiohttp.ClientSession()
     task = asyncio.create_task(background_checker())
     try:
         yield
@@ -66,7 +66,6 @@ async def lifespan(_app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
-        await _http_session.close()
 
 
 app = FastAPI(lifespan=lifespan)

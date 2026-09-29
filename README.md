@@ -299,6 +299,26 @@ falla y **nombra el módulo**.
 
 ## Backlog de mejoras
 
+> **El backlog vivo está en [`BACKLOG.md`](BACKLOG.md)** — bugs abiertos, features nuevas y
+> recomendaciones, con la evidencia `file:line` de cada una. Esta sección conserva el
+> histórico de lo ya entregado (#1-#24). Todo lo nuevo está además creado en **Linear**,
+> proyecto `flow-controller` (equipo `RAU`, estado *Backlog*, issues **RAU-124 … RAU-137**).
+
+### 🔜 Próximo ciclo
+
+| ID | Linear | Qué | Tipo | Estado |
+|----|--------|-----|------|--------|
+| B-04 | RAU-124 | `POST /api/actions/*` → **500**: `routes/actions.py:46` importa `_http_session` de `state`, que no lo define | bug | ✅ |
+| B-03 | RAU-125 | El escaneo **mueve** el fichero (`routes/files.py:219`) y rompe el hardlink del seed; debe **copiar** | bug | ⬜ |
+| B-02 | RAU-126 | Indexadores vacíos: el error se traga en 3 capas y no hay caché por `source` | bug | ⬜ |
+| B-01 | RAU-127 | Barra roja izquierda en cards naranjas (CSS deliberado + `path_exists` sin `host_path()`) | bug | ⬜ |
+| F-01 | RAU-128 | **Upgrade 4K/3D** desde la biblioteca + destino + renombrado tras copia | feature | ⬜ |
+| F-03 | RAU-129 | **Wizard de primera puesta en marcha** paso a paso (tipo Overseerr / aMuleTorrent) | feature | ⬜ |
+| F-02 | RAU-130 | **Python vs Go/Rust**: estudio cerrado con veredicto *no reescribir* + 8 mitigaciones | estudio | ⬜ |
+| C-01…C-07 | RAU-131…137 | Avisos de import bloqueado, su gestor, E2E Playwright, upgrades automáticos, rate limiting, responsive+dark, `IMPORT_TIMEOUT` en UI | backlog | ⬜ |
+
+Detalle y justificación de cada entrada en `BACKLOG.md`.
+
 ### ⚡ Cortas (1-2 horas)
 
 | # | Mejora | Estado | Archivos |

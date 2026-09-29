@@ -3,6 +3,7 @@
 import logging
 import time
 
+import aiohttp
 from fastapi import APIRouter, Depends
 
 from config import ACTIONS, SAFE_MODE
@@ -42,9 +43,14 @@ async def run_action(action: str, req: ActionRequest, _key: str = Depends(verify
         }
 
     payload = req.model_dump()
-    # _http_session is initialized in the lifespan
-    from state import _http_session
-    result = await do_action(_http_session, action, payload)
+    # One session per action, as every other route module in this app does. The
+    # alternative — reusing the lifespan's session — is not reachable from here:
+    # it lives in app.py, and importing the app from a route is a layering
+    # violation. A session fetched from anywhere else can also be None before
+    # the lifespan runs (tests, embedded use), which turns each arr call into an
+    # AttributeError 500 instead of a classified failure.
+    async with aiohttp.ClientSession() as session:
+        result = await do_action(session, action, payload)
 
     return {
         "action": action,

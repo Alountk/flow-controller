@@ -4,6 +4,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import aiohttp
+
 # Configurar env vars antes de importar app
 os.environ.setdefault("FOLDER_DOWNLOAD_AMULE", "/mnt/storage-6tb/shared-downloads/amule")
 os.environ.setdefault("FOLDER_DOWNLOAD_TORRENT", "/mnt/storage/downloads/qbittorrent/completed")
@@ -426,6 +428,32 @@ class TestRunActionValidation:
         data = resp.json()
         assert data["ok"] is False
         assert "desconocida" in data["error"]
+
+    def test_a_valid_action_reaches_do_action(self):
+        """A valid action must not 500.
+
+        The handler imported `_http_session` from `state`, which never defined
+        it — the global lives in the lifespan — so every valid action raised
+        ImportError before reaching `do_action`. The suite stayed green because
+        the only action posted here was an unknown one, which returns earlier.
+        """
+        with patch("routes.actions.do_action", new_callable=AsyncMock) as action:
+            action.return_value = {
+                "ok": True,
+                "steps": [{"target": "arr", "ok": True, "detail": "Comando encolado"}],
+            }
+            resp = client.post("/api/actions/retry_import", json={"source": "radarr"})
+
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+
+        session, name, payload = action.await_args.args
+        assert name == "retry_import"
+        assert payload["source"] == "radarr"
+        assert isinstance(session, aiohttp.ClientSession), (
+            "do_action needs a live session: passing None turns every arr call "
+            "into an AttributeError 500 instead of a classified failure"
+        )
 
 
 class TestSpaFallback:
