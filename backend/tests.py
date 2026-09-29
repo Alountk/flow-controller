@@ -15,6 +15,7 @@ os.environ.setdefault("AMUTORRENT_URL", "http://localhost:4000")
 
 from traces import host_path as _host_path, resolve_current_path as _resolve_current_path
 from config import _VOLUME_MAP
+from clients import arr_indexers
 from copy_engine import copy_files_to_root as _copy_files_to_root, copy_tasks
 
 
@@ -474,7 +475,7 @@ class TestSpaFallback:
 
 # ── Calendar Endpoints ───────────────────────────────────────────────────────
 
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestCalendarSearch:
@@ -754,22 +755,109 @@ class TestCalendarGrab:
 
 
 class TestCalendarIndexers:
+    """The list must never claim "there are none" when it failed to ask.
+
+    Before this contract, three layers flattened every failure into `[]`, so a
+    timeout was indistinguishable from an unconfigured arr and the modal simply
+    showed nothing. The failure has to reach the screen with its reason.
+    """
+
+    def _get(self, source: str = "radarr"):
+        """Clears first so every test starts cold — but never after, so a test
+        that wants to prove the cache works can still see it."""
+        from routes.calendar import _indexers_cache
+
+        _indexers_cache.clear()
+        return client.get(f"/api/calendar/indexers?source={source}")
+
     @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
     def test_indexers_returned(self, mock_idx):
-        mock_idx.return_value = [
-            {"id": 1, "name": "Torznab", "implementation": "Torznab", "enableSearch": True},
-        ]
-        resp = client.get("/api/calendar/indexers?source=radarr")
-        assert resp.status_code == 200
-        data = resp.json()
+        mock_idx.return_value = {
+            "indexers": [
+                {"id": 1, "name": "Torznab", "implementation": "Torznab", "enableSearch": True},
+            ]
+        }
+        data = self._get().json()
         assert len(data["indexers"]) == 1
         assert data["indexers"][0]["name"] == "Torznab"
+        assert "error" not in data, "a successful answer must not carry an error"
 
-    def test_unknown_source_returns_empty(self):
-        resp = client.get("/api/calendar/indexers?source=jackett")
-        assert resp.status_code == 200
-        data = resp.json()
+    def test_an_unconfigured_source_says_so_instead_of_looking_empty(self):
+        """Was `test_unknown_source_returns_empty`, which asserted the bug."""
+        data = self._get("jackett").json()
         assert data["indexers"] == []
+        assert data.get("error"), "an unknown source must explain itself"
+        assert data.get("error_kind")
+
+    @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
+    def test_a_failure_is_surfaced_not_flattened(self, mock_idx):
+        mock_idx.return_value = {
+            "indexers": [],
+            "error_kind": "timeout",
+            "error": "radarr: no respondio a tiempo",
+        }
+        data = self._get().json()
+        assert data["indexers"] == []
+        assert data["error_kind"] == "timeout"
+        assert data["error"]
+
+    @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
+    def test_the_list_is_cached_per_source_so_it_is_not_refetched(self, mock_idx):
+        """The user's own words: asking once for Radarr must not ask again."""
+        mock_idx.return_value = {"indexers": [{"id": 1, "name": "Torznab"}]}
+        self._get()
+        first = mock_idx.call_count
+        client.get("/api/calendar/indexers?source=radarr")
+        assert first == 1
+        assert mock_idx.call_count == first, "the second open hit the network again"
+
+        from routes.calendar import _indexers_cache
+
+        _indexers_cache.clear()
+
+    @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
+    def test_a_failure_is_never_cached(self, mock_idx):
+        """Caching a failure would keep the modal broken for the whole TTL."""
+        from routes.calendar import _indexers_cache
+
+        _indexers_cache.clear()
+        mock_idx.return_value = {"indexers": [], "error_kind": "unreachable", "error": "radarr: caido"}
+        client.get("/api/calendar/indexers?source=radarr")
+        assert _indexers_cache == {}, "a failure must not enter the cache"
+
+        mock_idx.return_value = {"indexers": [{"id": 7, "name": "Torznab"}]}
+        data = client.get("/api/calendar/indexers?source=radarr").json()
+        assert data["indexers"], "the next call must re-ask and recover"
+        _indexers_cache.clear()
+
+
+class TestArrIndexersReportsWhyItFailed:
+    """`arr_indexers` used to answer `[]` for every failure."""
+
+    _SERVICE = {"key": "radarr", "url": "http://radarr:7878", "api_key": "k"}
+
+    def test_a_timeout_is_reported_not_swallowed(self):
+        import asyncio
+
+        session = MagicMock()
+        session.get.side_effect = asyncio.TimeoutError()
+        result = asyncio.run(arr_indexers(session, self._SERVICE))
+        assert result["indexers"] == []
+        assert result["error_kind"] == "timeout"
+
+    def test_a_rejected_api_key_is_reported_not_swallowed(self):
+        import asyncio
+
+        resp = MagicMock(status=401)
+        resp.text = AsyncMock(return_value="Unauthorized")
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=resp)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        session = MagicMock()
+        session.get.return_value = cm
+        result = asyncio.run(arr_indexers(session, self._SERVICE))
+        assert result["indexers"] == []
+        assert result["error_kind"] == "auth"
 
 
 class TestSonarrSeriesCommands:

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from datetime import date, timedelta
 
 import aiohttp
@@ -174,6 +175,40 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
         return {"ok": False, "id": None, "detail": f"Error interno: {exc}"}
 
 
+# The indexers are a small, very stable list, and it is asked for on every modal
+# open AND on every release search (to map indexer name → id). 300s is long
+# enough that a list already fetched for Radarr is not fetched again a few
+# minutes later — the point of the bug — and short enough that adding an indexer
+# shows up without restarting anything. Failures are never cached: that would
+# keep the modal broken for the whole TTL.
+_INDEXERS_TTL = 300.0
+_indexers_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+async def _indexers_for(source: str) -> dict:
+    """Indexadores de una fuente, cached per source, with the failure preserved."""
+    cached = _indexers_cache.get(source)
+    if cached and time.time() - cached[0] < _INDEXERS_TTL:
+        return {"indexers": cached[1]}
+
+    service = find_service(source, "arr")
+    if not service:
+        return {
+            "indexers": [],
+            "error_kind": "unknown",
+            "error": f"{source}: servicio no configurado",
+        }
+
+    async with aiohttp.ClientSession() as session:
+        result = await arr_indexers(session, service)
+
+    if result.get("error"):
+        return result
+
+    _indexers_cache[source] = (time.time(), result.get("indexers", []))
+    return result
+
+
 @router.post("/api/calendar/releases")
 async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(verify_api_key)):
     """Obtiene releases disponibles para un movie/episode."""
@@ -189,9 +224,11 @@ async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(ve
                 result = await arr_fetch_releases(session, service, episode_id=req.id)
             else:
                 return {"releases": [], "detail": f"Tipo desconocido: {req.type}"}
-            # Enrich releases with indexerId by matching indexer name → id
+            # Enrich releases with indexerId by matching indexer name → id. The
+            # cached list is reused: re-asking the arr on every search was the
+            # reason a Radarr indexer list was fetched twice in a row.
             if result.get("releases"):
-                indexers = await arr_indexers(session, service)
+                indexers = (await _indexers_for(req.source)).get("indexers", [])
                 name_to_id = {idx["name"]: idx["id"] for idx in indexers if idx.get("name")}
                 for r in result["releases"]:
                     if not r.get("indexerId"):
@@ -342,13 +379,12 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
 
 @router.get("/api/calendar/indexers")
 async def calendar_indexers(source: str = "radarr", _key: str = Depends(verify_api_key)):
-    """Lista de indexadores configurados en Radarr/Sonarr."""
-    service = find_service(source, "arr")
-    if not service:
-        return {"indexers": []}
-    async with aiohttp.ClientSession() as session:
-        indexers = await arr_indexers(session, service)
-    return {"indexers": indexers}
+    """Lista de indexadores de una fuente, o el motivo de no haberla podido obtener.
+
+    `radarr` y `sonarr` son dos listas distintas y se cachean por separado: una
+    ya pedida para Radarr no se vuelve a pedir a los pocos minutos.
+    """
+    return await _indexers_for(source)
 
 
 def _merge_destination_folders(arr_roots: list[str], app_roots: list[str]) -> list[str]:
