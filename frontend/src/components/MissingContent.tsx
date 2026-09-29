@@ -116,14 +116,17 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
     },
   })
 
-  const moveQueue = useMutation({
+  const placeQueue = useMutation({
     mutationFn: async (matches: ScanMatch[]) => {
       for (const m of matches) {
         const dst = m.target_path
           ? `${m.target_path}/${m.file_name}`
           : `${m.movie_title} (${m.movie_year || ''})/${m.file_name}`
         await queueAdd(
-          'move',
+          // A copy, never a move: `move` renames the download away and the
+          // hardlink aMule/qBittorrent is sharing disappears with it. Placing
+          // keeps the source seeding (hardlink when the FS allows it).
+          'copy',
           m.file_path,
           dst,
           item.source,
@@ -373,10 +376,10 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
                 <div className="scan-actions">
                   <button
                     className="action-btn search-all"
-                    onClick={() => moveQueue.mutate(selectedMatches)}
-                    disabled={moveQueue.isPending}
+                    onClick={() => placeQueue.mutate(selectedMatches)}
+                    disabled={placeQueue.isPending}
                   >
-                    {moveQueue.isPending ? 'Encolando...' : `📦 Mover ${selectedMatches.length} archivos a la cola`}
+                    {placeQueue.isPending ? 'Encolando...' : `📦 Colocar ${selectedMatches.length} archivos en la cola`}
                   </button>
                 </div>
               )}

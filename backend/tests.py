@@ -917,3 +917,70 @@ class TestConsumeQueuePostMoveImport:
 
 
 
+
+
+class TestConsumeQueuePlacesWithoutDestroying:
+    """Placement must keep the source alive, and must not cost a copy.
+
+    The scan flow used to enqueue a `move`, so `os.rename` took the download
+    away from aMule/qBittorrent and the hardlink they were sharing disappeared
+    with it. Placing a file therefore has to leave `src` in place — and when
+    both ends sit on one filesystem, a hardlink does that for free, which also
+    keeps the operation as instant as the rename it replaces.
+    """
+
+    def _queue(self, tmp_path: Path, op_type: str, dst: Path) -> tuple[dict, Path]:
+        import asyncio
+
+        src = tmp_path / "seed" / "Movie (2016).mkv"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_bytes(b"payload")
+        op = {
+            "id": f"test-{op_type}-place",
+            "type": op_type,
+            "src": str(src),
+            "dst": str(dst),
+            "name": src.name,
+            "status": "pending",
+            "cancelled": False,
+            "arr_source": "",
+            "movie_id": None,
+            "series_id": None,
+        }
+        file_queue.append(op)
+        asyncio.run(routes.files._consume_queue())
+        return op, src
+
+    def test_a_copy_keeps_the_source_and_costs_no_extra_bytes(self, tmp_path):
+        # Nested destination whose parent does not exist yet: the old `move`
+        # branch created it, so placement must not lose that.
+        dst = tmp_path / "library" / "Movie (2016)" / "Movie (2016).mkv"
+        op, src = self._queue(tmp_path, "copy", dst)
+
+        assert op["status"] == "done", op.get("detail")
+        assert src.exists(), "the download must survive or the seed is gone"
+        assert dst.exists()
+        assert os.stat(src).st_ino == os.stat(dst).st_ino, (
+            "same filesystem: a hardlink would have done this without copying a byte"
+        )
+        assert op["progress"] == 100
+        assert op["total_bytes"] == len(b"payload")
+
+    def test_replacing_a_destination_that_already_points_at_the_source(self, tmp_path):
+        """A shared inode must never be opened for writing.
+
+        If `dst` already IS a link to `src` (a re-run of the same placement),
+        a plain copy opens it with "wb", truncates the inode the two names
+        share and empties the source — destroying exactly what this flow exists
+        to protect.
+        """
+        dst = tmp_path / "library" / "Movie (2016).mkv"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        _, src = self._queue(tmp_path, "copy", tmp_path / "library" / "first.mkv")
+        os.link(src, dst)
+
+        op, src = self._queue(tmp_path, "copy", dst)
+
+        assert op["status"] == "done", op.get("detail")
+        assert src.read_bytes() == b"payload", "the source was truncated to zero"
+        assert os.stat(src).st_ino == os.stat(dst).st_ino
