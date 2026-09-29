@@ -54,7 +54,9 @@ actualizar el README y Linear".
       Script idempotente (reutiliza proyecto y salta issues existentes).
       Relación: B-04→RAU-124, B-03→125, B-02→126, B-01→127, F-01→128, F-03→129,
       F-02→130, C-01→131, C-02→132, C-03→133, C-04→134, C-05→135, C-06→136, C-07→137.
-- [ ] T9 — Commit de T6+T7+T8 (esperar visto bueno del plan).
+- [x] T9 — Commit de T6+T7+T8. **`993dbc4`** `docs(backlog): record the new cycle plan in
+      BACKLOG, README and Linear` (3 ficheros, 175+/2-). Solo `BACKLOG.md`, `README.md` y
+      este documento; ningún fichero fuente tocado.
 
 ## Plan (resultado de T5)
 
@@ -103,9 +105,9 @@ C-05 Rate limiting + Request ID · C-06 Responsive + dark mode · C-07 `IMPORT_T
 - `git diff --stat` para revisar el alcance.
 
 ## Progreso
-- [x] T0-T8 completados.
-- [ ] T9 commit (pendiente de visto bueno).
+- [x] T0-T9 completados. Commit `993dbc4`.
 
 ## Siguiente paso
-Mostrar el plan al usuario y pedir su visto bueno para el commit de T6+T7+T8.
-Tras eso, elegir por dónde empieza la implementación (orden propuesto: B-04 → B-03 → B-02+B-01).
+Feature cerrada. Siguiente: elegir por dónde empieza la implementación
+(orden propuesto: B-04 → B-03 → B-02+B-01). Cada tarea de implementación abre su
+propio documento ODD; este queda como plan de ciclo.
