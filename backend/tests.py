@@ -984,3 +984,117 @@ class TestConsumeQueuePlacesWithoutDestroying:
         assert op["status"] == "done", op.get("detail")
         assert src.read_bytes() == b"payload", "the source was truncated to zero"
         assert os.stat(src).st_ino == os.stat(dst).st_ino
+
+
+    def test_copying_a_folder_links_every_file_instead_of_duplicating(self, tmp_path):
+        """A release folder is tens of GB: `copytree` must not fork them.
+
+        Same device means one inode per file at both ends, so the seed keeps
+        sharing and the disk does not grow. A cross-device copy still falls
+        back to real bytes — that is the only case with no choice.
+        """
+        import asyncio
+
+        src = tmp_path / "seed" / "release"
+        (src / "Subs").mkdir(parents=True)
+        (src / "release.mkv").write_bytes(b"video")
+        (src / "Subs" / "es.srt").write_bytes(b"sub")
+        dst = tmp_path / "library" / "release"
+
+        op = {
+            "id": "test-folder-link",
+            "type": "copy",
+            "src": str(src),
+            "dst": str(dst),
+            "name": src.name,
+            "status": "pending",
+            "cancelled": False,
+            "arr_source": "",
+            "movie_id": None,
+            "series_id": None,
+        }
+        file_queue.append(op)
+        asyncio.run(routes.files._consume_queue())
+
+        assert op["status"] == "done", op.get("detail")
+        assert src.exists(), "the folder must survive intact"
+        for rel in ("release.mkv", "Subs/es.srt"):
+            assert os.stat(src / rel).st_ino == os.stat(dst / rel).st_ino, f"{rel} was duplicated"
+
+
+class TestSeedIsNeverBroken:
+    """A torrent client shares a PATH, not an inode.
+
+    Moving a file out of a download folder deletes the entry the client is
+    sharing, and renaming it does the same even though the data stays intact
+    — the seeder's path is gone either way. Placement is fine: a hardlink adds
+    a name without removing anything.
+    """
+
+    def _post(self, src: str, dst: str, op_type: str = "move"):
+        return client.post(
+            "/api/files/queue/add",
+            json={"source": op_type, "remote_path": src, "local_path": dst},
+        )
+
+    def test_moving_a_file_out_of_a_download_folder_is_refused(self):
+        from config import FOLDER_DOWNLOAD_AMULE
+
+        resp = self._post(f"{FOLDER_DOWNLOAD_AMULE}/Movie (2016)/Movie.mkv", "/mnt/storage/movies/Movie (2016)/Movie.mkv")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "semilla" in data["detail"] or "hardlink" in data["detail"], data["detail"]
+        from state import file_queue
+
+        assert all(o["src"] != f"{FOLDER_DOWNLOAD_AMULE}/Movie (2016)/Movie.mkv" for o in file_queue), (
+            "a refused operation must never reach the queue"
+        )
+
+    def test_the_refusal_does_not_block_placing_a_copy_from_the_same_folder(self):
+        from config import FOLDER_DOWNLOAD_AMULE
+
+        resp = self._post(
+            f"{FOLDER_DOWNLOAD_AMULE}/Movie (2016)/Movie.mkv",
+            "/mnt/storage/movies/Movie (2016)/Movie.mkv",
+            op_type="copy",
+        )
+
+        assert resp.json()["ok"] is True, "a copy keeps the source, so it is always allowed"
+
+    def test_moving_a_library_file_still_moves(self):
+        resp = self._post(
+            "/mnt/storage/movies/Movie (2016)/Movie.mkv",
+            "/mnt/storage/movies/_archive/Movie (2016)/Movie.mkv",
+        )
+
+        assert resp.json()["ok"] is True, "outside the download folders a move is harmless"
+
+    def test_renaming_a_file_inside_a_download_folder_is_refused(self):
+        from config import FOLDER_DOWNLOAD_TORRENT
+
+        resp = client.post(
+            "/api/files/rename",
+            json={
+                "remote_path": f"{FOLDER_DOWNLOAD_TORRENT}/release.mkv",
+                "local_path": f"{FOLDER_DOWNLOAD_TORRENT}/release-fixed.mkv",
+            },
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is False
+        assert "semilla" in data["detail"] or "hardlink" in data["detail"], data["detail"]
+
+    def test_the_unguarded_move_endpoint_is_gone(self):
+        """`POST /api/files/move` had no guard and no caller.
+
+        Under the seed rule an unguarded destructive path is not worth keeping
+        alive "just in case": grep across the frontend found zero uses of it.
+        """
+        # `app.routes` holds `_IncludedRouter` objects with no `path`, so the
+        # flattened OpenAPI document is the only reliable view of the surface.
+        paths = set(app.openapi()["paths"])
+        assert "/api/files/move" not in paths, "an unguarded destructive endpoint is back"
+        assert "/api/files/rename" in paths, "renaming is still offered, just guarded"

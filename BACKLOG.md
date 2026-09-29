@@ -15,6 +15,7 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | F-01 | RAU-128 | C-05 | RAU-135 |
 | F-03 | RAU-129 | C-06 | RAU-136 |
 | F-02 | RAU-130 | C-07 | RAU-137 |
+| C-08 | RAU-138 |  |  |
 
 ---
 
@@ -144,7 +145,9 @@ así que la UI miente al decir "guardado sin reiniciar".
 
 ---
 
-## 🔵 Recomendaciones (propuestas por mí, no pedidas)
+## 🔵 Recomendaciones y reglas del ciclo
+
+C-01…C-07 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.
 
 | ID | Feature | Por qué, con evidencia |
 |----|---------|------------------------|
@@ -155,6 +158,7 @@ así que la UI miente al decir "guardado sin reiniciar".
 | **C-05** | **Rate limiting + Request ID** | Ya en el backlog (#13/#14). Ahora que hay auth por API key, una key filtrada sin límite es un agujero. |
 | **C-06** | **Responsive + dark mode** | Ya en el backlog (#10/#11). Ninguna prueba visual. |
 | **C-07** | **Ajuste de `IMPORT_TIMEOUT` desde la UI** | Lo que ya estaba pendiente en este documento: el backend lo soporta (`intervals.import_timeout`), falta el control en la pestaña *Configuración*. Ojo: `intervals.*` **no** está en `RESTART_REQUIRED_FIELDS` pero `background_checker` lo lee en import (`status.py:79`). |
+| **C-08** | **Regla «siempre hardlink»** — nada rompe la semilla | Un cliente de descargas comparte la **ruta**, no el inodo: renombrar o mover borra la entrada sembrada aunque los datos sobrevivan. Aplicada a la cola (move), a `rename`, al endpoint muerto `/api/files/move` (fuera) y a `copytree` (ahora enlace duro por fichero). **Pendiente:** `importMode: "Move"` en `clients.py:1465,1474`, a probar contra el ajuste de hardlinks de Radarr. | ✅ |
 
 **Descartadas (con motivo):** *WebSockets para progreso* — la cola ya usa polling adaptativo
 (3-5 s activo / 15-30 s en reposo) y el WebSocket de aMuTorrent es de comandos, no de

@@ -12,7 +12,7 @@ import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 
 import state
-from config import find_service
+from config import FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT, find_service
 from traces import host_path
 import history
 from import_service import post_move_import
@@ -25,6 +25,32 @@ router = APIRouter()
 
 ALLOWED_ROOTS = ["/mnt/storage", "/mnt/storage-6tb"]
 CHUNK_SIZE = 1024 * 1024  # 1MB
+
+
+def _seed_block_reason(src: str, verb: str) -> str | None:
+    """Why `src` must not be renamed or moved by us — or None when it may.
+
+    A torrent client shares a PATH, not an inode. Renaming or moving a file
+    removes the directory entry it is seeding, and the data surviving does not
+    help: the seeder's path is what disappeared. Placing an extra name (a
+    hardlink or a copy) never touches it, which is why the operations allowed
+    here are the ones that ADD a name and not the ones that change one.
+
+    The folders come from settings, so moving them in Configuración moves the
+    guard with them.
+    """
+    resolved = os.path.realpath(src)
+    for folder in (FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT):
+        root = os.path.realpath(folder)
+        if resolved == root or resolved.startswith(root + "/"):
+            return (
+                f"'{Path(src).name}' está en una carpeta de descargas ({root}) y no se puede "
+                f"{verb}: el cliente de descargas comparte exactamente esa ruta, y "
+                f"renombrarla o moverla rompe el hardlink con el que sigue sembrando. "
+                f"En su lugar, copia o coloca el fichero — se resuelve con un enlace duro y "
+                f"la semilla no se entera."
+            )
+    return None
 
 
 def _validate_path(path: str) -> str:
@@ -94,21 +120,12 @@ async def file_rename(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Renombra un archivo o directorio."""
     src = _validate_path(req.remote_path or "")
     dst = _validate_path(req.local_path or "")
+    blocked = _seed_block_reason(src, "renombrar")
+    if blocked:
+        return {"ok": False, "detail": blocked}
     try:
         os.rename(src, dst)
         return {"ok": True, "detail": f"Renombrado: {Path(src).name} → {Path(dst).name}"}
-    except Exception as exc:
-        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
-
-
-@router.post("/api/files/move")
-async def file_move(req: ActionRequest, _key: str = Depends(verify_api_key)):
-    """Mueve un archivo o directorio."""
-    src = _validate_path(req.remote_path or "")
-    dst = _validate_path(req.local_path or "")
-    try:
-        shutil.move(src, dst)
-        return {"ok": True, "detail": f"Movido: {Path(src).name} → {dst}"}
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
@@ -136,7 +153,7 @@ async def file_copy(req: ActionRequest, _key: str = Depends(verify_api_key)):
     try:
         src_path = Path(src)
         if src_path.is_dir():
-            shutil.copytree(src, dst)
+            shutil.copytree(src, dst, copy_function=_link_or_copy)
         else:
             shutil.copy2(src, dst)
         return {"ok": True, "detail": f"Copiado: {src_path.name} → {dst}"}
@@ -145,6 +162,20 @@ async def file_copy(req: ActionRequest, _key: str = Depends(verify_api_key)):
 
 
 # ── Copy + Queue ──────────────────────────────────────────────────────────────
+
+def _link_or_copy(src: str, dst: str) -> None:
+    """Enlaza si el sistema de ficheros deja, y copia si no.
+
+    `shutil.copytree` lo invoca una vez por fichero, así que una carpeta de
+    release colocada en el mismo dispositivo no cuesta un byte extra y la
+    semilla sigue intacta. Solo un corte de dispositivo (EXDEV) paga el
+    duplicado real — y ahí no hay más remedio.
+    """
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
 
 def _copy_with_progress(src: str, dst: str, op: dict) -> None:
     """Copia un archivo con progreso, actualizando op en un dict compartido.
@@ -156,7 +187,7 @@ def _copy_with_progress(src: str, dst: str, op: dict) -> None:
     """
     src_path = Path(src)
     if src_path.is_dir():
-        shutil.copytree(src, dst)
+        shutil.copytree(src, dst, copy_function=_link_or_copy)
         return
     total = src_path.stat().st_size
     op["total_bytes"] = total
@@ -225,7 +256,7 @@ def _copytree_with_progress(src: str, dst: str, op: dict) -> None:
     op["files_done"] = 0
     op["total_bytes"] = sum(f.stat().st_size for f in all_files)
     op["copied_bytes"] = 0
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, copy_function=_link_or_copy)
     op["files_done"] = total_files
     op["copied_bytes"] = op["total_bytes"]
     op["progress"] = 100
@@ -335,6 +366,10 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
     dst = _validate_path(req.local_path or "")
     if not src or not dst:
         return {"ok": False, "detail": "Se requieren remote_path y local_path"}
+    if op_type == "move":
+        blocked = _seed_block_reason(src, "mover")
+        if blocked:
+            return {"ok": False, "detail": blocked}
 
     op = {
         "id": str(int(time.time() * 1000)),
