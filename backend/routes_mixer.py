@@ -3,6 +3,7 @@
 Provides endpoints for probing media files, muxing audio/video tracks,
 and managing mux tasks (list, status, cancel, pause, resume).
 """
+import asyncio
 import logging
 import os
 
@@ -80,8 +81,11 @@ async def mixer_probe(req: ProbeRequest, _key: str = Depends(verify_api_key)):
         raise HTTPException(status_code=400, detail=f"File not found: {req.path_b}")
 
     try:
-        probe_a = probe_file(path_a)
-        probe_b = probe_file(path_b)
+        # ffprobe is a subprocess with a 30 s timeout, twice per request. Inline
+        # it would freeze every other request for up to a minute: there is only
+        # one event loop, and it does not preempt.
+        probe_a = await asyncio.to_thread(probe_file, path_a)
+        probe_b = await asyncio.to_thread(probe_file, path_b)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:

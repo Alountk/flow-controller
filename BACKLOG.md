@@ -125,14 +125,24 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
 
 | ID | Mitigación | Gravedad |
 |----|-----------|----------|
-| F-02a | `await asyncio.to_thread(...)` en `routes/files.py:109,122,138,140` y `routes_mixer.py:83-84` (`subprocess.run(ffprobe)` puede parar el loop hasta **60 s**) | Crítica |
-| F-02b | Offload del `os.walk` + scoring O(ficheros×títulos) en `routes/wanted.py:554-581` | Alta |
+| F-02a ✅ | `await asyncio.to_thread(...)` en `routes_mixer.py` (2 × `subprocess.run(ffprobe, timeout=30)` por petición → hasta **60 s** en el loop) y en `file_rename` / `file_delete` / `file_copy` de `routes/files.py` | Crítica |
+| F-02b ✅ | Offload del `os.walk` + scoring O(ficheros×títulos): extraído a `_score_target()` y `await asyncio.to_thread(...)` en `routes/wanted.py` | Alta |
 | F-02c | Una sola `ClientSession` compartida + `TCPConnector(limit=…, limit_per_host=…)`: hoy hay **30 construcciones por request** y keep-alive cero | Alta |
 | F-02d | TTL corto (5-10 s) en `/api/trace` o en `fetch_qbit_torrents` → baja el fan-out 3-6× | Media |
 | F-02e | Single-flight en el consumidor de la cola de ficheros (`routes/files.py:320`): hoy N adds → N copias concurrentes | Media |
 | F-02f | Mover ~10 llamadas síncronas a sqlite detrás de `to_thread` (están en la ruta caliente de `/api/wanted`) | Media |
 | F-02g | Log append-only en vez de leer y reescribir `logs.json` completo en cada WARNING (`state.py:28-40`) | Baja |
-| F-02h | `config.SERVICES` se congelta en el import: tras guardar settings hay que reconstruirlo (relacionado con F-03) | Baja |
+| F-02h | `config.SERVICES` se congela en el import: tras guardar settings hay que reconstruirlo (relacionado con F-03) | Baja |
+
+**F-02a y F-02b hechas** — rama `perf/offloop-blocking-calls`. La comprobación no cronometra
+nada: cada test pregunta *en qué hilo* corrió la operación con `asyncio.get_running_loop()`,
+que es thread-local — dentro del loop resuelve, en un worker de `to_thread` lanza
+`RuntimeError`. RED observado en los cinco: `assert True is False`.
+
+Pendiente en la misma serie: **F-02c** (sesión compartida + `TCPConnector`) — va en un PR
+aparte porque toca los mismos ficheros. No tocado a propósito: `file_browse` (2 `stat` por
+entrada sobre el mount de red) y `clients.py:1001,1049` (un `isdir` por fichero de la
+biblioteca).
 
 ### F-03 — Wizard de primera puesta en marcha (tipo Overseerr / aMuleTorrent) · **Mediana**
 
