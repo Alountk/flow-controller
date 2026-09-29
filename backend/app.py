@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 import history
 from config import FRONTEND_DIST
-from state import buf_handler, _load_log_file
+from state import buf_handler, _load_log_file, close_shared_session, open_shared_session
 from routes.status import router as status_router, background_checker
 from routes.wanted import router as wanted_router
 from routes.calendar import router as calendar_router
@@ -44,12 +44,11 @@ for entry in _load_log_file():
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 #
-# No shared ClientSession lives here on purpose. Every route module opens its
-# own (`async with aiohttp.ClientSession()`), and the one that used to be held
-# in this file was never read by anything — which is how a route ended up
-# importing `_http_session` from `state`, where it did not exist, and 500ing on
-# every action. Reintroducing a shared session belongs with the connector-limit
-# work (one session + TCPConnector for every route), not as a private global.
+# The shared HTTP session lives in `state.http_session()`, not here: routes must
+# be able to reach it without importing this module, which they cannot do
+# without an import cycle. The lifespan only opens it and closes it, and that
+# open/close is the switch — with no lifespan running (every test) each scope
+# gets a private session instead.
 
 async def lifespan(_app: FastAPI):
     # Open the durable history before serving, and record honestly that any
@@ -57,6 +56,7 @@ async def lifespan(_app: FastAPI):
     history.init_db()
     history.mark_interrupted()
 
+    open_shared_session()
     task = asyncio.create_task(background_checker())
     try:
         yield
@@ -66,6 +66,7 @@ async def lifespan(_app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
+        await close_shared_session()
 
 
 app = FastAPI(lifespan=lifespan)

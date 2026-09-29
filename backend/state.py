@@ -4,6 +4,9 @@ import asyncio
 import collections
 import logging
 import os
+from contextlib import asynccontextmanager
+
+import aiohttp
 from pathlib import Path
 
 # ── In-memory log buffer + file persistence ───────────────────────────────────
@@ -81,3 +84,60 @@ status_cache: dict = {
 file_queue: list[dict] = []
 queue_lock = asyncio.Lock()
 queue_consumer_task: asyncio.Task | None = None
+
+
+# ── HTTP session ────────────────────────────────────────────────────────────
+#
+# Every route used to build its own `aiohttp.ClientSession`, so no connection
+# was ever reused: one TCP setup per outbound call, no keep-alive, and no
+# ceiling on how many sockets a burst could open. A lifespan runs exactly one
+# event loop for the process, so one session can serve every outbound call and
+# pool its connections.
+
+# aiohttp's defaults, stated explicitly: the ceiling should be visible rather
+# than implied. Three hosts (radarr, sonarr, amutorrent) and the trace fan-out
+# of four calls each sit well inside `limit_per_host`.
+_HTTP_LIMIT = 100
+_HTTP_LIMIT_PER_HOST = 30
+
+_shared_session: aiohttp.ClientSession | None = None
+
+
+def open_shared_session() -> None:
+    """Create the process-wide session. Called once, from the lifespan."""
+    global _shared_session
+    if _shared_session is None or _shared_session.closed:
+        _shared_session = aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(
+                limit=_HTTP_LIMIT, limit_per_host=_HTTP_LIMIT_PER_HOST
+            )
+        )
+
+
+async def close_shared_session() -> None:
+    """Close the process-wide session at shutdown."""
+    global _shared_session
+    if _shared_session is not None and not _shared_session.closed:
+        await _shared_session.close()
+    _shared_session = None
+
+
+@asynccontextmanager
+async def http_session(*args, **kwargs):
+    """Yield a session for this scope: the shared one, or a private one.
+
+    Under a lifespan every scope receives THE session, so keep-alive works and
+    the connector's limits apply process-wide. Outside a lifespan — which is
+    where the test suite lives, since it never enters one — each scope gets its
+    own session and closes it on exit, exactly the behaviour every existing
+    route test asserts.
+
+    Not for the aMuleTorrent WebSocket helpers: they pass their own
+    `cookie_jar` and must keep a private session.
+    """
+    shared = _shared_session
+    if shared is not None and not shared.closed:
+        yield shared
+        return
+    async with aiohttp.ClientSession(*args, **kwargs) as session:
+        yield session

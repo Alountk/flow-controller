@@ -3,7 +3,6 @@
 import copy
 import os
 
-import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 
 import credentials
@@ -12,6 +11,7 @@ from settings import get_settings, save_settings
 from clients import test_service_connection
 from config import SERVICES, configured_services
 from routes.status import verify_api_key
+from state import http_session
 
 router = APIRouter()
 
@@ -147,7 +147,7 @@ async def test_services(service: str = "", _key: str = Depends(verify_api_key)):
     """
     targets = [s for s in SERVICES if not service or s["key"] == service]
     results = []
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         for target in targets:
             results.append(await test_service_connection(session, target))
     return {"results": results, "ok": all(r["ok"] for r in results)}

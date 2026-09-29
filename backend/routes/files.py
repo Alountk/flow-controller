@@ -8,7 +8,6 @@ import tempfile
 import time
 from pathlib import Path
 
-import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 
 import state
@@ -18,7 +17,7 @@ import history
 from import_service import post_move_import
 from models import ActionRequest
 from routes.status import verify_api_key
-from state import file_queue, queue_lock
+from state import file_queue, queue_lock, http_session
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
@@ -323,7 +322,7 @@ async def _consume_queue():
                     async with queue_lock:
                         op["import_status"] = "importing"
                     try:
-                        async with aiohttp.ClientSession() as session:
+                        async with http_session() as session:
                             movie_id = int(op["movie_id"]) if op.get("movie_id") else None
                             series_id = int(op.get("series_id") or op.get("movie_id")) if (op.get("series_id") or (service["key"] == "sonarr" and op.get("movie_id"))) else None
                             res = await post_move_import(

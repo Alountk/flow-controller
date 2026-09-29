@@ -12,7 +12,6 @@ never look like "no downloads".
 import asyncio
 import time
 
-import aiohttp
 from fastapi import APIRouter, Depends
 
 from clients import (
@@ -24,6 +23,7 @@ from clients import (
 from config import configured_services
 from routes.status import verify_api_key
 from traces import normalize_hash
+from state import http_session
 
 router = APIRouter()
 
@@ -83,7 +83,7 @@ async def collect_downloads() -> dict:
     arr_services = configured_services("arr")
     errors: list[dict] = []
 
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         queues = await asyncio.gather(
             *(fetch_arr_queue(session, service) for service in arr_services)
         )

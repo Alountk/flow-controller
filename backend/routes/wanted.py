@@ -6,7 +6,6 @@ import re
 import time
 import unicodedata
 
-import aiohttp
 from fastapi import APIRouter, Depends
 
 import history
@@ -27,6 +26,7 @@ from clients import (
 )
 from models import ActionRequest
 from routes.status import verify_api_key
+from state import http_session
 
 router = APIRouter()
 
@@ -188,7 +188,7 @@ async def _fetch_all_wanted(source_key: str) -> dict:
     if not service:
         return {"items": [], "total": 0, "error_kind": "unknown", "error": f"{source_key}: servicio no configurado"}
 
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         if source_key == "radarr":
             result = await fetch_wanted_movies(session, service, page=1, page_size=ALL_ITEMS_PAGE_SIZE)
         else:
@@ -236,7 +236,7 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
             {"wanted": wanted, "updated_at": int(time.time()), "filtered": True}
         )
 
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         results = await asyncio.gather(
             *(
                 fetch_wanted_movies(session, s, page, page_size)
@@ -301,7 +301,7 @@ async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: 
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
     # page_size=0 tells the client not to slice, so the filter sees everything.
     fetch_size = 0 if normalize_for_search(q) else page_size
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         result = await fetch_all_movies_detailed(session, service, page, fetch_size)
     # Every /api/wanted/all item is a Radarr movie, so the key is explicit.
     return _attach_grabbed_at(
@@ -316,7 +316,7 @@ async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: 
     if not service:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
     fetch_size = 0 if normalize_for_search(q) else page_size
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         result = await fetch_all_series_detailed(session, service, page, fetch_size)
     # A series card is marked by any episode grab of that series.
     return _attach_grabbed_at(
@@ -330,7 +330,7 @@ async def get_series_episodes(series_id: int, _key: str = Depends(verify_api_key
     service = find_service("sonarr", "arr")
     if not service:
         return {"episodes": [], "error": service_unavailable_reason("sonarr")}
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         return await arr_series_episodes(session, service, series_id)
 
 
@@ -342,7 +342,7 @@ async def search_wanted(req: ActionRequest, _key: str = Depends(verify_api_key))
     if not service:
         return {"ok": False, "error": service_unavailable_reason(source)}
 
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         if source == "radarr":
             result = await arr_search_missing_movies(session, service)
         elif source == "sonarr":
@@ -362,7 +362,7 @@ async def search_wanted_item(req: ActionRequest, _key: str = Depends(verify_api_
         return {"ok": False, "error": service_unavailable_reason(source)}
 
     ids = req.ids or {}
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         if source == "radarr" and ids.get("movie_id"):
             result = await arr_search_movie(session, service, ids["movie_id"])
         elif source == "sonarr" and ids.get("episode_id"):
@@ -517,7 +517,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
     # Modo selectivo: buscar solo un item específico
     if movie_id or series_id:
         movie_path = ""
-        async with aiohttp.ClientSession() as session:
+        async with http_session() as session:
             if movie_id:
                 meta = await arr_movie_metadata(session, service, int(movie_id))
                 if not meta:
@@ -565,7 +565,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
                 }
     else:
         # Modo legacy: buscar contra todas las wanted movies
-        async with aiohttp.ClientSession() as session:
+        async with http_session() as session:
             result = await fetch_wanted_movies(session, service, page=1, page_size=200)
             wanted_movies = result.get("items", [])
 

@@ -17,7 +17,7 @@ from config import (
 )
 from traces import build_traces
 from clients import check_service, arr_headers
-from state import status_cache
+from state import status_cache, http_session
 
 router = APIRouter()
 
@@ -77,7 +77,7 @@ async def check_all(session: aiohttp.ClientSession) -> None:
 
 async def background_checker() -> None:
     from config import CHECK_INTERVAL
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         while True:
             try:
                 await check_all(session)
@@ -102,14 +102,14 @@ async def get_status(_key: str = Depends(verify_api_key)):
 
 @router.get("/api/status/refresh")
 async def refresh_status(_key: str = Depends(verify_api_key)):
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         await check_all(session)
     return status_cache
 
 
 @router.get("/api/trace")
 async def get_trace(_key: str = Depends(verify_api_key)):
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         traces = await build_traces(session)
     summary = {
         "downloading": sum(1 for t in traces if t["stage"] == "downloading"),
@@ -175,7 +175,7 @@ async def debug_indexers(source: str = "radarr", _key: str = Depends(verify_api_
         return {"error": f"Servicio desconocido: {source}"}
     try:
         headers = arr_headers(service["api_key"])
-        async with aiohttp.ClientSession() as session:
+        async with http_session() as session:
             async with session.get(
                 f"{service['url']}/api/v3/indexer",
                 headers=headers,
