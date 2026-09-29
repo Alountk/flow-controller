@@ -62,8 +62,12 @@ Si el conjunto pasa de ~400 líneas autoradas se pregunta antes de seguir (regla
       aparte: es otra mecánica (sesiones/connector) y toca otros ficheros.
 - [x] T6 — Verificación completa (backend + frontend, aunque el frontend no cambia).
 - [x] T7 — Docs: filas F-02a/b del `BACKLOG.md`.
-- [ ] T8 — PR 1 → merge; RAU-130 no se cierra (quedan d..h).
-- [ ] T9 — F-02c (PR 2).
+- [x] T8 — **PR #81** (`bb9fe4c`, merge `134a374`) → F-02a/b en `main`. RAU-130 **no** se
+      cierra: quedan F-02d..h.
+- [x] T9 — F-02c implementado en la rama `perf/shared-http-session`: seam
+      `state.http_session()` (abre/cierra el lifespan), **28 sitios** convertidos,
+      `TCPConnector(limit=100, limit_per_host=30)` explícito, WS (`cookie_jar`) fuera a
+      propósito. **Cero tests existentes modificados.**
 
 ## Riesgos / qué no debe romperse
 - `tests_mixer_api.py` parchea `routes_mixer.probe_file` — con `to_thread(probe_file, …)` el
@@ -93,11 +97,10 @@ del loop se demuestra por pertenencia al hilo, no por cronometrar.
 Un commit por mitigación (`perf(a)`, `perf(b)`), cada uno con su conjunto cerrado.
 
 ## Progreso
-- [x] T1-T7
-- [ ] T8-T9
+- [x] T1-T9
 
 ## Siguiente paso
-T8: push + PR; después T9 (F-02c).
+Push + PR de F-02c.
 
 ## Evidencia
 - **RED (5/5)**: cada test fallaba con `assert True is False` — ffprobe, rename, rmtree,
@@ -106,3 +109,17 @@ T8: push + PR; después T9 (F-02c).
   en los 4 ficheros tocados · frontend typecheck ✅, eslint **0 problemas / 80 ficheros**,
   **225 tests** (sin cambios: no se tocó frontend).
 - Presupuesto: **366 líneas autoradas** (< 400) → un solo PR, no hizo falta preguntar.
+
+## Evidencia de F-02c (T9)
+
+- **RED**: `ImportError: cannot import name 'close_shared_session' from 'state'` — el seam no
+  existía.
+- **Dos fallos míos en el test, no en el código**: cerraba la sesión en un `finally` *antes* de
+  devolverla y después asertaba sobre ella (`_connector` ya era `None`). Corregido inspeccionando
+  **dentro** del ámbito. Lección: nunca asserts sobre un objeto que tu propio `finally` cierra.
+- **GREEN**: `pytest -q` → **570 passed** (era 565) · `tests_static` 8 · vulture solo el
+  whitelisted · pyflakes limpio · frontend typecheck ✅, **225 tests**, eslint **0/80**.
+- **Cero cambios en los tests existentes**: la probesheet decidió el diseño — `TestClient` abre un
+  event loop **distinto por petición** y ningún test usa `with TestClient`, así que el lifespan
+  nunca corre en tests y el fallback privado reproduce exactamente el comportamiento de siempre.
+- Presupuesto: **~275 líneas autoradas** (< 400) → un solo PR.

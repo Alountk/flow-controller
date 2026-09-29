@@ -36,6 +36,7 @@ from models import (
 )
 from routes.status import verify_api_key
 from routes.wanted import _attach_grabbed_at
+from state import http_session
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
@@ -53,7 +54,7 @@ async def get_calendar(start: str = "", end: str = "", _key: str = Depends(verif
     sonarr = find_service("sonarr", "arr")
 
     all_items = []
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         tasks = []
         if radarr:
             tasks.append(fetch_radarr_calendar(session, radarr, start, end))
@@ -77,7 +78,7 @@ async def calendar_search(req: CalendarSearchRequest, _key: str = Depends(verify
     if not service:
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         if req.type == "movie":
             result = await arr_search_movie(session, service, req.id)
         elif req.type == "episode":
@@ -96,7 +97,7 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
         return {"ok": False, "id": None, "detail": f"Servicio desconocido: {req.source}"}
 
     try:
-        async with aiohttp.ClientSession() as session:
+        async with http_session() as session:
             root_folders = await arr_root_folders(session, service)
             root_path = root_folders[0] if root_folders else ""
 
@@ -199,7 +200,7 @@ async def _indexers_for(source: str) -> dict:
             "error": f"{source}: servicio no configurado",
         }
 
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         result = await arr_indexers(session, service)
 
     if result.get("error"):
@@ -217,7 +218,7 @@ async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(ve
         return {"releases": [], "detail": f"Servicio desconocido: {req.source}"}
 
     try:
-        async with aiohttp.ClientSession() as session:
+        async with http_session() as session:
             if req.type == "movie":
                 result = await arr_fetch_releases(session, service, movie_id=req.id)
             elif req.type == "episode":
@@ -281,7 +282,7 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
         # the arr the grab just hit, so a second session would only add another
         # connection. `_resolve_series_id` cannot raise, so a failed lookup can
         # never turn this successful grab into the error response below.
-        async with aiohttp.ClientSession() as session:
+        async with http_session() as session:
             result = await arr_grab_release(session, service, req.guid, req.indexerId, req.movieId, req.episodeId)
             series_id = (
                 await _resolve_series_id(session, service, req.source, req.episodeId)
@@ -337,7 +338,7 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
     # lookups. A failed lookup still leaves every successful grab recorded.
     series_id: int | None = None
     series_resolved = False
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         for i, guid in enumerate(req.guids):
             idx_id = req.indexerIds[i] if i < len(req.indexerIds) else 0
             try:
@@ -424,7 +425,7 @@ async def calendar_destinations(source: str = "radarr", _key: str = Depends(veri
             "detail": service_unavailable_reason(source),
         }
 
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         arr_roots = await arr_root_folders(session, service)
 
     folders = _merge_destination_folders(arr_roots, ALLOWED_ROOTS)

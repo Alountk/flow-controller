@@ -3,13 +3,13 @@
 import logging
 import time
 
-import aiohttp
 from fastapi import APIRouter, Depends
 
 from config import ACTIONS, SAFE_MODE
 from copy_engine import copy_tasks, cleanup_tasks, do_action
 from models import ActionRequest
 from routes.status import verify_api_key
+from state import http_session
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
@@ -49,7 +49,7 @@ async def run_action(action: str, req: ActionRequest, _key: str = Depends(verify
     # violation. A session fetched from anywhere else can also be None before
     # the lifespan runs (tests, embedded use), which turns each arr call into an
     # AttributeError 500 instead of a classified failure.
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         result = await do_action(session, action, payload)
 
     return {

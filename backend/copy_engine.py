@@ -26,6 +26,7 @@ from clients import (
 )
 from traces import host_path
 from task_manager import copy_tasks
+from state import http_session
 
 log = logging.getLogger("flow-controller")
 
@@ -189,7 +190,7 @@ async def run_copy_background(
             return
         if result["ok"]:
             copy_tasks.update(task_id, detail="importando...", status="importing")
-            async with aiohttp.ClientSession() as session:
+            async with http_session() as session:
                 await arr_command(session, service, {"name": "ProcessMonitoredDownloads"})
             await verify_import(task_id, service, source, ids)
     except CopyCancelled:
@@ -206,7 +207,7 @@ async def run_copy_background(
 
 async def verify_import(task_id: str, service: dict, source: str, ids: dict):
     start = time.time()
-    async with aiohttp.ClientSession() as session:
+    async with http_session() as session:
         while time.time() - start < IMPORT_POLL_TIMEOUT:
             if copy_tasks.is_cancelled(task_id):
                 return
