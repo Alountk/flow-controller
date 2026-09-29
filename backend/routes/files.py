@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import shutil
+import tempfile
 import time
 from pathlib import Path
 
@@ -146,7 +147,13 @@ async def file_copy(req: ActionRequest, _key: str = Depends(verify_api_key)):
 # ── Copy + Queue ──────────────────────────────────────────────────────────────
 
 def _copy_with_progress(src: str, dst: str, op: dict) -> None:
-    """Copia un archivo con progreso, actualizando op en un dict compartido."""
+    """Copia un archivo con progreso, actualizando op en un dict compartido.
+
+    Escribe en un temporal del MISMO directorio y solo lo renombra al final: un
+    fallo a mitad no deja un fichero a medias con el nombre definitivo, y un
+    destino que ya sea otro nombre del MISMO inodo jamás se abre para escritura
+    — eso vaciaría el inodo que la fuente todavía referencia.
+    """
     src_path = Path(src)
     if src_path.is_dir():
         shutil.copytree(src, dst)
@@ -154,18 +161,59 @@ def _copy_with_progress(src: str, dst: str, op: dict) -> None:
     total = src_path.stat().st_size
     op["total_bytes"] = total
     op["copied_bytes"] = 0
-    with open(src, "rb") as fin, open(dst, "wb") as fout:
-        while True:
-            if op.get("cancelled"):
-                fout.close()
-                os.remove(dst)
-                raise InterruptedError("Cancelado por el usuario")
-            chunk = fin.read(CHUNK_SIZE)
-            if not chunk:
-                break
-            fout.write(chunk)
-            op["copied_bytes"] += len(chunk)
-            op["progress"] = round(op["copied_bytes"] / total * 100) if total else 100
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=str(Path(dst).parent), delete=False, prefix=".copy_", suffix=".part"
+        ) as fdst:
+            tmp_path = fdst.name
+            with open(src, "rb") as fin:
+                while True:
+                    if op.get("cancelled"):
+                        raise InterruptedError("Cancelado por el usuario")
+                    chunk = fin.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    fdst.write(chunk)
+                    op["copied_bytes"] += len(chunk)
+                    op["progress"] = round(op["copied_bytes"] / total * 100) if total else 100
+        os.rename(tmp_path, dst)
+        tmp_path = None
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+def _place_file(src: str, dst: str, op: dict) -> None:
+    """Pone `src` en `dst` sin destruir nunca `src`.
+
+    El enlace duro es la primera opción: instantáneo, sin un byte extra, y la
+    descarga sigue sembrando desde el mismo inodo — la misma razón que ya
+    invoca `copy_file_chunked` en `copy_engine`. Solo el sistema de ficheros
+    puede rechazarlo (EXDEV cuando `dst` vive en otro dispositivo), y entonces
+    copiamos los bytes: pero el origen queda intacto, porque esto *coloca*, no
+    mueve.
+    """
+    src_path = Path(src)
+    dst_path = Path(dst)
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Ya hay un nombre en cada extremo apuntando al mismo inodo: no hay nada que
+    # hacer, y sobre todo NO hay que abrir `dst` para escritura.
+    if src_path.exists() and dst_path.exists() and os.path.samefile(src, dst):
+        op["total_bytes"] = op["copied_bytes"] = src_path.stat().st_size
+        op["progress"] = 100
+        op["files_done"] = op["files_total"] = 1
+        return
+
+    try:
+        os.link(src, dst)
+    except OSError:
+        _copy_with_progress(src, dst, op)
+    else:
+        op["total_bytes"] = op["copied_bytes"] = src_path.stat().st_size
+        op["progress"] = 100
+    op["files_done"] = op["files_total"] = 1
 
 
 def _copytree_with_progress(src: str, dst: str, op: dict) -> None:
@@ -209,7 +257,7 @@ async def _consume_queue():
                 if src_path.is_dir():
                     await asyncio.to_thread(_copytree_with_progress, src, dst, op)
                 else:
-                    await asyncio.to_thread(_copy_with_progress, src, dst, op)
+                    await asyncio.to_thread(_place_file, src, dst, op)
             else:
                 src_path = Path(src)
                 try:
@@ -253,12 +301,13 @@ async def _consume_queue():
                                 series_id=series_id,
                             )
                             imported = res.get("imported", False)
+                            verb = "Copiado" if op["type"] == "copy" else "Movido"
                             async with queue_lock:
                                 op["import_status"] = "imported" if imported else "import_failed"
                                 op["detail"] = (
                                     f"Completado + importado: {Path(src).name}"
                                     if imported
-                                    else f"Movido (import pendiente): {Path(src).name}"
+                                    else f"{verb} (import pendiente): {Path(src).name}"
                                 )
                             await asyncio.to_thread(history.record_operation, op)
                     except Exception as exc:

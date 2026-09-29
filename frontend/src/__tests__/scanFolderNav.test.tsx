@@ -73,18 +73,20 @@ function ok(body: unknown) {
  *
  * `browse` may be a single listing or a sequence of listings; each call to
  * /api/files/browse serves the next one (the last repeats), so a test can
- * change what the folder reports between calls.
+ * change what the folder reports between calls. `scan` is what
+ * /api/wanted/scan answers, and the queue endpoint always accepts.
  */
 function mockFetch(
   browse: BrowseItem[] | BrowseItem[][] = [],
   episodes: typeof seriesEpisodes = seriesEpisodes,
+  scan: Record<string, unknown> = {},
 ) {
   const sequence: BrowseItem[][] = Array.isArray(browse[0])
     ? (browse as BrowseItem[][])
     : [browse as BrowseItem[]]
   let browseCalls = 0
 
-  const fn = vi.fn((input: RequestInfo | URL) => {
+  const fn = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input)
     if (url.includes('/api/services')) {
       return ok({ services: [], configured: ['radarr', 'sonarr'] })
@@ -109,6 +111,12 @@ function mockFetch(
       const items = sequence[Math.min(browseCalls, sequence.length - 1)]
       browseCalls += 1
       return ok({ ok: true, path, items })
+    }
+    if (url.includes('/api/wanted/scan')) {
+      return ok(scan)
+    }
+    if (url.includes('/api/files/queue/add')) {
+      return ok({ ok: true, detail: 'Agregado a la cola' })
     }
     return ok({})
   })
@@ -239,4 +247,41 @@ describe('"En carpeta" navigator', () => {
     // The series title stays visible alongside it.
     expect(document.querySelector('.scan-selected-series')).toHaveTextContent('Some Show')
   })
+
+  it('queues a copy, not a move, so the download keeps seeding', async () => {
+    const fetchMock = mockFetch([file('Your.Name.2016.1080p.mkv')], seriesEpisodes, {
+      ok: true,
+      detail: '1 coincidencia',
+      scanned_files: 1,
+      matches: [
+        {
+          file_path: '/mnt/storage/seed/Your.Name.2016.1080p.mkv',
+          file_name: 'Your.Name.2016.1080p.mkv',
+          movie_id: 411,
+          movie_title: 'Your Name.',
+          movie_year: 2016,
+          target_path: '/mnt/storage/movies',
+          score: 0.95,
+          matched_title: 'Your Name.',
+        },
+      ],
+    })
+    await openScanModal()
+
+    fireEvent.click(screen.getByText(/Buscar "Your Name\." en esta carpeta/))
+    await screen.findByText(/coincidencia/i)
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: /Colocar 1 archivos en la cola/ }))
+
+    // The whole point: `move` renames the download away and the hardlink the
+    // seeder is sharing disappears with it, so the queue must get a copy.
+    await screen.findByText(/archivos encolados/)
+    const queued = fetchMock.mock.calls
+      .filter(([input]) => String(input).includes('/api/files/queue/add'))
+      .map(([, init]) => JSON.parse(String((init as RequestInit)?.body)))
+    expect(queued).toHaveLength(1)
+    expect(queued[0].source).toBe('copy')
+    expect(queued[0].remote_path).toBe('/mnt/storage/seed/Your.Name.2016.1080p.mkv')
+  })
 })
+

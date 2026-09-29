@@ -309,7 +309,7 @@ falla y **nombra el módulo**.
 | ID | Linear | Qué | Tipo | Estado |
 |----|--------|-----|------|--------|
 | B-04 | RAU-124 | `POST /api/actions/*` → **500**: `routes/actions.py:46` importa `_http_session` de `state`, que no lo define | bug | ✅ |
-| B-03 | RAU-125 | El escaneo **mueve** el fichero (`routes/files.py:219`) y rompe el hardlink del seed; debe **copiar** | bug | ⬜ |
+| B-03 | RAU-125 | El escaneo **mueve** el fichero (`routes/files.py:219`) y rompe el hardlink del seed; debe **copiar** | bug | ✅ |
 | B-02 | RAU-126 | Indexadores vacíos: el error se traga en 3 capas y no hay caché por `source` | bug | ⬜ |
 | B-01 | RAU-127 | Barra roja izquierda en cards naranjas (CSS deliberado + `path_exists` sin `host_path()`) | bug | ⬜ |
 | F-01 | RAU-128 | **Upgrade 4K/3D** desde la biblioteca + destino + renombrado tras copia | feature | ⬜ |
