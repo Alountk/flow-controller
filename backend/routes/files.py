@@ -263,12 +263,40 @@ def _copytree_with_progress(src: str, dst: str, op: dict) -> None:
     op["progress"] = 100
 
 
+async def _ensure_consumer() -> None:
+    """Arranca el consumidor de la cola solo si no hay uno vivo.
+
+    Sin esto, cada POST lanzaba un consumidor nuevo: al elegir, cada uno tomaba
+    una operación distinta (la pone en `running` bajo el lock) y las copiaban
+    **a la vez**, contradiciendo el propio docstring de `_consume_queue`.
+
+    Dos señales en lugar de una, ambas bajo `queue_lock`:
+    - `consumer_active` despejado *dentro* del lock por el propio consumidor →
+      un POST que llega justo cuando la cola se vacía no se pierde.
+    - `task.done()` → un consumidor que murió sin despejar la bandera (o una
+      bandera huérfana sin tarea) no deja la cola bloqueada para siempre.
+    """
+    async with queue_lock:
+        task = state.queue_consumer_task
+        if state.consumer_active and task is not None and not task.done():
+            return
+        state.consumer_active = True
+        # Hold a reference on the shared state object: an unreferenced asyncio
+        # task may be garbage-collected mid-execution, silently aborting the
+        # queue.
+        state.queue_consumer_task = asyncio.create_task(_consume_queue())
+
+
 async def _consume_queue():
     """Ejecuta operaciones de la cola secuencialmente."""
     while True:
         async with queue_lock:
             pending = [op for op in file_queue if op["status"] == "pending"]
             if not pending:
+                # Cleared under the lock on purpose: a POST holding the same
+                # lock either appends before we look (we see it) or after we
+                # release (it sees the flag already down and starts us again).
+                state.consumer_active = False
                 return
             op = pending[0]
             op["status"] = "running"
@@ -400,9 +428,7 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
     # Durable from the moment it is accepted, so a restart still shows it.
     await asyncio.to_thread(history.record_operation, op)
 
-    # Hold a reference on the shared state object: an unreferenced asyncio task
-    # may be garbage-collected mid-execution, silently aborting the queue.
-    state.queue_consumer_task = asyncio.create_task(_consume_queue())
+    await _ensure_consumer()
 
     return {"ok": True, "detail": f"Agregado a la cola: {op['name']}", "op": op}
 
