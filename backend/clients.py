@@ -754,22 +754,22 @@ async def arr_download_clients(session: aiohttp.ClientSession, service: dict) ->
         return []
 
 
-async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> list[dict]:
-    """Obtiene la lista de indexadores configurados en Radarr/Sonarr."""
+async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> dict:
+    """Indexadores configurados en Radarr/Sonarr, o el motivo de no haberlos podido preguntar.
+
+    Devuelve dict y no lista: `[]` sobre un timeout sería indistinguible de "no
+    hay ninguno configurado", y la pantalla afirmaría lo segundo con confianza.
+    Es el mismo trato que ya da `fetch_wanted_movies` vía `arr_failure`.
+    """
     headers = arr_headers(service["api_key"])
     url = f"{service['url']}/api/v3/indexer"
     try:
         async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)) as resp:
-            text = await resp.text()
             if resp.status != 200:
-                log.warning("arr_indexers %s status=%d body=%s", service["key"], resp.status, text[:200])
-                return []
+                log.warning("arr_indexers %s status=%d", service["key"], resp.status)
+                return {"indexers": [], **arr_failure(service, status=resp.status)}
             data = await resp.json(content_type=None)
-            log.warning("arr_indexers %s raw=%d", service["key"], len(data))
-            for idx in data:
-                log.warning("arr_indexers %s -> id=%s name=%s enableSearch=%s",
-                    service["key"], idx.get("id"), idx.get("name"), idx.get("enableSearch"))
-            # Return ALL indexers — let frontend show them
+            # ALL indexers — the frontend shows them and lets the user pick one.
             result = [
                 {
                     "id": idx.get("id"),
@@ -780,11 +780,11 @@ async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> list[di
                 }
                 for idx in data
             ]
-            log.warning("arr_indexers %s returning=%d", service["key"], len(result))
-            return result
+            log.info("arr_indexers %s returning=%d", service["key"], len(result))
+            return {"indexers": result}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         log.warning("arr_indexers %s error: %s", service["key"], exc)
-        return []
+        return {"indexers": [], **arr_failure(service, exc=exc)}
 
 
 async def arr_root_folders(session: aiohttp.ClientSession, service: dict) -> list[str]:
