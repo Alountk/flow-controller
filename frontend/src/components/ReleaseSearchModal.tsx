@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   addCalendarItem,
   fetchCalendarReleases,
@@ -71,7 +72,6 @@ export interface ReleaseSearchModalProps {
 export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   const [step, setStep] = useState<ModalStep>('initial')
   const [message, setMessage] = useState('')
-  const [indexers, setIndexers] = useState<Indexer[]>([])
   const [selectedIndexer, setSelectedIndexer] = useState<string>('all')
   const [releases, setReleases] = useState<Release[]>([])
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
@@ -93,13 +93,29 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Fetch indexers on mount
-  useEffect(() => {
-    apiFetch(`/api/calendar/indexers?source=${item.source}`, {})
-      .then((r) => r.json())
-      .then((data: { indexers: Indexer[] }) => setIndexers(data.indexers || []))
-      .catch(() => {})
-  }, [item.source])
+  // Cached per SOURCE. Asking Radarr once must not ask it again a few minutes
+  // later, and Sonarr's list is a different list — that separation is the cache
+  // key. The previous behaviour (a bare `useEffect` with `.catch(() => {})`)
+  // threw the failure away, so a Radarr timeout looked exactly like "there are
+  // no indexers": `[]` in, `[]` out, nothing on screen.
+  const indexersQuery = useQuery({
+    queryKey: ['indexers', item.source],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/calendar/indexers?source=${item.source}`, {})
+      const data = (await res.json()) as { indexers?: Indexer[]; error?: string }
+      // The backend reports its own failures in the body, so HTTP 200 can still
+      // mean "I could not ask Radarr". Either way this must NOT become an empty
+      // list: an empty list means "none configured" and is shown as such.
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
+      return data.indexers ?? []
+    },
+    staleTime: 5 * 60_000,
+    retry: 1,
+    placeholderData: keepPreviousData,
+  })
+  const indexers = indexersQuery.data ?? []
 
   // Fetch destination folders on mount. A failed load is not fatal: the combo
   // keeps its built-in library default, so searching and grabbing still work.
@@ -314,8 +330,24 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
                   <option key={idx.id} value={String(idx.id)}>{idx.name}</option>
                 ))}
               </select>
-              {indexers.length > 0 && (
-                <span className="calendar-indexer-count">{indexers.length} configurados</span>
+              {indexersQuery.isError ? (
+                <span className="calendar-indexer-error" role="alert">
+                  ⚠️ No se pudo consultar {item.source}:{' '}
+                  {indexersQuery.error instanceof Error
+                    ? indexersQuery.error.message
+                    : 'error desconocido'}
+                  <button
+                    type="button"
+                    className="calendar-indexer-retry"
+                    onClick={() => indexersQuery.refetch()}
+                  >
+                    Reintentar
+                  </button>
+                </span>
+              ) : (
+                indexers.length > 0 && (
+                  <span className="calendar-indexer-count">{indexers.length} configurados</span>
+                )
               )}
             </div>
           )}
