@@ -58,14 +58,6 @@ export async function renameItem(oldPath: string, newPath: string): Promise<{ ok
   return handleResponse(res)
 }
 
-export async function moveItem(src: string, dst: string): Promise<{ ok: boolean; detail: string }> {
-  const res = await apiFetch('/api/files/move', {
-    method: 'POST',
-    body: JSON.stringify({ remote_path: src, local_path: dst }),
-  })
-  return handleResponse(res)
-}
-
 export async function deleteItem(path: string): Promise<{ ok: boolean; detail: string }> {
   const res = await apiFetch('/api/files/delete', {
     method: 'POST',

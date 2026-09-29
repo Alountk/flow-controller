@@ -315,6 +315,7 @@ falla y **nombra el módulo**.
 | F-01 | RAU-128 | **Upgrade 4K/3D** desde la biblioteca + destino + renombrado tras copia | feature | ⬜ |
 | F-03 | RAU-129 | **Wizard de primera puesta en marcha** paso a paso (tipo Overseerr / aMuleTorrent) | feature | ⬜ |
 | F-02 | RAU-130 | **Python vs Go/Rust**: estudio cerrado con veredicto *no reescribir* + 8 mitigaciones | estudio | ⬜ |
+| C-08 | RAU-138 | **Regla «siempre hardlink»**: guardar/renombrar bajo `FOLDER_DOWNLOAD_*`, endpoint muerto fuera, carpetas por enlace duro | regla | ✅ |
 | C-01…C-07 | RAU-131…137 | Avisos de import bloqueado, su gestor, E2E Playwright, upgrades automáticos, rate limiting, responsive+dark, `IMPORT_TIMEOUT` en UI | backlog | ⬜ |
 
 Detalle y justificación de cada entrada en `BACKLOG.md`.
