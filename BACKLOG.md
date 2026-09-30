@@ -13,7 +13,7 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | B-02 | RAU-126 | C-03 | RAU-133 |
 | B-01 | RAU-127 | C-04 | RAU-134 |
 | F-01 | RAU-128 | C-05 | RAU-135 |
-| F-03 | RAU-129 | C-06 | RAU-136 |
+| F-03 🟡 | **Wizard de primera puesta en marcha** paso a paso (tipo Overseerr/aMuleTorrent). **Parte 1 (backend)** ✅ — `/api/setup` acepta **todos los grupos** (parcial-seguro), `/api/services/test` acepta **candidatos sin guardar**, y `save_settings` expone **`persisted`** para no decir "guardado" con el volumen de solo lectura. **Parte 2 (frontend)** ⬜ — rutas unificadas + el wizard | 🟦🟦 |
 | F-02 | RAU-130 | C-07 | RAU-137 |
 | C-08 | RAU-138 |  |  |
 
@@ -145,6 +145,20 @@ Y `RESTART_REQUIRED_FIELDS` pasa a lo que **genuinamente** no puede aplicarse en
 `security.api_key` ya se leía en vivo (su propio docstring lo dice) y los servicios ahora
 también — la UI dejaba de mentir en una dirección para seguir mintiendo en la otra.
 
+**F-03, parte 1 (backend)** — rama `feat/setup-wizard-backend`. Tres huecos entre
+`POST /api/setup` y un wizard real:
+
+1. **Solo copiaba `services.*`** — un paso que guardara `paths` o `intervals` los mandaba y se
+   perdían. La única alternativa, `POST /api/settings`, **no es parcial-seguro** (`_deep_merge(
+   DEFAULTS, data)` → todo lo omitido vuelve a su default).
+2. **"Probar conexión" solo sonda lo guardado** → imposible validar una URL antes de
+   comprometerse, que es justo lo que hace un paso de wizard.
+3. **`save_settings` devuelve `False`** con el directorio de configuración de solo lectura y
+   **ambas rutas respondían `ok: true`** — la misma mentira que arreglamos en F-02g.
+
+Y `restart_needed` filtraba `services.*` sobre un conjunto que ya solo contiene `server.port`,
+así que **siempre devolvía `[]`**: cambiar el puerto no se reportaba.
+
 **F-02h, parte 2** — rama `fix/config-live-scalars`. Los escalares que `from config import X`
 había congelado pasan a leerse en tiempo de llamada: `SAFE_MODE` (la UI decía "guardado" para
 `security.safe_mode` y **era un no-op**), `DEVELOPER`, `CHECK_INTERVAL`, `TRACE_LIMIT`,
@@ -205,10 +219,13 @@ el usuario nunca se entera de que hay que reiniciar.
 8. Avanzado (intervalos, `tracing.limit`, `safe_mode`, `developer`, `port`) ·
 9. Revisar y guardar → mostrar `restart_required`.
 
-**Huecos:** no hay endpoint que valide existencia/escritura de rutas · `needs_setup` puede
-quedarse colgado (usa `config.SERVICES`, congelado en el import) · `RESTART_REQUIRED_FIELDS`
-(`routes/settings.py:18-24`) no incluye `safe_mode`, `developer`, `intervals.*`, `paths.*`,
-así que la UI miente al decir "guardado sin reiniciar".
+**Huecos:** no hay endpoint que valide existencia/escritura de rutas (seguía fuera de alcance
+en F-03). ~~`needs_setup` se quedaba colgado~~ y ~~`RESTART_REQUIRED_FIELDS` hacía que la UI
+mintiera con `safe_mode`/`intervals`/`paths`~~ → **lo arregló F-02h**: `config.rebuild()`
+refresca `SERVICES` en caliente y la lista quedó en `{"server.port"}`.
+
+**Decisión (F-03):** la clave de la app va **al final** — en cuanto existe, `POST /api/setup`
+devuelve 403 y `needs_setup` pasa a false; ponerla antes cortaría el wizard.
 
 ---
 
