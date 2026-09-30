@@ -35,20 +35,29 @@ def _seed_block_reason(src: str, verb: str) -> str | None:
     hardlink or a copy) never touches it, which is why the operations allowed
     here are the ones that ADD a name and not the ones that change one.
 
-    The folders come from settings, so moving them in Configuración moves the
-    guard with them.
+    **Only the torrent folder is guarded.** aMule is excluded on purpose, and
+    two independent reasons say the same thing:
+
+    - its downloads sit on a *different mount* from the library
+      (`/mnt/storage-6tb` vs `/mnt/storage`), so a hardlink between them is
+      impossible — there was no hardlink here to protect in the first place;
+    - aMule has no seed ratio and no swarm obligation, and an ED2K can be
+      fetched again from the network, so a file there is disposable on a
+      schedule rather than a fragile seed. Blocking it would protect nothing
+      while getting in the way of the retention cleanup.
+
+    The folder comes from settings, so changing it in Configuración moves the
+    guard with it.
     """
     resolved = os.path.realpath(src)
-    for folder in (config.FOLDER_DOWNLOAD_AMULE, config.FOLDER_DOWNLOAD_TORRENT):
-        root = os.path.realpath(folder)
-        if resolved == root or resolved.startswith(root + "/"):
-            return (
-                f"'{Path(src).name}' está en una carpeta de descargas ({root}) y no se puede "
-                f"{verb}: el cliente de descargas comparte exactamente esa ruta, y "
-                f"renombrarla o moverla rompe el hardlink con el que sigue sembrando. "
-                f"En su lugar, copia o coloca el fichero — se resuelve con un enlace duro y "
-                f"la semilla no se entera."
-            )
+    root = os.path.realpath(config.FOLDER_DOWNLOAD_TORRENT)
+    if resolved == root or resolved.startswith(root + "/"):
+        return (
+            f"'{Path(src).name}' está en la carpeta de descargas de torrents ({root}) y no se "
+            f"puede {verb}: qBittorrent comparte exactamente esa ruta, y renombrarla o moverla "
+            f"rompe el hardlink con el que sigue sembrando. En su lugar, copia o coloca el "
+            f"fichero — se resuelve con un enlace duro y la semilla no se entera."
+        )
     return None
 
 

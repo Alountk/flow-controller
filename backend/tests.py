@@ -1113,10 +1113,22 @@ class TestConsumeQueuePlacesWithoutDestroying:
 class TestSeedIsNeverBroken:
     """A torrent client shares a PATH, not an inode.
 
-    Moving a file out of a download folder deletes the entry the client is
+    Moving a file out of the download folder deletes the entry the client is
     sharing, and renaming it does the same even though the data stays intact
     — the seeder's path is gone either way. Placement is fine: a hardlink adds
     a name without removing anything.
+
+    **Only the torrent folder is guarded.** aMule is deliberately not:
+
+    - its downloads live on a *different mount* from the library
+      (`/mnt/storage-6tb` vs `/mnt/storage`), so a hardlink between them is
+      impossible — there was never a hardlink here to protect;
+    - aMule has no seed ratio and no swarm obligation, and an ED2K is
+      re-downloadable from the network, so a file there is disposable on a
+      schedule rather than a fragile seed (see the retention feature).
+
+    Torrent files are the ones that sit on the same mount as the library,
+    where a hardlink works and where losing the path ends the seeding.
     """
 
     def _post(self, src: str, dst: str, op_type: str = "move"):
@@ -1125,10 +1137,11 @@ class TestSeedIsNeverBroken:
             json={"source": op_type, "remote_path": src, "local_path": dst},
         )
 
-    def test_moving_a_file_out_of_a_download_folder_is_refused(self):
-        from config import FOLDER_DOWNLOAD_AMULE
+    def test_moving_a_file_out_of_the_torrent_folder_is_refused(self):
+        from config import FOLDER_DOWNLOAD_TORRENT
 
-        resp = self._post(f"{FOLDER_DOWNLOAD_AMULE}/Movie (2016)/Movie.mkv", "/mnt/storage/movies/Movie (2016)/Movie.mkv")
+        src = f"{FOLDER_DOWNLOAD_TORRENT}/Movie (2016)/Movie.mkv"
+        resp = self._post(src, "/mnt/storage/movies/Movie (2016)/Movie.mkv")
 
         assert resp.status_code == 200
         data = resp.json()
@@ -1136,15 +1149,34 @@ class TestSeedIsNeverBroken:
         assert "semilla" in data["detail"] or "hardlink" in data["detail"], data["detail"]
         from state import file_queue
 
-        assert all(o["src"] != f"{FOLDER_DOWNLOAD_AMULE}/Movie (2016)/Movie.mkv" for o in file_queue), (
+        assert all(o["src"] != src for o in file_queue), (
             "a refused operation must never reach the queue"
         )
 
-    def test_the_refusal_does_not_block_placing_a_copy_from_the_same_folder(self):
+    def test_moving_an_aMule_file_is_allowed(self):
+        """aMule downloads are on another mount and have no seed to protect.
+
+        Hardlinks to the library are impossible from `/mnt/storage-6tb`, so
+        the guard was refusing an operation it was never protecting anything
+        with — and aMule files are disposable on a schedule anyway.
+        """
         from config import FOLDER_DOWNLOAD_AMULE
 
         resp = self._post(
             f"{FOLDER_DOWNLOAD_AMULE}/Movie (2016)/Movie.mkv",
+            "/mnt/storage/movies/Movie (2016)/Movie.mkv",
+        )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["ok"] is True, (
+            "an aMule file is not a seed: the guard must not refuse it"
+        )
+
+    def test_the_refusal_does_not_block_placing_a_copy_from_the_torrent_folder(self):
+        from config import FOLDER_DOWNLOAD_TORRENT
+
+        resp = self._post(
+            f"{FOLDER_DOWNLOAD_TORRENT}/Movie (2016)/Movie.mkv",
             "/mnt/storage/movies/Movie (2016)/Movie.mkv",
             op_type="copy",
         )
@@ -1159,7 +1191,7 @@ class TestSeedIsNeverBroken:
 
         assert resp.json()["ok"] is True, "outside the download folders a move is harmless"
 
-    def test_renaming_a_file_inside_a_download_folder_is_refused(self):
+    def test_renaming_a_file_inside_the_torrent_folder_is_refused(self):
         from config import FOLDER_DOWNLOAD_TORRENT
 
         resp = client.post(

@@ -188,6 +188,18 @@ migración de esquema, no un ajuste de UI — de ahí que vaya aparte.
 Y `restart_needed` filtraba `services.*` sobre un conjunto que ya solo contiene `server.port`,
 así que **siempre devolvía `[]`**: cambiar el puerto no se reportaba.
 
+**C-08 acotado a torrents** — rama `fix/seed-guard-torrents-only`. El guard cubría
+`FOLDER_DOWNLOAD_AMULE` **y** `FOLDER_DOWNLOAD_TORRENT`; ahora solo el segundo, porque las dos
+razones coinciden en que aMule no necesita esa protección:
+
+- los ficheros de aMule están en **`/mnt/storage-6tb`** y la biblioteca en **`/mnt/storage`**
+  → montajes distintos → **un hardlink entre ellos es imposible**, no había nada que proteger;
+- aMule no tiene ratio ni obligación de enjambre, y un ED2K se vuelve a bajar de la red: allí un
+  fichero es **desechable con un plazo**, no una semilla frágil.
+
+Esto además despeja el camino a la retención de aMule: el guard ya no se interpone entre el
+ciclo de vida del fichero y su borrado programado.
+
 **F-02h, parte 2** — rama `fix/config-live-scalars`. Los escalares que `from config import X`
 había congelado pasan a leerse en tiempo de llamada: `SAFE_MODE` (la UI decía "guardado" para
 `security.safe_mode` y **era un no-op**), `DEVELOPER`, `CHECK_INTERVAL`, `TRACE_LIMIT`,
@@ -283,31 +295,46 @@ Lo que implica:
 
 ---
 
-### F-05 — Saber qué ficheros de aMule están ya en la biblioteca · **Mediana**
+### F-05 — Retención y procedencia de las descargas de aMule · **Mediana**
 
 Pedida: *"en la carpeta de amule me gustaría saber si los archivos están controlados por radarr
 o sonarr, podríamos marcarlos de alguna manera, para localizar los que puedo borrar"*.
 
-**Señales disponibles** (ninguna basta sola — se combinan):
+**Decisión del usuario: el borrado es SUYO, siempre con aviso de irreversibilidad.**
+El sweep **nunca** borra solo: marca y deja que tú lo borres (en lote, con F-04), y antes de
+ejecutar aparece un aviso explícito de que **no se puede recuperar**. Un borrado automático es
+una opción futura con interruptor, no el comportamiento por defecto.
+
+#### Qué guarda y cómo
+
+| Pieza | Detalle |
+|---|---|
+| Tabla nueva | `amule_downloads(path PRIMARY KEY, first_seen_at REAL)` — mismo patrón de migración que `auto_copy_seen` (`history.py:110`), que **ya usa `first_seen_at`** |
+| Sweep | recorre `FOLDER_DOWNLOAD_AMULE` y registra por primera vez cada fichero. ⚠️ `first_seen_at` se escribe **solo una vez**: refrescarlo en cada vuelta haría que nada caducara nunca |
+| Caducidad | `edad = ahora - first_seen_at ≥ retención` → marcado como **caducado** |
+| Duración | configurable en Configuración, **7 días** por defecto |
+| Borrado | botón + confirmación con el aviso de irreversibilidad; idealmente en lote vía F-04 |
+
+#### ¿Y si a los N días el arr nunca lo importó?
+
+La otra mitad de lo que pediste: saber qué ficheros están **controlados por Radarr o Sonarr**.
 
 | Señal | Fuente | Dice |
 |---|---|---|
-| Cola del arr | `GET /api/v3/queue` (`clients.py:731`) | `cola · importando` — aún en curso |
-| Histórico del arr | `GET /api/v3/history` (`clients.py:715`) | `histórico` — el arr ya lo importó una vez |
-| **Inodo compartido** | `st_nlink > 1` + mismo `(st_dev, st_ino)` bajo las raíces de biblioteca | **`ya tiene otro nombre en la biblioteca`** — la señal fuerte |
+| Cola del arr | `GET /api/v3/queue` (`clients.py:731`) | `cola · importando` |
+| Histórico del arr | `GET /api/v3/history` (`clients.py:715`) | `histórico` |
 | Nuestras peticiones | tabla `own_grabs` | `lo pedimos nosotros` |
+| ~~Inodo compartido~~ | `st_nlink > 1` + mismo `(st_dev, st_ino)` | **No aplica a aMule**: montaje distinto, el hardlink es imposible. Sí sirve para torrents |
 | Ninguna | — | `desconocido` |
 
-⚠️ **La marca no dice "puedo borrar sin coste".** Borrar el de la carpeta de descargas
-**rompe la semilla** (C-08) aunque el de biblioteca exista — el dato sobrevive, la *ruta* que
-comparte el cliente no. La etiqueta tiene que distinguir *"ya está en la biblioteca"* de
-*"puedo borrar"*, o estaremos sugiriendo una operación que corta el seeding.
+⚠️ La marca **no** dice "puedo borrar sin coste": en aMule no hay semilla que romper, pero
+puede que **el arr nunca lo haya importado** y entonces borrarlo sí pierde el dato. Se **muestra
+y no bloquea** en la v1 — tú decides, con el aviso — y se puede promover a condición si alguna
+vez se clavan ficheros.
 
-**Coste:** barrer la biblioteca comparando inodos es I/O sobre el montaje de red → cachear por
-sesión y limitarlo a `ALLOWED_ROOTS`.
+**Coste:** cruzar descarga y biblioteca es I/O sobre el montaje de red → cachear por sesión y
+limitarlo a `ALLOWED_ROOTS`.
 
-**Abierto:** ¿marcado **por fichero** en el explorador o pestaña aparte? ¿y las carpetas
-completas de un release (marcar la carpeta si todos sus ficheros están)?
 
 ---
 
