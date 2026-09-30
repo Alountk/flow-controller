@@ -2039,13 +2039,31 @@ class TestFirstRunSetup:
 
         assert not fresh["security"].get("api_key_hash")
 
-    def test_setup_reports_that_a_restart_is_needed(self, fresh, monkeypatch):
+    @pytest.fixture(autouse=True)
+    def _restore_config_after_rebuild(self):
+        """The route calls `config.rebuild()` after saving.
+
+        The `fresh` fixture blanks `settings._settings`, so that rebuild reads
+        defaults and leaves `config.SERVICES` pointing at localhost. This runs
+        after `fresh` (and its monkeypatch) have been torn down, so the real
+        settings are back and the constants go with them.
+        """
+        yield
+        import config
+
+        config.rebuild()
+
+    def test_setup_no_longer_reports_a_restart_for_services(self, fresh, monkeypatch):
         monkeypatch.setattr("settings.auth_required", lambda: False)
 
         body = client.post("/api/setup", json={"services": {"radarr": {"url": "http://r:1"}}}).json()
 
-        # Service URLs are read into config.SERVICES at import.
-        assert "services.radarr.url" in body["restart_required"]
+        # `config.rebuild()` refills SERVICES in place, so a service URL is live
+        # now and asking for a restart would be a lie. The rebuild itself — that
+        # the new value reaches the list every route holds — is proven in
+        # tests_settings_live.py, because this fixture stubs `save_settings` and
+        # the value never reaches the settings the rebuild reads from.
+        assert body["restart_required"] == [], body["restart_required"]
 
     def test_setup_is_refused_once_the_app_is_protected(self, fresh, monkeypatch):
         """Otherwise anyone could rewrite the deployment's credentials."""

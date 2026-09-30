@@ -22,6 +22,7 @@ from media_mixer import (
 )
 from task_manager import mux_tasks
 from routes.status import verify_api_key
+import config
 
 log = logging.getLogger("flow-controller")
 
@@ -43,7 +44,7 @@ class MuxRequest(BaseModel):
 
 # ── Path validation ──────────────────────────────────────────────────────────
 
-ALLOWED_ROOTS = ["/mnt/storage", "/mnt/storage-6tb"]
+ALLOWED_ROOTS = config.ALLOWED_ROOTS
 
 
 def _validate_mixer_path(path: str) -> str:

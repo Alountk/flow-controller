@@ -7,17 +7,6 @@ load_dotenv()
 migrate_env_vars()
 load_settings()
 
-RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
-SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:8989")
-AMUTORRENT_URL = get_setting("services", "amutorrent", "url", default="http://localhost:4000")
-
-RADARR_API_KEY = get_setting("services", "radarr", "api_key", default="")
-SONARR_API_KEY = get_setting("services", "sonarr", "api_key", default="")
-AMUTORRENT_API_KEY = get_setting("services", "amutorrent", "api_key", default="")
-
-AMUTORRENT_USER = get_setting("services", "amutorrent", "user", default="admin")
-AMUTORRENT_PASSWORD = get_setting("services", "amutorrent", "password", default="")
-
 # The app key is stored hashed, never in the clear. Whether one is configured
 # is read live from settings (see settings.auth_required), so setting it takes
 # effect without a restart.
@@ -25,31 +14,21 @@ AMUTORRENT_PASSWORD = get_setting("services", "amutorrent", "password", default=
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIST = os.path.normpath(os.path.join(BASE_DIR, "..", "frontend", "dist"))
 
-CHECK_INTERVAL = int(get_setting("intervals", "check", default=15))
-MAX_RETRIES = int(get_setting("intervals", "max_retries", default=3))
-RETRY_DELAY = float(get_setting("intervals", "retry_delay", default=2))
-REQUEST_TIMEOUT = float(get_setting("intervals", "request_timeout", default=5))
-
-TRACE_LIMIT = int(get_setting("tracing", "limit", default=25))
-
 EXPECTED_CATEGORY = {"radarr": "radarr", "sonarr": "tv-sonarr"}
 
-AMUTORRENT_INDEXER = os.getenv(
-    "AMUTORRENT_INDEXER", f"{AMUTORRENT_URL}/indexer/amule/api"
-)
-
-SAFE_MODE = get_setting("security", "safe_mode", default=True)
-DEVELOPER = get_setting("developer", default=False)
-
-FOLDER_DOWNLOAD_AMULE = get_setting("paths", "download_amule", default="/mnt/storage-6tb/shared-downloads/amule")
-FOLDER_DOWNLOAD_TORRENT = get_setting("paths", "download_torrent", default="/mnt/storage/downloads/qbittorrent/completed")
-
+#: Containers shared with whoever did `from config import SERVICES`: they bind
+#: the *object*, not its contents, so `rebuild()` refills them **in place** and
+#: every holder sees the new data with no call-site change. Scalars cannot work
+#: that way — see `rebuild()` and the readers that ask for `config.X` at call
+#: time instead of binding it.
+SERVICES: list[dict] = []
 #: Filesystem roots the app is allowed to write to, read from the configured
 #: `paths.allowed_roots` (settings.py owns the default). This is the ONE
 #: authority for the list: routes validate against it instead of each carrying
 #: its own hardcoded copy, and the release-destination combo sources its
 #: non-arr options from the same value.
-ALLOWED_ROOTS: list[str] = get_setting("paths", "allowed_roots", default=[])
+ALLOWED_ROOTS: list[str] = []
+_DOWNLOAD_CLIENT_PATHS: dict[str, str] = {}
 
 ACTIONS: dict[str, dict] = {
     "fix_category": {
@@ -151,29 +130,105 @@ def path_is_allowed(path: str) -> bool:
     return False
 
 
-SERVICES = [
-    {
-        "key": "radarr",
-        "kind": "arr",
-        "url": RADARR_URL,
-        "api_key": RADARR_API_KEY,
-        "configured": service_is_configured(RADARR_URL, RADARR_API_KEY),
-    },
-    {
-        "key": "sonarr",
-        "kind": "arr",
-        "url": SONARR_URL,
-        "api_key": SONARR_API_KEY,
-        "configured": service_is_configured(SONARR_URL, SONARR_API_KEY),
-    },
-    {
-        "key": "amutorrent",
-        "kind": "qbit",
-        "url": AMUTORRENT_URL,
-        "api_key": AMUTORRENT_API_KEY,
-        "configured": service_is_configured(AMUTORRENT_URL, AMUTORRENT_API_KEY),
-    },
-]
+def rebuild() -> None:
+    """Re-read every settings-backed value. Called at import and after a save.
+
+    Two mechanisms, because the two kinds of value behave differently:
+
+    - **Containers** (`SERVICES`, `ALLOWED_ROOTS`, `_DOWNLOAD_CLIENT_PATHS`)
+      are refilled **in place**. A module that did `from config import
+      SERVICES` holds the same list, so it sees the new contents with no
+      call-site change.
+    - **Scalars** (`SAFE_MODE`, `TRACE_LIMIT`, the intervals, the folders) are
+      immutable: `from config import SAFE_MODE` binds the value itself and no
+      rebinding here reaches it. Every reader of a value the UI promises is
+      restart-free therefore asks for `config.X` *at call time*; this refreshes
+      only our own name.
+
+    Without this, saving a service URL changed `settings.json` and nothing
+    else: `find_service` kept returning the old one until the container
+    restarted, right after the UI said it had been saved.
+    """
+    global RADARR_URL, SONARR_URL, AMUTORRENT_URL
+    global RADARR_API_KEY, SONARR_API_KEY, AMUTORRENT_API_KEY
+    global AMUTORRENT_USER, AMUTORRENT_PASSWORD
+    global CHECK_INTERVAL, MAX_RETRIES, RETRY_DELAY, REQUEST_TIMEOUT
+    global IMPORT_POLL_TIMEOUT, TRACE_LIMIT
+    global SAFE_MODE, DEVELOPER
+    global FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT
+
+    RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
+    SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:7878")
+    AMUTORRENT_URL = get_setting("services", "amutorrent", "url", default="http://localhost:4000")
+
+    RADARR_API_KEY = get_setting("services", "radarr", "api_key", default="")
+    SONARR_API_KEY = get_setting("services", "sonarr", "api_key", default="")
+    AMUTORRENT_API_KEY = get_setting("services", "amutorrent", "api_key", default="")
+
+    AMUTORRENT_USER = get_setting("services", "amutorrent", "user", default="admin")
+    AMUTORRENT_PASSWORD = get_setting("services", "amutorrent", "password", default="")
+
+    CHECK_INTERVAL = int(get_setting("intervals", "check", default=15))
+    MAX_RETRIES = int(get_setting("intervals", "max_retries", default=3))
+    RETRY_DELAY = float(get_setting("intervals", "retry_delay", default=2))
+    REQUEST_TIMEOUT = float(get_setting("intervals", "request_timeout", default=5))
+    IMPORT_POLL_TIMEOUT = int(get_setting("intervals", "import_timeout", default=40))
+
+    TRACE_LIMIT = int(get_setting("tracing", "limit", default=25))
+
+    SAFE_MODE = get_setting("security", "safe_mode", default=True)
+    DEVELOPER = get_setting("developer", default=False)
+
+    FOLDER_DOWNLOAD_AMULE = get_setting(
+        "paths", "download_amule", default="/mnt/storage-6tb/shared-downloads/amule"
+    )
+    FOLDER_DOWNLOAD_TORRENT = get_setting(
+        "paths", "download_torrent", default="/mnt/storage/downloads/qbittorrent/completed"
+    )
+
+    # In place on purpose: rebinding the NAME would never reach a module that
+    # did `from config import ALLOWED_ROOTS`.
+    ALLOWED_ROOTS[:] = get_setting("paths", "allowed_roots", default=[])
+    _DOWNLOAD_CLIENT_PATHS.clear()
+    _DOWNLOAD_CLIENT_PATHS.update({
+        "amule": FOLDER_DOWNLOAD_AMULE,
+        "amutorrent": FOLDER_DOWNLOAD_AMULE,
+        "qbittorrent": FOLDER_DOWNLOAD_TORRENT,
+        "qbit": FOLDER_DOWNLOAD_TORRENT,
+    })
+
+    # Also in place: every route and driver holds this exact list.
+    SERVICES[:] = [
+        {
+            "key": "radarr",
+            "kind": "arr",
+            "url": RADARR_URL,
+            "api_key": RADARR_API_KEY,
+            "configured": service_is_configured(RADARR_URL, RADARR_API_KEY),
+        },
+        {
+            "key": "sonarr",
+            "kind": "arr",
+            "url": SONARR_URL,
+            "api_key": SONARR_API_KEY,
+            "configured": service_is_configured(SONARR_URL, SONARR_API_KEY),
+        },
+        {
+            "key": "amutorrent",
+            "kind": "qbit",
+            "url": AMUTORRENT_URL,
+            "api_key": AMUTORRENT_API_KEY,
+            "configured": service_is_configured(AMUTORRENT_URL, AMUTORRENT_API_KEY),
+        },
+    ]
+
+
+rebuild()
+
+#: Derived from the URL, so only once `rebuild()` has run.
+AMUTORRENT_INDEXER = os.getenv(
+    "AMUTORRENT_INDEXER", f"{AMUTORRENT_URL}/indexer/amule/api"
+)
 
 
 def all_services() -> list[dict]:
@@ -233,14 +288,6 @@ _VOLUME_MAP = [
     ("/data-6tb/", "/mnt/storage-6tb/"),
 ]
 
-_DOWNLOAD_CLIENT_PATHS: dict[str, str] = {
-    "amule": FOLDER_DOWNLOAD_AMULE,
-    "amutorrent": FOLDER_DOWNLOAD_AMULE,
-    "qbittorrent": FOLDER_DOWNLOAD_TORRENT,
-    "qbit": FOLDER_DOWNLOAD_TORRENT,
-}
-
 IMPORT_POLL_INTERVAL = 5
-IMPORT_POLL_TIMEOUT = int(get_setting("intervals", "import_timeout", default=40))
 
 _TASK_TTL = 600

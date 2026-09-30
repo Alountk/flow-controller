@@ -27,6 +27,7 @@ from clients import (
 from models import ActionRequest
 from routes.status import verify_api_key
 from state import http_session
+import config
 
 router = APIRouter()
 
@@ -430,8 +431,9 @@ def _validate_path(path: str) -> str:
         return ""
     normalized = host_path(path)
     resolved = os.path.realpath(normalized)
-    ALLOWED_ROOTS = ["/mnt/storage", "/mnt/storage-6tb"]
-    for root in ALLOWED_ROOTS:
+    # The configured roots, not a copy: a root added in Configuración has to
+    # be the one this validator accepts.
+    for root in config.ALLOWED_ROOTS:
         if resolved == root or resolved.startswith(root + "/"):
             return resolved
     from fastapi import HTTPException
