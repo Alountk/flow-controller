@@ -1,3 +1,4 @@
+import config
 import asyncio
 import logging
 
@@ -5,10 +6,7 @@ import aiohttp
 
 from config import (
     EXPECTED_CATEGORY,
-    FOLDER_DOWNLOAD_AMULE,
-    FOLDER_DOWNLOAD_TORRENT,
     PAUSED_STATES,
-    TRACE_LIMIT,
     configured_services,
     _DOWNLOAD_CLIENT_PATHS,
     _VOLUME_MAP,
@@ -49,11 +47,11 @@ def resolve_current_path(save_path: str, download_client: str | None) -> str:
                     log.info("resolve_path: client='%s' match='%s' → %s", download_client, key, host_folder)
                     return host_folder
         if save_path.startswith("/downloads/incoming"):
-            log.info("resolve_path: pattern match '/downloads/incoming' → %s", FOLDER_DOWNLOAD_AMULE)
-            return FOLDER_DOWNLOAD_AMULE
+            log.info("resolve_path: pattern match '/downloads/incoming' → %s", config.FOLDER_DOWNLOAD_AMULE)
+            return config.FOLDER_DOWNLOAD_AMULE
         if save_path.startswith("/downloads"):
-            log.info("resolve_path: pattern match '/downloads' → %s", FOLDER_DOWNLOAD_TORRENT)
-            return FOLDER_DOWNLOAD_TORRENT
+            log.info("resolve_path: pattern match '/downloads' → %s", config.FOLDER_DOWNLOAD_TORRENT)
+            return config.FOLDER_DOWNLOAD_TORRENT
     result = host_path(save_path) if save_path else ""
     log.info("resolve_path: fallback '%s' → '%s'", save_path, result)
     return result
@@ -112,7 +110,7 @@ async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
     arr_services = configured_services("arr")
 
     results = await asyncio.gather(
-        *(fetch_arr_grabbed(session, s, TRACE_LIMIT) for s in arr_services),
+        *(fetch_arr_grabbed(session, s, config.TRACE_LIMIT) for s in arr_services),
         *(fetch_arr_queue(session, s) for s in arr_services),
         *(arr_download_clients(session, s) for s in arr_services),
         *(fetch_arr_all_series(session, s) for s in arr_services if s["key"] == "sonarr"),

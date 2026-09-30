@@ -132,7 +132,7 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
 | F-02e ✅ | Single-flight en el consumidor: `state.consumer_active` + `task.done()`, **ambas bajo `queue_lock`**. Antes cada `add` lanzaba un consumidor y **N copias corrían a la vez**, contradiciendo el docstring — y pisaban la referencia GC | Media |
 | F-02f ✅ | Sqlite detrás de `to_thread` en la ruta caliente: `_attach_grabbed_at` (un `WHERE grabbed_at >= ?` **sin índice**, en 4 rutas), `record_own_grab` ×2 y la lectura de `/api/auto-copy/history`. `_attach_grabbed_at` pasa a `async def` con 5 sitios con `await` | Media |
 | F-02g ✅ | Log **append-only** (`os.open(O_APPEND)` + un `os.write`). Antes: leer hasta 500 líneas y reescribir **cada WARNING**, en el loop, con ~37 sitios `log.warning` — un arr caído generaba uno por intento | Baja |
-| F-02h 🟡 | `config.SERVICES` se congelaba en el import: guardar no servía de nada hasta reiniciar. **Parte 1 (PR A)**: `config.rebuild()` con contenedores rellenados **in situ** + fuera las **3 copias duras** de `allowed_roots` + `RESTART_REQUIRED_FIELDS` deja de mentir. **Parte 2 (PR B)**: escalares leídos en tiempo de llamada | Baja |
+| F-02h ✅ | `config.SERVICES` se congelaba en el import: guardar no servía de nada hasta reiniciar. **(A)** `config.rebuild()` con contenedores rellenados **in situ** + fuera las **3 copias duras** de `allowed_roots` + `RESTART_REQUIRED_FIELDS` honesto. **(B)** todos los escalares leídos en tiempo de llamada, incluidos los **46 sitios** de `REQUEST_TIMEOUT` | Baja |
 
 **F-02h, parte 1** — rama `fix/config-rebuild-roots`. `config.rebuild()` se llama tras
 **ambos** `save_settings` (endpoint y first-run) y rellena `SERVICES`, `ALLOWED_ROOTS` y
@@ -144,6 +144,14 @@ deja de ser ignorada por el explorador de ficheros.
 Y `RESTART_REQUIRED_FIELDS` pasa a lo que **genuinamente** no puede aplicarse en caliente:
 `security.api_key` ya se leía en vivo (su propio docstring lo dice) y los servicios ahora
 también — la UI dejaba de mentir en una dirección para seguir mintiendo en la otra.
+
+**F-02h, parte 2** — rama `fix/config-live-scalars`. Los escalares que `from config import X`
+había congelado pasan a leerse en tiempo de llamada: `SAFE_MODE` (la UI decía "guardado" para
+`security.safe_mode` y **era un no-op**), `DEVELOPER`, `CHECK_INTERVAL`, `TRACE_LIMIT`,
+`FOLDER_DOWNLOAD_*`, `MAX_RETRIES`, `RETRY_DELAY`, `IMPORT_POLL_TIMEOUT` y — el último —
+`REQUEST_TIMEOUT` con sus **46 sitios** en `clients.py`.
+
+`RESTART_REQUIRED_FIELDS` queda en `{"server.port"}`: lo único que uvicorn solo lee al arrancar.
 
 **F-02f hecha** — rama `perf/sqlite-off-hot-path`. El contrato venía escrito en el propio
 `history.py` ("callers hand it to `asyncio.to_thread`") y unos 8 sitios lo ignoraban.

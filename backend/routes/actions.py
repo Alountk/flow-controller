@@ -5,11 +5,12 @@ import time
 
 from fastapi import APIRouter, Depends
 
-from config import ACTIONS, SAFE_MODE
+from config import ACTIONS
 from copy_engine import copy_tasks, cleanup_tasks, do_action
 from models import ActionRequest
 from routes.status import verify_api_key
 from state import http_session
+import config
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
@@ -21,7 +22,7 @@ async def list_actions(_key: str = Depends(verify_api_key)):
         "actions": [
             {"key": k, **v} for k, v in ACTIONS.items()
         ],
-        "safe_mode": SAFE_MODE,
+        "safe_mode": config.SAFE_MODE,
         "available": sorted(ACTIONS.keys()),
     }
 
@@ -32,7 +33,7 @@ async def run_action(action: str, req: ActionRequest, _key: str = Depends(verify
         return {"ok": False, "error": f"acción desconocida: {action}"}
 
     meta = ACTIONS[action]
-    if SAFE_MODE and meta["destructive"]:
+    if config.SAFE_MODE and meta["destructive"]:
         return {
             "ok": False,
             "error": (

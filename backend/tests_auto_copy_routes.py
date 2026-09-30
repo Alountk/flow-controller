@@ -40,8 +40,10 @@ def test_the_sweep_endpoint_forwards_the_configured_safe_mode():
         seen["safe_mode"] = safe_mode
         return {"ok": True, "running": False, "safe_mode": safe_mode}
 
-    with patch.object(route_module, "sweep", new=fake_sweep), patch.object(
-        route_module, "SAFE_MODE", False
+    # `routes.auto_copy` used to bind SAFE_MODE at import; it reads
+    # `config.SAFE_MODE` now, so that is what has to be patched.
+    with patch.object(route_module, "sweep", new=fake_sweep), patch(
+        "config.SAFE_MODE", False
     ):
         assert client.post("/api/auto-copy/sweep").status_code == 200
 
