@@ -159,6 +159,30 @@ async def test_services(service: str = "", _key: str = Depends(verify_api_key)):
     return {"results": results, "ok": all(r["ok"] for r in results)}
 
 
+@router.post("/api/services/test")
+async def test_service_candidate(body: dict, _key: str = Depends(verify_api_key)):
+    """Probe a URL and key the user has typed but not saved.
+
+    The GET form above reads `config.SERVICES` — what is *already* stored — so
+    it can only answer "is the saved setup healthy?". A wizard step has to ask
+    "is the URL I just typed right?" before it commits, and that is a different
+    question with a different input.
+    """
+    key = body.get("service") or ""
+    template = next((s for s in SERVICES if s["key"] == key), None)
+    if template is None:
+        return {"results": [], "ok": False, "detail": f"servicio desconocido: {key}"}
+
+    candidate = dict(template)
+    for field in ("url", "api_key", "user", "password"):
+        if field in body:
+            candidate[field] = body[field]
+
+    async with http_session() as session:
+        result = await test_service_connection(session, candidate)
+    return {"results": [result], "ok": bool(result.get("ok"))}
+
+
 @router.get("/api/services")
 async def list_services(_key: str = Depends(verify_api_key)):
     """Qué servicios están utilizables, sin salir a la red.
@@ -229,21 +253,37 @@ async def run_setup(body: dict):
             if field in service:
                 target[field] = service[field]
 
+    # Every other group a wizard step may send. Taken wholesale — unlike the
+    # services above, which merge field by field — and merged onto the CURRENT
+    # settings, so a partial body stays partial-safe. That matters because the
+    # other endpoint, POST /api/settings, merges `DEFAULTS <- body`: a step that
+    # saved only `paths` would have silently reset every other group.
+    for group in ("paths", "intervals", "tracing", "server"):
+        value = body.get(group)
+        if not isinstance(value, dict):
+            continue
+        merged.setdefault(group, {}).update(value)
+
     # The app key is optional: leave it unset and the app stays open on the LAN.
     app_key = body.get("api_key", "")
     if app_key:
         credentials.set_app_key(merged, app_key)
     merged.setdefault("security", {}).pop("api_key", None)
 
-    save_settings(merged)
+    # `False` when the config volume is read-only: the values still applied in
+    # memory, so `ok` stays true, but calling that "saved" is the same lie the
+    # Settings page used to tell.
+    persisted = bool(save_settings(merged))
     # The file is only half of it: `config`'s constants were computed at
     # import, so without this the new values would not exist until a restart
     # the UI never mentioned.
     config.rebuild()
 
-    # The service URLs and keys are read into config.SERVICES at import, so they
-    # need a restart to take effect. The app key does not: it is read live.
+    # Only what the request actually sent AND what genuinely cannot be applied
+    # live. Services are no longer in the set, so a services-only body still
+    # reports nothing — the contract tests_routes.py already pins.
     restart_needed = sorted(
-        field for field in RESTART_REQUIRED_FIELDS if field.startswith("services.")
+        field for field in RESTART_REQUIRED_FIELDS
+        if field.split(".", 1)[0] in body
     )
-    return {"ok": True, "restart_required": restart_needed}
+    return {"ok": True, "persisted": persisted, "restart_required": restart_needed}
