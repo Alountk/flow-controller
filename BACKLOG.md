@@ -219,10 +219,13 @@ el usuario nunca se entera de que hay que reiniciar.
 8. Avanzado (intervalos, `tracing.limit`, `safe_mode`, `developer`, `port`) ·
 9. Revisar y guardar → mostrar `restart_required`.
 
-**Huecos:** no hay endpoint que valide existencia/escritura de rutas · `needs_setup` puede
-quedarse colgado (usa `config.SERVICES`, congelado en el import) · `RESTART_REQUIRED_FIELDS`
-(`routes/settings.py:18-24`) no incluye `safe_mode`, `developer`, `intervals.*`, `paths.*`,
-así que la UI miente al decir "guardado sin reiniciar".
+**Huecos:** no hay endpoint que valide existencia/escritura de rutas (seguía fuera de alcance
+en F-03). ~~`needs_setup` se quedaba colgado~~ y ~~`RESTART_REQUIRED_FIELDS` hacía que la UI
+mintiera con `safe_mode`/`intervals`/`paths`~~ → **lo arregló F-02h**: `config.rebuild()`
+refresca `SERVICES` en caliente y la lista quedó en `{"server.port"}`.
+
+**Decisión (F-03):** la clave de la app va **al final** — en cuanto existe, `POST /api/setup`
+devuelve 403 y `needs_setup` pasa a false; ponerla antes cortaría el wizard.
 
 ---
 
