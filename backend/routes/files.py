@@ -11,18 +11,18 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 import state
-from config import FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT, find_service
+from config import find_service
 from traces import host_path
 import history
 from import_service import post_move_import
 from models import ActionRequest
 from routes.status import verify_api_key
 from state import file_queue, queue_lock, http_session
+import config
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
 
-ALLOWED_ROOTS = ["/mnt/storage", "/mnt/storage-6tb"]
 CHUNK_SIZE = 1024 * 1024  # 1MB
 
 
@@ -39,7 +39,7 @@ def _seed_block_reason(src: str, verb: str) -> str | None:
     guard with them.
     """
     resolved = os.path.realpath(src)
-    for folder in (FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT):
+    for folder in (config.FOLDER_DOWNLOAD_AMULE, config.FOLDER_DOWNLOAD_TORRENT):
         root = os.path.realpath(folder)
         if resolved == root or resolved.startswith(root + "/"):
             return (
@@ -58,7 +58,9 @@ def _validate_path(path: str) -> str:
         return ""
     normalized = host_path(path)
     resolved = os.path.realpath(normalized)
-    for root in ALLOWED_ROOTS:
+    # The configured roots, not a copy: a root added in Configuración has
+    # to be the one this validator accepts.
+    for root in config.ALLOWED_ROOTS:
         if resolved == root or resolved.startswith(root + "/"):
             return resolved
     raise HTTPException(status_code=403, detail=f"Ruta no permitida: {path}")
@@ -83,7 +85,7 @@ def _file_entry(p: Path) -> dict:
 async def file_roots(_key: str = Depends(verify_api_key)):
     """Devuelve las raíces de navegación disponibles."""
     roots = []
-    for root in ALLOWED_ROOTS:
+    for root in config.ALLOWED_ROOTS:
         if os.path.isdir(root):
             roots.append({"path": root, "name": os.path.basename(root) or root})
     return {"roots": roots}

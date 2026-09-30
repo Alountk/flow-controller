@@ -12,15 +12,18 @@ from clients import test_service_connection
 from config import SERVICES, configured_services
 from routes.status import verify_api_key
 from state import http_session
+import config
 
 router = APIRouter()
 
+#: Only what genuinely cannot be picked up at runtime. Services are refilled
+#: in place by `config.rebuild()`, and `security.api_key` is read live by
+#: `settings.auth_required()` — its own docstring says a restart would be
+#: exactly wrong there — so neither belongs here. The one interval still bound
+#: at import stays until its readers are converted (F-02h, part 2).
 RESTART_REQUIRED_FIELDS = {
-    "services.radarr.url", "services.radarr.api_key",
-    "services.sonarr.url", "services.sonarr.api_key",
-    "services.amutorrent.url", "services.amutorrent.api_key",
-    "services.amutorrent.user", "services.amutorrent.password",
-    "security.api_key", "server.port",
+    "server.port",
+    "intervals.request_timeout",
 }
 
 PROTOTYPES_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "prototypes"))
@@ -112,6 +115,10 @@ async def save_settings_endpoint(body: dict, _key: str = Depends(verify_api_key)
     merged = _restore_masked_secrets(body, current)
     merged = _apply_app_key_change(body, merged)
     save_settings(merged)
+    # The file is only half of it: `config`'s constants were computed at
+    # import, so without this the new values would not exist until a restart
+    # the UI never mentioned.
+    config.rebuild()
     restart_needed = []
     def _check(data: dict, prefix: str = "") -> None:
         for k, v in data.items():
@@ -230,6 +237,10 @@ async def run_setup(body: dict):
     merged.setdefault("security", {}).pop("api_key", None)
 
     save_settings(merged)
+    # The file is only half of it: `config`'s constants were computed at
+    # import, so without this the new values would not exist until a restart
+    # the UI never mentioned.
+    config.rebuild()
 
     # The service URLs and keys are read into config.SERVICES at import, so they
     # need a restart to take effect. The app key does not: it is read live.

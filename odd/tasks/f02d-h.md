@@ -47,7 +47,11 @@ Los cinco son **independientes** (ninguno requiere otro); los conflictos son sol
       inicializado desde el tamaño real del fichero.
 - [x] T9 — F-02f en la rama `perf/sqlite-off-hot-path`: `_attach_grabbed_at` → `async def`
       (5 sitios con `await`), `record_own_grab` ×2 y `/api/auto-copy/history` → `to_thread`.
-- [ ] T10 — F-02h (PR D) — **necesita decisión del usuario** (ver abajo).
+- [x] T10 — **F-02h decidido y partido en dos PRs** (la respuesta fue "c" = Tier 2 completo,
+      y luego "1" = partirlo):
+      · **PR A** `fix/config-rebuild-roots` — `config.rebuild()` + contenedores in situ +
+        las 3 copias duras de `allowed_roots` + `RESTART_REQUIRED_FIELDS` honesto.
+      · **PR B** `fix/config-live-scalars` — los escalares leídos en tiempo de llamada.
 
 ## Decisión pendiente de F-02h (no la tomo yo solo)
 `config.SERVICES` y otros ~10 constantes se congelan en el import. Hay dos vías:
@@ -107,3 +111,21 @@ Push + PR de F-02g; después T9 (F-02f).
   frontend typecheck ✅, **225 tests** (sin cambios), eslint **0/80**.
 - **Fuera de alcance y anotado**: `auto_copy_driver.py` (round-trips síncronos por traza en un
   sweep que ya es *single-flight*) y el **índice en `grabbed_at`** (migración de esquema).
+
+## Evidencia de F-02h parte 1 (PR A)
+
+- **RED**: `AttributeError: module 'config' has no attribute 'rebuild'` (×10) +
+  `the UI still asks for a restart on fields that already applied`.
+- **GREEN**: `pytest -q --ignore=tests_settings_scalars.py` → **586 passed** · `tests_static`
+  8 · pyflakes limpio · frontend typecheck ✅, **225 tests**, eslint **0/80**.
+- **Dos fallos que cazaron errores míos, no del código:**
+  1. Mi script de recorte usó `s.index("_DOWNLOAD_CLIENT_PATHS: dict[str, str] = {")` — con
+     `= {` coincide también con `= {}`, así que recortó desde la declaración de contenedores
+     hasta `IMPORT_POLL_INTERVAL`, **borrando medio fichero**. Sintaxis válida, contenido
+     destrozado. Lección: ancla con el cuerpo, no con el prefijo. Restaurado con `git checkout`.
+  2. `import config` en `routes/status.py` chocó con la ruta **`async def config()`**: el
+     handler sombreaba el módulo y `config.DEVELOPER` habría sido un `AttributeError` en
+     `GET /api/config`. Lo cazó pyflakes (`redefinition of unused 'config'`). Handler
+     renombrado a `public_config` — el path viene del decorador, no del nombre.
+- **Fuera de alcance, anotado**: `REQUEST_TIMEOUT` (47 sitios en `clients.py`) sigue en
+  `RESTART_REQUIRED_FIELDS` para que la UI **no** mienta hasta que llegue la parte 2.
