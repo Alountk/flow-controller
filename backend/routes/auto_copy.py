@@ -7,6 +7,7 @@ user's external timer (cron/systemd) calling this endpoint; there is deliberatel
 no background loop (design D1 rejected it).
 """
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends
@@ -34,7 +35,8 @@ async def get_auto_copy_history(limit: int = 20, _key: str = Depends(verify_api_
     cannot ask SQLite for "no limit".
     """
     try:
-        items = recent_auto_copy_log(limit=limit)
+        # Same contract as history.py states: hand it to a worker.
+        items = await asyncio.to_thread(recent_auto_copy_log, limit=limit)
         if not store_available():
             return {"items": [], "error": "el historial no está disponible"}
         return {"items": items}

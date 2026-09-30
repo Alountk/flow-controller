@@ -45,7 +45,8 @@ Los cinco son **independientes** (ninguno requiere otro); los conflictos son sol
 - [x] T8 — F-02g en la rama `perf/append-only-log`: `os.open(O_APPEND)` + `_trim_log_file()`
       amortizado (1 reescritura por 512 KiB, no una por WARNING), con `_LOG_BYTES`
       inicializado desde el tamaño real del fichero.
-- [ ] T9 — F-02f (PR C).
+- [x] T9 — F-02f en la rama `perf/sqlite-off-hot-path`: `_attach_grabbed_at` → `async def`
+      (5 sitios con `await`), `record_own_grab` ×2 y `/api/auto-copy/history` → `to_thread`.
 - [ ] T10 — F-02h (PR D) — **necesita decisión del usuario** (ver abajo).
 
 ## Decisión pendiente de F-02h (no la tomo yo solo)
@@ -94,3 +95,15 @@ Push + PR de F-02g; después T9 (F-02f).
   no, se recorta en cada escritura y volvemos al problema de origen.
 - **GREEN**: `pytest -q` → **580 passed** (era 576) · `tests_static` 8 · pyflakes limpio ·
   frontend typecheck ✅, **225 tests**, eslint **0/80**.
+
+## Evidencia de F-02f (T9)
+
+- **RED (3)**: `an unindexed own_grabs scan ran on the event loop` (dos rutas distintas) y
+  `a sqlite read ran inline on the event loop`.
+- **Un test existente cazó mi error**: `tests_auto_copy_routes.py:120` hace
+  `reader.assert_called_once_with(limit=3)` — al pasarlo por `to_thread` lo llamé
+  **posicional**. Corregido a `limit=limit`; `to_thread` reenvía args y kwargs verbatim.
+- **GREEN**: `pytest -q` → **583 passed** (era 580) · `tests_static` 8 · pyflakes limpio ·
+  frontend typecheck ✅, **225 tests** (sin cambios), eslint **0/80**.
+- **Fuera de alcance y anotado**: `auto_copy_driver.py` (round-trips síncronos por traza en un
+  sweep que ya es *single-flight*) y el **índice en `grabbed_at`** (migración de esquema).
