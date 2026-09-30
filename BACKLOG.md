@@ -234,7 +234,7 @@ aparte porque toca los mismos ficheros. No tocado a propósito: `file_browse` (2
 entrada sobre el mount de red) y `clients.py:1001,1049` (un `isdir` por fichero de la
 biblioteca).
 
-### F-03 — Wizard de primera puesta en marcha (tipo Overseerr / aMuleTorrent) · **Mediana**
+### F-03 — Wizard de primera puesta en marcha (tipo Overseerr / aMuleTorrent) · ✅ **Entregado**
 
 **Ya existe** una pantalla de setup (`SetupPage.tsx` + `GET/POST /api/setup`), pero no es una
 ruta, no valida paso a paso y **descarta el `restart_required`** (`SetupPage.tsx:62`), así que
@@ -255,6 +255,59 @@ refresca `SERVICES` en caliente y la lista quedó en `{"server.port"}`.
 
 **Decisión (F-03):** la clave de la app va **al final** — en cuanto existe, `POST /api/setup`
 devuelve 403 y `needs_setup` pasa a false; ponerla antes cortaría el wizard.
+
+---
+
+### F-04 — Selector múltiple en el explorador de ficheros · **Mediana**
+
+Pedida: *"en la sección de archivos, que es como un explorador de carpetas, un selector de varios archivos"*.
+
+**Estado actual:** `frontend/src/components/FileManager.tsx:47` guarda `selected: string | null`
+— **selección unitaria**. Todas las acciones viven en la fila (`handleQueue(type, item)` en `:177`,
+`deleteItem(p)`), y no hay checkbox ni "seleccionar todo".
+
+Lo que implica:
+
+1. **Estado** `Set<string>` + UI por fila. Ojo: `utils/selection.ts` **ya existe** y se usa en el
+   escaneo y en los indexadores con la regla *"seleccionar todo solo sobre lo visible"* — usar
+   esa, no una segunda copia.
+2. **Acciones en lote.** O N llamadas a los endpoints actuales, o endpoints `batch`. Con N
+   llamadas hace falta informar **por fichero**: una puede ser rechazada y las otras no.
+3. ⚠️ **El guard de semilla de C-08 corta en seco un "mover" en lote desde la carpeta de
+   descargas.** El resultado parcial pasa a ser **el caso normal**, no la excepción: la UI
+   tiene que mostrar qué se colocó, qué se rechazó y el motivo de cada uno.
+4. La cola ya es secuencial (F-02e) y persistente (SQLite), así que encolar N es barato.
+
+**Abierto:** ¿qué hace la selección con carpetas (todo el árbol)? ¿límite de elementos?
+¿"eliminar en lote" necesita confirmación distinta de la actual (`confirm()` por fichero)?
+
+---
+
+### F-05 — Saber qué ficheros de aMule están ya en la biblioteca · **Mediana**
+
+Pedida: *"en la carpeta de amule me gustaría saber si los archivos están controlados por radarr
+o sonarr, podríamos marcarlos de alguna manera, para localizar los que puedo borrar"*.
+
+**Señales disponibles** (ninguna basta sola — se combinan):
+
+| Señal | Fuente | Dice |
+|---|---|---|
+| Cola del arr | `GET /api/v3/queue` (`clients.py:731`) | `cola · importando` — aún en curso |
+| Histórico del arr | `GET /api/v3/history` (`clients.py:715`) | `histórico` — el arr ya lo importó una vez |
+| **Inodo compartido** | `st_nlink > 1` + mismo `(st_dev, st_ino)` bajo las raíces de biblioteca | **`ya tiene otro nombre en la biblioteca`** — la señal fuerte |
+| Nuestras peticiones | tabla `own_grabs` | `lo pedimos nosotros` |
+| Ninguna | — | `desconocido` |
+
+⚠️ **La marca no dice "puedo borrar sin coste".** Borrar el de la carpeta de descargas
+**rompe la semilla** (C-08) aunque el de biblioteca exista — el dato sobrevive, la *ruta* que
+comparte el cliente no. La etiqueta tiene que distinguir *"ya está en la biblioteca"* de
+*"puedo borrar"*, o estaremos sugiriendo una operación que corta el seeding.
+
+**Coste:** barrer la biblioteca comparando inodos es I/O sobre el montaje de red → cachear por
+sesión y limitarlo a `ALLOWED_ROOTS`.
+
+**Abierto:** ¿marcado **por fichero** en el explorador o pestaña aparte? ¿y las carpetas
+completas de un release (marcar la carpeta si todos sus ficheros están)?
 
 ---
 
@@ -287,4 +340,4 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 
 ## Orden propuesto
 
-`B-01` → `F-02a..h` → `F-03` → `C-03` → `F-01` → `C-01/C-02`
+`B-01` → `C-03` → `F-04` → `F-05` → `F-01` → `C-01/C-02`

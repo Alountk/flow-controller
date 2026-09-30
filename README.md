@@ -314,9 +314,11 @@ falla y **nombra el módulo**.
 | B-05 | RAU-139 | `PROTOTYPES_DIR` → `/prototypes` dentro del contenedor; la página vacía con los ficheros en la imagen | bug | ✅ |
 | B-01 | RAU-127 | Barra roja izquierda en cards naranjas (CSS deliberado + `path_exists` sin `host_path()`) | bug | ⬜ |
 | F-01 | RAU-128 | **Upgrade 4K/3D** desde la biblioteca + destino + renombrado tras copia | feature | ⬜ |
-| F-03 | RAU-129 | **Wizard de primera puesta en marcha** paso a paso (tipo Overseerr / aMuleTorrent) | feature | ⬜ |
-| F-02 | RAU-130 | **Python vs Go/Rust**: estudio cerrado con veredicto *no reescribir* + 8 mitigaciones | estudio | ⬜ |
+| F-03 | RAU-129 | **Wizard de primera puesta en marcha** paso a paso (tipo Overseerr / aMuleTorrent) | feature | ✅ |
+| F-02 | RAU-130 | **Python vs Go/Rust**: estudio cerrado con veredicto *no reescribir* + 8 mitigaciones | estudio | ✅ |
 | C-08 | RAU-138 | **Regla «siempre hardlink»**: guardar/renombrar bajo `FOLDER_DOWNLOAD_*`, endpoint muerto fuera, carpetas por enlace duro | regla | ✅ |
+| F-04 | RAU-140 | **Selector múltiple** en el explorador de ficheros (acciones en lote) | feature | ⬜ |
+| F-05 | RAU-141 | **Marcar qué ficheros de aMule están ya en la biblioteca** (Radarr/Sonarr) para localizar los borrables | feature | ⬜ |
 | C-01…C-07 | RAU-131…137 | Avisos de import bloqueado, su gestor, E2E Playwright, upgrades automáticos, rate limiting, responsive+dark, `IMPORT_TIMEOUT` en UI | backlog | ⬜ |
 
 Detalle y justificación de cada entrada en `BACKLOG.md`.
