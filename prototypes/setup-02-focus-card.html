@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Propuesta 2: Una cosa a la vez</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #111113;
+      --bg-elev: #18181b;
+      --bg-elev-2: #1c1c21;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-dim: #71717a;
+      --ok: #22c55e;
+      --ok-dim: #15803d;
+      --bad: #ef4444;
+      --warn: #eab308;
+      --accent: #6366f1;
+      --accent-soft: rgba(99,102,241,0.12);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ---------- Escenario centrado ---------- */
+    .stage { min-height: calc(100vh - 168px); display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
+    .frame { width: 520px; max-width: 100%; }
+    .proto { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px; }
+    .card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 16px; padding: 36px 40px; }
+
+    /* ---------- Contador y puntos ---------- */
+    .counter { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+    .dots { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--border); transition: background 0.2s, width 0.2s; }
+    .dot.done { background: var(--ok); }
+    .dot.now { background: var(--accent); width: 18px; }
+
+    /* ---------- Un paso por tarjeta ---------- */
+    .step { display: none; }
+    .step.is-active { display: block; animation: fade 0.2s ease; }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .step h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 28px; }
+    .lede { font-size: 14px; line-height: 1.65; color: var(--text-dim); margin-top: 10px; }
+    .form { margin-top: 28px; display: grid; gap: 18px; }
+    .field { display: block; }
+    .field > span { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+    input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; color: var(--text); font: inherit; font-size: 14px; transition: border-color 0.15s, box-shadow 0.15s; }
+    input::placeholder { color: var(--text-dim); }
+    input:hover { border-color: var(--text-dim); }
+    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .hint { font-size: 12px; line-height: 1.6; color: var(--text-dim); }
+    .field > span.hint { font-weight: 400; margin: 6px 0 0; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+
+    /* ---------- Controles ---------- */
+    .btn { font: inherit; font-size: 14px; font-weight: 600; border: 1px solid transparent; border-radius: 8px; padding: 11px 20px; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s, filter 0.15s; }
+    .btn.primary { background: var(--accent); color: var(--text); }
+    .btn.primary:hover { filter: brightness(1.12); }
+    .btn.primary:active { transform: translateY(1px); }
+    .btn.quiet { background: none; color: var(--text-dim); padding: 11px 8px; }
+    .btn.quiet:hover { color: var(--text); }
+    .btn.ghost { background: var(--bg-elev-2); border-color: var(--border); color: var(--text); font-size: 13px; padding: 9px 14px; }
+    .btn.ghost:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; filter: none; }
+    .nav { margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .nav-right { display: flex; align-items: center; gap: 12px; }
+    .gate { display: none; font-size: 11px; font-weight: 600; color: var(--warn); background: var(--accent-soft); border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; }
+    .gate.on { display: inline-block; }
+    .toast { display: none; margin-top: 16px; font-size: 12px; color: var(--ok); background: var(--accent-soft); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .toast.on { display: block; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ---------- Contenido ---------- */
+    .checklist { list-style: none; margin-top: 24px; display: grid; gap: 14px; }
+    .checklist li { display: flex; gap: 12px; font-size: 13px; line-height: 1.55; color: var(--text-dim); }
+    .checklist b { color: var(--text); font-weight: 600; }
+    .probe { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .result { font-size: 12px; font-weight: 600; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elev-2); color: var(--text-dim); }
+    .result.ok { color: var(--ok); border-color: var(--ok-dim); }
+    .result.bad { color: var(--bad); border-color: var(--bad); }
+    .result.warn { color: var(--warn); border-color: var(--warn); }
+    .badge-restart { display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--warn); background: var(--accent-soft); border: 1px solid var(--warn); border-radius: 999px; padding: 2px 8px; vertical-align: middle; }
+    .callout { display: flex; gap: 10px; font-size: 13px; line-height: 1.6; color: var(--text); background: var(--bg-elev-2); border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 8px; padding: 12px 14px; }
+    .summary { display: grid; gap: 8px; }
+    .sum-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; }
+    .sum-k { color: var(--text-dim); font-weight: 600; }
+    .sum-v { overflow-wrap: anywhere; }
+
+    /* ---------- Notas de diseño ---------- */
+    .notes { max-width: 900px; margin: 0 auto; padding: 24px 32px 40px; }
+    .notes h3 { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px; }
+    .notes ul { list-style: none; display: grid; gap: 8px; }
+    .notes li { position: relative; padding-left: 18px; font-size: 12px; line-height: 1.6; color: var(--text-dim); }
+    .notes li::before { content: '—'; position: absolute; left: 0; color: var(--accent); }
+    .notes b { color: var(--text); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <div class="frame">
+      <span class="proto">Prototipo — Una cosa a la vez</span>
+      <div class="card">
+        <div class="counter">
+          <span id="count">1 de 8</span>
+          <span class="dots" id="dots">
+            <span class="dot now"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          </span>
+        </div>
+
+        <section id="welcome" class="step is-active" data-step="0">
+          <h1>Bienvenida</h1>
+          <p class="lede">Ocho pasos y listo. Cada uno guarda lo suyo y puedes volver atrás antes de terminar.</p>
+          <ul class="checklist">
+            <li><span>🎬</span><span><b>Radarr</b> — URL y clave de la API.</span></li>
+            <li><span>📺</span><span><b>Sonarr</b> — URL y clave de la API.</span></li>
+            <li><span>⬇️</span><span><b>aMuTorrent</b> — URL, clave, usuario y contraseña.</span></li>
+            <li><span>📁</span><span><b>Rutas</b> — carpetas de descarga y raíces permitidas.</span></li>
+            <li><span>🛡️</span><span><b>Protección</b> — clave de la app y tiempos del motor.</span></li>
+          </ul>
+        </section>
+
+        <section id="radarr" class="step" data-step="1">
+          <h1>Radarr</h1>
+          <p class="lede">URL y clave con las que Flow Controller hablará con Radarr.</p>
+          <div class="form">
+            <label class="field"><span>URL</span><input type="text" value="http://localhost:7878"></label>
+            <label class="field"><span>API Key</span><input type="password" value="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"></label>
+            <div class="probe">
+              <button type="button" class="btn ghost probe-btn">Probar conexión</button>
+              <span class="result ok" data-idx="0">✓ Conectado (6.4.4)</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="sonarr" class="step" data-step="2">
+          <h1>Sonarr</h1>
+          <p class="lede">La comprobación usa lo que acabas de escribir, no lo guardado.</p>
+          <div class="form">
+            <label class="field"><span>URL</span><input type="text" value="http://localhost:8989"></label>
+            <label class="field"><span>API Key</span><input type="password" value="f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1"></label>
+            <div class="probe">
+              <button type="button" class="btn ghost probe-btn">Probar conexión</button>
+              <span class="result bad" data-idx="1">✗ API key rechazada (HTTP 401)</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="amutorrent" class="step" data-step="3">
+          <h1>aMuTorrent</h1>
+          <p class="lede">El gestor de descargas. Sin él no hay nada que seguir en el pipeline.</p>
+          <div class="form">
+            <label class="field"><span>URL</span><input type="text" value="http://localhost:4000"></label>
+            <label class="field"><span>API Key</span><input type="password" value="0f9e8d7c6b5a4938271605f4e3d2c1b0"></label>
+            <div class="grid-2">
+              <label class="field"><span>Usuario</span><input type="text" value="admin"></label>
+              <label class="field"><span>Contraseña</span><input type="password" value="••••••••••"></label>
+            </div>
+            <div class="probe">
+              <button type="button" class="btn ghost probe-btn">Probar conexión</button>
+              <span class="result warn" data-idx="2">⏱ no respondió a tiempo</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="paths" class="step" data-step="4">
+          <h1>Rutas</h1>
+          <p class="lede">Dónde caen las descargas y qué carpetas puede tocar la app.</p>
+          <div class="form">
+            <label class="field"><span>Carpeta descargas aMuTorrent</span><input type="text" value="/mnt/storage-6tb/shared-downloads/amule"></label>
+            <label class="field"><span>Carpeta descargas Torrent</span><input type="text" value="/mnt/storage/downloads/qbittorrent/completed"></label>
+            <label class="field"><span>Raíces permitidas</span><input type="text" value="/mnt/storage, /mnt/storage-6tb"><span class="hint">Separadas por comas.</span></label>
+          </div>
+        </section>
+
+        <section id="advanced" class="step" data-step="5">
+          <h1>Ajustes</h1>
+          <p class="lede">Tiempos y límites del motor. Se aplican al instante salvo el puerto.</p>
+          <div class="form">
+            <div class="grid-2">
+              <label class="field"><span>Intervalo de chequeo (s)</span><input type="text" value="15"></label>
+              <label class="field"><span>Reintentos</span><input type="text" value="3"></label>
+              <label class="field"><span>Espera entre reintentos (s)</span><input type="text" value="2"></label>
+              <label class="field"><span>Timeout de petición (s)</span><input type="text" value="5"></label>
+              <label class="field"><span>Timeout de import (s)</span><input type="text" value="40"></label>
+              <label class="field"><span>Límite de trazabilidad</span><input type="text" value="25"></label>
+            </div>
+            <label class="field"><span>Puerto<span class="badge-restart">Requiere reinicio</span></span><input type="text" value="8000"></label>
+          </div>
+        </section>
+
+        <section id="protect" class="step" data-step="6">
+          <h1>Proteger la app</h1>
+          <p class="lede">Opcional. Sin clave, cualquiera que alcance el puerto puede entrar.</p>
+          <div class="form">
+            <label class="field"><span>Clave de la API</span><input type="password" placeholder="Déjalo vacío para no protegerla"></label>
+            <div class="callout"><span>🛡️</span><span>Este es el último paso que guarda: con la clave definida, el endpoint de primera ejecución responde 403 y el asistente ya no puede escribir.</span></div>
+          </div>
+        </section>
+
+        <section id="review" class="step" data-step="7">
+          <h1>Revisar y entrar</h1>
+          <p class="lede">Resumen de lo guardado. Este paso no escribe nada.</p>
+          <div class="form">
+            <div class="summary">
+              <div class="sum-row"><span class="sum-k">Radarr</span><span class="sum-v">http://localhost:7878</span><span class="result ok">✓ Conectado (6.4.4)</span></div>
+              <div class="sum-row"><span class="sum-k">Sonarr</span><span class="sum-v">http://localhost:8989</span><span class="result bad">✗ API key rechazada (HTTP 401)</span></div>
+              <div class="sum-row"><span class="sum-k">aMuTorrent</span><span class="sum-v">http://localhost:4000</span><span class="result warn">⏱ no respondió a tiempo</span></div>
+              <div class="sum-row"><span class="sum-k">Rutas</span><span class="sum-v">/mnt/storage, /mnt/storage-6tb</span><span class="sum-k">guardado</span></div>
+              <div class="sum-row"><span class="sum-k">Ajustes</span><span class="sum-v">15 s · 3 reintentos · 2 s · 5 s · 40 s · 25</span><span class="sum-k">aplicado</span></div>
+              <div class="sum-row"><span class="sum-k">Puerto</span><span class="sum-v">8000</span><span class="badge-restart">Requiere reinicio</span></div>
+              <div class="sum-row"><span class="sum-k">Protección</span><span class="sum-v">Sin clave de la app</span><span class="sum-k">abierto</span></div>
+            </div>
+          </div>
+          <div class="toast" id="toast" role="status">Mockup: esto abriría la aplicación. No hace nada.</div>
+        </section>
+
+        <footer class="nav">
+          <button type="button" class="btn quiet" id="back" disabled>Atrás</button>
+          <div class="nav-right">
+            <span class="gate" id="gate">Último paso que guarda</span>
+            <button type="button" class="btn primary" id="next">Empezar</button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ Notas de diseño ============ -->
+  <section class="notes">
+    <h3>Notas de diseño — Una cosa a la vez</h3>
+    <ul>
+      <li><b>Optimiza</b> la carga cognitiva: un encabezado, un párrafo corto, los campos de ese paso y un botón. Nunca ves ocho cosas pendientes a la vez.</li>
+      <li><b>Cuesta</b> ocultar el progreso: solo quedan el contador «n de 8» y los puntos, sin lista a la que saltar; corregir algo obliga a retroceder paso a paso con <b>Atrás</b>.</li>
+      <li><b>Cuesta</b> también que la revisión final sea más larga: al no poder saltar, el resumen del paso 8 es el único sitio donde se ven todos los valores juntos.</li>
+      <li><b>Restricción más visible:</b> la de reinicio. En una tarjeta casi vacía, el único badge <b>Requiere reinicio</b> de <b>Puerto</b> no compite con nada y salta a la vista.</li>
+      <li>La restricción de la clave depende solo del texto (contador, aviso bajo el botón y callout del paso 7): sin lista lateral, el copy tiene que trabajar más.</li>
+    </ul>
+  </section>
+
+  <script>
+    const TOTAL = 8;
+    const NEXT_LABEL = ['Empezar', 'Siguiente', 'Siguiente', 'Siguiente', 'Siguiente', 'Siguiente', 'Siguiente', 'Entrar'];
+    const OUTCOMES = [
+      { cls: 'ok', text: '✓ Conectado (6.4.4)' },
+      { cls: 'bad', text: '✗ API key rechazada (HTTP 401)' },
+      { cls: 'warn', text: '⏱ no respondió a tiempo' },
+      { cls: 'bad', text: '⚠ no se pudo conectar' },
+    ];
+    const sections = Array.from(document.querySelectorAll('.step'));
+    const dots = Array.from(document.querySelectorAll('.dot'));
+    const count = document.getElementById('count');
+    const btnNext = document.getElementById('next');
+    const btnBack = document.getElementById('back');
+    const gate = document.getElementById('gate');
+    const toast = document.getElementById('toast');
+    let current = 0;
+
+    function render() {
+      sections.forEach((section, i) => section.classList.toggle('is-active', i === current));
+      dots.forEach((dot, i) => {
+        dot.classList.toggle('done', i < current);
+        dot.classList.toggle('now', i === current);
+      });
+      count.textContent = (current + 1) + ' de ' + TOTAL;
+      btnNext.textContent = NEXT_LABEL[current];
+      gate.classList.toggle('on', current === 6);
+      btnBack.disabled = current === 0;
+      toast.classList.remove('on');
+    }
+
+    btnNext.addEventListener('click', () => {
+      if (current === TOTAL - 1) { toast.classList.add('on'); return; }
+      current += 1;
+      render();
+    });
+    btnBack.addEventListener('click', () => { if (current > 0) { current -= 1; render(); } });
+
+    // "Probar conexión": recorre los cuatro resultados reales que devuelve la API
+    document.querySelectorAll('.probe-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const out = btn.parentElement.querySelector('.result');
+        const next = (Number(out.dataset.idx) + 1) % OUTCOMES.length;
+        out.dataset.idx = next;
+        out.className = 'result ' + OUTCOMES[next].cls;
+        out.textContent = OUTCOMES[next].text;
+      });
+    });
+
+    render();
+  </script>
+</body>
+</html>

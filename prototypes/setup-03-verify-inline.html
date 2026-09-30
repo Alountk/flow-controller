@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Propuesta 3: Validación en línea</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #111113;
+      --bg-elev: #18181b;
+      --bg-elev-2: #1c1c21;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-dim: #71717a;
+      --ok: #22c55e;
+      --ok-dim: #15803d;
+      --bad: #ef4444;
+      --warn: #eab308;
+      --accent: #6366f1;
+      --accent-soft: rgba(99,102,241,0.12);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ---------- Layout: stepper + formulario + panel ---------- */
+    .shell { display: grid; grid-template-columns: 244px minmax(0, 1fr) 300px; min-height: calc(100vh - 156px); }
+
+    /* ---------- Stepper ---------- */
+    .stepper { background: var(--bg-elev); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
+    .brand { font-size: 15px; font-weight: 700; } .brand span { color: var(--accent); } .brand-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .progress-track { height: 4px; background: var(--border); border-radius: 999px; overflow: hidden; } .progress-track span { display: block; height: 100%; width: 12.5%; background: var(--accent); transition: width 0.2s ease; }
+    .progress-text { font-size: 11px; color: var(--text-dim); margin-top: 8px; }
+    .steps { list-style: none; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+    .nav-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: none; border: 1px solid transparent; border-radius: 8px; color: var(--text-dim); font: inherit; font-size: 13px; text-align: left; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+    .nav-item:hover:not(:disabled) { background: var(--bg-elev-2); color: var(--text); } .nav-item:disabled { opacity: 0.45; cursor: not-allowed; }
+    .nav-item.is-current { background: var(--accent-soft); border-color: var(--accent); color: var(--text); } .nav-item.is-done { color: var(--text); }
+    .num { width: 22px; height: 22px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 50%; display: grid; place-items: center; font-size: 11px; }
+    .is-done .num { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); } .is-current .num { background: var(--accent); border-color: var(--accent); color: var(--text); font-weight: 700; }
+    .mark { margin-left: auto; font-size: 12px; color: var(--ok); }
+    .stepper-foot { font-size: 11px; line-height: 1.6; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 14px; }
+
+    /* ---------- Formulario ---------- */
+    .panel { padding: 32px; max-width: 780px; display: flex; flex-direction: column; }
+    .pill { align-self: flex-start; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--warn); background: var(--accent-soft); border: 1px solid var(--border); padding: 4px 10px; border-radius: 999px; margin-bottom: 20px; }
+    .step { display: none; } .step.is-active { display: block; animation: fade 0.18s ease; }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .step h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+    .lede { font-size: 13px; line-height: 1.6; color: var(--text-dim); margin: 8px 0 24px; }
+    .hint { font-size: 12px; line-height: 1.6; color: var(--text-dim); margin-top: 14px; }
+    .field > span.hint { font-weight: 400; margin: 6px 0 0; }
+    .field { display: block; margin-bottom: 16px; } .field > span { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+    input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--text); font: inherit; font-size: 13px; transition: border-color 0.15s, box-shadow 0.15s; }
+    input::placeholder { color: var(--text-dim); }
+    input:hover { border-color: var(--text-dim); } input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } .grid-2 .field { margin-bottom: 0; } .grid-2 + .field { margin-top: 16px; }
+    .btn { font: inherit; font-size: 13px; font-weight: 600; border: 1px solid transparent; border-radius: 8px; padding: 9px 16px; cursor: pointer; transition: background 0.15s, border-color 0.15s, filter 0.15s; }
+    .btn.primary { background: var(--accent); color: var(--text); } .btn.primary:hover { filter: brightness(1.12); } .btn.primary:active { transform: translateY(1px); }
+    .btn.ghost { background: var(--bg-elev-2); border-color: var(--border); color: var(--text); } .btn.ghost:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+    .nav { margin-top: auto; padding-top: 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .nav-right { display: flex; align-items: center; gap: 10px; }
+    .gate { display: none; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); }
+    .gate.on { display: inline-block; } .gate.lock { color: var(--bad); background: var(--accent-soft); } .gate.save { color: var(--warn); background: var(--accent-soft); }
+    .toast { display: none; margin-top: 16px; font-size: 12px; color: var(--ok); background: var(--accent-soft); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; } .toast.on { display: block; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ---------- Resultado en línea y contenido ---------- */
+    .probe-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .result { font-size: 12px; font-weight: 600; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text-dim); }
+    .result.ok { color: var(--ok); border-color: var(--ok-dim); } .result.bad { color: var(--bad); border-color: var(--bad); } .result.warn { color: var(--warn); border-color: var(--warn); }
+    .checklist { list-style: none; display: grid; gap: 12px; }
+    .checklist li { display: flex; gap: 12px; font-size: 13px; line-height: 1.5; color: var(--text-dim); } .checklist b { color: var(--text); font-weight: 600; }
+    .badge-restart { display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--warn); background: var(--accent-soft); border: 1px solid var(--warn); border-radius: 999px; padding: 2px 8px; vertical-align: middle; }
+    .callout { display: flex; gap: 10px; font-size: 12px; line-height: 1.6; background: var(--bg-elev-2); border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 8px; padding: 12px 14px; }
+    .summary { display: grid; gap: 8px; }
+    .sum-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 12px; align-items: center; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; }
+    .sum-k { color: var(--text-dim); font-weight: 600; } .sum-v { overflow-wrap: anywhere; }
+
+    /* ---------- Panel de estado del sistema ---------- */
+    .status { background: var(--bg-elev); border-left: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .status-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+    .status-hint { font-size: 11px; line-height: 1.6; color: var(--text-dim); }
+    .svc-card { background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; transition: border-color 0.15s; }
+    .svc-card.is-current { border-color: var(--accent); }
+    .svc-card.ok { border-color: var(--ok-dim); } .svc-card.bad { border-color: var(--bad); } .svc-card.warn { border-color: var(--warn); }
+    .svc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
+    .svc-url { font-size: 11px; color: var(--text-dim); margin-top: 3px; overflow-wrap: anywhere; } .svc-card .result { display: block; margin-top: 8px; }
+    .sim { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
+    .sim-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+    .sim-opt { text-align: left; font: inherit; font-size: 11px; font-weight: 600; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--text-dim); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+    .sim-opt:hover:not(:disabled) { border-color: var(--accent); color: var(--text); } .sim-opt.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); } .sim-opt:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ---------- Notas de diseño ---------- */
+    .notes { max-width: 900px; margin: 0 auto; padding: 24px 32px 40px; }
+    .notes h3 { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px; }
+    .notes ul { list-style: none; display: grid; gap: 8px; }
+    .notes li { position: relative; padding-left: 18px; font-size: 12px; line-height: 1.6; color: var(--text-dim); }
+    .notes li::before { content: '—'; position: absolute; left: 0; color: var(--accent); }
+    .notes b { color: var(--text); font-weight: 600; }
+    @media (max-width: 1120px) { .shell { grid-template-columns: 244px minmax(0, 1fr); } .status { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--border); } .sim { margin-top: 8px; } }
+    @media (max-width: 860px) { .shell { grid-template-columns: 1fr; } .stepper { border-right: none; border-bottom: 1px solid var(--border); } .steps { flex-direction: row; flex-wrap: wrap; } .nav-item { width: auto; } .panel { padding: 24px; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- ============ Stepper lateral ============ -->
+    <aside class="stepper">
+      <div>
+        <div class="brand">Flow<span>Controller</span></div>
+        <div class="brand-sub">Configuración inicial</div>
+      </div>
+      <div>
+        <div class="progress-track"><span id="bar"></span></div>
+        <div class="progress-text" id="count">Paso 1 de 8</div>
+      </div>
+      <ol class="steps" id="stepList">
+        <li><button type="button" class="nav-item is-current"><span class="num">1</span><span class="lbl">Bienvenida</span><span class="mark"></span></button></li>
+        <li><button type="button" class="nav-item"><span class="num">2</span><span class="lbl">Radarr</span><span class="mark"></span></button></li>
+        <li><button type="button" class="nav-item"><span class="num">3</span><span class="lbl">Sonarr</span><span class="mark"></span></button></li>
+        <li><button type="button" class="nav-item"><span class="num">4</span><span class="lbl">aMuTorrent</span><span class="mark"></span></button></li>
+        <li><button type="button" class="nav-item"><span class="num">5</span><span class="lbl">Rutas</span><span class="mark"></span></button></li>
+        <li><button type="button" class="nav-item"><span class="num">6</span><span class="lbl">Ajustes</span><span class="mark"></span></button></li>
+        <li><button type="button" class="nav-item"><span class="num">7</span><span class="lbl">Proteger la app</span><span class="mark"></span></button></li>
+        <li><button type="button" class="nav-item"><span class="num">8</span><span class="lbl">Revisar y entrar</span><span class="mark"></span></button></li>
+      </ol>
+      <div class="stepper-foot">Sin comprobar la conexión del servicio, el paso no se completa.</div>
+    </aside>
+
+    <!-- ============ Formulario del paso actual ============ -->
+    <main class="panel">
+      <span class="pill">Prototipo — Validación en línea</span>
+
+      <section id="welcome" class="step is-active" data-step="0">
+        <h2>Bienvenida</h2>
+        <p class="lede">Configura Radarr, Sonarr, aMuTorrent, las rutas y la protección de la app. Cada servicio se comprueba antes de dar el siguiente paso.</p>
+        <ul class="checklist">
+          <li><span>🎬</span><span><b>Radarr</b> — URL y clave de la API.</span></li>
+          <li><span>📺</span><span><b>Sonarr</b> — URL y clave de la API.</span></li>
+          <li><span>⬇️</span><span><b>aMuTorrent</b> — URL, clave, usuario y contraseña.</span></li>
+          <li><span>📁</span><span><b>Rutas</b> — carpetas de descarga y raíces permitidas.</span></li>
+          <li><span>🛡️</span><span><b>Protección</b> — clave de la app y tiempos del motor.</span></li>
+        </ul>
+        <p class="hint">El panel de la derecha mantiene el estado de los tres servicios mientras avanzas.</p>
+      </section>
+
+      <section id="radarr" class="step" data-step="1">
+        <h2>Radarr</h2>
+        <p class="lede">Escribe la URL y la clave, comprueba y solo entonces continúa.</p>
+        <label class="field"><span>URL</span><input type="text" value="http://localhost:7878"></label>
+        <label class="field"><span>API Key</span><input type="password" value="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"></label>
+        <div class="probe-row"><button type="button" class="btn ghost probe" data-probe="radarr">Probar conexión</button><span class="result" data-result="radarr">Sin comprobar</span></div>
+      </section>
+
+      <section id="sonarr" class="step" data-step="2">
+        <h2>Sonarr</h2>
+        <p class="lede">Una API key incorrecta se reporta como tal, no como un servicio caído.</p>
+        <label class="field"><span>URL</span><input type="text" value="http://localhost:8989"></label>
+        <label class="field"><span>API Key</span><input type="password" value="f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1"></label>
+        <div class="probe-row"><button type="button" class="btn ghost probe" data-probe="sonarr">Probar conexión</button><span class="result" data-result="sonarr">Sin comprobar</span></div>
+      </section>
+
+      <section id="amutorrent" class="step" data-step="3">
+        <h2>aMuTorrent</h2>
+        <p class="lede">Gestor de descargas. Si no responde, el resto del flujo no podrá avanzar.</p>
+        <label class="field"><span>URL</span><input type="text" value="http://localhost:4000"></label>
+        <label class="field"><span>API Key</span><input type="password" value="0f9e8d7c6b5a4938271605f4e3d2c1b0"></label>
+        <label class="field"><span>Usuario</span><input type="text" value="admin"></label>
+        <label class="field"><span>Contraseña</span><input type="password" value="••••••••••"></label>
+        <div class="probe-row"><button type="button" class="btn ghost probe" data-probe="amutorrent">Probar conexión</button><span class="result" data-result="amutorrent">Sin comprobar</span></div>
+      </section>
+
+      <section id="paths" class="step" data-step="4">
+        <h2>Rutas</h2>
+        <p class="lede">Dónde caen las descargas y qué carpetas puede tocar la app.</p>
+        <label class="field"><span>Carpeta descargas aMuTorrent</span><input type="text" value="/mnt/storage-6tb/shared-downloads/amule"></label>
+        <label class="field"><span>Carpeta descargas Torrent</span><input type="text" value="/mnt/storage/downloads/qbittorrent/completed"></label>
+        <label class="field"><span>Raíces permitidas</span><input type="text" value="/mnt/storage, /mnt/storage-6tb"><span class="hint">Separadas por comas. La app no trabajará fuera de estas raíces.</span></label>
+      </section>
+
+      <section id="advanced" class="step" data-step="5">
+        <h2>Ajustes</h2>
+        <p class="lede">Tiempos y límites del motor. Se aplican al instante, salvo el puerto.</p>
+        <div class="grid-2">
+          <label class="field"><span>Intervalo de chequeo (s)</span><input type="text" value="15"></label>
+          <label class="field"><span>Reintentos</span><input type="text" value="3"></label>
+          <label class="field"><span>Espera entre reintentos (s)</span><input type="text" value="2"></label>
+          <label class="field"><span>Timeout de petición (s)</span><input type="text" value="5"></label>
+          <label class="field"><span>Timeout de import (s)</span><input type="text" value="40"></label>
+          <label class="field"><span>Límite de trazabilidad</span><input type="text" value="25"></label>
+        </div>
+        <label class="field"><span>Puerto<span class="badge-restart">Requiere reinicio</span></span><input type="text" value="8000"></label>
+      </section>
+
+      <section id="protect" class="step" data-step="6">
+        <h2>Proteger la app</h2>
+        <p class="lede">Última escritura del asistente.</p>
+        <label class="field"><span>Clave de la API (opcional)</span><input type="password" placeholder="Déjalo vacío para no protegerla"></label>
+        <div class="callout"><span>🛡️</span><span>Opcional. Sin clave, cualquiera que alcance el puerto puede entrar. Con la clave definida, el endpoint de primera ejecución responde 403: el paso 8 ya no escribe nada.</span></div>
+      </section>
+
+      <section id="review" class="step" data-step="7">
+        <h2>Revisar y entrar</h2>
+        <p class="lede">Estado final de servicios, rutas y ajustes. Este paso no escribe nada.</p>
+        <div class="summary">
+          <div class="sum-row"><span class="sum-k">Radarr</span><span class="sum-v">http://localhost:7878</span><span class="result" data-review="radarr">Sin comprobar</span></div>
+          <div class="sum-row"><span class="sum-k">Sonarr</span><span class="sum-v">http://localhost:8989</span><span class="result" data-review="sonarr">Sin comprobar</span></div>
+          <div class="sum-row"><span class="sum-k">aMuTorrent</span><span class="sum-v">http://localhost:4000</span><span class="result" data-review="amutorrent">Sin comprobar</span></div>
+          <div class="sum-row"><span class="sum-k">Raíces permitidas</span><span class="sum-v">/mnt/storage, /mnt/storage-6tb</span><span class="sum-k">guardado</span></div>
+          <div class="sum-row"><span class="sum-k">Ajustes</span><span class="sum-v">15 s · 3 reintentos · 2 s · 5 s · 40 s · 25</span><span class="sum-k">aplicado</span></div>
+          <div class="sum-row"><span class="sum-k">Puerto</span><span class="sum-v">8000</span><span class="badge-restart">Requiere reinicio</span></div>
+          <div class="sum-row"><span class="sum-k">Protección</span><span class="sum-v">Sin clave de la app</span><span class="sum-k">abierto</span></div>
+        </div>
+        <div class="toast" id="toast" role="status">Mockup: esto abriría la aplicación. No hace nada.</div>
+      </section>
+
+      <footer class="nav">
+        <button type="button" class="btn ghost" id="back" disabled>Atrás</button>
+        <div class="nav-right">
+          <span class="gate" id="gate"></span>
+          <button type="button" class="btn primary" id="next">Empezar</button>
+        </div>
+      </footer>
+    </main>
+
+    <!-- ============ Panel de estado ============ -->
+    <aside class="status">
+      <div class="status-title">Estado del sistema</div>
+      <div class="status-hint">Se comprueba contra la URL escrita, no contra la configuración guardada.</div>
+      <article class="svc-card" data-card="radarr">
+        <div class="svc-head"><span>Radarr</span></div><div class="svc-url">http://localhost:7878</div><div class="result" data-state="radarr">Sin comprobar</div>
+      </article>
+      <article class="svc-card" data-card="sonarr">
+        <div class="svc-head"><span>Sonarr</span></div><div class="svc-url">http://localhost:8989</div><div class="result" data-state="sonarr">Sin comprobar</div>
+      </article>
+      <article class="svc-card" data-card="amutorrent">
+        <div class="svc-head"><span>aMuTorrent</span></div><div class="svc-url">http://localhost:4000</div><div class="result" data-state="amutorrent">Sin comprobar</div>
+      </article>
+      <div class="sim">
+        <div class="sim-title">Estados documentados</div>
+        <button type="button" class="sim-opt" data-out="0">✓ Conectado (6.4.4)</button>
+        <button type="button" class="sim-opt" data-out="1">✗ API key rechazada (HTTP 401)</button>
+        <button type="button" class="sim-opt" data-out="2">⏱ no respondió a tiempo</button>
+        <button type="button" class="sim-opt" data-out="3">⚠ no se pudo conectar</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ============ Notas de diseño ============ -->
+  <section class="notes">
+    <h3>Notas de diseño — Validación en línea</h3>
+    <ul>
+      <li><b>Optimiza</b> responder «¿esta URL es correcta?» antes de comprometerla: resultado en línea bajo los campos más un panel por servicio que nunca deja avanzar a ciegas.</li>
+      <li><b>Cuesta</b> fricción: en los pasos de servicio, <b>Siguiente</b> está bloqueado hasta pulsar <b>Probar conexión</b> — un clic obligatorio por servicio a cambio de no guardar basura.</li>
+      <li><b>Cuesta</b> más cromo y más estados que mantener: tres columnas, tarjeta de servicio, resultado en línea y resumen deben decir lo mismo; por debajo de 1120 px el panel baja y pierde presencia.</li>
+      <li>Los cuatro resultados reales de la API están en el marcado —uno activo, los otros conmutables desde <b>Estados documentados</b>— para reseñar el caso de error sin esperar a un backend caído.</li>
+      <li><b>Restricción más visible:</b> la del paso 7. Con los tres servicios ya verificados en el panel, el pie declara «Último paso que guarda» y el paso 8 queda como solo lectura (403 al definir la clave).</li>
+    </ul>
+  </section>
+
+  <script>
+    const TOTAL = 8;
+    const LABELS = ['Empezar', 'Siguiente', 'Siguiente', 'Siguiente', 'Siguiente', 'Siguiente', 'Siguiente', 'Entrar'];
+    const SERVICE = { 1: 'radarr', 2: 'sonarr', 3: 'amutorrent' };
+    // Los cuatro resultados que la API distingue entre sí
+    const OUTCOMES = [
+      { cls: 'ok', text: '✓ Conectado (6.4.4)' },
+      { cls: 'bad', text: '✗ API key rechazada (HTTP 401)' },
+      { cls: 'warn', text: '⏱ no respondió a tiempo' },
+      { cls: 'bad', text: '⚠ no se pudo conectar' },
+    ];
+    const state = { radarr: 0, sonarr: 1, amutorrent: 2 };
+    const probed = { radarr: false, sonarr: false, amutorrent: false };
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => Array.from(document.querySelectorAll(s));
+    const sections = $$('.step'), navItems = $$('.nav-item'), simOpts = $$('.sim-opt');
+    const bar = $('#bar'), count = $('#count'), btnNext = $('#next'), btnBack = $('#back'), gate = $('#gate'), toast = $('#toast');
+    let current = 0, reached = 0;
+
+    function paint(key) {
+      const on = probed[key], out = OUTCOMES[state[key]];
+      const cls = 'result' + (on ? ' ' + out.cls : ''), txt = on ? out.text : 'Sin comprobar';
+      ['[data-result="' + key + '"]', '[data-review="' + key + '"]', '[data-state="' + key + '"]'].forEach((sel) => {
+        const el = $(sel); el.className = cls; el.textContent = txt;
+      });
+      $('[data-card="' + key + '"]').className = 'svc-card' + (on ? ' ' + out.cls : '');
+    }
+
+    function render() {
+      const svc = SERVICE[current];
+      sections.forEach((s, i) => s.classList.toggle('is-active', i === current));
+      navItems.forEach((b, i) => {
+        b.classList.toggle('is-current', i === current);
+        b.classList.toggle('is-done', i < current);
+        b.querySelector('.mark').textContent = i < current ? '✓' : '';
+        b.disabled = i > reached; // solo se puede volver, no saltar hacia delante
+      });
+      $$('.svc-card').forEach((c) => c.classList.toggle('is-current', c.dataset.card === svc));
+      simOpts.forEach((o, i) => { o.disabled = !svc; o.classList.toggle('is-on', Boolean(svc) && i === state[svc]); });
+      const blocked = Boolean(svc) && !probed[svc];
+      btnNext.disabled = blocked;
+      const text = blocked ? 'Comprueba la conexión' : current === 6 ? 'Último paso que guarda' : '';
+      gate.className = 'gate' + (text ? ' on ' + (blocked ? 'lock' : 'save') : '');
+      gate.textContent = text;
+      bar.style.width = ((current + 1) / TOTAL) * 100 + '%';
+      count.textContent = 'Paso ' + (current + 1) + ' de ' + TOTAL;
+      btnNext.textContent = LABELS[current];
+      btnBack.disabled = current === 0;
+      toast.classList.remove('on');
+    }
+
+    function goTo(index) {
+      if (index < 0 || index > reached) return;
+      current = index;
+      render();
+    }
+
+    btnNext.addEventListener('click', () => {
+      if (current === TOTAL - 1) { toast.classList.add('on'); return; }
+      current += 1;
+      reached = Math.max(reached, current);
+      render();
+    });
+    btnBack.addEventListener('click', () => goTo(current - 1));
+    navItems.forEach((b, i) => b.addEventListener('click', () => goTo(i)));
+
+    $$('.probe').forEach((btn) => btn.addEventListener('click', () => {
+      const key = btn.dataset.probe, result = $('[data-result="' + key + '"]');
+      result.className = 'result';
+      result.textContent = '… comprobando';
+      btn.disabled = true;
+      setTimeout(() => { btn.disabled = false; probed[key] = true; paint(key); render(); }, 450);
+    }));
+
+    simOpts.forEach((opt) => opt.addEventListener('click', () => {
+      const svc = SERVICE[current];
+      if (!svc) return;
+      state[svc] = Number(opt.dataset.out);
+      probed[svc] = true;
+      paint(svc);
+      render();
+    }));
+
+    Object.keys(probed).forEach(paint);
+    render();
+  </script>
+</body>
+</html>
