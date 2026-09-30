@@ -103,13 +103,15 @@ async function saveSettings(data: Settings): Promise<SaveSettingsResponse> {
   return res.json() as Promise<SaveSettingsResponse>
 }
 
-function Field({
+export function Field({
   label,
   value,
   onChange,
   type = 'text',
   restart = false,
   placeholder,
+  ariaLabel,
+  disabled = false,
 }: {
   label: string
   value: string | number | boolean
@@ -117,6 +119,9 @@ function Field({
   type?: string
   restart?: boolean
   placeholder?: string
+  /** Accessible name when the visible label is shorter (e.g. "URL" on the Radarr step). */
+  ariaLabel?: string
+  disabled?: boolean
 }) {
   return (
     <div className="settings-field">
@@ -137,6 +142,8 @@ function Field({
           type={type}
           value={String(value)}
           placeholder={placeholder}
+          aria-label={ariaLabel ?? label}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         />
       )}

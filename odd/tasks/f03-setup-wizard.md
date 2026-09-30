@@ -86,12 +86,23 @@ PR A se sostiene solo: la página *Configuración* gana el "probar lo que estoy 
       lectura (hoy devuelve `ok: true` igualmente).
 - [x] T3 — Implementado en `routes/settings.py`.
 - [x] T4 — `pytest -q` → **601 passed** (era 591) · `tests_static` 8 · pyflakes limpio.
-- [ ] T5 — PR A → merge.
-- [ ] T6 — Rutas unificadas + test de la unión.
-- [ ] T7 — **RED** frontend: paso a paso, guardado por paso, prueba con candidato.
-- [ ] T8 — El wizard.
-- [ ] T9 — Reescribir las 3 pruebas fijadas + añadir las nuevas.
-- [ ] T10 — Verificación completa + docs + PR B.
+- [x] T5 — **PR #89** (`5753fbb`, merge `7a59534`) → backend en `main`.
+- [x] T6 — **Retirado del alcance**, con razón: el wizard **no es una ruta** (sustituye a la
+      pantalla de primer arranque tras el mismo gate), así que no hay entrada nueva que añadir.
+      La duplicación `Page`/`PAGE_PATHS` (`usePageRoute.ts` vs `Sidebar.tsx`, sin ningún test
+      que fije la unión) es un defecto latente **real**, pero meterlo en un PR de feature es
+      exactamente el trabajo no pedido que evitamos en B-03. Va al `BACKLOG.md` como ítem
+      aparte.
+- [x] T7 — **RED** frontend: `11 failed | 2 passed` antes de implementar — los tres tests de
+      pantalla única y los de navegación/guardado/sondeo no encontraban `Empezar`/`Atrás`.
+- [x] T8 — El wizard, **dirección (d) focus card** (cambio del usuario tras ver los mockups).
+      `canEnter = arrConfigured` con la regla *al menos uno de Radarr/Sonarr*; aMuTorrent
+      opcional. RED de la regla demostrada poniendo `canEnter = true` → el test
+      *disables Entrar until Radarr or Sonarr is configured* falla.
+- [x] T9 — 3 reescritas (cada servicio en su paso · clave en el paso 7 · un POST por paso) +
+      2 de gate (ninguno configurado → bloqueado · **solo Radarr** → desbloqueado). Las 2 del
+      gate original quedan **verbatim**. 13 → 15 tests.
+- [ ] T10 — Docs, commit y PR.
 
 ## Criterios de aceptación
 - Un `POST /api/setup` con `paths.allowed_roots` los persiste (hoy se descartan).
@@ -112,11 +123,11 @@ Runtime en vivo: **N/A** — sin arr ni volumen real; los tres huecos se demuest
 Un commit por PR; A solo toca `backend/routes/settings.py`, `backend/clients.py` y tests.
 
 ## Progreso
-- [x] T1-T4
-- [ ] T5-T10
+- [x] T1-T9
+- [ ] T10 — docs, commit y PR.
 
 ## Siguiente paso
-T2: RED del backend.
+T7-T10: la parte 2 (frontend).
 
 ## Evidencia de T2-T4 (parte 1, backend)
 
@@ -129,3 +140,67 @@ T2: RED del backend.
 - Los 2 que ya pasaban eran las garantías de no-regresión: que un cuerpo solo de `services`
   siga reportando `restart_required == []` (contrato que fija `tests_routes.py`) y que el
   `GET /api/services/test` siga sondeando lo guardado.
+
+## Dirección elegida: **(d) focus card** — decidida por el usuario **tras ver los prototipos**
+
+**Corrección de dirección.** El usuario eligió primero (c) *antes* de poder ver los mockups, y
+tras desplegarlos cambió a **(d) focus card**. Se descarta la columna izquierda de `setup-01`
+(já no hay lista de pasos ni navegación por salto) y se **mantienen** el guardado por paso, el
+sondeo en línea y el mapeo de los cuatro `error_kind`, que son independientes del diseño.
+
+Sobre las tres variantas de `prototypes/setup-0*.html`, el planteamiento original era **(c)**: la
+**estructura de `setup-01`** (stepper lateral, 8 pasos, progreso, navegación hacia atrás) con la
+**validación en línea de `setup-03`** (el resultado de *Probar conexión* bajo cada campo de
+servicio), **sin** el panel persistente de `setup-03` — que es lo más frágil de esa variante
+(tres columnas, y el panel se cae por debajo de 1120px).
+
+Concreta en tres reglas:
+
+1. Stepper lateral con los 8 pasos, estado hecho/actual/pendiente, navegación libre hacia los
+   ya completados, barra de progreso.
+2. En cada paso de servicio, el resultado del *probe* **junto al campo**, con uno de los cuatro
+   estados reales de la API: `✓ Conectado (vX)` · `✗ API key rechazada (HTTP 401)` ·
+   `⏱ no respondió a tiempo` · `⚠ no se pudo conectar`.
+3. **El probe es disuasorio, no una pared**: `Siguiente` queda habilitado aunque falle (un
+   servicio puede estar reiniciándose), pero el paso queda marcado *sin verificar* y el paso de
+   resumen los lista. Bloquear a mitad de instalación por un arr caído sería peor que dejar
+   entrar con una URL a medias.
+
+## Peligro operativo (ya documentado arriba, se reitera para la implementación)
+
+- **No invalidar `['setup']` hasta `onDone`**: `needs_setup` pasa a `false` en cuanto un
+  servicio tiene URL+clave, y el gate de `App` es exactamente esa bandera → invalidarla
+  desmonta el wizard a mitad de recorrido.
+- **Tras guardar la clave de la app (paso 7), `rememberApiKey` debe ejecutarse en ese momento**,
+  no al final: cualquier llamada posterior necesita `X-Api-Key` o un 401 manda a `AuthGate`.
+- El paso 8 **no escribe nada** (por eso la clave va en el 7).
+
+## Tamaño esperado
+~450 líneas para T7-T10 → **por encima de 400**. Medir al terminar y preguntar si toca partirlo
+(`ask-on-risk`) o si se acepta `size:exception`.
+
+## T10 — Presupuesto: `size:exception` concedido por el usuario
+
+**1728 líneas autoradas** (1486 añadidas + 219 borradas, incluidos `BACKLOG.md` y este documento)
+contra un presupuesto de ~400. El corte honesto que manda la regla no produce ninguna pieza que
+funcione por separado:
+
+| Corte | Por qué no sirve |
+|---|---|
+| API (`saveSetupStep`/`probeService`) aparte, UI después | `runSetup` lo usa el formulario actual: quitarlo en A **rompe** lo que hay; no quitarlo deja las funciones nuevas como **código muerto** |
+| UI en *shell* + *cuerpo de pasos* | un shell sin cuerpos es una pantalla rota — no es medio producto |
+| Componente aparte, tests aparte | los tests van con el código que verifican |
+| Subcomponente a otro fichero | mueve líneas entre archivos, no reduce la superficie de revisión |
+
+El wizard **es una unidad**: 8 pasos en un componente (679), su CSS (350) y 15 tests (519).
+
+### Verificación final
+- `npx tsc -b --noEmit` → sin errores · `npm run lint` → limpio
+- `npm test` → **33 ficheros / 235 tests** (eran 225)
+- `npx eslint src/ --format json` → **0 errores, 0 warnings, 80 ficheros**
+- `git status --short` → **cero ficheros de `backend/`**
+
+### Corrección de dirección (registrada)
+El usuario eligió primero (c) híbrida *antes* de poder ver los mockups y cambió a **(d) focus
+card** tras desplegarlos. Se descartó la columna de pasos de `setup-01`; se mantuvieron el
+guardado por paso, el sondeo en línea y el mapeo de `error_kind`, que no dependen del diseño.

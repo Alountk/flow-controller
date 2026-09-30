@@ -156,6 +156,24 @@ Y `RESTART_REQUIRED_FIELDS` pasa a lo que **genuinamente** no puede aplicarse en
 `security.api_key` ya se leía en vivo (su propio docstring lo dice) y los servicios ahora
 también — la UI dejaba de mentir en una dirección para seguir mintiendo en la otra.
 
+**F-03, parte 2 (frontend)** — dirección **elegida por el usuario tras ver los tres prototipos**:
+**focus card** (`setup-02`), no el híbrido que se había propuesto antes de desplegar. Tarjeta
+centrada de 520px, contador `n de 8` + puntos, **sin lista de pasos** y sin salto: solo
+`Atrás`/`Siguiente`. Coste asumido — el progreso no se puede recorrer, hay que retroceder.
+
+**Regla de validación (decisión del usuario):** **Radarr y Sonarr obligatorios, al menos uno de
+los dos**; **aMuTorrent opcional** (paso rotulado `aMuTorrent (opcional)`). El gate vive en el
+paso de resumen: `Entrar` exige URL + clave en Radarr o en Sonarr. Avanzar por los pasos de
+servicio **no** está bloqueado — un servicio puede estar reiniciándose y una instalación solo de
+películas o solo de series es válida.
+
+**Aplazado a un ciclo futuro (pedido, no olvidado): varias instancias de Radarr/Sonarr.** El
+esquema actual es `services.radarr` / `services.sonarr` **unitario**, así que admite una URL por
+servicio. Soportar varias toca `settings.py` (esquema), `config.SERVICES` (lista con clave por
+instancia), `find_service`/`configured_services` (que hoy filtran por `key` fijo), el bloque de
+servicios de la UI y la selección de fuente en toda la app (`source=radarr|sonarr`). Es una
+migración de esquema, no un ajuste de UI — de ahí que vaya aparte.
+
 **F-03, parte 1 (backend)** — rama `feat/setup-wizard-backend`. Tres huecos entre
 `POST /api/setup` y un wizard real:
 
