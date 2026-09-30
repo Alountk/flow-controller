@@ -84,6 +84,12 @@ status_cache: dict = {
 file_queue: list[dict] = []
 queue_lock = asyncio.Lock()
 queue_consumer_task: asyncio.Task | None = None
+# True while a `_consume_queue` task is meant to be running. The check and the
+# flip live under `queue_lock`, which is the same lock the consumer takes to
+# decide it has drained — so neither side can miss the other. The task handle is
+# consulted too, so a consumer that died without clearing the flag does not
+# wedge every later add.
+consumer_active: bool = False
 
 
 # ── HTTP session ────────────────────────────────────────────────────────────

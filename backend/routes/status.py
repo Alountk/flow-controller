@@ -107,10 +107,29 @@ async def refresh_status(_key: str = Depends(verify_api_key)):
     return status_cache
 
 
+# One page-load costs 9 outbound HTTP calls (4 per arr plus the qBittorrent
+# list) and the frontend polls this every 15 s *per open tab* — five tabs were
+# forty-five calls every fifteen seconds against three LAN services that do not
+# change that fast. A shared TTL shorter than the poll makes the cost depend on
+# the window, not on how many tabs are open: one fan-out per 10 s, period.
+#
+# `build_traces` returns [] both for an idle pipeline and for a transport
+# failure, so an empty result cannot be told apart and is not special-cased.
+# What bounds a bad cache is the TTL itself: at most 10 s of staleness.
+_TRACE_TTL = 10.0
+_trace_cache: tuple[float, list[dict]] | None = None
+
+
 @router.get("/api/trace")
 async def get_trace(_key: str = Depends(verify_api_key)):
-    async with http_session() as session:
-        traces = await build_traces(session)
+    global _trace_cache
+    cached = _trace_cache
+    if cached and time.time() - cached[0] < _TRACE_TTL:
+        traces = cached[1]
+    else:
+        async with http_session() as session:
+            traces = await build_traces(session)
+        _trace_cache = (time.time(), traces)
     summary = {
         "downloading": sum(1 for t in traces if t["stage"] == "downloading"),
         "downloaded": sum(1 for t in traces if t["stage"] == "downloaded"),

@@ -128,11 +128,16 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
 | F-02a ✅ | `await asyncio.to_thread(...)` en `routes_mixer.py` (2 × `subprocess.run(ffprobe, timeout=30)` por petición → hasta **60 s** en el loop) y en `file_rename` / `file_delete` / `file_copy` de `routes/files.py` | Crítica |
 | F-02b ✅ | Offload del `os.walk` + scoring O(ficheros×títulos): extraído a `_score_target()` y `await asyncio.to_thread(...)` en `routes/wanted.py` | Alta |
 | F-02c ✅ | `state.http_session()`: **una sola `ClientSession` + `TCPConnector(limit=100, limit_per_host=30)`** compartida bajo el lifespan. Las **28 llamadas** `aiohttp.ClientSession()` pasan al seam; las 2 de WebSocket (con `cookie_jar` propio) se quedan privadas a propósito | Alta |
-| F-02d | TTL corto (5-10 s) en `/api/trace` o en `fetch_qbit_torrents` → baja el fan-out 3-6× | Media |
-| F-02e | Single-flight en el consumidor de la cola de ficheros (`routes/files.py:320`): hoy N adds → N copias concurrentes | Media |
+| F-02d ✅ | TTL de **10 s** en `/api/trace` (antes: **9 llamadas por sondeo, cada 15 s, por pestaña**). Caché compartido → el coste depende de la ventana, no del número de pestañas | Media |
+| F-02e ✅ | Single-flight en el consumidor: `state.consumer_active` + `task.done()`, **ambas bajo `queue_lock`**. Antes cada `add` lanzaba un consumidor y **N copias corrían a la vez**, contradiciendo el docstring — y pisaban la referencia GC | Media |
 | F-02f | Mover ~10 llamadas síncronas a sqlite detrás de `to_thread` (están en la ruta caliente de `/api/wanted`) | Media |
 | F-02g | Log append-only en vez de leer y reescribir `logs.json` completo en cada WARNING (`state.py:28-40`) | Baja |
 | F-02h | `config.SERVICES` se congela en el import: tras guardar settings hay que reconstruirlo (relacionado con F-03) | Baja |
+
+**F-02d y F-02e hechas** — rama `perf/trace-ttl-and-queue-singleflight`. Dos cosas que no son
+solo "rendimiento": el consumidor de la cola **no era secuencial** (varias copias a la vez) y
+`/api/trace` se pagaba entero por cada pestaña. Ambas fuera de alcance y anotadas: la colisión
+de `op.id` en el mismo milisegundo y el tope de 50 que solo poda terminados.
 
 **F-02c hecha** — rama `perf/shared-http-session`. El seam vive en `state.http_session()`, no
 en `app.py`: las rutas no pueden importar `app` sin crear un ciclo. **Bajo el lifespan** (producción,
