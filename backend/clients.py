@@ -1,3 +1,4 @@
+import config
 import asyncio
 import json
 import logging
@@ -13,11 +14,8 @@ from config import (
     AMUTORRENT_USER,
     EXPECTED_CATEGORY,
     _AMU_WS_COMPLETE,
-    MAX_RETRIES,
     QBIT_COMPLETED,
     QBIT_DOWNLOADING,
-    REQUEST_TIMEOUT,
-    RETRY_DELAY,
 )
 
 log = logging.getLogger("flow-controller")
@@ -47,9 +45,9 @@ async def check_arr(session: aiohttp.ClientSession, service: dict) -> tuple[str,
     headers = arr_headers(service["api_key"])
     endpoint = f"{url}/api/v3/system/status"
     last_error = "sin respuesta"
-    for attempt in range(1, MAX_RETRIES + 1):
+    for attempt in range(1, config.MAX_RETRIES + 1):
         try:
-            timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+            timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
             async with session.get(endpoint, headers=headers, timeout=timeout) as resp:
                 if resp.status in AUTH_STATUSES:
                     # Up but unusable. Calling this "online" sent the user to
@@ -63,14 +61,14 @@ async def check_arr(session: aiohttp.ClientSession, service: dict) -> tuple[str,
             last_error = "Timeout"
         except aiohttp.ClientError as exc:
             last_error = type(exc).__name__
-        if attempt < MAX_RETRIES:
-            await asyncio.sleep(RETRY_DELAY)
-    return "offline", f"Fallaron {MAX_RETRIES} intentos ({last_error})", {}
+        if attempt < config.MAX_RETRIES:
+            await asyncio.sleep(config.RETRY_DELAY)
+    return "offline", f"Fallaron {config.MAX_RETRIES} intentos ({last_error})", {}
 
 
 async def fetch_qbit_meta(session: aiohttp.ClientSession, service: dict) -> dict:
     headers = qbit_headers(service["api_key"])
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
     meta: dict = {}
     try:
         async with session.get(f"{service['url']}/api/v2/app/version", headers=headers, timeout=timeout) as resp:
@@ -101,9 +99,9 @@ async def check_qbit(session: aiohttp.ClientSession, service: dict) -> tuple[str
     headers = qbit_headers(service["api_key"])
     endpoint = f"{url}/api/v2/app/version"
     last_error = "sin respuesta"
-    for attempt in range(1, MAX_RETRIES + 1):
+    for attempt in range(1, config.MAX_RETRIES + 1):
         try:
-            timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+            timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
             async with session.get(endpoint, headers=headers, timeout=timeout) as resp:
                 if resp.status in AUTH_STATUSES:
                     return "misconfigured", f"API key rechazada (HTTP {resp.status})", {}
@@ -115,9 +113,9 @@ async def check_qbit(session: aiohttp.ClientSession, service: dict) -> tuple[str
             last_error = "Timeout"
         except aiohttp.ClientError as exc:
             last_error = type(exc).__name__
-        if attempt < MAX_RETRIES:
-            await asyncio.sleep(RETRY_DELAY)
-    return "offline", f"Fallaron {MAX_RETRIES} intentos ({last_error})", {}
+        if attempt < config.MAX_RETRIES:
+            await asyncio.sleep(config.RETRY_DELAY)
+    return "offline", f"Fallaron {config.MAX_RETRIES} intentos ({last_error})", {}
 
 
 async def check_service(session: aiohttp.ClientSession, service: dict) -> tuple[str, str, dict]:
@@ -152,7 +150,7 @@ async def test_service_connection(session: aiohttp.ClientSession, service: dict)
 
     try:
         async with session.get(
-            endpoint, headers=headers, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+            endpoint, headers=headers, timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
         ) as resp:
             if resp.status != 200:
                 return {**result, "ok": False, **_failure_detail(service, status=resp.status)}
@@ -187,7 +185,7 @@ def _failure_detail(service: dict, **kwargs) -> dict:
 async def arr_command(session: aiohttp.ClientSession, service: dict, body: dict) -> dict:
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.post(
             f"{service['url']}/api/v3/command", headers=headers, json=body, timeout=timeout
@@ -212,7 +210,7 @@ async def amu_ws_login(session: aiohttp.ClientSession) -> tuple[bool, str]:
                 "rememberMe": True,
             },
             headers={"Referer": AMUTORRENT_URL},
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             data = await resp.json(content_type=None)
             if data.get("success"):
@@ -364,7 +362,7 @@ async def arr_delete_queue(
         f"?removeFromClient={'true' if remove_from_client else 'false'}"
         f"&blocklist={'true' if blocklist else 'false'}"
     )
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.delete(url, headers=headers, timeout=timeout) as resp:
             if resp.status in (200, 204):
@@ -378,7 +376,7 @@ async def arr_delete_queue(
 
 async def arr_remote_paths(session: aiohttp.ClientSession, service: dict) -> list[dict]:
     headers = arr_headers(service["api_key"])
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.get(
             f"{service['url']}/api/v3/remotepathmapping",
@@ -402,7 +400,7 @@ async def arr_add_remote_path(
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
     body = {"host": host, "remotePath": remote_path, "localPath": local_path}
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.post(
             f"{service['url']}/api/v3/remotepathmapping",
@@ -424,7 +422,7 @@ async def arr_series_root_folder(session: aiohttp.ClientSession, service: dict, 
         async with session.get(
             f"{service['url']}/api/v3/series/{series_id}",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return ""
@@ -440,7 +438,7 @@ async def arr_episode_season(session: aiohttp.ClientSession, service: dict, epis
         async with session.get(
             f"{service['url']}/api/v3/episode/{episode_id}",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return None
@@ -456,7 +454,7 @@ async def arr_movie_root_folder(session: aiohttp.ClientSession, service: dict, m
         async with session.get(
             f"{service['url']}/api/v3/movie/{movie_id}",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return ""
@@ -480,7 +478,7 @@ async def arr_episode_metadata(
         async with session.get(
             f"{service['url']}/api/v3/episode/{episode_id}",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return {}
@@ -504,7 +502,7 @@ async def arr_series_metadata(
         async with session.get(
             f"{service['url']}/api/v3/series/{series_id}",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return {}
@@ -527,7 +525,7 @@ async def arr_movie_metadata(
         async with session.get(
             f"{service['url']}/api/v3/movie/{movie_id}",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return {}
@@ -565,7 +563,7 @@ async def arr_import_status(
             async with session.get(
                 f"{service['url']}/api/v3/movie/{movie_id}",
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json(content_type=None)
@@ -579,7 +577,7 @@ async def arr_import_status(
                     f"{service['url']}/api/v3/rename",
                     params={"movieId": movie_id},
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                    timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
                 ) as resp:
                     if resp.status == 200:
                         renames = await resp.json(content_type=None)
@@ -599,7 +597,7 @@ async def arr_import_status(
                     f"{service['url']}/api/v3/episode",
                     params={"seriesId": series_id, "seasonNumber": season_number},
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                    timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
                 ) as resp:
                     if resp.status == 200:
                         episodes = await resp.json(content_type=None)
@@ -614,7 +612,7 @@ async def arr_import_status(
                     f"{service['url']}/api/v3/rename",
                     params={"seriesId": series_id, "seasonNumber": season_number},
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                    timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
                 ) as resp:
                     if resp.status == 200:
                         renames = await resp.json(content_type=None)
@@ -662,7 +660,7 @@ async def arr_has_file(
         async with session.get(
             endpoint,
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return None
@@ -685,7 +683,7 @@ async def fetch_arr_all_series(session: aiohttp.ClientSession, service: dict) ->
         async with session.get(
             f"{service['url']}/api/v3/series",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return {}
@@ -701,7 +699,7 @@ async def fetch_arr_all_movies(session: aiohttp.ClientSession, service: dict) ->
         async with session.get(
             f"{service['url']}/api/v3/movie",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return {}
@@ -717,7 +715,7 @@ async def fetch_arr_grabbed(session: aiohttp.ClientSession, service: dict, limit
         f"{service['url']}/api/v3/history"
         f"?pageSize={limit}&sortKey=date&sortDirection=descending&eventType=1"
     )
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.get(url, headers=headers, timeout=timeout) as resp:
             if resp.status != 200:
@@ -731,7 +729,7 @@ async def fetch_arr_grabbed(session: aiohttp.ClientSession, service: dict, limit
 async def fetch_arr_queue(session: aiohttp.ClientSession, service: dict) -> list[dict]:
     headers = arr_headers(service["api_key"])
     url = f"{service['url']}/api/v3/queue?pageSize=200&includeUnknownSeriesItems=true&includeUnknownMovieItems=true"
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.get(url, headers=headers, timeout=timeout) as resp:
             if resp.status != 200:
@@ -746,7 +744,7 @@ async def arr_download_clients(session: aiohttp.ClientSession, service: dict) ->
     headers = arr_headers(service["api_key"])
     url = f"{service['url']}/api/v3/downloadclient"
     try:
-        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)) as resp:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)) as resp:
             if resp.status != 200:
                 return []
             return await resp.json(content_type=None)
@@ -764,7 +762,7 @@ async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> dict:
     headers = arr_headers(service["api_key"])
     url = f"{service['url']}/api/v3/indexer"
     try:
-        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)) as resp:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)) as resp:
             if resp.status != 200:
                 log.warning("arr_indexers %s status=%d", service["key"], resp.status)
                 return {"indexers": [], **arr_failure(service, status=resp.status)}
@@ -792,7 +790,7 @@ async def arr_root_folders(session: aiohttp.ClientSession, service: dict) -> lis
     headers = arr_headers(service["api_key"])
     url = f"{service['url']}/api/v3/rootfolder"
     try:
-        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)) as resp:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)) as resp:
             text = await resp.text()
             if resp.status != 200:
                 log.warning("arr_root_folders %s status=%d body=%s", service["key"], resp.status, text[:200])
@@ -808,7 +806,7 @@ async def arr_root_folders(session: aiohttp.ClientSession, service: dict) -> lis
 
 async def fetch_qbit_torrents(session: aiohttp.ClientSession) -> list[dict]:
     headers = qbit_headers(AMUTORRENT_API_KEY)
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 3)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 3)
     try:
         async with session.get(
             f"{AMUTORRENT_URL}/api/v2/torrents/info", headers=headers, timeout=timeout
@@ -826,7 +824,7 @@ async def amu_torrent_categories(session: aiohttp.ClientSession) -> list[str]:
         async with session.get(
             f"{AMUTORRENT_URL}/api/v2/torrents/categories",
             headers=qbit_headers(AMUTORRENT_API_KEY),
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return []
@@ -876,7 +874,7 @@ async def fetch_amu_torrents_by_category(
                 f"{AMUTORRENT_URL}/api/v2/torrents/info",
                 params={"category": category},
                 headers=qbit_headers(AMUTORRENT_API_KEY),
-                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 3),
+                timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 3),
             ) as resp:
                 if resp.status != 200:
                     failures.append(f"{category}: HTTP {resp.status}")
@@ -940,7 +938,7 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
             f"{service['url']}/api/v3/wanted/missing",
             headers=headers,
             params=params,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return {**_empty_page(page, page_size), **arr_failure(service, status=resp.status)}
@@ -977,7 +975,7 @@ async def fetch_all_movies_detailed(
             f"{service['url']}/api/v3/movie",
             headers=headers,
             params={"sortKey": "title", "sortDirection": "ascending"},
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return {**_empty_page(page, page_size), **arr_failure(service, status=resp.status)}
@@ -1025,7 +1023,7 @@ async def fetch_all_series_detailed(
             f"{service['url']}/api/v3/series",
             headers=headers,
             params={"sortKey": "title", "sortDirection": "ascending"},
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return {**_empty_page(page, page_size), **arr_failure(service, status=resp.status)}
@@ -1081,7 +1079,7 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
             f"{service['url']}/api/v3/wanted/missing",
             headers=headers,
             params=params,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return {**_empty_page(page, page_size), **arr_failure(service, status=resp.status)}
@@ -1119,7 +1117,7 @@ async def arr_series_episodes(session: aiohttp.ClientSession, service: dict, ser
             f"{service['url']}/api/v3/episode",
             params={"seriesId": str(series_id)},
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return {"episodes": [], **arr_failure(service, status=resp.status)}
@@ -1164,7 +1162,7 @@ async def arr_add_movie(session: aiohttp.ClientSession, service: dict, movie_dat
     """Agrega una película a la biblioteca de Radarr via POST /api/v3/movie."""
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     url = f"{service['url']}/api/v3/movie"
     log.info("arr_add_movie %s payload=%s", service["key"], {k: v for k, v in movie_data.items() if k != "images"})
     try:
@@ -1189,7 +1187,7 @@ async def arr_add_series(session: aiohttp.ClientSession, service: dict, series_d
     """Agrega una serie a la biblioteca de Sonarr via POST /api/v3/series."""
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     url = f"{service['url']}/api/v3/series"
     log.info("arr_add_series %s payload=%s", service["key"], {k: v for k, v in series_data.items() if k != "images"})
     try:
@@ -1213,7 +1211,7 @@ async def arr_add_series(session: aiohttp.ClientSession, service: dict, series_d
 async def arr_series_lookup(session: aiohttp.ClientSession, service: dict, title: str) -> dict:
     """Busca una serie por título en Sonarr y devuelve metadata (tvdbId, title, year, etc)."""
     headers = arr_headers(service["api_key"])
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.get(
             f"{service['url']}/api/v3/series/lookup",
@@ -1243,7 +1241,7 @@ async def arr_series_lookup(session: aiohttp.ClientSession, service: dict, title
 async def arr_movie_lookup(session: aiohttp.ClientSession, service: dict, title: str) -> dict:
     """Busca una película por título en Radarr y devuelve metadata (tmdbId, title, year, etc)."""
     headers = arr_headers(service["api_key"])
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.get(
             f"{service['url']}/api/v3/movie/lookup",
@@ -1276,7 +1274,7 @@ async def arr_movie_exists(session: aiohttp.ClientSession, service: dict, tmdb_i
         async with session.get(
             f"{service['url']}/api/v3/movie",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return None
@@ -1296,7 +1294,7 @@ async def arr_series_exists(session: aiohttp.ClientSession, service: dict, tvdb_
         async with session.get(
             f"{service['url']}/api/v3/series",
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
         ) as resp:
             if resp.status != 200:
                 return None
@@ -1319,7 +1317,7 @@ async def arr_fetch_releases(session: aiohttp.ClientSession, service: dict, movi
     headers["Content-Type"] = "application/json"
     if not movie_id and not episode_id:
         return {"releases": [], "detail": "Se requiere movieId o episodeId"}
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 48)  # 5*48=240s=4min (aMuleTorrent puede ser lento)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 48)  # 5*48=240s=4min (aMuleTorrent puede ser lento)
     log.info("arr_fetch_releases %s movieId=%s episodeId=%s", service["key"], movie_id or "-", episode_id or "-")
     try:
         params: dict[str, int] = {}
@@ -1377,7 +1375,7 @@ async def arr_grab_release(session: aiohttp.ClientSession, service: dict, guid: 
     """Descarga un release específico via POST /api/v3/release."""
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     body = {"guid": guid}
     if indexer_id:
         body["indexerId"] = indexer_id
@@ -1420,7 +1418,7 @@ async def arr_manual_import(session: aiohttp.ClientSession, service: dict, file_
     headers = arr_headers(service["api_key"])
     headers["Content-Type"] = "application/json"
     body = [{"path": file_path, "movieId": movie_id}]
-    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
         async with session.post(
             f"{service['url']}/api/v3/manualimport",
@@ -1483,7 +1481,7 @@ async def fetch_radarr_calendar(session: aiohttp.ClientSession, service: dict, s
             f"{service['url']}/api/v3/calendar",
             headers=headers,
             params={"start": start, "end": end},
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return []
@@ -1519,7 +1517,7 @@ async def fetch_sonarr_calendar(session: aiohttp.ClientSession, service: dict, s
             f"{service['url']}/api/v3/calendar",
             headers=headers,
             params={"start": start, "end": end, "includeSeries": "true"},
-            timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 2),
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
         ) as resp:
             if resp.status != 200:
                 return []

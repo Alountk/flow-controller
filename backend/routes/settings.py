@@ -23,7 +23,6 @@ router = APIRouter()
 #: at import stays until its readers are converted (F-02h, part 2).
 RESTART_REQUIRED_FIELDS = {
     "server.port",
-    "intervals.request_timeout",
 }
 
 PROTOTYPES_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "prototypes"))

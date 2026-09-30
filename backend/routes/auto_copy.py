@@ -13,10 +13,10 @@ import logging
 from fastapi import APIRouter, Depends
 
 from auto_copy_driver import sweep
-from config import SAFE_MODE
 from history import recent_auto_copy_log, store_available
 from routes.status import verify_api_key
 from state import http_session
+import config
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
@@ -57,13 +57,13 @@ async def run_auto_copy_sweep(_key: str = Depends(verify_api_key)):
         # A per-sweep session, like GET /api/trace: sweeps are infrequent and
         # this avoids depending on the lifespan having run.
         async with http_session() as session:
-            return await sweep(session, safe_mode=SAFE_MODE)
+            return await sweep(session, safe_mode=config.SAFE_MODE)
     except Exception as exc:  # noqa: BLE001 — the route contract is JSON, not 500
         log.exception("auto-copy sweep: error inesperado: %s", exc)
         return {
             "ok": False,
             "running": False,
-            "safe_mode": SAFE_MODE,
+            "safe_mode": config.SAFE_MODE,
             "detail": "el barrido falló",
             "counts": {},
             "entries": [],

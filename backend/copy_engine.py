@@ -11,7 +11,6 @@ import aiohttp
 
 from config import (
     IMPORT_POLL_INTERVAL,
-    IMPORT_POLL_TIMEOUT,
     SERVICES,
 )
 from clients import (
@@ -27,6 +26,7 @@ from clients import (
 from traces import host_path
 from task_manager import copy_tasks
 from state import http_session
+import config
 
 log = logging.getLogger("flow-controller")
 
@@ -208,7 +208,7 @@ async def run_copy_background(
 async def verify_import(task_id: str, service: dict, source: str, ids: dict):
     start = time.time()
     async with http_session() as session:
-        while time.time() - start < IMPORT_POLL_TIMEOUT:
+        while time.time() - start < config.IMPORT_POLL_TIMEOUT:
             if copy_tasks.is_cancelled(task_id):
                 return
 
@@ -244,7 +244,7 @@ async def verify_import(task_id: str, service: dict, source: str, ids: dict):
                 copy_tasks.update(task_id, status="imported", detail=status.get("detail", "importado correctamente"))
                 return
 
-    copy_tasks.update(task_id, status="import_timeout", detail=f"timeout después de {IMPORT_POLL_TIMEOUT}s — verifica manualmente")
+    copy_tasks.update(task_id, status="import_timeout", detail=f"timeout después de {config.IMPORT_POLL_TIMEOUT}s — verifica manualmente")
 
 
 async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) -> dict:

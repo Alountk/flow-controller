@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 import credentials
 from config import (
     AMUTORRENT_INDEXER,
-    DEVELOPER,
     all_services,
     configured_services,
     find_service,
@@ -18,6 +17,7 @@ from config import (
 from traces import build_traces
 from clients import check_service, arr_headers
 from state import status_cache, http_session
+import config
 
 router = APIRouter()
 
@@ -76,7 +76,6 @@ async def check_all(session: aiohttp.ClientSession) -> None:
 
 
 async def background_checker() -> None:
-    from config import CHECK_INTERVAL
     async with http_session() as session:
         while True:
             try:
@@ -85,7 +84,7 @@ async def background_checker() -> None:
                 raise
             except Exception as exc:  # noqa: BLE001
                 status_cache["flow"] = f"error:{exc}"
-            await asyncio.sleep(CHECK_INTERVAL)
+            await asyncio.sleep(config.CHECK_INTERVAL)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -149,7 +148,7 @@ async def get_trace(_key: str = Depends(verify_api_key)):
 
 
 @router.get("/api/config")
-async def config():
+async def public_config():
     """Configuración pública para el arranque del frontend.
 
     NUNCA devuelve la API key: esta ruta es anónima por necesidad (el navegador
@@ -162,7 +161,7 @@ async def config():
     from settings import encryption_error
     from settings import auth_required as _auth_required
     return {
-        "developer": DEVELOPER,
+        "developer": config.DEVELOPER,
         "auth_required": _auth_required(),
         "encryption_ok": not encryption_error,
         "encryption_error": encryption_error,

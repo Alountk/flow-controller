@@ -51,7 +51,9 @@ Los cinco son **independientes** (ninguno requiere otro); los conflictos son sol
       y luego "1" = partirlo):
       · **PR A** `fix/config-rebuild-roots` — `config.rebuild()` + contenedores in situ +
         las 3 copias duras de `allowed_roots` + `RESTART_REQUIRED_FIELDS` honesto.
-      · **PR B** `fix/config-live-scalars` — los escalares leídos en tiempo de llamada.
+      · **PR B** `fix/config-live-scalars` — los escalares leídos en tiempo de llamada,
+        **incluido `REQUEST_TIMEOUT` (46 sitios)** y `RESTART_REQUIRED_FIELDS` →
+        `{"server.port"}`. Con eso el (c) queda completo.
 
 ## Decisión pendiente de F-02h (no la tomo yo solo)
 `config.SERVICES` y otros ~10 constantes se congelan en el import. Hay dos vías:
@@ -129,3 +131,18 @@ Push + PR de F-02g; después T9 (F-02f).
      renombrado a `public_config` — el path viene del decorador, no del nombre.
 - **Fuera de alcance, anotado**: `REQUEST_TIMEOUT` (47 sitios en `clients.py`) sigue en
   `RESTART_REQUIRED_FIELDS` para que la UI **no** mienta hasta que llegue la parte 2.
+
+## Evidencia de F-02h parte 2 (PR B)
+
+- **Cero solape con A**: A toca `config.py`, `routes/{files,settings,wanted}.py`,
+  `routes_mixer.py`; B toca `routes/{actions,auto_copy,status}.py`, `traces.py`,
+  `clients.py`, `copy_engine.py`. Por eso B puede apilarse sobre A y cada PR revisa lo suyo.
+- **GREEN**: `pytest -q` → **591 passed** · `tests_static` 8 · pyflakes limpio · frontend
+  typecheck ✅, **225 tests**, eslint **0/80**.
+- **Dos tests del contrato viejo reescritos** (en A y B):
+  `test_the_sweep_endpoint_forwards_the_configured_safe_mode` parcheaba
+  `routes.auto_copy.SAFE_MODE` → ahora `config.SAFE_MODE`; y
+  `test_setup_reports_that_a_restart_is_needed` afirmaba
+  `"services.radarr.url" in restart_required` → ahora `== []`, con un fixture que restaura las
+  constantes porque el `fresh` del test deja `settings._settings` en `{}`.
+- **Reparto decidido por el usuario**: "c" (Tier 2 completo) y luego "1" (partir en dos PRs).
