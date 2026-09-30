@@ -13,6 +13,20 @@ from pathlib import Path
 
 _LOG_BUFFER: collections.deque[dict] = collections.deque(maxlen=200)
 _LOG_FILE = Path(os.environ.get("CONFIG_DIR", "/app/config")) / "logs.json"
+#: Trim only once the file has grown this far. The old code paid a full
+#: read-modify-write for every single warning; this makes that cost amortised.
+_LOG_FILE_MAX_BYTES = 512 * 1024
+_LOG_FILE_MAX_LINES = 500
+#: Bytes written so far; `None` until the process has sized the file once.
+_LOG_BYTES: int | None = None
+
+
+def _trim_log_file() -> None:
+    """Bound the file. Runs once per threshold, never once per record."""
+    global _LOG_BYTES
+    lines = _LOG_FILE.read_text().splitlines()[-_LOG_FILE_MAX_LINES:]
+    _LOG_FILE.write_text("\n".join(lines) + "\n")
+    _LOG_BYTES = _LOG_FILE.stat().st_size
 
 
 class _BufferHandler(logging.Handler):
@@ -29,26 +43,49 @@ class _BufferHandler(logging.Handler):
             pass
 
     def _persist(self, entry: dict) -> None:
+        """One append syscall; the trim is amortised over a size threshold.
+
+        This used to read up to 500 lines and write every one of them back for
+        **each** warning — on whatever thread emitted it, which is the event
+        loop for the ~37 `log.warning` sites in clients/history/routes. An arr
+        that is down produces one per failed probe, so the cost was O(file
+        size) at failure rate, in the worst place to pay it.
+        """
+        global _LOG_BYTES
+        line = f'{entry["level"]}: {entry["time"]} — {entry["message"]}\n'
         try:
             _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            existing: list[dict] = []
-            if _LOG_FILE.exists():
-                existing = _LOG_FILE.read_text().splitlines()
-            # Keep last 500 lines
-            existing.append(
-                f'{entry["level"]}: {entry["time"]} — {entry["message"]}'
-            )
-            if len(existing) > 500:
-                existing = existing[-500:]
-            _LOG_FILE.write_text("\n".join(existing) + "\n")
+            data = line.encode()
+            fd = os.open(_LOG_FILE, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            try:
+                os.write(fd, data)
+            finally:
+                os.close(fd)
+
+            if _LOG_BYTES is None:
+                # First record of the process: size the file once so the
+                # threshold is about the file, not about what we wrote.
+                try:
+                    _LOG_BYTES = _LOG_FILE.stat().st_size
+                except OSError:
+                    _LOG_BYTES = 0
+            _LOG_BYTES += len(data)
+            if _LOG_BYTES > _LOG_FILE_MAX_BYTES:
+                _trim_log_file()
         except Exception:
             pass
 
 
 def _load_log_file() -> list[dict]:
     """Load persisted log lines into buffer on startup."""
+    global _LOG_BYTES
     if not _LOG_FILE.exists():
+        _LOG_BYTES = 0
         return []
+    try:
+        _LOG_BYTES = _LOG_FILE.stat().st_size
+    except OSError:
+        _LOG_BYTES = 0
     entries: list[dict] = []
     try:
         for line in _LOG_FILE.read_text().splitlines():
