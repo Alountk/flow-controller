@@ -131,8 +131,13 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
 | F-02d ✅ | TTL de **10 s** en `/api/trace` (antes: **9 llamadas por sondeo, cada 15 s, por pestaña**). Caché compartido → el coste depende de la ventana, no del número de pestañas | Media |
 | F-02e ✅ | Single-flight en el consumidor: `state.consumer_active` + `task.done()`, **ambas bajo `queue_lock`**. Antes cada `add` lanzaba un consumidor y **N copias corrían a la vez**, contradiciendo el docstring — y pisaban la referencia GC | Media |
 | F-02f | Mover ~10 llamadas síncronas a sqlite detrás de `to_thread` (están en la ruta caliente de `/api/wanted`) | Media |
-| F-02g | Log append-only en vez de leer y reescribir `logs.json` completo en cada WARNING (`state.py:28-40`) | Baja |
+| F-02g ✅ | Log **append-only** (`os.open(O_APPEND)` + un `os.write`). Antes: leer hasta 500 líneas y reescribir **cada WARNING**, en el loop, con ~37 sitios `log.warning` — un arr caído generaba uno por intento | Baja |
 | F-02h | `config.SERVICES` se congela en el import: tras guardar settings hay que reconstruirlo (relacionado con F-03) | Baja |
+
+**F-02g hecha** — rama `perf/append-only-log`. El trim sigue existiendo pero está
+**amortizado**: un reescritura por cada 512 KiB de warnings, no una por registro. El contador
+`_LOG_BYTES` se inicializa leyendo el tamaño real del fichero, así que el umbral mide el
+fichero y no lo que llevamos escrito.
 
 **F-02d y F-02e hechas** — rama `perf/trace-ttl-and-queue-singleflight`. Dos cosas que no son
 solo "rendimiento": el consumidor de la cola **no era secuencial** (varias copias a la vez) y
