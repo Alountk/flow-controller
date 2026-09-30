@@ -270,7 +270,7 @@ devuelve 403 y `needs_setup` pasa a false; ponerla antes cortaría el wizard.
 
 ---
 
-### F-04 — Selector múltiple en el explorador de ficheros · **Mediana**
+### F-04 — Selector múltiple en el explorador de ficheros · ✅ **Entregado**
 
 Pedida: *"en la sección de archivos, que es como un explorador de carpetas, un selector de varios archivos"*.
 
@@ -299,6 +299,22 @@ Lo que implica:
 
 Pedida: *"en la carpeta de amule me gustaría saber si los archivos están controlados por radarr
 o sonarr, podríamos marcarlos de alguna manera, para localizar los que puedo borrar"*.
+
+**F-04 entregado** — rama `fix/file-manager-multiselect`. Selección con
+`Set<item.path>` + *Seleccionar todo* **reusando `utils/selection.ts`** (su docstring advierte
+de lo que cuesta copiarla), barra de lote `Copiar · Mover · Eliminar · Limpiar`, y **N llamadas
+secuenciales** a los endpoints existentes — sin endpoints nuevos. Un `Promise.all` no vale aquí:
+50 `unlink` en paralelo contra un montaje de red es como se consiguen timeouts.
+
+**Resultado por fichero**: toast con recuentos + informe persistente de *Rechazados* con el
+`detail` literal del backend. Un `move` que el guard de semilla rechaza a mitad de lote es un
+**resultado correcto**, no un crash. El borrado en lote pide confirmación con la **cuenta y la
+frase de irreversibilidad**.
+
+`size:exception` concedido: **585 líneas** (287 componente+CSS, 298 del test nuevo). El corte
+honesto no deja piezas que funcionen por separado — ver `odd/tasks/f04-multiselect.md`.
+
+Y un dato: **`FileManager.tsx` no tenía ni un test**; este trabajo lo crea (4, RED comprobado).
 
 **Decisión del usuario: el borrado es SUYO, siempre con aviso de irreversibilidad.**
 El sweep **nunca** borra solo: marca y deja que tú lo borres (en lote, con F-04), y antes de
@@ -367,4 +383,4 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 
 ## Orden propuesto
 
-`B-01` → `C-03` → `F-04` → `F-05` → `F-01` → `C-01/C-02`
+`B-01` → `C-03` → `F-05` → `F-01` → `C-01/C-02`

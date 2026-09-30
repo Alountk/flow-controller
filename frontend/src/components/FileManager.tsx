@@ -9,6 +9,7 @@ import {
   deleteItem,
   queueAdd,
 } from '../api/files'
+import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
 import './FileManager.css'
 
 function formatSize(bytes: number): string {
@@ -18,6 +19,29 @@ function formatSize(bytes: number): string {
   let size = bytes
   while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
   return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+/** "1 colocado" / "7 colocados" — a count without an agreement is noise. */
+function countWord(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+/** One item's outcome. The backend answers per file, never per batch. */
+interface BatchOutcome {
+  path: string
+  name: string
+  ok: boolean
+  detail: string
+}
+
+/**
+ * What the last batch left behind. Only the refusals are kept on screen: a
+ * summary of successes is a toast, but a failure has to stay readable with the
+ * backend's own reason until the user dismisses it.
+ */
+interface BatchReport {
+  failures: BatchOutcome[]
+  total: number
 }
 
 function formatDate(ts: number): string {
@@ -44,13 +68,15 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const initialRoot = roots[index]?.path || roots[0]?.path || '/'
   const [selectedRoot, setSelectedRoot] = useState(initialRoot)
   const [path, setPath] = useState(initialRoot)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [batchReport, setBatchReport] = useState<BatchReport | null>(null)
+  const [batchBusy, setBatchBusy] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const onPathChangeRef = useRef<((index: number, path: string) => void) | null>(null)
   onPathChangeRef.current = onPathChange
@@ -63,7 +89,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
 
   useEffect(() => {
     if (browseData?.ok) {
-      setSelected(null)
+      setSelected(new Set())
       onPathChangeRef.current?.(index, browseData.path)
     } else if (browseData?.error) {
       setError(browseData.error)
@@ -131,13 +157,13 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   }
 
   function navigateTo(p: string) {
-    setSelected(null)
+    setSelected(new Set())
     setPath(p)
   }
 
   function handleVolumeChange(newRoot: string) {
     setSelectedRoot(newRoot)
-    setSelected(null)
+    setSelected(new Set())
     setPath(newRoot)
   }
 
@@ -180,6 +206,79 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   }
 
   const items = browseData?.ok ? browseData.items : []
+  const itemKey = (item: FileItem) => item.path
+  const allVisibleSelected = areAllVisibleSelected(selected, items, itemKey)
+
+  function toggleRowSelection(itemPath: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemPath)) next.delete(itemPath)
+      else next.add(itemPath)
+      return next
+    })
+  }
+
+  function toggleAllSelection() {
+    // The shared helper, never a second copy: select-all only ever touches the
+    // rows currently on screen, so it cannot act on a file nobody is looking at.
+    setSelected((prev) => toggleVisibleSelection(prev, items, itemKey))
+  }
+
+  /**
+   * One batch: one request per file, one honest result per file.
+   *
+   * Sequential on purpose — these endpoints talk to a network mount, and N
+   * concurrent unlinks against CIFS is how you get timeouts. Copy/move only
+   * enqueues (the queue is already sequential and SQLite-backed), but delete
+   * runs the unlinks itself, so both go through the same loop.
+   */
+  async function runBatch(action: 'copy' | 'move' | 'delete') {
+    // Selection is cleared on every navigation, so every selected path belongs
+    // to the listing currently on screen.
+    const targets = items.filter((item) => selected.has(item.path))
+    if (targets.length === 0 || batchBusy) return
+
+    setBatchBusy(true)
+    setBatchReport(null)
+
+    const results: BatchOutcome[] = []
+    for (const item of targets) {
+      let res: { ok: boolean; detail: string }
+      try {
+        res = action === 'delete'
+          ? await deleteItem(item.path)
+          : await queueAdd(action, item.path, `${otherPath}/${item.name}`)
+      } catch (err) {
+        // A dead mount is one failed item, not a reason to drop the rest.
+        res = { ok: false, detail: err instanceof Error ? err.message : String(err) }
+      }
+      results.push({ path: item.path, name: item.name, ok: res.ok, detail: res.detail })
+    }
+
+    const failures = results.filter((r) => !r.ok)
+    setBatchBusy(false)
+    setBatchReport(failures.length > 0 ? { failures, total: results.length } : null)
+    // The batch is consumed either way: leaving the rows selected would invite
+    // a second click that enqueues everything a second time.
+    setSelected(new Set())
+
+    const okCount = results.length - failures.length
+    const done = action === 'delete'
+      ? countWord(okCount, 'eliminado', 'eliminados')
+      : countWord(okCount, 'colocado', 'colocados')
+    showToast(`${done}, ${countWord(failures.length, 'rechazado', 'rechazados')}`)
+
+    if (action === 'delete') invalidateBrowse()
+    else queryClient.invalidateQueries({ queryKey: ['queue'] })
+  }
+
+  function handleBatchDelete() {
+    const n = selected.size
+    const what = n === 1 ? 'elemento seleccionado' : 'elementos seleccionados'
+    const message = `¿Eliminar ${n} ${what}? Esta acción no se puede deshacer: no podrás recuperar los datos borrados.`
+    if (!confirm(message)) return
+    void runBatch('delete')
+  }
 
   return (
     <div className="fm-pane">
@@ -228,6 +327,80 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         </div>
       )}
 
+      {items.length > 0 && (
+        <div className="fm-select-bar">
+          <label className="fm-select-all">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={toggleAllSelection}
+            />
+            <span>Seleccionar todo</span>
+          </label>
+        </div>
+      )}
+
+      {selected.size > 0 && (
+        <div className="fm-batch-bar">
+          <span className="fm-batch-count">
+            {selected.size} seleccionado{selected.size === 1 ? '' : 's'}
+          </span>
+          <button
+            className="fm-action-btn"
+            onClick={() => runBatch('copy')}
+            disabled={batchBusy}
+          >
+            Copiar
+          </button>
+          <button
+            className="fm-action-btn"
+            onClick={() => runBatch('move')}
+            disabled={batchBusy}
+          >
+            Mover
+          </button>
+          <button
+            className="fm-action-btn"
+            onClick={handleBatchDelete}
+            disabled={batchBusy}
+          >
+            Eliminar
+          </button>
+          <button
+            className="fm-cancel-btn"
+            onClick={() => setSelected(new Set())}
+            disabled={batchBusy}
+          >
+            Limpiar
+          </button>
+        </div>
+      )}
+
+      {batchReport && (
+        <div className="fm-batch-report">
+          <div className="fm-batch-report-head">
+            <span className="fm-batch-report-title">
+              Rechazados: {batchReport.failures.length} de {batchReport.total}
+            </span>
+            <button
+              className="fm-cancel-btn"
+              title="Cerrar detalle"
+              onClick={() => setBatchReport(null)}
+            >
+              ✕
+            </button>
+          </div>
+          <ul className="fm-batch-report-list">
+            {batchReport.failures.map((f) => (
+              <li key={f.path} className="fm-batch-report-item">
+                <span className="fm-batch-report-name">{f.name}</span>
+                <span className="fm-batch-report-detail">{f.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="fm-loading">Cargando...</div>
       ) : items.length === 0 ? (
@@ -237,10 +410,18 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
           {items.map((item) => (
             <div
               key={item.path}
-              className={`fm-item ${selected === item.path ? 'selected' : ''} ${item.is_dir ? 'dir' : ''}`}
-              onClick={() => setSelected(item.path)}
+              className={`fm-item ${selected.has(item.path) ? 'selected' : ''} ${item.is_dir ? 'dir' : ''}`}
+              onClick={() => setSelected(new Set([item.path]))}
               onDoubleClick={() => handleDoubleClick(item)}
             >
+              <input
+                type="checkbox"
+                className="fm-item-check"
+                checked={selected.has(item.path)}
+                onChange={() => toggleRowSelection(item.path)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Seleccionar ${item.name}`}
+              />
               <span className="fm-icon">{item.is_dir ? '📁' : '📄'}</span>
               {renaming === item.path ? (
                 <input
