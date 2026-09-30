@@ -11,6 +11,7 @@
   --bad-dim: #991b1b;
   --warn: #eab308;
   --accent: #6366f1;
+  --accent-soft: rgba(99, 102, 241, 0.12);
 }
 
 * {

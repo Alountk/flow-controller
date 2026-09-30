@@ -1,88 +1,279 @@
+/* ── First-run setup wizard ──────────────────────────────────────── */
+
 .setup-page {
   display: flex;
   justify-content: center;
   min-height: 100vh;
   background: var(--bg);
-  padding: 32px 24px;
+  padding: 40px 24px;
   overflow-y: auto;
 }
 
+/* One centred focus card. `margin: auto` centres it vertically without
+   clipping the top when the content is taller than the viewport. */
 .setup-card {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  margin: auto;
   width: 100%;
-  max-width: 560px;
-  height: fit-content;
+  max-width: 520px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 36px 40px;
 }
 
-.setup-card h1 {
+/* ── Counter and dots ─────────────────────────────────────────────── */
+
+.setup-counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.setup-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setup-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.2s, width 0.2s;
+}
+
+.setup-dot.is-done {
+  background: var(--ok);
+}
+
+.setup-dot.is-now {
+  background: var(--accent);
+  width: 18px;
+}
+
+/* ── Step content ─────────────────────────────────────────────────── */
+
+.setup-step {
+  margin-top: 28px;
+}
+
+.setup-step h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--text);
+}
+
+.setup-lede {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-dim);
+  margin: 10px 0 0;
 }
 
 .setup-hint {
   margin: 0;
   font-size: 12px;
-  color: var(--text-dim);
   line-height: 1.6;
+  color: var(--text-dim);
 }
 
-.setup-hint-inline {
-  margin-bottom: 8px;
-}
-
-.setup-group {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  background: var(--bg-elev);
-}
-
-.setup-group legend {
-  padding: 0 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.setup-field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.setup-hint + .setup-hint {
   margin-top: 8px;
 }
 
-.setup-field span {
-  flex: 0 0 110px;
-  font-size: 11px;
+.setup-enter-hint {
+  color: var(--warn);
+}
+
+.setup-checklist {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.setup-checklist li {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--text-dim);
 }
 
-.setup-field input {
-  flex: 1;
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
+.setup-checklist strong {
   color: var(--text);
-  font-size: 12px;
-  font-family: inherit;
+  font-weight: 600;
 }
 
-.setup-field input:focus {
-  outline: none;
-  border-color: var(--accent);
+.setup-checklist .ico {
+  flex-shrink: 0;
 }
 
-.setup-results {
+.setup-form {
+  margin-top: 28px;
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+/* The card is narrow: stack the label over its input (as the prototype
+   does) so Field's 200px inline label does not squeeze the control. */
+.setup-form .settings-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.setup-form .settings-label {
+  flex: none;
+}
+
+.setup-form .settings-input {
+  flex: none;
+  width: 100%;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.setup-callout {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+/* ── Inline probe ─────────────────────────────────────────────────── */
+
+.setup-probe-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.setup-probe-result {
+  flex: 1;
+  min-width: 240px;
+}
+
+.setup-probe-result.warn {
+  border-color: var(--warn);
+}
+
+.setup-probe-result.warn .service-test-detail {
+  color: var(--warn);
+}
+
+.setup-probe-result .service-test-detail {
+  color: var(--text);
+}
+
+.setup-probe-result:not(.ok):not(.fail):not(.warn) .service-test-detail {
+  color: var(--text-dim);
+}
+
+/* ── Review summary ───────────────────────────────────────────────── */
+
+.setup-summary {
+  margin-top: 28px;
+  display: grid;
   gap: 8px;
 }
 
+.setup-sum-row {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.setup-sum-row .sum-k {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.setup-sum-row .sum-v {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.setup-result {
+  justify-self: end;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.setup-result.ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.setup-result.fail {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.setup-result.warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+/* ── Notices, errors, navigation ──────────────────────────────────── */
+
+.setup-notice {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.setup-notice.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.setup-notice.fail {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
 .setup-error {
+  margin-top: 16px;
   padding: 10px 12px;
   border: 1px solid var(--bad);
   border-radius: 8px;
@@ -90,9 +281,70 @@
   color: var(--bad);
 }
 
-.setup-actions {
+.setup-nav {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
   display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setup-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.setup-gate {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warn);
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 10px;
+}
+
+/* Exactly one primary button per screen: the primary carries the step
+   forward, Atrás stays a quiet text button. */
+.setup-page .setup-back {
+  background: none;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.setup-page .setup-back:hover:not(:disabled) {
+  background: none;
+  border-color: transparent;
+  color: var(--text);
+}
+
+.setup-page .setup-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  padding: 10px 20px;
+}
+
+.setup-page .setup-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  filter: brightness(1.12);
+}
+
+.setup-page .setup-primary:disabled {
+  filter: none;
+}
+
+@media (max-width: 560px) {
+  .setup-card {
+    padding: 24px 20px;
+  }
+
+  .setup-grid {
+    grid-template-columns: 1fr;
+  }
 }
