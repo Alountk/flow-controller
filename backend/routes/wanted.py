@@ -74,7 +74,7 @@ def _mark_fields(
     }
 
 
-def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> dict:
+async def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> dict:
     """Add ``grabbed_at`` and ``grabbed_destination`` to every item on a body.
 
     Shared by every surface that shows the mark — ``/api/wanted``,
@@ -105,7 +105,12 @@ def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> d
     # One read for both fields: `rows` carries the destination and `marks` is
     # its date-only projection, so the two can never disagree.
     since = time.time() - WANTED_GRAB_LOOKBACK
-    rows = history.own_grabs_latest_rows(since)
+    # `history.py`'s own contract: callers hand the synchronous API to
+    # `asyncio.to_thread`. This one has no index on `grabbed_at`, so it is an
+    # unindexed full scan — and it runs on every response of four routes.
+    # `own_grabs_latest_map` stays inline: with `rows` given it is a pure dict
+    # projection and does no I/O at all.
+    rows = await asyncio.to_thread(history.own_grabs_latest_rows, since)
     marks = history.own_grabs_latest_map(since, rows=rows)
 
     wanted = response.get("wanted")
@@ -232,7 +237,7 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
                 "page": page,
                 "page_size": page_size,
             }
-        return _attach_grabbed_at(
+        return await _attach_grabbed_at(
             {"wanted": wanted, "updated_at": int(time.time()), "filtered": True}
         )
 
@@ -248,7 +253,7 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
     wanted = {}
     for service, result in zip(arr_services, results):
         wanted[service["key"]] = result
-    return _attach_grabbed_at({
+    return await _attach_grabbed_at({
         "wanted": wanted,
         "updated_at": int(time.time()),
     })
@@ -304,7 +309,7 @@ async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: 
     async with http_session() as session:
         result = await fetch_all_movies_detailed(session, service, page, fetch_size)
     # Every /api/wanted/all item is a Radarr movie, so the key is explicit.
-    return _attach_grabbed_at(
+    return await _attach_grabbed_at(
         _filter_all_endpoint(result, q, page, page_size), source="radarr", kind="movie"
     )
 
@@ -319,7 +324,7 @@ async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: 
     async with http_session() as session:
         result = await fetch_all_series_detailed(session, service, page, fetch_size)
     # A series card is marked by any episode grab of that series.
-    return _attach_grabbed_at(
+    return await _attach_grabbed_at(
         _filter_all_endpoint(result, q, page, page_size), source="sonarr", kind="series"
     )
 

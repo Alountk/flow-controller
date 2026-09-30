@@ -68,7 +68,7 @@ async def get_calendar(start: str = "", end: str = "", _key: str = Depends(verif
     all_items.sort(key=lambda x: x.get("date") or "9999")
     # Each item carries its own `source` and `type`, so the shared helper reads
     # the mark key from the item instead of being told which one it is.
-    return _attach_grabbed_at({"items": all_items, "start": start, "end": end})
+    return await _attach_grabbed_at({"items": all_items, "start": start, "end": end})
 
 
 @router.post("/api/calendar/search")
@@ -298,7 +298,7 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
     # request's "not this kind of title" default, so it becomes NULL rather than
     # a bogus id.
     if result.get("ok"):
-        record_own_grab(
+        await asyncio.to_thread(record_own_grab, 
             req.source,
             movie_id=req.movieId or None,
             episode_id=req.episodeId or None,
@@ -351,7 +351,7 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                         )
                         series_resolved = True
                     # One row per guid that succeeded, not one per request.
-                    record_own_grab(
+                    await asyncio.to_thread(record_own_grab, 
                         req.source,
                         movie_id=req.movieId or None,
                         episode_id=req.episodeId or None,

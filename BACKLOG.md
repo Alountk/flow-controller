@@ -130,9 +130,18 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
 | F-02c ✅ | `state.http_session()`: **una sola `ClientSession` + `TCPConnector(limit=100, limit_per_host=30)`** compartida bajo el lifespan. Las **28 llamadas** `aiohttp.ClientSession()` pasan al seam; las 2 de WebSocket (con `cookie_jar` propio) se quedan privadas a propósito | Alta |
 | F-02d ✅ | TTL de **10 s** en `/api/trace` (antes: **9 llamadas por sondeo, cada 15 s, por pestaña**). Caché compartido → el coste depende de la ventana, no del número de pestañas | Media |
 | F-02e ✅ | Single-flight en el consumidor: `state.consumer_active` + `task.done()`, **ambas bajo `queue_lock`**. Antes cada `add` lanzaba un consumidor y **N copias corrían a la vez**, contradiciendo el docstring — y pisaban la referencia GC | Media |
-| F-02f | Mover ~10 llamadas síncronas a sqlite detrás de `to_thread` (están en la ruta caliente de `/api/wanted`) | Media |
+| F-02f ✅ | Sqlite detrás de `to_thread` en la ruta caliente: `_attach_grabbed_at` (un `WHERE grabbed_at >= ?` **sin índice**, en 4 rutas), `record_own_grab` ×2 y la lectura de `/api/auto-copy/history`. `_attach_grabbed_at` pasa a `async def` con 5 sitios con `await` | Media |
 | F-02g ✅ | Log **append-only** (`os.open(O_APPEND)` + un `os.write`). Antes: leer hasta 500 líneas y reescribir **cada WARNING**, en el loop, con ~37 sitios `log.warning` — un arr caído generaba uno por intento | Baja |
 | F-02h | `config.SERVICES` se congela en el import: tras guardar settings hay que reconstruirlo (relacionado con F-03) | Baja |
+
+**F-02f hecha** — rama `perf/sqlite-off-hot-path`. El contrato venía escrito en el propio
+`history.py` ("callers hand it to `asyncio.to_thread`") y unos 8 sitios lo ignoraban.
+`own_grabs_latest_map` se queda **inline** a propósito: con `rows` ya leídos es una proyección
+de dict sin I/O.
+
+**Queda anotado, no hecho:** `auto_copy_driver.py` hace ~10 round-trips síncronos **por traza**
+durante un sweep, y `own_grabs` no tiene **índice en `grabbed_at`** (migración que subiría
+`SCHEMA_VERSION`) — el índice ayudaría también a los que ya usan `to_thread`.
 
 **F-02g hecha** — rama `perf/append-only-log`. El trim sigue existiendo pero está
 **amortizado**: un reescritura por cada 512 KiB de warnings, no una por registro. El contador
