@@ -41,8 +41,10 @@ Los cinco son **independientes** (ninguno requiere otro); los conflictos son sol
 - [x] T4 — F-02e: `state.consumer_active` + `_ensure_consumer()` + clear bajo lock.
 - [x] T5 — Verificación completa.
 - [x] T6 — Docs (`BACKLOG.md`).
-- [ ] T7 — PR A → merge.
-- [ ] T8 — F-02g (PR B).
+- [x] T7 — **PR #83** (`a0273f5`, merge `9da08e9`) → F-02d/e en `main`.
+- [x] T8 — F-02g en la rama `perf/append-only-log`: `os.open(O_APPEND)` + `_trim_log_file()`
+      amortizado (1 reescritura por 512 KiB, no una por WARNING), con `_LOG_BYTES`
+      inicializado desde el tamaño real del fichero.
 - [ ] T9 — F-02f (PR C).
 - [ ] T10 — F-02h (PR D) — **necesita decisión del usuario** (ver abajo).
 
@@ -79,4 +81,16 @@ ficheros. Arreglarlo es un cambio de comportamiento.
   conteo de llamadas y por pertenencia al lock, no por cronometrar.
 
 ## Siguiente paso
-T7: push + PR A.
+Push + PR de F-02g; después T9 (F-02f).
+
+## Evidencia de F-02g (T8)
+
+- **RED (3)**: `persist read the whole file to append one line` — hacían falta **dos**
+  registros, porque el primero no lee (el fichero aún no existe) y el test pasaba por el motivo
+  equivocado —, `the file was rewritten 3 times for 3 records` y
+  `no attribute _LOG_FILE_MAX_BYTES`.
+- **Test propio corregido tras el GREEN**: asertaba `_LOG_BYTES <= MAX_BYTES`, imposible con un
+  trim por número de líneas. Lo que importa es que el contador se **reajuste** al recortar; si
+  no, se recorta en cada escritura y volvemos al problema de origen.
+- **GREEN**: `pytest -q` → **580 passed** (era 576) · `tests_static` 8 · pyflakes limpio ·
+  frontend typecheck ✅, **225 tests**, eslint **0/80**.
