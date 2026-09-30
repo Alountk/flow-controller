@@ -61,6 +61,17 @@ si dice `✗ Sin archivo` en *Faltantes* → es el diseño y hay que decidir si 
 
 ---
 
+| **B-05** ✅ | `PROTOTYPES_DIR` resolvía a **`/prototypes`** dentro del contenedor: `BASE_DIR` es `dirname(config.py)`, que localmente es `<repo>/backend` pero en la imagen es `/app` (el Dockerfile aplana `backend/*.py` con `COPY`), así que `../prototypes` apuntaba a un sitio inexistente. `isdir` → false → **`[]`**: la página mostraba su estado vacío con los ficheros dentro de la imagen | Media |
+
+**B-05 resuelto** — rama `fix/prototypes-dir-in-container`. `_resolve_prototypes_dir()` mira
+**ambos** layouts (hermano de `backend/` localmente, dentro de `/app` en la imagen) y se queda
+con el que exista, sin meter ninguno de los dos como respuesta fija. Un test fija el destino del
+`Dockerfile` para que la asunción no se pudra en silencio.
+
+**Ojo con el razonamiento que llevó a esto:** la sección *Prototipos* es una entrada **fija**
+del sidebar (no está en `hiddenPages`), así que verla **no demuestra** que el directorio esté
+bien — solo que la ruta existe en el menú.
+
 ## 🟢 Features
 
 ### F-01 — Upgrade de calidad desde la biblioteca (4K / 3D) + destino + renombrado · **Grande**

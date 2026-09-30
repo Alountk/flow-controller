@@ -25,7 +25,37 @@ RESTART_REQUIRED_FIELDS = {
     "server.port",
 }
 
-PROTOTYPES_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "prototypes"))
+def _resolve_prototypes_dir(base_dir: str = BASE_DIR) -> str:
+    """Where the HTML mockups live, for either layout this app ships in.
+
+    `BASE_DIR` is `dirname(config.py)`, and that directory is not the same
+    shape everywhere:
+
+    - **locally** it is `<repo>/backend`, so the folder is its sibling:
+      `<repo>/prototypes`;
+    - **in the container** the Dockerfile does `COPY backend/*.py .` under
+      `WORKDIR /app`, flattening the package, so `BASE_DIR` is `/app` and
+      the folder is `/app/prototypes` — *inside* it.
+
+    The old constant only handled the first, so inside the container it
+    resolved to `/prototypes`, `os.path.isdir` was false, and the endpoint
+    answered an empty list: the Prototipos page showed its empty state even
+    though the image had the files all along. The section itself is a
+    hardcoded sidebar entry, so seeing it never proved the directory was
+    right.
+
+    Both layouts are legitimate, so neither is baked in as the answer —
+    we pick the first candidate that actually exists, and fall back to the
+    repo shape so the endpoint still returns `[]` instead of raising.
+    """
+    candidates = (
+        os.path.normpath(os.path.join(base_dir, "..", "prototypes")),
+        os.path.normpath(os.path.join(base_dir, "prototypes")),
+    )
+    return next((c for c in candidates if os.path.isdir(c)), candidates[0])
+
+
+PROTOTYPES_DIR = _resolve_prototypes_dir()
 
 
 #: A stored secret is shown to the UI as this prefix plus its last characters.
