@@ -312,7 +312,7 @@ falla y **nombra el módulo**.
 | B-03 | RAU-125 | El escaneo **mueve** el fichero (`routes/files.py:219`) y rompe el hardlink del seed; debe **copiar** | bug | ✅ |
 | B-02 | RAU-126 | Indexadores vacíos: el error se traga en 3 capas y no hay caché por `source` | bug | ✅ |
 | B-05 | RAU-139 | `PROTOTYPES_DIR` → `/prototypes` dentro del contenedor; la página vacía con los ficheros en la imagen | bug | ✅ |
-| B-01 | RAU-127 | Barra roja izquierda en cards naranjas (CSS deliberado + `path_exists` sin `host_path()`) | bug | ⬜ |
+| B-01 | RAU-127 | Barra roja izquierda en cards naranjas → **diseño intencional**, no defecto | bug | ✅ |
 | F-01 | RAU-128 | **Upgrade 4K/3D** desde la biblioteca + destino + renombrado tras copia | feature | ⬜ |
 | F-03 | RAU-129 | **Wizard de primera puesta en marcha** paso a paso (tipo Overseerr / aMuleTorrent) | feature | ✅ |
 | F-02 | RAU-130 | **Python vs Go/Rust**: estudio cerrado con veredicto *no reescribir* + 8 mitigaciones | estudio | ✅ |

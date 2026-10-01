@@ -26,7 +26,7 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | **B-04** | `POST /api/actions/*` devuelve **500**: `routes/actions.py:46` hace `from state import _http_session` y `state.py` no define ese símbolo (vive en `app.py:48`). Ninguna acción de la UI funciona. | **Alta** | Verificado en runtime con Python. `tests.py:422` solo publica una acción *desconocida*, por eso la suite está en verde. | ✅ |
 | **B-03** | El escaneo encola la operación como `move` → `routes/files.py:219` `os.rename`, y en EXDEV copia **y borra el origen** (`:226`). Rompe el hardlink con el que aMule/qBittorrent siguen compartiendo el archivo. Debería copiar (idealmente `os.link`, como ya hace `copy_engine.copy_file_chunked`). | **Alta** | `MissingContent.tsx:126` → `queueAdd('move', …)` | ✅ |
 | **B-02** | "Buscar" a veces no muestra el listado de indexadores: el error se traga en **tres capas** y devuelve `[]`, indistinguible de "no hay indexadores". Además no hay caché ni clave por `source`. | Media | `clients.py:766,787` → `[]`; `routes/calendar.py:343-351` sin campo `error`; `ReleaseSearchModal.tsx:96-102` `.catch(() => {})` | ✅ |
-| **B-01** | Al pasar a naranja, la barra izquierda de la card se queda roja. **Dos causas distintas**: (a) `MissingContent.css:187-191` pinta `border-color: var(--warn)` y luego `border-left-color: var(--bad)` en la *misma* regla, con guarda solo para `.status-ok`; (b) `clients.py:1001,1049` comprueba `os.path.isdir` con la **ruta cruda del arr** sin pasar por `host_path()`, así que una película sana se clasifica `status-error`. | Media | Verificado en disco ambas | ⬜ |
+| **B-01** | Al pasar a naranja, la barra izquierda de la card se queda roja. **Dos causas distintas**: (a) `MissingContent.css:187-191` pinta `border-color: var(--warn)` y luego `border-left-color: var(--bad)` en la *misma* regla, con guarda solo para `.status-ok`; (b) `clients.py:1001,1049` comprueba `os.path.isdir` con la **ruta cruda del arr** sin pasar por `host_path()`, así que una película sana se clasifica `status-error`. | Media | Verificado en disco ambas | ✅ |
 
 **B-04 resuelto** — rama `fix/actions-session-import`: la sesión ahora se abre por petición
   en `routes/actions.py` (igual que el resto de rutas), y el global muerto de `app.py` se eliminó
@@ -53,11 +53,17 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
   búsqueda. Contrato cambiado: `test_unknown_source_returns_empty` afirmaba el bug y se
   reescribió. Tests nuevos: 7 en backend, 2 en frontend (`indexerList.test.tsx`).
 
-**Decisión de diseño pendiente en B-01:** en *Faltantes* la barra roja sobre fondo naranja es
-**intencional** (comentario en `MissingContent.css:182-186`: "el rojo sigue diciendo que no hay
-archivo, el naranja que ya se pidió"). Hay que confirmar en qué pestaña se ve el fallo:
-si la badge dice `✗ Ruta no encontrada` en una película que sí tiene archivo → causa (b);
-si dice `✗ Sin archivo` en *Faltantes* → es el diseño y hay que decidir si se cambia.
+**B-01 cerrado — no era un defecto.** Confirmado por el usuario: se ve en *Faltantes* con
+`✗ Sin archivo`, que es **el diseño intencional** (comentario en `MissingContent.css:182-186`:
+el rojo dice *que no hay archivo*, el naranja *que ya se pidió* — dos hechos, ninguno pisa al
+otro; esa es la razón de ser del estado).
+
+**Queda registrado aparte, sin confirmar en producción:** la *otra* causa que encontré al
+analizarlo — `clients.py:1001` y `:1049` hacen `os.path.isdir(path)` con la **ruta cruda del
+arr**, sin pasar por `host_path()`, mientras `copy_engine.py:88,493` sí traduce. Si Radarr
+reporta `/data/...` y el backend solo ve `/mnt/storage/...`, una película **sana** de la pestaña
+*Todas* se clasificaría `status-error` y mostraría `✗ Ruta no encontrada`. No es lo que se
+reportó, así que no entra en B-01 — pero es un fallo latente de dos líneas con `host_path()`.
 
 ---
 
@@ -482,4 +488,4 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 
 ## Orden propuesto
 
-`B-01` → `C-03` → `F-07` → `F-01` → `C-01/C-02` — **F-06 aparte, sin fecha**
+`C-03` → `F-07` → `F-01` → `C-01/C-02` — **F-06 aparte, sin fecha**
