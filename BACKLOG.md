@@ -117,37 +117,53 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
    `GET /api/v3/rename` y reporta `renamed_needed`, pero **nadie ejecuta nunca el rename**.
    Falta un paso tras `run_copy_background` (`copy_engine.py:179`).
 
-**Decisiones de producto que dependen del usuario:**
-- ¿El 4K **sustituye** al archivo existente en la biblioteca o **convive** junto a él?
-- Si conviven, ¿qué pasa con el fichero viejo (conservar / borrar / archivar)?
-- ¿Pre-chequear el perfil de calidad de Radarr y avisar si no permite 2160p, o dejar que
-  Radarr devuelva su 400?
-- ¿Destino único por lote (hoy) o destino por release?
+#### Decisión tomada por el usuario: **conviven**, cada calidad en su ruta
 
-### F-02 — Estudio: ¿el backend nos vale o necesitamos Go/Rust? · **Veredicto: NO reescribir**
+> *"conviven juntos: 4K va a una carpeta específica, 3D a otra; las pelis de 1080p están en otra ruta."*
 
-**A favor de quedarse (evidencia, no opinión):**
+Esto **cambia el alcance a mejor**:
 
-| Hecho | Fuente |
-|-------|--------|
-| El coste dominante es **esperar a Radarr/Sonarr/aMuTorrent por LAN** (timeout 5 s, 3 reintentos). Go/Rust espera igual de despacio. | `config.py` `REQUEST_TIMEOUT` |
-| Carga real ≈ **80-110 req/min de una pestaña**, I/O-bound, sin saturación CPU | `/api/trace` + `/api/downloads` |
-| ~**524 tests** + capa de dominio no trivial (mapeo contenedor→host, settings cifrados, política de auto-copy, 6 migraciones SQLite) → reescribir es re-derivar la parte más arriesgada y con menos valor | `backend/tests*.py` |
-| Un rewrite no arregla ninguna de las latencias que notamos | — |
+| Lo que estaba abierto | Cómo queda |
+|---|---|
+| ¿El 4K **sustituye** o **convive**? | ✅ **Conviven.** Cero upgrade de Radarr, cero reemplazo, cero "qué hago con el viejo" |
+| ¿Destino por release o por lote? | ✅ **Derivado por release, automáticamente** — desaparece la limitación de "un destino para todo el lote" |
+| ¿Pre-chequear el perfil de calidad? | ⚠️ Sigue abierto: si el perfil no admite 2160p, el grab devuelve un 400 (ya lo parseamos) |
 
-**Lo que un rewrite SÍ compraría:** sin GIL sobre parseos de ~1 MB × ~15/min, y sobre todo
-**eliminar la clase de bug "me olvidé de offload"**, que hoy tiene 11 sitios.
+**La maquinaria de destino existe — pero está apagada justo para este caso.**
+`own_grabs.destination` (PRs #66-#73) ya lleva un destino hasta `copy_engine`, que lo usa como
+`dest_root`: se valida con `path_is_allowed`, se escribe **tal cual** y copia con
+`import_after_copy=not dest_root` → **el arr ni se entera**. Eso es exactamente lo que hace
+falta para que un 4K conviva sin tocar el 1080p.
 
-**Mitigaciones baratas (F-02a … F-02h), ordenadas por valor/esfuerzo:**
+⚠️ **Pero `auto_copy.py` devuelve SKIP cuando `arr_has_file` es `True`** — y el destino solo se
+aplica *después* de esa decisión (`auto_copy_driver.py:351` → `:434`). Para una película que
+**ya tiene archivo** (que es *siempre* en "conviven"), `arr_has_file` es `True` → **el destino
+nunca llega a disco**. Ese guard hay que abrir o reencuadrar, y es el verdadero bloqueo de F-01.
 
-| ID | Mitigación | Gravedad |
-|----|-----------|----------|
-| F-02a ✅ | `await asyncio.to_thread(...)` en `routes_mixer.py` (2 × `subprocess.run(ffprobe, timeout=30)` por petición → hasta **60 s** en el loop) y en `file_rename` / `file_delete` / `file_copy` de `routes/files.py` | Crítica |
-| F-02b ✅ | Offload del `os.walk` + scoring O(ficheros×títulos): extraído a `_score_target()` y `await asyncio.to_thread(...)` en `routes/wanted.py` | Alta |
-| F-02c ✅ | `state.http_session()`: **una sola `ClientSession` + `TCPConnector(limit=100, limit_per_host=30)`** compartida bajo el lifespan. Las **28 llamadas** `aiohttp.ClientSession()` pasan al seam; las 2 de WebSocket (con `cookie_jar` propio) se quedan privadas a propósito | Alta |
-| F-02d ✅ | TTL de **10 s** en `/api/trace` (antes: **9 llamadas por sondeo, cada 15 s, por pestaña**). Caché compartido → el coste depende de la ventana, no del número de pestañas | Media |
-| F-02e ✅ | Single-flight en el consumidor: `state.consumer_active` + `task.done()`, **ambas bajo `queue_lock`**. Antes cada `add` lanzaba un consumidor y **N copias corrían a la vez**, contradiciendo el docstring — y pisaban la referencia GC | Media |
-| F-02f ✅ | Sqlite detrás de `to_thread` en la ruta caliente: `_attach_grabbed_at` (un `WHERE grabbed_at >= ?` **sin índice**, en 4 rutas), `record_own_grab` ×2 y la lectura de `/api/auto-copy/history`. `_attach_grabbed_at` pasa a `async def` con 5 sitios con `await` | Media |
+Así que F-01 pasa de "construir el emplazamiento" a **tres cosas concretas**:
+
+| # | Qué | Dificultad |
+|---|---|---|
+| 1 | **Abrir ese SKIP** para grabs con destino explícito (el arr ya tiene el 1080p; eso es lo que queremos) | media — toca la política de auto-copy, que está cubierta de tests |
+| 2 | **Elegir el destino según la calidad**: `paths.path_4k` / `paths.path_3d` (vacíos = desactivado = comportamiento de hoy), 1080p → biblioteca | baja — la detección de 4K es `release.quality` → `Bluray-2160p`/`WEBDL-2160p`, **ya llega al cliente** (`clients.py:1344`) |
+| 3 | **Detección de 3D** | ❓ **única incógnita real** |
+
+#### Decisión de producto pendiente (la última):
+
+- **¿Cómo identificamos un release como 3D?** En todo el repo hay **cero** ocurrencias de
+  3D/HSBS/HTAB/SBS. Opciones:
+  1. **Por el título** del release (`3D`, `HSBS`, `HTAB`, `SBS`) — cero dependencias, pero frágil
+     y propenso a falsos positivos con "3D" en títulos normales.
+  2. **Por los flags del indexador** (`indexerFlags` de Torznab) — fiable si el indexador los
+     pone, y silenciosamente vacío si no.
+  3. **Etiquetado manual** — el usuario marca la release como 3D antes de descargar; cero
+     fallos, pero es trabajo por cada una.
+  4. **(1) + (3)** — automático con corrección manual. *Mi recomendación.*
+
+*(El resto de lo que había pendiente queda resuelto o sin objeto: "¿sustituye o convive" →
+conviven; "destino por release o por lote" → por release automáticamente; "qué pasa con el
+fichero viejo" → nada, se queda.)*
+**, en 4 rutas), `record_own_grab` ×2 y la lectura de `/api/auto-copy/history`. `_attach_grabbed_at` pasa a `async def` con 5 sitios con `await` | Media |
 | F-02g ✅ | Log **append-only** (`os.open(O_APPEND)` + un `os.write`). Antes: leer hasta 500 líneas y reescribir **cada WARNING**, en el loop, con ~37 sitios `log.warning` — un arr caído generaba uno por intento | Baja |
 | F-02h ✅ | `config.SERVICES` se congelaba en el import: guardar no servía de nada hasta reiniciar. **(A)** `config.rebuild()` con contenedores rellenados **in situ** + fuera las **3 copias duras** de `allowed_roots` + `RESTART_REQUIRED_FIELDS` honesto. **(B)** todos los escalares leídos en tiempo de llamada, incluidos los **46 sitios** de `REQUEST_TIMEOUT` | Baja |
 
