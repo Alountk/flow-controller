@@ -233,8 +233,15 @@ jobs:
           # compose service DNS. Print it: if this ever changes, the RADARR_URL
           # in docker-compose.e2e.yml must change with it, and this line is
           # what makes the next failure self-explaining.
-          docker inspect flow-controller --format 'flow-controller network_mode={{.HostConfig.NetworkMode}}'
-          echo "stub reachable at $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4400/__health) via 127.0.0.1:4400"
+          # Resolved by service, not by container name: docker-compose.yml does
+          # not set `container_name`, so the id must come from compose. And this
+          # step must NEVER fail the job — it is a diagnostic, and a wrong name
+          # once cost a whole run before the specs even started.
+          set +e
+          CID=$(docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml ps -q flow-controller)
+          docker inspect "$CID" --format 'flow-controller network_mode={{.HostConfig.NetworkMode}}'
+          echo "stub __health via 127.0.0.1:4400 -> $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4400/__health)"
+          exit 0
 
       - name: "Phase 2 — health check (app :8000 + fake-arr __health)"
         run: |
