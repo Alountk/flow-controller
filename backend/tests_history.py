@@ -728,8 +728,46 @@ def test_a_fresh_database_is_created_with_the_destination_column(tmp_path):
         columns = [r[1] for r in conn.execute("PRAGMA table_info(own_grabs)")]
     finally:
         conn.close()
-    assert version == 6
+    # Follows the constant rather than a literal: bumping the schema must not
+    # turn this into a red test for a reason unrelated to what it checks.
+    assert version == history.SCHEMA_VERSION
     assert "destination" in columns
+
+
+def test_a_v6_database_gains_the_retention_table(tmp_path):
+    """v7 adds `amule_downloads`. Same discipline as v2: `executescript` runs
+    `CREATE TABLE IF NOT EXISTS` on every start, so a real v6 file gains the
+    table with no ALTER and the version bump only records it."""
+    path = tmp_path / "history.db"
+    history.close()
+    history.init_db(path)
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("DROP TABLE amule_downloads")  # a file from before v7
+        conn.execute("PRAGMA user_version=6")
+        conn.commit()
+    finally:
+        conn.close()
+    history.close()
+
+    history.init_db(path)
+    try:
+        # Present AND usable — the table existing is not the same as working.
+        stamp = history.remember_downloads([str(path / "Movie.mkv")])
+        assert stamp, "the migrated file could not record a first-seen instant"
+    finally:
+        history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        present = bool(
+            conn.execute("SELECT name FROM sqlite_master WHERE name='amule_downloads'").fetchone()
+        )
+    finally:
+        conn.close()
+    assert version == 7
+    assert present, "a v6 file did not gain the v7 table"
 
 
 # ── The own-grab reader (T6) ─────────────────────────────────────────────────
