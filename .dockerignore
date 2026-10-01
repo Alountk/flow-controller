@@ -18,6 +18,9 @@ frontend/node_modules
 frontend/dist
 frontend/.cache
 
+# E2E tests (never part of the image; keeps `context: .` lean)
+e2e
+
 # IDE
 .vscode
 .idea
