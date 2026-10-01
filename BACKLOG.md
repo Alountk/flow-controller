@@ -467,7 +467,7 @@ C-01…C-07 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplica
 |----|---------|------------------------|
 | **C-01** | **Aviso de import bloqueado** (webhook/Telegram/email) | La app *existe* para detectar que el flujo se corta, y hoy solo te enteras si miras la pantalla. El ROADMAP ya lo tenía en Fase 4. |
 | **C-02** | **Gestor de import bloqueado**: reintentar / limpiar en un clic | Hay un caso real documentado en producción (`Transformers … 2160p`, `importBlocked`). Hoy solo se *ve*, no se actúa. |
-| **C-03** | **E2E con Playwright** | B-01 y B-02 son exactamente el tipo de fallo que ni el CSS ni los tests unitarios cazan. Ya estaba en el backlog (#12) — subirle prioridad. |
+| **C-03** ✅ | **E2E con Playwright** | **Entregado en #97-#100**: `e2e/` + 5 specs + stub `fake-arr` con payloads capturados + CI en dos fases (bare / con stub). B-01 y B-02 eran exactamente el tipo de fallo que ni el CSS ni los tests unitarios cazan. |
 | **C-04** | **Upgrades automáticos programados** 1080p → 4K | Extensión natural de F-01: en vez de pedirlo a mano, una cola de upgrade por perfil de calidad. |
 | **C-05** | **Rate limiting + Request ID** | Ya en el backlog (#13/#14). Ahora que hay auth por API key, una key filtrada sin límite es un agujero. |
 | **C-06** | **Responsive + dark mode** | Ya en el backlog (#10/#11). Ninguna prueba visual. |
@@ -505,4 +505,4 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 
 ## Orden propuesto
 
-`C-03` → `F-07` → `F-01` → `C-01/C-02` — **F-06 aparte, sin fecha**
+`F-07` → `F-01` → `C-01/C-02` — **F-06 aparte, sin fecha**

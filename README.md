@@ -321,7 +321,8 @@ falla y **nombra el módulo**.
 | F-05 | RAU-141 | **Retención de aMule**: edad en BD + chips + *Marcar caducados*, **borrado manual con aviso de irreversibilidad** | feature | ✅ |
 | F-07 | RAU-143 | **Procedencia de los ficheros de aMule** (¿Radarr o Sonarr?) — mostrada, no bloqueante | feature | ⬜ |
 | F-06 | RAU-142 | **Estudio**: motor propio de aMule (control de rutas y flow) — viabilidad de 4 opciones + licencia GPL vs MIT | estudio | ⬜ (sin fecha) |
-| C-01…C-07 | RAU-131…137 | Avisos de import bloqueado, su gestor, E2E Playwright, upgrades automáticos, rate limiting, responsive+dark, `IMPORT_TIMEOUT` en UI | backlog | ⬜ |
+| C-03 | RAU-133 | **E2E con Playwright**: 5 specs + stub `fake-arr` + CI en dos fases | mejora | ✅ |
+| C-01/02/04/05/06/07 | RAU-131,132,134,135,136,137 | Avisos de import bloqueado, su gestor, upgrades automáticos, rate limiting, responsive+dark, `IMPORT_TIMEOUT` en UI | backlog | ⬜ |
 
 Detalle y justificación de cada entrada en `BACKLOG.md`.
 
