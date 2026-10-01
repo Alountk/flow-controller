@@ -317,6 +317,15 @@ honesto no deja piezas que funcionen por separado — ver `odd/tasks/f04-multise
 Y un dato: **`FileManager.tsx` no tenía ni un test**; este trabajo lo crea (4, RED comprobado).
 
 **Decisión del usuario: el borrado es SUYO, siempre con aviso de irreversibilidad.**
+
+**Parte A (backend) entregada** — `GET /api/files/retention?path=` devuelve
+`{days, files:[{name, first_seen_at, age_days, expired}]}`. Solo marca: **nunca borra**, y si
+la BD no está disponible devuelve el fichero **sin edad** en vez de inventar una. Migración
+`SCHEMA_VERSION` 6 → 7 con la disciplina de v2-v6 (tabla nueva que un fichero viejo gana sin
+`ALTER`). Falta la parte B (chips en el explorador + *Marcar caducados* + campo en
+Configuración) y, aparte, la **procedencia** — que necesita mover la caché de `build_traces`
+y por eso no entra aquí.
+
 El sweep **nunca** borra solo: marca y deja que tú lo borres (en lote, con F-04), y antes de
 ejecutar aparece un aviso explícito de que **no se puede recuperar**. Un borrado automático es
 una opción futura con interruptor, no el comportamiento por defecto.

@@ -114,6 +114,54 @@ async def file_browse(path: str = "/", _key: str = Depends(verify_api_key)):
         return {"ok": False, "error": "Sin permisos de lectura", "items": [], "path": target}
 
 
+@router.get("/api/files/retention")
+async def file_retention(path: str = "/", _key: str = Depends(verify_api_key)):
+    """How long each file in `path` has been here, and is it past the window.
+
+    **Marking only — this endpoint never deletes anything.** Deletion is the
+    maintainer's decision, taken behind an explicit irreversible-data warning
+    in the UI; a read endpoint that also cleaned up would take that decision
+    by itself.
+
+    The clock is persisted the first time a file is observed and never
+    refreshed: recomputing it per sweep would mean nothing ever expires. Rows
+    whose file has disappeared are pruned here so the table tracks the disk.
+    """
+    target = _validate_path(path)
+    if not os.path.isdir(target):
+        return {"ok": False, "detail": f"No es un directorio: {target}",
+                "path": target, "days": config.RETENTION_AMULE_DAYS, "files": []}
+
+    entries = sorted(
+        (e for e in Path(target).iterdir() if e.is_file()),
+        key=lambda p: p.name.lower(),
+    )
+    full = [str(e) for e in entries]
+    seen = await asyncio.to_thread(history.remember_downloads, full)
+    await asyncio.to_thread(history.prune_downloads, target, set(full))
+
+    now = time.time()
+    days = config.RETENTION_AMULE_DAYS
+    files = []
+    for entry in entries:
+        first = seen.get(str(entry))
+        if first is None:
+            # The store is unavailable: report the file without an age rather
+            # than inventing one — a made-up age could justify a deletion.
+            files.append({"name": entry.name, "first_seen_at": None,
+                          "age_days": None, "expired": False})
+            continue
+        age_days = max(0.0, (now - first) / 86400.0)
+        files.append({
+            "name": entry.name,
+            "first_seen_at": first,
+            "age_days": round(age_days, 2),
+            "expired": age_days >= days,
+        })
+
+    return {"ok": True, "path": target, "days": days, "files": files}
+
+
 @router.post("/api/files/mkdir")
 async def file_mkdir(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Crea un directorio."""

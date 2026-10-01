@@ -156,6 +156,7 @@ def rebuild() -> None:
     global IMPORT_POLL_TIMEOUT, TRACE_LIMIT
     global SAFE_MODE, DEVELOPER
     global FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT
+    global RETENTION_AMULE_DAYS
 
     RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
     SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:7878")
@@ -175,6 +176,7 @@ def rebuild() -> None:
     IMPORT_POLL_TIMEOUT = int(get_setting("intervals", "import_timeout", default=40))
 
     TRACE_LIMIT = int(get_setting("tracing", "limit", default=25))
+    RETENTION_AMULE_DAYS = int(get_setting("retention", "amule_days", default=7))
 
     SAFE_MODE = get_setting("security", "safe_mode", default=True)
     DEVELOPER = get_setting("developer", default=False)

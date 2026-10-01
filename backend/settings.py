@@ -35,6 +35,9 @@ DEFAULTS: dict[str, Any] = {
         "import_timeout": 40,
     },
     "tracing": {"limit": 25},
+    # How long a downloaded file stays before the UI may offer deleting it.
+    # Deletion itself is always manual — see the retention feature.
+    "retention": {"amule_days": 7},
     "server": {"port": 8000},
 }
 

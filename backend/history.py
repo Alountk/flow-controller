@@ -24,7 +24,7 @@ from pathlib import Path
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -143,6 +143,20 @@ CREATE TABLE IF NOT EXISTS auto_copy_log (
     decision  TEXT NOT NULL,
     reason    TEXT,
     at        REAL NOT NULL
+);
+
+-- v7: retention clock for downloaded files. One row per file we have ever
+-- observed, written the FIRST time only: `first_seen_at` is the reference the
+-- retention window measures from, and refreshing it on every observation would
+-- mean nothing ever reaches the window. Rows are pruned when the file is gone,
+-- so the table tracks the disk instead of accumulating every download ever made.
+--
+-- Same migration discipline as v2-v6: `CREATE TABLE IF NOT EXISTS` inside a
+-- script `init_db` runs on every start, so an older file simply gains the
+-- table and the version bump only records it.
+CREATE TABLE IF NOT EXISTS amule_downloads (
+    path          TEXT PRIMARY KEY,
+    first_seen_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_auto_copy_log_newest ON auto_copy_log (at DESC, id DESC);
 """
@@ -558,6 +572,67 @@ def record_own_grab(
 # this instant from the trace (its `date` is the grab, which precedes the
 # download), so the reference is persisted here the first time a candidate is
 # seen in a given condition. See the schema comment on `auto_copy_seen`.
+
+
+def remember_downloads(paths: list[str], *, now: float | None = None) -> dict[str, float]:
+    """First-seen instant for each of `paths`, recording `now` for the new ones.
+
+    Existing rows are **never** updated, and that is the whole point: a sweep
+    that refreshed the clock on every observation would mean nothing ever
+    reached the retention window.
+
+    Returns `{}` when the store is unavailable, so the caller reports no ages
+    rather than inventing them — the safe direction, because an invented age
+    could justify deleting a file that was never actually kept for a week.
+    """
+    if not paths:
+        return {}
+    stamp = time.time() if now is None else now
+    with _lock:
+        if _conn is None:
+            return {}
+        try:
+            _conn.executemany(
+                "INSERT OR IGNORE INTO amule_downloads (path, first_seen_at) VALUES (?, ?)",
+                [(p, stamp) for p in paths],
+            )
+            _conn.commit()
+            out: dict[str, float] = {}
+            # Chunked: SQLite caps bound parameters per statement.
+            for i in range(0, len(paths), 400):
+                chunk = paths[i:i + 400]
+                rows = _conn.execute(
+                    "SELECT path, first_seen_at FROM amule_downloads "
+                    f"WHERE path IN ({','.join('?' * len(chunk))})",
+                    chunk,
+                ).fetchall()
+                out.update((r[0], float(r[1])) for r in rows)
+            return out
+        except sqlite3.Error as exc:
+            log.warning("Could not record download first-seen: %s", exc)
+            return {}
+
+
+def prune_downloads(directory: str, keep: set[str]) -> None:
+    """Drop the rows under `directory` whose file no longer exists.
+
+    Without this the table would outlive every download ever made. One pass
+    over the (already small, because it is pruned) table keeps it tracking
+    the disk instead of accumulating history nobody asked for.
+    """
+    prefix = directory.rstrip("/") + "/"
+    with _lock:
+        if _conn is None:
+            return
+        try:
+            rows = _conn.execute("SELECT path FROM amule_downloads").fetchall()
+            stale = [(r[0],) for r in rows
+                     if r[0].startswith(prefix) and r[0] not in keep]
+            if stale:
+                _conn.executemany("DELETE FROM amule_downloads WHERE path = ?", stale)
+                _conn.commit()
+        except sqlite3.Error as exc:
+            log.warning("Could not prune download first-seen rows: %s", exc)
 
 
 def note_auto_copy_seen(
