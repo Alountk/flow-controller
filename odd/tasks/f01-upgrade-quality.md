@@ -30,8 +30,8 @@ Es un **bug latente ya shipped**: el selector "destino por selección" existe, g
 | PR | Contenido | Estado |
 |----|-----------|--------|
 | **A** | Abrir el `SKIP` de `decide_copy` para destinos ajenos a la biblioteca | ✅ **PR #101** (`42d1acb`) — 626 tests |
-| **B** | Destino por calidad: `paths.path_4k` / `paths.path_3d` + detección de 4K | ⬜ siguiente |
-| **C** | Detección de 3D (título + corrección manual) | ⬜ |
+| **B** | Destino por calidad: `paths.path_4k` + detección de 4K | ✅ **PR #102** (`627de9f`) — 634 backend / 246 frontend |
+| **C** | Detección de 3D (título + corrección manual) + `paths.path_3d` | ⬜ siguiente |
 
 ---
 
@@ -77,35 +77,30 @@ ahora**.
 
 ---
 
-## Tareas — PR B: destino por calidad
+## Tareas — PR B ✅ (PR #102)
 
-**Decisión de arquitectura:** quién posee cada cosa.
+✅ **T1** `PATH_4K` en `rebuild()` + añadido a `ALLOWED_ROOTS` (obligatorio:
+`copy_engine` valida `dest_root` ahí, o se grabaría y se rechazaría al copiar) + campo en
+Settings.
+✅ **T2** `quality: str = ""` en ambos modelos; `destination_for_quality()` puro en
+`config.py` junto a `path_is_allowed`; destino **efectivo** validado en ambos endpoints.
+✅ **T3** el cliente manda `release.quality`.
 
-| | Quién | Por qué |
-|---|---|---|
-| **Configuración** (`paths.path_4k` / `paths.path_3d`) | backend | Como `ALLOWED_ROOTS`: **una sola autoridad**, no una copia hardcodeada por ruta |
-| **Validación** (`path_is_allowed`) | backend | **Ya existe** y es la única puerta |
-| **Decisión** (¿este release va al 4K?) | **frontend** | Ya tiene `quality` y `title` por fila, y ya agrupa por destino antes de llamar a `grab-batch` |
+### Lo que el test destapó (y hay que no perder)
 
-El cliente elige, el servidor valida — **exactamente como funciona `destination` hoy**.
+Mi primer test de batch asumía **una sola llamada** con la calidad compartida → falló.
+`grab-batch` tiene **un solo campo `quality`** y una selección puede mezclar clases.
 
-### T1 — las dos rutas son configuración 🔴
-- [ ] `config.py`: `PATH_4K` / `PATH_3D` leídos en `rebuild()` desde `paths.*`, vacío por defecto.
-- [ ] **Incluidas en `ALLOWED_ROOTS`.** Obligatorio: `copy_engine` valida `dest_root`
-      contra `path_is_allowed` (`tests_copy_engine.py::test_rejects_a_dest_root_outside_the_allowed_roots`),
-      así que una ruta 4K que no esté en las raíces **se copiaría y luego fallaría**.
-- [ ] `Settings` type + 2 campos en el bloque "Rutas".
+- **Fusionar no es viable**: mandar `1080p` para una fila 4K deja que Radarr la importe y
+  **reemplace** el 1080p → exactamente el fallo de convivencia que evitamos.
+- **Enviar nada tampoco**: mismo resultado.
+- **Solución**: el batch se **parte en una llamada por clase** (`splitByQuality`). Con
+  destino elegido a mano → una sola llamada (gana igualmente en el servidor). Con un solo
+  grupo el mensaje queda **byte a byte** igual.
 
-### T2 — el backend acepta la calidad del release 🔴
-- [ ] `CalendarGrabRequest` / `CalendarGrabBatchRequest` ganan `quality: str = ""`.
-- [ ] `destination_for_quality()` puro en `config.py`, junto a `path_is_allowed`.
-- [ ] En ambos endpoints: `destination = req.destination or destination_for_quality(req.quality)`,
-      y **la misma** validación `path_is_allowed` sobre el destino **efectivo**.
-- [ ] **Elección explícita del usuario gana** sobre lo derivado.
+### Decisión de alcance
 
-### T3 — el cliente la manda 🔴
-- [ ] `grabCalendarRelease` / `grabCalendarReleaseBatch` envían `quality` solo si está.
-- [ ] El modal pasa `release.quality` de cada fila.
+`path_3d` **se movió a PR C** a propósito: una setting a la que nada enruta es una mentira.
 
 ## Criterios de aceptación (PR B)
 

@@ -145,7 +145,7 @@ Así que F-01 pasa de "construir el emplazamiento" a **tres cosas concretas**:
 | # | Qué | Dificultad |
 |---|---|---|
 | 1 | **Abrir ese SKIP** para grabs con destino explícito (el arr ya tiene el 1080p; eso es lo que queremos) | media — toca la política de auto-copy, que está cubierta de tests |
-| 2 | **Elegir el destino según la calidad**: `paths.path_4k` / `paths.path_3d` (vacíos = desactivado = comportamiento de hoy), 1080p → biblioteca | baja — la detección de 4K es `release.quality` → `Bluray-2160p`/`WEBDL-2160p`, **ya llega al cliente** (`clients.py:1344`) |
+| 2 ✅ | **Elegir el destino según la calidad**: `paths.path_4k` (vacío = desactivado = hoy), 1080p → biblioteca — **PR #102** | Baja, como se preveía: la detección de 4K es `release.quality` → `endswith('2160p')`, **ya llegaba al cliente** (`clients.py:1344`) |
 | 3 | **Detección de 3D** | ❓ **única incógnita real** |
 
 #### Reparto (medido, no supuesto — decidido antes de empezar)
@@ -153,7 +153,7 @@ Así que F-01 pasa de "construir el emplazamiento" a **tres cosas concretas**:
 | PR | Contenido | Por qué va solo |
 |----|-----------|-----------------|
 | **A** ✅ | **Abrir el `SKIP` de `decide_copy`** para grabs con destino explícito — **PR #101**, `42d1acb`, 626 tests | Era un **bug latente ya shipped**: elegir un destino para una película con archivo no hacía nada. Ahora sí, y un destino que cae **dentro de una raíz de Radarr** sigue sin abrirse (fail-closed: sin raíces comprobables no se amplía nada) |
-| **B** | Destino por calidad: `paths.path_4k` / `paths.path_3d` + detección de 4K | Depende de A (si no, el destino no llega a disco) |
+| **B** ✅ | Destino por calidad — **PR #102**, `627de9f`, `paths.path_4k` + detección de `2160p` | Depende de A, ya en `main`. **El batch se parte en una llamada por clase**: `grab-batch` tiene un solo campo `quality`, y fusionarlas mandaría `1080p` para una fila 4K → Radarr la importaría y **reemplazaría** el fichero que debía conservarse |
 | C | Detección de 3D (título + corrección manual) | La única parte con UI nueva |
 
 #### Decisión de producto pendiente (resuelta):
