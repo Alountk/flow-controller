@@ -43,6 +43,9 @@ class CalendarGrabRequest(BaseModel):
     episodeId: int = 0
     # Chosen destination folder; None/absent means the arr's library.
     destination: str | None = None
+    # Radarr's quality name for this release (``Bluray-2160p``). Only read when
+    # no destination was chosen: it routes, it does not override a decision.
+    quality: str = ""
 
 
 class CalendarGrabBatchRequest(BaseModel):
@@ -54,3 +57,6 @@ class CalendarGrabBatchRequest(BaseModel):
     # One destination for the whole batch: the UI groups rows by destination and
     # issues one call per group. None/absent means the arr's library.
     destination: str | None = None
+    # One quality for the batch, for the same reason: the UI groups rows by
+    # destination, and the derived destination is what puts a batch in a group.
+    quality: str = ""

@@ -272,6 +272,10 @@ export interface Settings {
     download_amule: string
     download_torrent: string
     allowed_roots: string[]
+    // Folder a 4K release is routed to when nobody picked one by hand.
+    // Optional because a settings file written before this feature simply
+    // does not have the key — absent and "" mean the same thing: no routing.
+    path_4k?: string
   }
   intervals: {
     check: number

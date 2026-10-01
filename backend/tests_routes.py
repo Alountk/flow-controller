@@ -553,6 +553,144 @@ class TestGrabOwnRegistry:
         assert resp.json()["ok"] is True
         assert self._rows()[0]["destination"] is None
 
+    def test_a_4k_release_with_no_chosen_destination_lands_in_the_4k_folder(
+        self, monkeypatch
+    ):
+        """The whole point of PR B: the folder is chosen from the quality.
+
+        No hand-picked destination, so nothing overrides it — the release's
+        own class decides, which is what "4K goes to its own folder" means.
+        """
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={
+                    "source": "radarr",
+                    "guid": "g1",
+                    "movieId": 855,
+                    "quality": "Bluray-2160p",
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["destination"] == "/mnt/storage/movies/4k"
+
+    def test_the_owners_own_choice_beats_the_derived_one(self, monkeypatch):
+        """A destination picked by hand is a decision; a quality is only a hint.
+
+        Letting the derived value overwrite it would take the control the
+        destination combo already offers, and do it silently.
+        """
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={
+                    "source": "radarr",
+                    "guid": "g1",
+                    "movieId": 855,
+                    "quality": "Bluray-2160p",
+                    "destination": "/mnt/storage/movies/_manual",
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["destination"] == "/mnt/storage/movies/_manual"
+
+    @pytest.mark.parametrize("quality", ["Bluray-1080p", "WEBDL-720p", "HDTV-480p", ""])
+    def test_only_4k_is_routed_everything_else_stays_in_the_library(
+        self, monkeypatch, quality
+    ):
+        """Coexistence means the 1080p keeps its current route, untouched."""
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={
+                    "source": "radarr",
+                    "guid": "g1",
+                    "movieId": 855,
+                    "quality": quality,
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["destination"] is None
+
+    def test_an_unconfigured_4k_folder_means_the_library(self, monkeypatch):
+        """Empty is "not configured", never a request to write to "". A path
+        that cannot be read must not turn a normal grab into a failed one."""
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_4K", "", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={
+                    "source": "radarr",
+                    "guid": "g1",
+                    "movieId": 855,
+                    "quality": "Bluray-2160p",
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["destination"] is None
+
+    def test_the_batch_routes_by_quality_too(self, monkeypatch):
+        """The batch path is a separate endpoint with its own destination
+        handling; fixing only the single grab would leave half the UI on the
+        old behaviour."""
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab-batch",
+                json={
+                    "source": "radarr",
+                    "guids": ["g1", "g2"],
+                    "indexerIds": [1, 2],
+                    "movieId": 855,
+                    "quality": "Bluray-2160p",
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert [r["destination"] for r in self._rows()] == ["/mnt/storage/movies/4k"] * 2
+
     def test_a_destination_outside_the_allowed_roots_is_rejected_and_writes_no_row(self):
         from unittest.mock import AsyncMock
 
