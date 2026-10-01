@@ -177,7 +177,7 @@ flow-controller/
 │   └── run_local.sh
 ├── scripts/
 │   ├── verify.sh              # Pre-push verification (TypeScript build + backend tests)
-│   └── test-calendar-grab.sh  # Playwright headless test for calendar flow
+│   └── smoke/            # humo manual contra un servidor real (sin aserciones)
 └── frontend/
     └── src/
         ├── App.tsx
