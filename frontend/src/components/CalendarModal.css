@@ -472,3 +472,30 @@
   font-weight: 500;
 }
 
+
+/* The 3D mark: a suggestion from the title until the operator clicks it, at
+   which point it stops being one. Always rendered — offering the control only
+   when the heuristic already guessed would leave no way to correct a miss. */
+.release-3d {
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.18));
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.release-3d.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.release-3d:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

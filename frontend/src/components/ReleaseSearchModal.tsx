@@ -10,6 +10,7 @@ import {
 } from '../api/calendar'
 import { apiFetch } from '../api/auth'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
+import { looksThreeD } from '../utils/threeD'
 import {
   NO_RELEASE_FILTERS,
   collectLanguages,
@@ -69,6 +70,13 @@ export interface ReleaseSearchModalProps {
   onClose: () => void
 }
 
+/** Rows that would all land in the same folder, and must travel as one call. */
+interface RoutingGroup {
+  quality: string
+  is3d: boolean
+  guids: string[]
+}
+
 export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   const [step, setStep] = useState<ModalStep>('initial')
   const [message, setMessage] = useState('')
@@ -79,6 +87,9 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   const [destination, setDestination] = useState('')
   const [filters, setFilters] = useState<ReleaseFilters>(NO_RELEASE_FILTERS)
   const [grabErrors, setGrabErrors] = useState<{ guid: string; detail: string }[]>([])
+  // Per-row corrections to the 3D suggestion. An absent guid means "no human
+  // has spoken, trust the title"; present means "this is what I said".
+  const [threeDOverrides, setThreeDOverrides] = useState<Record<string, boolean>>({})
   const [elapsed, setElapsed] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -156,6 +167,9 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
         : result.releases.filter(r => r.indexer === selectedName)
       if (filtered.length > 0) {
         setReleases(filtered)
+        // A new search is a new list: whatever was corrected against the old
+        // rows would otherwise be applied, silently, to different releases.
+        setThreeDOverrides({})
         setStep('results')
       } else {
         setStep('error')
@@ -195,6 +209,18 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
     }
   }
 
+  /** What a row actually is: a human correction if there is one, else the suggestion. */
+  function isThreeD(r: Release): boolean {
+    const override = threeDOverrides[r.guid]
+    return override === undefined ? looksThreeD(r.title) : override
+  }
+
+  function toggleThreeD(guid: string) {
+    const release = releases.find((r) => r.guid === guid)
+    if (!release) return
+    setThreeDOverrides((prev) => ({ ...prev, [guid]: !isThreeD(release) }))
+  }
+
   async function handleGrab(guid: string) {
     setStep('grabbing')
     setGrabErrors([])
@@ -210,6 +236,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
       item.type === 'episode' ? item.id : 0,
       destination || undefined,
       release?.quality || undefined,
+      release ? isThreeD(release) : undefined,
     )
     if (result.ok) {
       setStep('done')
@@ -239,26 +266,29 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   }
 
   /**
-   * One call per quality class, not one call per batch.
+   * One call per *routing class*, not one call per batch.
    *
-   * `grab-batch` carries a single `quality`, so a selection mixing 4K and
-   * 1080p has no truthful answer for one call — and naming either class would
-   * send the other one to the wrong folder. Sending none would send both to
-   * the arr's library, which for a 4K release means the arr may import it and
-   * *replace* the 1080p: precisely the coexistence this feature exists to
-   * avoid. Splitting keeps every class where it belongs.
+   * `grab-batch` carries a single `quality` and a single `is3d`, so a selection
+   * holding two classes has no truthful value for one call — and naming either
+   * would send the other to the wrong folder. Sending neither would send a 3D
+   * release down the same route as any other: the arr may import it and replace
+   * what should have been kept, which is precisely the coexistence failure this
+   * feature exists to avoid.
    *
    * When a destination was chosen by hand it already wins server-side, so the
    * split buys nothing and one call is enough.
    */
-  function splitByQuality(guids: string[]): string[][] {
-    if (destination) return [guids]
-    const groups = new Map<string, string[]>()
+  function splitByRouting(guids: string[]): RoutingGroup[] {
+    if (destination) return [{ quality: '', is3d: false, guids }]
+    const groups = new Map<string, RoutingGroup>()
     for (const guid of guids) {
-      const quality = releases.find(r => r.guid === guid)?.quality ?? ''
-      const bucket = groups.get(quality)
-      if (bucket) bucket.push(guid)
-      else groups.set(quality, [guid])
+      const release = releases.find((r) => r.guid === guid)
+      const is3d = release ? isThreeD(release) : false
+      const quality = release?.quality ?? ''
+      const key = `${is3d ? '3d' : ''}|${quality}`
+      const bucket = groups.get(key)
+      if (bucket) bucket.guids.push(guid)
+      else groups.set(key, { quality, is3d, guids: [guid] })
     }
     return [...groups.values()]
   }
@@ -275,17 +305,17 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
     const errors: { guid: string; detail: string }[] = []
     const details: string[] = []
 
-    for (const group of splitByQuality(Array.from(selectedGuids))) {
-      const quality = releases.find(r => r.guid === group[0])?.quality ?? ''
-      const indexerIds = group.map(g => releases.find(r => r.guid === g)?.indexerId || 0)
+    for (const group of splitByRouting(Array.from(selectedGuids))) {
+      const indexerIds = group.guids.map(g => releases.find(r => r.guid === g)?.indexerId || 0)
       const result = await grabCalendarReleaseBatch(
         item.source,
-        group,
+        group.guids,
         indexerIds,
         item.type === 'movie' ? item.id : 0,
         item.type === 'episode' ? item.id : 0,
         destination || undefined,
-        quality || undefined,
+        group.quality || undefined,
+        group.is3d || undefined,
       )
       errors.push(...(result.errors ?? []))
       downloaded += result.downloaded?.length ?? 0
@@ -620,6 +650,24 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
                           <div className="release-title">{r.title}</div>
                           <div className="release-meta">
                             <span className="release-quality">{r.quality}</span>
+                            <button
+                              type="button"
+                              className={`release-3d ${isThreeD(r) ? 'active' : ''}`}
+                              aria-pressed={isThreeD(r)}
+                              aria-label={
+                                isThreeD(r)
+                                  ? `Quitar la marca 3D de ${r.title}`
+                                  : `Marcar ${r.title} como 3D`
+                              }
+                              onClick={(e) => {
+                                // The row's own click grabs the release; this
+                                // button only changes where it would go.
+                                e.stopPropagation()
+                                toggleThreeD(r.guid)
+                              }}
+                            >
+                              3D
+                            </button>
                             <span className="release-size">{formatSize(r.size)}</span>
                             {r.seeders > 0 && (
                               <span className="release-seeders">⬆ {r.seeders} / ⬇ {r.leechers}</span>

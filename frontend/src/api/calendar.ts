@@ -137,6 +137,7 @@ export async function grabCalendarRelease(
   episodeId: number = 0,
   destination?: string,
   quality?: string,
+  is3d?: boolean,
 ): Promise<{ ok: boolean; detail: string }> {
   // A rejected fetch (offline, aborted, DNS) must surface as a failed result,
   // not as an unhandled rejection that leaves the modal stuck on "Descargando".
@@ -147,6 +148,7 @@ export async function grabCalendarRelease(
   const body: Record<string, unknown> = { source, guid, indexerId, movieId, episodeId }
   if (destination) body.destination = destination
   if (quality) body.quality = quality
+  if (is3d) body.is3d = true
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab', {
@@ -172,10 +174,12 @@ export async function grabCalendarReleaseBatch(
   episodeId: number = 0,
   destination?: string,
   quality?: string,
+  is3d?: boolean,
 ): Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }> {
   const body: Record<string, unknown> = { source, guids, indexerIds, movieId, episodeId }
   if (destination) body.destination = destination
   if (quality) body.quality = quality
+  if (is3d) body.is3d = true
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab-batch', {

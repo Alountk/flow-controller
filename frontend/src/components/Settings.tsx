@@ -320,6 +320,12 @@ export function Settings() {
           onChange={(v) => update('paths.path_4k', v)}
           placeholder="/mnt/storage/peliculas-4k"
         />
+        <Field
+          label="Carpeta de las 3D (vacío = no enrutarlas aparte)"
+          value={form.paths.path_3d ?? ''}
+          onChange={(v) => update('paths.path_3d', v)}
+          placeholder="/mnt/storage/peliculas-3d"
+        />
       </Section>
 
       <Section title="Intervalos">

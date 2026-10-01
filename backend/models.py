@@ -46,6 +46,10 @@ class CalendarGrabRequest(BaseModel):
     # Radarr's quality name for this release (``Bluray-2160p``). Only read when
     # no destination was chosen: it routes, it does not override a decision.
     quality: str = ""
+    # Whether the release is 3D, resolved by the caller — the client owns the
+    # title heuristic AND the human correction that overrides it, so it sends
+    # one answer rather than both inputs.
+    is3d: bool = False
 
 
 class CalendarGrabBatchRequest(BaseModel):
@@ -60,3 +64,4 @@ class CalendarGrabBatchRequest(BaseModel):
     # One quality for the batch, for the same reason: the UI groups rows by
     # destination, and the derived destination is what puts a batch in a group.
     quality: str = ""
+    is3d: bool = False

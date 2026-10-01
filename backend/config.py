@@ -32,6 +32,9 @@ ALLOWED_ROOTS: list[str] = []
 #: "not configured", which must read as today's behaviour (the arr's library),
 #: never as a request to write to "".
 PATH_4K: str = ""
+#: Same deal as `PATH_4K`: empty means "not configured", which reads as
+#: "do not route 3D anywhere in particular".
+PATH_3D: str = ""
 _DOWNLOAD_CLIENT_PATHS: dict[str, str] = {}
 
 ACTIONS: dict[str, dict] = {
@@ -134,19 +137,31 @@ def path_is_allowed(path: str) -> bool:
     return False
 
 
-def destination_for_quality(quality: str) -> str | None:
-    """Folder a release's quality class is routed to; None means the library.
+def destination_for_quality(quality: str, *, is3d: bool = False) -> str | None:
+    """Folder a release should land in; None means the arr's library.
 
     Radarr reports the quality as one hyphen-joined token — ``Bluray-2160p``,
     ``WEBDL-2160p``, ``HDTV-2160p`` — so the resolution is matched on its
     suffix, which is what actually distinguishes the classes; the container
     varies and the number does not.
 
+    **3D outranks the resolution.** A 3D rip is 3D whatever it was encoded at,
+    so keying it off resolution would scatter the 3D collection across two
+    destinations based on a property nobody picked. The cost of the other
+    order — a 4K3D title sitting in the 3D folder — keeps the 3D collection
+    whole, which is the entire reason that folder exists.
+
+    `is3d` arrives already resolved: unlike a quality, "is this 3D?" is an
+    interpretation of the title plus a human correction, so the caller decides
+    and this function only routes.
+
     An unconfigured folder resolves to None, so adding this never changes a
     deployment that has not opted in. It is deliberately NOT authoritative:
     an explicit destination from the caller wins, because a folder chosen by
     hand is a decision and a quality is only a hint.
     """
+    if is3d and PATH_3D:
+        return PATH_3D
     name = (quality or "").strip().lower()
     if name.endswith("2160p") and PATH_4K:
         return PATH_4K
@@ -181,6 +196,7 @@ def rebuild() -> None:
     global FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT
     global RETENTION_AMULE_DAYS
     global PATH_4K
+    global PATH_3D
 
     RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
     SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:7878")
@@ -216,14 +232,16 @@ def rebuild() -> None:
     # did `from config import ALLOWED_ROOTS`.
     ALLOWED_ROOTS[:] = get_setting("paths", "allowed_roots", default=[])
     PATH_4K = str(get_setting("paths", "path_4k", default="") or "").strip()
-    # The quality folder has to be reachable, not merely named. `copy_engine`
-    # validates `dest_root` against `path_is_allowed`, so a 4K folder missing
-    # from the allowlist would be grabbed, downloaded and then REFUSED at copy
-    # time — the worst possible moment to find out. Naming it here is the
-    # operator saying "this is where those files go", which is the same
-    # authority `allowed_roots` records, one entry earlier.
-    if PATH_4K and PATH_4K not in ALLOWED_ROOTS:
-        ALLOWED_ROOTS.append(PATH_4K)
+    PATH_3D = str(get_setting("paths", "path_3d", default="") or "").strip()
+    # The routing folders have to be reachable, not merely named. `copy_engine`
+    # validates `dest_root` against `path_is_allowed`, so a folder missing from
+    # the allowlist would be grabbed, downloaded and then REFUSED at copy time —
+    # the worst possible moment to find out. Naming it here is the operator
+    # saying "this is where those files go", which is the same authority
+    # `allowed_roots` records, one entry earlier.
+    for routed in (PATH_4K, PATH_3D):
+        if routed and routed not in ALLOWED_ROOTS:
+            ALLOWED_ROOTS.append(routed)
     _DOWNLOAD_CLIENT_PATHS.clear()
     _DOWNLOAD_CLIENT_PATHS.update({
         "amule": FOLDER_DOWNLOAD_AMULE,

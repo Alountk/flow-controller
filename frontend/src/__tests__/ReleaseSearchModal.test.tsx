@@ -358,3 +358,91 @@ describe('ReleaseSearchModal quality routing', () => {
     expect(byQuality).toEqual({ 'Bluray-2160p': ['a'], 'WEBDL-1080p': ['b'] })
   })
 })
+
+/**
+ * The 3D suggestion and the hand correction that outranks it.
+ *
+ * `looksThreeD` itself is pinned in threeD.test.ts. What these own is the
+ * wiring: that the row's answer — not the heuristic's — is what reaches the
+ * grab, in both directions, and that a batch does not carry two answers at
+ * once.
+ */
+describe('ReleaseSearchModal 3D routing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const suggested = makeRelease({
+    guid: 'sug-1',
+    title: 'Película 2020 3D HSBS 1080p BluRay',
+    quality: 'Bluray-1080p',
+  })
+  const plain = makeRelease({
+    guid: 'plain-1',
+    title: 'Otra Película 2022 1080p BluRay',
+    quality: 'Bluray-1080p',
+  })
+
+  it('sends is3d when the title suggests it', async () => {
+    const fn = mockFetch({ releases: [suggested] })
+    await openResults()
+
+    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    expect(grabBodies(fn)[0].is3d).toBe(true)
+  })
+
+  it('sends nothing when the title suggests nothing', async () => {
+    const fn = mockFetch({ releases: [plain] })
+    await openResults()
+
+    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    expect(grabBodies(fn)[0]).not.toHaveProperty('is3d')
+  })
+
+  it('lets the operator overrule the suggestion', async () => {
+    const fn = mockFetch({ releases: [suggested] })
+    await openResults()
+
+    fireEvent.click(screen.getByRole('button', { name: /Quitar la marca 3D/ }))
+    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    // What the title said is a hint; what the operator says is the answer.
+    expect(grabBodies(fn)[0]).not.toHaveProperty('is3d')
+  })
+
+  it('lets the operator correct a title the heuristic missed', async () => {
+    const fn = mockFetch({ releases: [plain] })
+    await openResults()
+
+    fireEvent.click(screen.getByRole('button', { name: /Marcar .* como 3D/ }))
+    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    expect(grabBodies(fn)[0].is3d).toBe(true)
+  })
+
+  it('splits a batch so the 3D row never travels with the rest', async () => {
+    const fn = mockFetch({ releases: [suggested, plain] })
+    await openResults()
+
+    for (const box of document.querySelectorAll<HTMLInputElement>('.release-checkbox input')) {
+      fireEvent.click(box)
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Descargar \(2\)/ }))
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(2))
+
+    // Same quality, different folder: one `is3d` per call cannot describe both.
+    const routed3d = grabBodies(fn).filter((b) => b.is3d === true)
+    expect(routed3d).toHaveLength(1)
+    expect(routed3d[0].guids).toEqual(['sug-1'])
+    const routedFlat = grabBodies(fn).filter((b) => b.is3d !== true)
+    expect(routedFlat).toHaveLength(1)
+    expect(routedFlat[0].guids).toEqual(['plain-1'])
+  })
+})

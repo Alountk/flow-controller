@@ -279,7 +279,9 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
     # effective path is then checked against the app's configured allowed
     # roots (`path_is_allowed`); it is never trusted to be safe. Absent (None)
     # is the library default and skips the check entirely.
-    destination = req.destination or destination_for_quality(req.quality)
+    destination = req.destination or destination_for_quality(
+        req.quality, is3d=req.is3d
+    )
     if destination is not None and not path_is_allowed(destination):
         return {"ok": False, "detail": f"Destino no permitido: {destination}"}
 
@@ -329,7 +331,9 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
     # rows by destination and calls this once per group, so one value covers
     # the batch — and one quality covers it for the same reason, because the
     # derived destination is what put these rows in the same group.
-    destination = req.destination or destination_for_quality(req.quality)
+    destination = req.destination or destination_for_quality(
+        req.quality, is3d=req.is3d
+    )
     if destination is not None and not path_is_allowed(destination):
         return {
             "ok": False,
