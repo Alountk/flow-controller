@@ -148,7 +148,15 @@ Así que F-01 pasa de "construir el emplazamiento" a **tres cosas concretas**:
 | 2 | **Elegir el destino según la calidad**: `paths.path_4k` / `paths.path_3d` (vacíos = desactivado = comportamiento de hoy), 1080p → biblioteca | baja — la detección de 4K es `release.quality` → `Bluray-2160p`/`WEBDL-2160p`, **ya llega al cliente** (`clients.py:1344`) |
 | 3 | **Detección de 3D** | ❓ **única incógnita real** |
 
-#### Decisión de producto pendiente (la última):
+#### Reparto (medido, no supuesto — decidido antes de empezar)
+
+| PR | Contenido | Por qué va solo |
+|----|-----------|-----------------|
+| **A** | **Abrir el `SKIP` de `decide_copy`** para grabs con destino explícito | Es un **bug latente ya shipped**: hoy eliges un destino en "destino por selección" para una película con archivo y no pasa nada. Se arregla él solo, con sus tests de política |
+| **B** | Destino por calidad: `paths.path_4k` / `paths.path_3d` + detección de 4K | Depende de A (si no, el destino no llega a disco) |
+| C | Detección de 3D (título + corrección manual) | La única parte con UI nueva |
+
+#### Decisión de producto pendiente (resuelta):
 
 - **¿Cómo identificamos un release como 3D?** En todo el repo hay **cero** ocurrencias de
   3D/HSBS/HTAB/SBS. Opciones:
@@ -158,7 +166,12 @@ Así que F-01 pasa de "construir el emplazamiento" a **tres cosas concretas**:
      pone, y silenciosamente vacío si no.
   3. **Etiquetado manual** — el usuario marca la release como 3D antes de descargar; cero
      fallos, pero es trabajo por cada una.
-  4. **(1) + (3)** — automático con corrección manual. *Mi recomendación.*
+  4. **(1) + (3)** — automático con corrección manual. ✅ **Elegida por el usuario.**
+
+**Cómo se implementa la opción 4:** el título se analiza **al hacer el grab** (el mismo momento
+en que ya elegimos destino), y el resultado viaja en la petición — igual que `destination`, que
+ya viaja hasta `own_grabs`. La corrección manual es un control en la propia lista de releases
+que **sobrescribe** lo detectado: lo que detecta el título es una *sugerencia*, no una verdad.
 
 *(El resto de lo que había pendiente queda resuelto o sin objeto: "¿sustituye o convive" →
 conviven; "destino por release o por lote" → por release automáticamente; "qué pasa con el
