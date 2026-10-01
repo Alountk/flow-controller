@@ -1,0 +1,14 @@
+{
+  "id": 813,
+  "title": "Your Name.",
+  "originalTitle": "君の名は。",
+  "year": 2016,
+  "hasFile": false,
+  "path": "/data/shared-media/movies/Your Name. (2016)",
+  "movieFile": null,
+  "alternateTitles": [
+    {"sourceType": "tmdb", "movieMetadataId": 1083, "title": "Ton Nom", "id": 12496},
+    {"sourceType": "tmdb", "movieMetadataId": 1083, "title": "你的名字", "id": 12499},
+    {"sourceType": "tmdb", "movieMetadataId": 1083, "title": "Seu Nome", "id": 12493}
+  ]
+}

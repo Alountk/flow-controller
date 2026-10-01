@@ -1,0 +1,53 @@
+[
+  {
+    "guid": "torznab-your-name-1080p-bluray",
+    "title": "Your.Name.2016.1080p.BluRay.x264-GRP",
+    "size": 8589934592,
+    "quality": {
+      "quality": {"id": 1, "name": "Bluray-1080p", "source": 1},
+      "revision": {"version": 1, "real": 0, "isRepack": false}
+    },
+    "indexer": "Torznab",
+    "indexerId": 1,
+    "indexerFlags": "",
+    "seeders": 12,
+    "leechers": 3,
+    "protocol": "torrent",
+    "releaseGroup": "GRP",
+    "languages": [{"id": 1, "name": "English"}]
+  },
+  {
+    "guid": "torznab-your-name-720p-webdl",
+    "title": "Your.Name.2016.720p.WEB-DL.x264-RARBG",
+    "size": 3435973836,
+    "quality": {
+      "quality": {"id": 3, "name": "WEBDL-720p", "source": 3},
+      "revision": {"version": 1, "real": 0, "isRepack": false}
+    },
+    "indexer": "Torznab",
+    "indexerId": 1,
+    "indexerFlags": "",
+    "seeders": 40,
+    "leechers": 7,
+    "protocol": "torrent",
+    "releaseGroup": "RARBG",
+    "languages": [{"id": 1, "name": "English"}]
+  },
+  {
+    "guid": "torznab-your-name-1080p-webdl-x265",
+    "title": "Your.Name.2016.1080p.WEB-DL.x265-NTb",
+    "size": 5368709120,
+    "quality": {
+      "quality": {"id": 4, "name": "WEBDL-1080p", "source": 3},
+      "revision": {"version": 1, "real": 0, "isRepack": false}
+    },
+    "indexer": "Torznab",
+    "indexerId": 1,
+    "indexerFlags": "",
+    "seeders": 7,
+    "leechers": 1,
+    "protocol": "torrent",
+    "releaseGroup": "NTb",
+    "languages": [{"id": 1, "name": "English"}]
+  }
+]

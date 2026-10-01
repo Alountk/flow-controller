@@ -1,0 +1,43 @@
+# E2E override — the stub-backed variant of the CI install.
+#
+# Used ONLY by the second phase of the `e2e` job (and by local runs that want
+# the headline flow): the bare phase keeps running with docker-compose.yml +
+# docker-compose.ci.yml alone, against a container with no services.
+#
+# Chosen approach: stock `node:22-alpine` with ./e2e/fake-arr bind-mounted —
+# no Dockerfile for the stub. server.mjs has zero dependencies, so there is
+# nothing to install and nothing to build; a fixture edit is live on the next
+# `up`. The image is the same node:22 the frontend build stage already uses.
+services:
+  fake-arr:
+    image: node:22-alpine
+    command: node /stub/server.mjs
+    volumes:
+      - ./e2e/fake-arr:/stub:ro
+    ports:
+      # Host-only convenience: lets CI (and a local run) curl the stub's
+      # __health from the runner. The containers themselves never use this —
+      # they talk over the compose network as fake-arr:4000 — and 127.0.0.1
+      # keeps the port off the network interface. 4400, not the default 4000:
+      # a local aMuleTorrent on :4000 must not make `up` fail to bind.
+      - "127.0.0.1:4400:4000"
+    healthcheck:
+      # BusyBox wget ships with alpine; __health is the stub's liveness route.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/__health"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  flow-controller:
+    # `up` blocks on fake-arr's health before starting the app, so the first
+    # /api/v3/* probe can never race an unlistening stub.
+    depends_on:
+      fake-arr:
+        condition: service_healthy
+    environment:
+      - RADARR_URL=http://fake-arr:4000
+      - RADARR_API_KEY=test-radarr-key
+      # SONARR_* deliberately NOT set: the specs cover the Radarr path and a
+      # second configured arr would fan out every poll twice. The stub still
+      # serves GET /api/v3/series so the Sonarr readers have a valid answer
+      # if a future spec turns it on.
