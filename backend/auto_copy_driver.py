@@ -14,6 +14,7 @@ user's external timer (cron/systemd) calling that endpoint.
 
 import asyncio
 import logging
+import os
 import time
 
 from auto_copy import (
@@ -27,7 +28,7 @@ from auto_copy import (
     find_own_grab,
     matches_own_grab,
 )
-from clients import arr_has_file
+from clients import arr_has_file, arr_root_folders
 from config import find_service
 from copy_engine import do_action
 from history import (
@@ -231,12 +232,20 @@ async def _run_sweep(
     # sweep. The transition log below only appends when this differs.
     last_outcomes = latest_auto_copy_decisions()
 
+    # ONE arr round trip for the whole sweep, and only if some grab actually
+    # carries a destination. Resolved once because root folders do not move
+    # between two traces of the same sweep, and because every trace has to be
+    # judged against the same list — judging them against different answers
+    # would make the gate's behaviour depend on loop order.
+    foreign_destinations = await _foreign_destinations(session, own_grabs)
+
     for trace in traces:
         try:
             entry = await _handle_trace(
                 session,
                 trace,
                 own_grabs=own_grabs,
+                foreign_destinations=foreign_destinations,
                 now=current,
                 safe_mode=safe_mode,
                 grace_seconds=grace,
@@ -300,11 +309,76 @@ def _log_outcome(entry: dict, last_outcomes: dict[str, str]) -> None:
     )
 
 
+async def _arr_roots(session, source: str) -> list[str]:
+    """Root folders the arr manages for `source`; [] whenever unknown.
+
+    Unknown is the point: the caller cannot then prove a destination is
+    foreign, and the policy keeps the gate it already has.
+    """
+    service = find_service(source, "arr")
+    if not service:
+        return []
+    try:
+        return await arr_root_folders(session, service)
+    except Exception as exc:  # noqa: BLE001 — unknown, never "not a root"
+        log.warning("auto-copy sweep: sin raíces de %s: %s", source, exc)
+        return []
+
+
+def _inside(path: str, root: str) -> bool:
+    """`path` is `root` itself or lies under it — compared by component.
+
+    A bare ``startswith`` would file ``/movies-4k`` under ``/movies``, which is
+    precisely the pair this feature tells apart.
+    """
+    candidate = os.path.normpath(path or "")
+    base = os.path.normpath(root or "")
+    if not base or base == os.curdir:
+        return False
+    return candidate == base or candidate.startswith(base + os.sep)
+
+
+async def _foreign_destinations(session, own_grabs: list[dict]) -> set[str]:
+    """Chosen destinations that are provably outside every arr root.
+
+    Asked for only when someone actually picked a destination: the sweep
+    already probes the arr per actionable trace, and the overwhelmingly common
+    grab has no destination at all.
+
+    **Fails closed.** An unreadable root list contributes nothing here, so the
+    gate stays exactly as shut as it is today — widening a safety policy
+    because the arr happened to be down would be backwards. `GET
+    /api/calendar/destinations` offers the arr's own roots first, so "has a
+    destination" alone says nothing about whether the file is leaving the
+    library.
+    """
+    wanted = {
+        (g.get("source") or "", g.get("destination"))
+        for g in own_grabs
+        if g.get("destination")
+    }
+    if not wanted:
+        return set()
+
+    foreign: set[str] = set()
+    resolved: dict[str, list[str]] = {}
+    for source, destination in sorted(wanted):
+        if source not in resolved:
+            resolved[source] = await _arr_roots(session, source)
+        roots = resolved[source]
+        if not roots:
+            continue
+        if not any(_inside(destination, root) for root in roots):
+            foreign.add(destination)
+    return foreign
+
+
 async def _handle_trace(
     session,
     trace: dict,
     *,
     own_grabs: list[dict],
+    foreign_destinations: set[str],
     now: float,
     safe_mode: bool,
     grace_seconds: float,
@@ -325,13 +399,21 @@ async def _handle_trace(
     already = is_auto_copy_handled(key)
     stage = trace.get("stage")
 
+    # Resolved here, not inside `_dispatch`, because the policy below must know
+    # it: the probe exists solely to answer "would copying this duplicate into
+    # the library", and a chosen destination puts the file somewhere the
+    # library does not reach — so it does not even need asking.
+    own_grab = find_own_grab(trace, own_grabs)
+    destination = own_grab.get("destination") if own_grab else None
+    has_destination = bool(destination) and destination in foreign_destinations
+
     # Ask the arr only when the answer can change the outcome. A probe per trace
     # per sweep would be one request per trace; asking only for a plausibly
     # actionable one (ours, not already handled, a stage that can lead to a
     # copy) keeps the sweep cheap. `None` means "unknown", and the policy treats
     # that as unknown, never as "no file", so gating this is safe by design.
     has_file = None
-    if is_own and not already and stage in _ACTIONABLE_STAGES:
+    if is_own and not already and stage in _ACTIONABLE_STAGES and not has_destination:
         has_file = await _arr_probe(session, trace)
 
     # The reference the grace window is measured from. The trace does not carry
@@ -356,6 +438,7 @@ async def _handle_trace(
         already_handled=already,
         is_own_grab=is_own,
         arr_has_file=has_file,
+        has_destination=has_destination,
     )
     result = decision["decision"]
     reason = decision["reason"]
@@ -376,7 +459,9 @@ async def _handle_trace(
         )
         return _entry(key, source, title, result, reason, action="proposed")
 
-    return await _dispatch(session, trace, key, source, title, reason, own_grabs=own_grabs)
+    return await _dispatch(
+        session, trace, key, source, title, reason, destination=destination
+    )
 
 
 async def _arr_probe(session, trace: dict) -> bool | None:
@@ -409,7 +494,7 @@ async def _dispatch(
     title: str,
     reason: str,
     *,
-    own_grabs: list[dict],
+    destination: str | None = None,
 ) -> dict:
     torrent = trace.get("torrent") or {}
     output_path = torrent.get("content_path")
@@ -426,11 +511,9 @@ async def _dispatch(
         "output_path": output_path,
     }
 
-    # The matched registry row carries the destination the user picked. When it
+    # The destination the user picked, already resolved by the caller. When it
     # is NULL the payload stays exactly as before: the copy goes to the arr's
     # library, and the engine resolves that root itself.
-    own_grab = find_own_grab(trace, own_grabs)
-    destination = own_grab.get("destination") if own_grab else None
     if destination:
         payload["dest_root"] = destination
 

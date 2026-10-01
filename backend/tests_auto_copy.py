@@ -51,6 +51,67 @@ def test_skips_when_the_arr_already_has_the_file():
     assert result["reason"] == "el arr ya tiene el fichero"
 
 
+# ── An explicit destination takes the file out of the library ────────────────
+#
+# With a destination the file is going somewhere the arr does not manage, so
+# `arr_has_file` stops being the right question: it answers "is it in the
+# library", and we are not writing to the library. What still matters is the
+# grace window, which exists so we never race the arr while it moves a file —
+# that hazard is about the *source*, not the destination.
+
+
+def test_an_explicit_destination_beats_the_arr_having_the_file():
+    result = decide_copy(
+        _trace("downloaded"),
+        now=DEFAULT_GRACE_SECONDS + 1,
+        since=0,
+        arr_has_file=True,
+        has_destination=True,
+    )
+    assert result["decision"] == COPY
+
+
+def test_an_explicit_destination_still_waits_out_the_grace_window():
+    result = decide_copy(
+        _trace("downloaded"),
+        now=DEFAULT_GRACE_SECONDS - 1,
+        since=0,
+        arr_has_file=True,
+        has_destination=True,
+    )
+    assert result["decision"] == WAIT
+    assert "ventana de gracia" in result["reason"]
+
+
+def test_an_explicit_destination_does_not_wait_on_a_probe_that_could_not_answer():
+    # A dead probe used to mean "we might be about to duplicate into the
+    # library". With a destination there is no library copy to duplicate, so
+    # the unknown guard no longer has anything to protect.
+    result = decide_copy(
+        _trace("downloaded"),
+        now=DEFAULT_GRACE_SECONDS + 1,
+        since=0,
+        arr_has_file=None,
+        has_destination=True,
+    )
+    assert result["decision"] == COPY
+
+
+def test_the_reason_with_a_destination_is_about_the_destination_not_the_arr():
+    result = decide_copy(
+        _trace("downloaded"),
+        now=DEFAULT_GRACE_SECONDS + 1,
+        since=0,
+        arr_has_file=True,
+        has_destination=True,
+    )
+    assert result["decision"] == COPY
+    assert "fuera de la biblioteca" in result["reason"]
+    # Saying "the arr did not import it in 30 min" would be a lie here: the
+    # arr very likely did. What made this copy safe is where it is going.
+    assert "no lo importó" not in result["reason"]
+
+
 def test_skips_a_failed_download():
     result = decide_copy(_trace("failed"), now=10_000, since=0)
     assert result["decision"] == SKIP
