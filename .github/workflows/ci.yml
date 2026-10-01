@@ -128,6 +128,12 @@ jobs:
   # docker-verify, not part of it, and NOT in docker-push's needs chain: a
   # brand-new browser suite must not be able to block image publishing until
   # it has earned that.
+  #
+  # Promotion criterion (agreed when this job landed, so it is not a vague
+  # decision in six months): add `e2e` to docker-push's `needs` once it has
+  # run **20 consecutive green runs on main** with no manual intervention and
+  # no `waitForTimeout` anywhere in the specs. Until then a red e2e is
+  # visible on the PR and on main, and it never holds an image back.
   e2e:
     runs-on: ubuntu-latest
     needs: [backend-tests, frontend-build]

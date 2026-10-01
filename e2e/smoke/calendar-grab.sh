@@ -1,21 +1,38 @@
 #!/usr/bin/env bash
-# Playwright headless test for calendar grab flow
-# Usage: ./scripts/test-calendar-grab.sh [SERVER_URL] [API_KEY]
+# Manual smoke for the calendar grab flow — against a LIVE deployment.
 #
-# Requires: npx playwright (auto-installs on first run)
+# Usage:
+#   SERVER_URL=https://tu-servidor:8001 FLOW_API_KEY=... \
+#     ./e2e/smoke/calendar-grab.sh
+#
+# This is a DIAGNOSTIC, not a test: it asserts nothing. It navigates, prints
+# what it observes, and drops screenshots in /tmp. The assertions live in
+# e2e/specs/, which run hermetically against a container in CI.
+#
+# Why it still exists: it is the only thing that drives the real grab flow
+# against a real Radarr/Sonarr — exactly what e2e/ cannot do without a stub.
+#
+# The target and the key come from the environment ONLY. A default server or
+# a key argument would put a live deployment and a credential into a shell
+# default and into somebody's command history.
+
 set -e
 
-SERVER="${1:-http://localhost:8001}"
-API_KEY="${2:-}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
+# No defaults on purpose. This drives a REAL deployment, so the target and
+# the credential are taken from the environment only: nothing here may end up
+# as a shell default, a committed URL, or an argument in somebody's history.
+SERVER="${SERVER_URL:?Set SERVER_URL to the instance you want to probe (no default: this hits a live deployment)}"
+API_KEY="${FLOW_API_KEY:-}"
 if [ -z "$API_KEY" ]; then
-  echo "Usage: $0 <server_url> <api_key>"
-  echo "Example: $0 http://111.111.111.111:8001 your-api-key-here"
+  echo "FLOW_API_KEY is not set. This script talks to a live server, so the key"
+  echo "comes from the environment — it is never accepted as an argument."
   exit 1
 fi
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "🧪 Calendar grab flow test — $SERVER"
+echo "🧪 Manual smoke: calendar grab flow — $SERVER"
+echo "   Diagnóstico, NO aserciones: imprime lo que ve y guarda capturas."
+echo "   Los tests con aserciones viven en e2e/specs/."
 echo ""
 
 # Write the test file
@@ -170,8 +187,7 @@ TESTEOF
 
 echo "🧪 Running test against $SERVER..."
 echo ""
-SERVER="$SERVER" API_KEY="$API_KEY" npx playwright test --config=/dev/null 2>/dev/null || \
-  SERVER="$SERVER" API_KEY="$API_KEY" node /tmp/test-calendar-grab.mjs
+SERVER="$SERVER" API_KEY="$API_KEY" node /tmp/test-calendar-grab.mjs
 
 echo ""
 echo "📸 Screenshots saved in /tmp/calendar-*.png"

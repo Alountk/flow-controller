@@ -480,6 +480,23 @@ progreso (verificado). *DI con `Depends()`* — refactor sin efecto observable.
 
 ---
 
+### C-03 · Decisiones de implementación (tomadas)
+
+| Pregunta | Decisión | Por qué |
+|---|---|---|
+| **¿Servidor arr falso?** | **Sí, stub con payloads capturados** — pendiente de implementar | El repo ya tiene la convención: `tests_wanted_scan.py` dice *"Shape captured from a real Radarr response"*. Un stub alimentado con capturas reales miente mucho menos que datos escritos a mano, y un stub **aparte** no toca una línea de código de producción (un modo `FC_FAKE_ARR` dentro del backend sería una costura que puede quedarse colgada) |
+| **¿El `e2e` frena `docker-push`?** | **De momento no** — y el criterio de promoción está escrito **en `ci.yml`**, junto al job | Un e2e rojo ya se ve en el PR y en `main`; lo que no debe pasar es que una suite de browser nueva inestable retenga imágenes. Criterio: **20 corridas verdes seguidas en `main`** sin intervención y sin `waitForTimeout` en los specs |
+| **`scripts/test-calendar-grab.sh`** | **Reubicado** a `e2e/smoke/calendar-grab.sh` | No era un test: **cero aserciones**, esperas fijas de hasta 250 s, selectores por clase, `npx playwright test --config=/dev/null \|\| node`. Y pedía la API key **como argumento** con un ejemplo que era **tu servidor de producción**. Sigue existiendo porque es lo único que ejercita el grab real — pero ahora sin URL por defecto y con la clave **solo de entorno** |
+
+**Los 6 endpoints que un stub tendría que servir** para el flujo del backlog:
+`/api/v3/wanted/missing` · `/api/v3/movie/{id}` · `/api/v3/release` · `/api/v3/indexer` ·
+`/api/v3/command` (grab) · `/api/v3/queue`. Para toda la app, **23** (añade `history`,
+`downloadclient`, `rootfolder`, `remotepathmapping`, `series/*`, `calendar`, `rename`,
+`manualimport`…). Un "grab" falso no descarga nada: se prueba el **flujo de UI**, no la
+descarga — legítimo, pero hay que saberlo.
+
+---
+
 ## 🗄️ Completado (histórico)
 
 Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
