@@ -95,6 +95,7 @@ def _install(
     real_marker=False,
     seen=None,
     latest_outcomes=None,
+    roots=(),
 ) -> _Calls:
     """Stub every I/O boundary the driver crosses.
 
@@ -120,6 +121,11 @@ def _install(
         calls.has_file += 1
         return has_file
 
+    async def arr_roots(session, source):
+        # Never the network: the default answer is "we could not obtain the
+        # roots", which is also the fail-closed answer the policy wants.
+        return list(roots)
+
     async def do_action(session, action, payload):
         calls.dispatch.append({"action": action, "payload": payload})
         calls.order.append(("dispatch", action))
@@ -136,6 +142,9 @@ def _install(
     monkeypatch.setattr(driver, "list_own_grabs", lambda *a, **k: list(own_grabs))
     monkeypatch.setattr(driver, "arr_has_file", arr_probe)
     monkeypatch.setattr(driver, "do_action", do_action)
+    # `raising=False`: while the driver has no such helper this is a no-op, and
+    # once it does the suite never reaches for a real root-folder endpoint.
+    monkeypatch.setattr(driver, "_arr_roots", arr_roots, raising=False)
 
     if not real_marker:
         def is_handled(key):
@@ -295,6 +304,88 @@ def test_a_null_destination_keeps_the_payload_unchanged(monkeypatch):
     }
     assert "dest_root" not in payload
     assert summary["entries"][0]["action"] == "copied"
+
+
+def test_a_chosen_destination_beats_the_arr_already_having_the_file(monkeypatch):
+    """A movie that already has its 1080p file always reports True here.
+
+    That is the *normal* case for an upgrade, so without opening the gate the
+    destination the user picked is a no-op for exactly the downloads the
+    feature exists for.
+    """
+    calls = _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab(destination="/mnt/storage-6tb/4k")],
+        has_file=True,
+        roots=["/mnt/storage-6tb/library"],
+    )
+    monkeypatch.setattr(driver, "find_service", lambda *a, **k: {"key": "radarr"})
+
+    summary = _sweep(safe_mode=False)
+
+    assert summary["entries"][0]["decision"] == COPY
+    assert calls.dispatch[0]["payload"]["dest_root"] == "/mnt/storage-6tb/4k"
+
+
+def test_a_destination_inside_the_arr_library_does_not_open_the_gate(monkeypatch):
+    """`/api/calendar/destinations` offers the arr's own roots first.
+
+    `dest_root` is used exactly as given — no movie subfolder — so a root
+    chosen as destination would drop the file flat into the library. That is a
+    regression the gate prevents today, so it keeps preventing it.
+    """
+    _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab(destination="/mnt/storage-6tb/library")],
+        has_file=True,
+        roots=["/mnt/storage-6tb/library"],
+    )
+    monkeypatch.setattr(driver, "find_service", lambda *a, **k: {"key": "radarr"})
+
+    summary = _sweep(safe_mode=False)
+
+    assert summary["entries"][0]["decision"] == SKIP
+    assert summary["entries"][0]["reason"] == "el arr ya tiene el fichero"
+
+
+def test_roots_we_could_not_obtain_leave_the_gate_shut(monkeypatch):
+    """Fail closed: we cannot prove the destination is foreign, so it isn't.
+
+    The arr being down must not widen the policy — it only means the operator
+    sees the same thing they see today.
+    """
+    _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab(destination="/mnt/storage-6tb/4k")],
+        has_file=True,
+        roots=(),
+    )
+    monkeypatch.setattr(driver, "find_service", lambda *a, **k: {"key": "radarr"})
+
+    summary = _sweep(safe_mode=False)
+
+    assert summary["entries"][0]["decision"] == SKIP
+
+
+def test_no_root_lookup_happens_when_no_grab_carries_a_destination(monkeypatch):
+    """The sweep is already chatty; roots are asked for only if someone picked one."""
+    _install(monkeypatch, traces=[_trace()], own_grabs=[_own_grab()])
+    monkeypatch.setattr(driver, "find_service", lambda *a, **k: {"key": "radarr"})
+    looked: list[str] = []
+
+    async def _roots(session, source):
+        looked.append(source)
+        return []
+
+    monkeypatch.setattr(driver, "_arr_roots", _roots)
+
+    summary = _sweep(safe_mode=False)
+
+    assert summary["entries"][0]["decision"] == COPY
+    assert looked == []
 
 
 def test_the_marker_is_persisted_before_dispatching(monkeypatch):

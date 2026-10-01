@@ -35,6 +35,7 @@ def _grace_gate(
     since: float | None,
     grace_seconds: float,
     arr_has_file: bool | None,
+    has_destination: bool = False,
 ) -> dict:
     """Decide inside the grace window.
 
@@ -49,8 +50,17 @@ def _grace_gate(
     expired window would copy a file the arr may already have imported: a
     duplicate in the library, exactly what D2 and the whole guard exist to
     prevent. So an unknown guard waits for a confident answer. Only `False` — the
-    arr explicitly saying it has no file — copies. (`True` never reaches here:
-    `decide_copy` skips on it before the stage switch.)
+    arr explicitly saying it has no file — copies. (`True` never reaches here
+    without a destination: `decide_copy` skips on it before the stage switch.)
+
+    With `has_destination` the window keeps guarding the hazard that is still
+    real — racing the arr while it *moves the source file* — but `arr_has_file`
+    stops counting, both branches of it. The guard exists to stop a **second
+    copy in the library**, and a chosen destination is precisely a file going
+    somewhere the library does not reach; whether the arr holds the 1080p it
+    already had says nothing about that. Reporting `None` as "could not check"
+    would keep a download hostage to a probe failure that no longer threatens a
+    duplicate.
     """
     if since is None:
         return {
@@ -65,6 +75,17 @@ def _grace_gate(
             "reason": (
                 f"dentro de la ventana de gracia de {window}: "
                 "el arr puede importarlo solo"
+            ),
+        }
+    if has_destination:
+        # Deliberately does NOT say "the arr did not import it": with a
+        # destination that is very likely false, and the operator would be
+        # reading a reason that contradicts what they just watched happen.
+        return {
+            "decision": COPY,
+            "reason": (
+                f"ventana de gracia de {window} vencida: el destino queda "
+                "fuera de la biblioteca, no se duplica nada"
             ),
         }
     if arr_has_file is None:
@@ -87,17 +108,28 @@ def decide_copy(
     already_handled: bool = False,
     is_own_grab: bool = True,
     arr_has_file: bool | None = None,
+    has_destination: bool = False,
 ) -> dict:
     """Return {"decision": COPY|WAIT|SKIP, "reason": str}.
 
     Rules are evaluated in order, first match wins. Reasons are user-facing:
     a later task writes them into the operation history.
+
+    `has_destination` means the grab carries a folder the user chose for
+    itself. It is the difference between a copy **into the arr's library** —
+    which must never duplicate a file the arr already holds — and a copy
+    **beside** it. The caller only passes `True` when that folder is provably
+    outside every arr root; see `auto_copy_driver._foreign_destinations`.
     """
     if is_own_grab is False:
         return {"decision": SKIP, "reason": "no es un grab lanzado desde la app"}
     if already_handled:
         return {"decision": SKIP, "reason": "ya se copió antes"}
-    if arr_has_file is True:
+    if arr_has_file is True and not has_destination:
+        # A movie that already has its file is the *normal* case for an
+        # upgrade, not an error: the arr holds the 1080p, we are putting the
+        # 4K somewhere else. Blocking there would make the whole destination
+        # feature a no-op for exactly the downloads it exists for.
         return {"decision": SKIP, "reason": "el arr ya tiene el fichero"}
 
     stage = trace.get("stage")
@@ -114,9 +146,9 @@ def decide_copy(
         # No warning: `importPending` is ALSO the healthy transient state right
         # before the arr imports. It is not proof the arr is stuck, so wait the
         # window out rather than racing it (D2).
-        return _grace_gate(now, since, grace_seconds, arr_has_file)
+        return _grace_gate(now, since, grace_seconds, arr_has_file, has_destination)
     if stage == "downloaded":
-        return _grace_gate(now, since, grace_seconds, arr_has_file)
+        return _grace_gate(now, since, grace_seconds, arr_has_file, has_destination)
     return {"decision": SKIP, "reason": "estado desconocido: no se actúa"}
 
 
