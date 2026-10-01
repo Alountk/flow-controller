@@ -319,6 +319,7 @@ falla y **nombra el módulo**.
 | C-08 | RAU-138 | **Regla «siempre hardlink»**: guardar/renombrar bajo `FOLDER_DOWNLOAD_*`, endpoint muerto fuera, carpetas por enlace duro | regla | ✅ |
 | F-04 | RAU-140 | **Selector múltiple** en el explorador de ficheros (acciones en lote) | feature | ✅ |
 | F-05 | RAU-141 | **Retención de aMule**: edad en BD + procedencia (¿ya en biblioteca?) para localizar los borrables. **Borrado manual con aviso de irreversibilidad** | feature | ⬜ |
+| F-06 | RAU-142 | **Estudio**: motor propio de aMule (control de rutas y flow) — viabilidad de 4 opciones + licencia GPL vs MIT | estudio | ⬜ (sin fecha) |
 | C-01…C-07 | RAU-131…137 | Avisos de import bloqueado, su gestor, E2E Playwright, upgrades automáticos, rate limiting, responsive+dark, `IMPORT_TIMEOUT` en UI | backlog | ⬜ |
 
 Detalle y justificación de cada entrada en `BACKLOG.md`.

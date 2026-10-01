@@ -354,6 +354,61 @@ limitarlo a `ALLOWED_ROOTS`.
 
 ---
 
+### F-06 — Estudio: motor propio de aMule · **Estudio (para más adelante)**
+
+Pedida: *"explorar el cómo sería de viable implementar un motor de amule en nuestro proyecto
+para tener más control sobre los archivos y el flow del programa"* — **para un estudio más
+adelante**, no ahora.
+
+#### Por qué interesa precisamente ahora
+
+Casi todo lo que hemos hecho en este ciclo existe **porque no controlamos dónde cae el
+fichero**: el escaneo de la carpeta, la colocación con enlace duro (B-03), el guard de semilla
+(C-08), la retención de aMule (F-05), el selector múltiple para limpiar (F-04). Un motor
+nuestro que decidiera **la ruta de descarga desde el principio** eliminaría la fase de escaneo y
+colocación **entera** — que es la causa raíz de B-03 y de media F-05.
+
+#### Qué dependemos hoy (verificado en `ROADMAP.md`)
+
+Nunca hablamos con aMule directamente. Hablamos con **aMuTorrent** en el puerto 4000, que expone:
+
+1. **Indexador Torznab** (`/indexer/amule/api`) — puente ED2K → el `enclosure` es un
+   `magnet:` cuyo `downloadId` es un **hash ED2K** (16 bytes + relleno);
+2. **API compatible con qBittorrent** (`/api/v2/...`).
+
+Y ni `amuled`, ni `aMuleWeb`, ni el protocolo **EC (External Connections)** aparecen en el repo:
+**la vía de control directo ni siquiera está explorada.**
+
+#### Las cuatro opciones que el estudio debe comparar
+
+| Opción | Qué da | Coste |
+|---|---|---|
+| **(a) Motor propio** — reimplementar ED2K + Kad | Control total de la ruta de descarga; desaparecen escaneo y colocación | Muy alto: protocolo, DHT, descarga multi-fuente, verificación MD4, cola, NAT/obfuscación. **Sin biblioteca Python madura** que reutilizar |
+| **(b) Controlar aMule vía EC** (`amuled` / `aMuleRemote`) | RPC sobre TCP con contraseña MD5: añadir ED2K/magnets, listar, pausar, borrar, **fijar el directorio de descarga** | Medio. Da control de *flujo*, pero el *emplazamiento* sigue en manos de aMule |
+| **(c) Sustituir por un cliente API-first** (p.ej. `mldonkey`, daemon con RPC que soporta eDonkey) | Transferencia ya controlable por API | Medio-alto: migración operativa y otra pieza en el stack |
+| **(d) Mantener aMuTorrent y completar lo que falta** | Ya tenemos Torznab + API qBit verificados | Bajo — es el status quo |
+
+#### Qué tiene que decidir el estudio con evidencia
+
+1. **Qué control de emplazamiento necesitamos de verdad**: ¿que el fichero caiga donde
+   queremos con hardlink y sin copia? Si la respuesta es sí, (a) o (c) son los únicos que lo
+   dan; (b) no.
+2. **Esfuerzo real de (a)** — con bibliotecas concretas, no con impressiones.
+3. **Coste de mantenimiento** de cada opción frente a la que ya funciona.
+4. **Si (a) o (c), ¿sigue haciendo falta aMule?** — y con él, el puente aMuTorrent.
+
+#### Restricción de licencia a comprobar (no es menor)
+
+Este proyecto es **MIT** (`README.md`), y aMule se distribuye bajo **GPL** — *confirmar la
+versión exacta en el estudio*. **Reimplementar un protocolo a partir de las especificaciones no
+es copiar código**, y eso es compatible; pero **reutilizar código de aMule dentro de un
+proyecto MIT lo convertiría en GPL**. Cualquier opción que contemple fork o vinculación debe
+resolver eso *antes* de estimar esfuerzo.
+
+**No empieza hasta que se diga.** Sin fecha, sin PR, sin hueco en el orden.
+
+---
+
 ## 🔵 Recomendaciones y reglas del ciclo
 
 C-01…C-07 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.
@@ -383,4 +438,4 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 
 ## Orden propuesto
 
-`B-01` → `C-03` → `F-05` → `F-01` → `C-01/C-02`
+`B-01` → `C-03` → `F-05` → `F-01` → `C-01/C-02` — **F-06 aparte, sin fecha**
