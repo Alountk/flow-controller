@@ -773,6 +773,64 @@ class TestGrabOwnRegistry:
         assert resp.json()["ok"] is True, resp.text
         assert self._rows()[0]["destination"] is None
 
+    def test_a_grab_records_the_release_quality(self):
+        from unittest.mock import AsyncMock
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={
+                    "source": "radarr",
+                    "guid": "g1",
+                    "movieId": 855,
+                    "quality": "Bluray-2160p",
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["quality"] == "Bluray-2160p"
+
+    def test_a_grab_without_a_quality_records_null_not_a_default(self):
+        """NULL means "we do not know", and a later reader must not turn that
+        into a guessed quality and name a file after it."""
+        from unittest.mock import AsyncMock
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={"source": "radarr", "guid": "g1", "movieId": 855},
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["quality"] is None
+
+    def test_the_batch_records_one_quality_per_row(self):
+        from unittest.mock import AsyncMock
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab-batch",
+                json={
+                    "source": "radarr",
+                    "guids": ["g1", "g2"],
+                    "indexerIds": [1, 2],
+                    "movieId": 855,
+                    "quality": "Bluray-2160p",
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert [r["quality"] for r in self._rows()] == ["Bluray-2160p"] * 2
+
     def test_the_batch_routes_3d_too(self, monkeypatch):
         import config
         from unittest.mock import AsyncMock
