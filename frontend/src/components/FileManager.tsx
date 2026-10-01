@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { FileItem } from '../types'
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { FileItem, RetentionFile } from '../types'
 import {
   fetchRoots,
   browsePath,
+  fetchRetention,
   createDirectory,
   renameItem,
   deleteItem,
@@ -85,6 +86,20 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     queryKey: ['browse', path],
     queryFn: () => browsePath(path),
     enabled: !!path,
+  })
+
+  // Ages for the directory just browsed, keyed by the RESOLVED path the
+  // backend answered with — both listings come from that same resolution, so
+  // the two can be joined by path without guessing.
+  const resolvedPath = browseData?.ok ? browseData.path : null
+  const { data: retentionData } = useQuery({
+    queryKey: ['retention', resolvedPath],
+    queryFn: () => fetchRetention(resolvedPath!),
+    enabled: resolvedPath !== null,
+    // Navigating must not blank the chips already on screen: the previous
+    // directory's ages stay visible until the new ones arrive, and the join
+    // is by absolute path, so a stale row can never light up the wrong file.
+    placeholderData: keepPreviousData,
   })
 
   useEffect(() => {
@@ -209,6 +224,32 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const itemKey = (item: FileItem) => item.path
   const allVisibleSelected = areAllVisibleSelected(selected, items, itemKey)
 
+  // The join: the retention endpoint answers a top-level `path` plus each
+  // file's `name`, while rows are keyed by `item.path`. Both come from the
+  // same resolved directory, so `path + '/' + name` IS `item.path` — no
+  // fallback here on purpose: a key that does not match must not be papered
+  // over with a fuzzy lookup, it would mean the two responses disagree.
+  const retentionByPath = new Map<string, RetentionFile>(
+    (retentionData?.files ?? []).map((f) => [`${retentionData!.path}/${f.name}`, f]),
+  )
+  const expiredPaths = items
+    .filter((item) => retentionByPath.get(item.path)?.expired)
+    .map((item) => item.path)
+
+  /** The row's retention chip. Unknown age (`null`: store unreadable) and
+   *  files the endpoint did not report render NOTHING — a fabricated age
+   *  could justify deleting a file that was never recorded. */
+  function ageChip(item: FileItem) {
+    const info = retentionByPath.get(item.path)
+    if (!info) return null
+    // Caducado is a STATE, not an error: `--warn`, never `--bad`.
+    if (info.expired) return <span className="fm-age expired">caducado</span>
+    if (info.age_days === null) return null
+    if (info.age_days < 1) return <span className="fm-age">hoy</span>
+    const days = Math.floor(info.age_days)
+    return <span className="fm-age">hace {days} {days === 1 ? 'día' : 'días'}</span>
+  }
+
   function toggleRowSelection(itemPath: string) {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -268,8 +309,12 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
       : countWord(okCount, 'colocado', 'colocados')
     showToast(`${done}, ${countWord(failures.length, 'rechazado', 'rechazados')}`)
 
-    if (action === 'delete') invalidateBrowse()
-    else queryClient.invalidateQueries({ queryKey: ['queue'] })
+    if (action === 'delete') {
+      // The unlinks change what the retention endpoint answers: rows for the
+      // deleted files get pruned, so its cache must be re-read, not trusted.
+      invalidateBrowse()
+      queryClient.invalidateQueries({ queryKey: ['retention'] })
+    } else queryClient.invalidateQueries({ queryKey: ['queue'] })
   }
 
   function handleBatchDelete() {
@@ -307,6 +352,15 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         <button className="fm-action-btn" onClick={invalidateBrowse}>
           ↻
         </button>
+        {expiredPaths.length > 0 && (
+          <button
+            className="fm-action-btn"
+            onClick={() => setSelected(new Set(expiredPaths))}
+            title="Selecciona solo los que ya han pasado la ventana de retención"
+          >
+            Marcar caducados
+          </button>
+        )}
       </div>
 
       {error && <div className="fm-error" onClick={() => setError(null)}>{error}</div>}
@@ -439,6 +493,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
               ) : (
                 <span className="fm-name">{item.name}</span>
               )}
+              {ageChip(item)}
               <span className="fm-size">{item.is_dir ? '—' : formatSize(item.size)}</span>
               <span className="fm-date">{formatDate(item.modified)}</span>
               <div className="fm-item-actions">

@@ -322,6 +322,10 @@ export function Settings() {
         <Field label="Delay entre reintentos (segundos)" value={form.intervals.retry_delay} onChange={(v) => update('intervals.retry_delay', v)} type="number" />
         <Field label="Timeout peticiones HTTP (segundos)" value={form.intervals.request_timeout} onChange={(v) => update('intervals.request_timeout', v)} type="number" />
         <Field label="Timeout import (segundos)" value={form.intervals.import_timeout} onChange={(v) => update('intervals.import_timeout', v)} type="number" />
+        {/* The retention window is the Intervalos group's only value measured
+            in days instead of seconds; no `restart` badge because the backend
+            reads it live through config.rebuild(). */}
+        <Field label="Días antes de poder borrar una descarga" value={form.retention.amule_days} onChange={(v) => update('retention.amule_days', v)} type="number" />
       </Section>
 
       <Section title="Trazabilidad">
