@@ -27,6 +27,22 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | **B-03** | El escaneo encola la operación como `move` → `routes/files.py:219` `os.rename`, y en EXDEV copia **y borra el origen** (`:226`). Rompe el hardlink con el que aMule/qBittorrent siguen compartiendo el archivo. Debería copiar (idealmente `os.link`, como ya hace `copy_engine.copy_file_chunked`). | **Alta** | `MissingContent.tsx:126` → `queueAdd('move', …)` | ✅ |
 | **B-02** | "Buscar" a veces no muestra el listado de indexadores: el error se traga en **tres capas** y devuelve `[]`, indistinguible de "no hay indexadores". Además no hay caché ni clave por `source`. | Media | `clients.py:766,787` → `[]`; `routes/calendar.py:343-351` sin campo `error`; `ReleaseSearchModal.tsx:96-102` `.catch(() => {})` | ✅ |
 | **B-01** | Al pasar a naranja, la barra izquierda de la card se queda roja. **Dos causas distintas**: (a) `MissingContent.css:187-191` pinta `border-color: var(--warn)` y luego `border-left-color: var(--bad)` en la *misma* regla, con guarda solo para `.status-ok`; (b) `clients.py:1001,1049` comprueba `os.path.isdir` con la **ruta cruda del arr** sin pasar por `host_path()`, así que una película sana se clasifica `status-error`. | Media | Verificado en disco ambas | ✅ |
+| **B-06** | La página **Disco** etiquetaba un directorio del rootfs del propio contenedor como **"Storage (6TB)"**. `/api/disk` hardcodeaba dos rutas y usaba `shutil.disk_usage`, que devuelve el uso del *sistema de ficheros que contiene* un camino — así que un directorio corriente devuelve el rootfs. **Cero tests** previos. | Media | Reportado en runtime: 63 GB (`/dev/loop2`) servidos como volumen 6TB | ✅ PR #103 |
+
+**B-06 resuelto** — PR #103, `1cc1fcd`. Dos cambios, una causa raíz: **nadie comprobaba qué
+  es la ruta**. Los volúmenes salen ahora de `paths.allowed_roots` (la autoridad que ya decide
+  qué carpetas puede escribir la app) en vez de estar hardcodeados, y cada uno se comprueba con
+  `os.path.ismount` **antes** de medir: si no es punto de montaje → mensaje explícito y **cero
+  números**, porque esos números describen otro disco. Dos matices que no son cosméticos: un
+  path inexistente conserva su `"no disponible"` (hay que preguntar por existencia **antes**,
+  porque `ismount` devuelve `False` y no lanza), y el nombre pasó a ser el último componente de
+  la ruta — `"Storage (6TB)"` prometía una capacidad que nunca se midió. **8 tests** donde
+  antes no había ninguno.
+
+  ⚠️ **Esto no arregla el síntoma original.** En este host los dos montajes están sanos y el
+  compose los bind-mounta; lo que encaja es un **bind-mount capturado demasiado pronto**: con la
+  propagación `rprivate` por defecto, un montaje posterior en el host no se cuela dentro del
+  contenedor. **Eso se arregla reiniciando el contenedor** — infraestructura, fuera del repo.
 
 **B-04 resuelto** — rama `fix/actions-session-import`: la sesión ahora se abre por petición
   en `routes/actions.py` (igual que el resto de rutas), y el global muerto de `app.py` se eliminó
