@@ -691,6 +691,113 @@ class TestGrabOwnRegistry:
         assert resp.json()["ok"] is True, resp.text
         assert [r["destination"] for r in self._rows()] == ["/mnt/storage/movies/4k"] * 2
 
+    @pytest.mark.parametrize(
+        "quality", ["Bluray-2160p", "Bluray-1080p", ""],
+    )
+    def test_a_3d_release_is_routed_to_the_3d_folder_whatever_the_resolution(
+        self, monkeypatch, quality
+    ):
+        """3D outranks resolution.
+
+        A 3D rip is 3D whatever it was encoded at, and sending those to the 4K
+        folder would scatter the 3D collection across two destinations based on
+        a property nobody chose. The reverse cost — a 4K3D title sitting in the
+        3D folder — keeps the 3D collection whole, which is the point of it.
+        """
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={
+                    "source": "radarr",
+                    "guid": "g1",
+                    "movieId": 855,
+                    "quality": quality,
+                    "is3d": True,
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["destination"] == "/mnt/storage/movies/3d"
+
+    def test_an_unconfigured_3d_folder_falls_back_to_the_quality(self, monkeypatch):
+        """Empty is "not configured": the release is still routed, just by the
+        only rule that has something to say."""
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
+        monkeypatch.setattr(config, "PATH_3D", "", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={
+                    "source": "radarr",
+                    "guid": "g1",
+                    "movieId": 855,
+                    "quality": "Bluray-2160p",
+                    "is3d": True,
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["destination"] == "/mnt/storage/movies/4k"
+
+    def test_a_row_that_is_not_3d_is_untouched_by_the_3d_setting(self, monkeypatch):
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={"source": "radarr", "guid": "g1", "movieId": 855, "quality": "Bluray-1080p"},
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert self._rows()[0]["destination"] is None
+
+    def test_the_batch_routes_3d_too(self, monkeypatch):
+        import config
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
+
+        with patch(
+            "routes.calendar.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
+        ):
+            resp = client.post(
+                "/api/calendar/grab-batch",
+                json={
+                    "source": "radarr",
+                    "guids": ["g1", "g2"],
+                    "indexerIds": [1, 2],
+                    "movieId": 855,
+                    "quality": "Bluray-1080p",
+                    "is3d": True,
+                },
+            )
+
+        assert resp.json()["ok"] is True, resp.text
+        assert [r["destination"] for r in self._rows()] == ["/mnt/storage/movies/3d"] * 2
+
     def test_a_destination_outside_the_allowed_roots_is_rejected_and_writes_no_row(self):
         from unittest.mock import AsyncMock
 

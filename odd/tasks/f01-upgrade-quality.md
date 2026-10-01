@@ -109,6 +109,50 @@ Mi primer test de batch asumía **una sola llamada** con la calidad compartida �
 - [x] Destino = raíz del arr, o raíces no comprobables → **sigue sin pasar nada** (fail-closed).
 - [x] Ventana de gracia: **sigue esperando** el mismo tiempo; solo cambia la **razón**.
 
+---
+
+## Tareas — PR C: detección de 3D (opción 4) + `paths.path_3d`
+
+**Elección del usuario:** título **+** corrección manual. Lo que detecta el título es una
+*sugerencia*; la corrección **sobrescribe**.
+
+### Decisión de arquitectura: ¿quién decide?
+
+| | Fuente | Por qué |
+|---|---|---|
+| **Calidad** (`2160p`) | backend la deriva | Es un **hecho** que Radarr reporta |
+| **¿Es 3D?** | **frontend resuelve y manda un bool** | Es una **interpretación**: un heurístico sobre el título **más** una corrección humana. El servidor no ve ni una ni otra |
+
+→ El cliente envía `is3d: bool` ya resuelto; el backend enruta con él. Misma puerta
+(`path_is_allowed`) que todo lo demás.
+
+### T1 — `paths.path_3d` backend 🔴
+- [ ] `PATH_3D` en `config.py` + `rebuild()` + añadido a `ALLOWED_ROOTS` (mismo porqué que `PATH_4K`).
+- [ ] `destination_for_quality(quality, *, is3d=False)`.
+- [ ] **`is3d` tiene prioridad sobre `2160p`**: una 3D es 3D **sea** la resolución que sea, y al
+      revés mandaría los 3D a la carpeta de 4K. Decisión reversible en una línea.
+- [ ] `is3d: bool = False` en ambos modelos; pasado en ambos endpoints.
+- [ ] Settings: campo "Carpeta de las 3D".
+
+### T2 — detección por título 🔴
+- [ ] Utilidad pura `looksThreeD(title)` con tokens **acotados por palabra** (`3d`, `hsbs`,
+      `htab`, `sbs`, `3dtv`). Sin `\b`, `ABSORB` casaría con `sbs` — falso positivo garantizado.
+- [ ] Estado por fila (`guid → bool`); **ausente = sugerencia automática**.
+- [ ] Al buscar de nuevo se limpian los overrides: son de *ese* listado.
+
+### T3 — el control manual 🔴
+- [ ] Toggle por fila en la lista de releases. Clic = invierte y deja de ser sugerencia.
+- [ ] `handleGrab` envía `is3d` de **su** fila.
+- [ ] `splitByQuality` pasa a agrupar por **clave de enrutado** = `(is3d, quality)`, o un lote
+      con una 3D y una normal acabaría mandando los dos destinos en una sola llamada.
+
+### Aceptación (PR C)
+- [ ] `paths.path_3d` configurado + fila marcada → destino `path_3d`, **aunque sea 4K**.
+- [ ] `paths.path_3d` vacío → no enruta 3D (cae en la calidad), comportamiento de hoy.
+- [ ] Título con `HSBS`/`HTAB`/`3D` como token → sugerencia activa; `ABSORB` **no**.
+- [ ] Corrección manual gana sobre la sugerencia.
+- [ ] Sin destino manual, 3D y no-3D en el mismo lote → **una llamada por clase**.
+
 ## Checks
 
 ```
