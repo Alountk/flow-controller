@@ -226,6 +226,16 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml up -d
           sleep 15
 
+      - name: "Phase 2 — network mode (diagnostic)"
+        run: |
+          # The app inherits `network_mode: host` from docker-compose.yml, which
+          # is why it reaches the stub on the host loopback and NOT through
+          # compose service DNS. Print it: if this ever changes, the RADARR_URL
+          # in docker-compose.e2e.yml must change with it, and this line is
+          # what makes the next failure self-explaining.
+          docker inspect flow-controller --format 'flow-controller network_mode={{.HostConfig.NetworkMode}}'
+          echo "stub reachable at $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4400/__health) via 127.0.0.1:4400"
+
       - name: "Phase 2 — health check (app :8000 + fake-arr __health)"
         run: |
           # Both must answer: the app via its liveness probe, the stub via

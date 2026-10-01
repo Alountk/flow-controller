@@ -15,11 +15,12 @@ services:
     volumes:
       - ./e2e/fake-arr:/stub:ro
     ports:
-      # Host-only convenience: lets CI (and a local run) curl the stub's
-      # __health from the runner. The containers themselves never use this —
-      # they talk over the compose network as fake-arr:4000 — and 127.0.0.1
-      # keeps the port off the network interface. 4400, not the default 4000:
-      # a local aMuleTorrent on :4000 must not make `up` fail to bind.
+      # This is the ONLY way the app reaches the stub: it inherits
+      # `network_mode: host` from docker-compose.yml, so compose service DNS
+      # does not resolve for it and it must come through the host loopback.
+      # `127.0.0.1` also keeps the port off the network interface. 4400, not
+      # the default 4000: a local aMuleTorrent on :4000 must not make `up`
+      # fail to bind.
       - "127.0.0.1:4400:4000"
     healthcheck:
       # BusyBox wget ships with alpine; __health is the stub's liveness route.
@@ -35,7 +36,19 @@ services:
       fake-arr:
         condition: service_healthy
     environment:
-      - RADARR_URL=http://fake-arr:4000
+      # NOT http://fake-arr:4000 — compose service DNS does not resolve inside
+      # this container. `docker-compose.yml` sets `network_mode: host` for
+      # flow-controller, and the `network_mode: null` in docker-compose.ci.yml
+      # does not remove it (observed in CI: `ClientConnectorDNSError` for
+      # `fake-arr`, while the app was correctly configured). A host-network
+      # container reaches the host loopback, which is exactly where the stub
+      # publishes below — so the loopback address is the one address that
+      # works in the observed configuration.
+      #
+      # If the app is ever moved off `host` networking, this must go back to
+      # `http://fake-arr:4000`; the CI step named "network mode" prints which
+      # one is live so a failure explains itself.
+      - RADARR_URL=http://127.0.0.1:4400
       - RADARR_API_KEY=test-radarr-key
       # SONARR_* deliberately NOT set: the specs cover the Radarr path and a
       # second configured arr would fan out every poll twice. The stub still
