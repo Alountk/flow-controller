@@ -96,7 +96,7 @@ bien — solo que la ruta existe en el menú.
 
 ## 🟢 Features
 
-### F-01 — Upgrade de calidad desde la biblioteca (4K / 3D) + destino + renombrado · **Grande**
+### F-01 — Upgrade de calidad desde la biblioteca (4K / 3D) + destino · **Grande** · ✅ **Cerrado** (PRs #101, #102, #104)
 
 Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de más calidad
 (4K) o 3D, escoger el destino y renombrar el archivo una vez copiado.
@@ -129,7 +129,7 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
    `True`, que en una película con archivo **siempre lo es** → el destino que elijas hoy es
    un no-op. Hay que decidir: upgrade dentro de la biblioteca (Radarr reemplaza y renombra él)
    o copia a carpeta externa (fuera del control de Radarr).
-6. **Renombrado tras la copia.** Hoy solo se *detecta*: `clients.py:576` lee
+6. **Renombrado tras la copia.** *(hueco que queda: no entró en el reparto de 3 PRs y nadie lo ha pedido)* Hoy solo se *detecta*: `clients.py:576` lee
    `GET /api/v3/rename` y reporta `renamed_needed`, pero **nadie ejecuta nunca el rename**.
    Falta un paso tras `run_copy_background` (`copy_engine.py:179`).
 
@@ -162,7 +162,7 @@ Así que F-01 pasa de "construir el emplazamiento" a **tres cosas concretas**:
 |---|---|---|
 | 1 | **Abrir ese SKIP** para grabs con destino explícito (el arr ya tiene el 1080p; eso es lo que queremos) | media — toca la política de auto-copy, que está cubierta de tests |
 | 2 ✅ | **Elegir el destino según la calidad**: `paths.path_4k` (vacío = desactivado = hoy), 1080p → biblioteca — **PR #102** | Baja, como se preveía: la detección de 4K es `release.quality` → `endswith('2160p')`, **ya llegaba al cliente** (`clients.py:1344`) |
-| 3 | **Detección de 3D** | ❓ **única incógnita real** |
+| 3 ✅ | **Detección de 3D** — **PR #104** | Como se decidió: tokens acotados por palabra (sin `\b`, `ABSORB` casaría con `sbs`) + corrección manual que **sobrescribe**. **`is3d` manda sobre `2160p`**: una 3D es 3D sea la resolución que sea |
 
 #### Reparto (medido, no supuesto — decidido antes de empezar)
 
@@ -170,7 +170,7 @@ Así que F-01 pasa de "construir el emplazamiento" a **tres cosas concretas**:
 |----|-----------|-----------------|
 | **A** ✅ | **Abrir el `SKIP` de `decide_copy`** para grabs con destino explícito — **PR #101**, `42d1acb`, 626 tests | Era un **bug latente ya shipped**: elegir un destino para una película con archivo no hacía nada. Ahora sí, y un destino que cae **dentro de una raíz de Radarr** sigue sin abrirse (fail-closed: sin raíces comprobables no se amplía nada) |
 | **B** ✅ | Destino por calidad — **PR #102**, `627de9f`, `paths.path_4k` + detección de `2160p` | Depende de A, ya en `main`. **El batch se parte en una llamada por clase**: `grab-batch` tiene un solo campo `quality`, y fusionarlas mandaría `1080p` para una fila 4K → Radarr la importaría y **reemplazaría** el fichero que debía conservarse |
-| C | Detección de 3D (título + corrección manual) | La única parte con UI nueva |
+| **C** ✅ | Detección de 3D (título + corrección manual) + **`paths.path_3d`** — **PR #104**, `ef182a0`, 648 backend / 260 frontend | La corrección manual es un control **siempre visible** en cada fila: ofrecerlo solo cuando el heurístico ya adivinó dejaría sin forma de corregir un fallo, que es justo el caso de la opción 4 |
 
 #### Decisión de producto pendiente (resuelta):
 
