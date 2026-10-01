@@ -152,7 +152,7 @@ Así que F-01 pasa de "construir el emplazamiento" a **tres cosas concretas**:
 
 | PR | Contenido | Por qué va solo |
 |----|-----------|-----------------|
-| **A** | **Abrir el `SKIP` de `decide_copy`** para grabs con destino explícito | Es un **bug latente ya shipped**: hoy eliges un destino en "destino por selección" para una película con archivo y no pasa nada. Se arregla él solo, con sus tests de política |
+| **A** ✅ | **Abrir el `SKIP` de `decide_copy`** para grabs con destino explícito — **PR #101**, `42d1acb`, 626 tests | Era un **bug latente ya shipped**: elegir un destino para una película con archivo no hacía nada. Ahora sí, y un destino que cae **dentro de una raíz de Radarr** sigue sin abrirse (fail-closed: sin raíces comprobables no se amplía nada) |
 | **B** | Destino por calidad: `paths.path_4k` / `paths.path_3d` + detección de 4K | Depende de A (si no, el destino no llega a disco) |
 | C | Detección de 3D (título + corrección manual) | La única parte con UI nueva |
 

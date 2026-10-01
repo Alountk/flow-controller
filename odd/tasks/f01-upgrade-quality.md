@@ -29,8 +29,8 @@ Es un **bug latente ya shipped**: el selector "destino por selección" existe, g
 
 | PR | Contenido | Estado |
 |----|-----------|--------|
-| **A** | Abrir el `SKIP` de `decide_copy` para destinos ajenos a la biblioteca | 🔄 este documento |
-| **B** | Destino por calidad: `paths.path_4k` / `paths.path_3d` + detección de 4K | ⬜ |
+| **A** | Abrir el `SKIP` de `decide_copy` para destinos ajenos a la biblioteca | ✅ **PR #101** (`42d1acb`) — 626 tests |
+| **B** | Destino por calidad: `paths.path_4k` / `paths.path_3d` + detección de 4K | ⬜ siguiente |
 | **C** | Detección de 3D (título + corrección manual) | ⬜ |
 
 ---
@@ -38,23 +38,23 @@ Es un **bug latente ya shipped**: el selector "destino por selección" existe, g
 ## Tareas — PR A
 
 ### T1 — `decide_copy` entiende "destino explícito" 🔴
-- [ ] Añadir `has_destination: bool = False` a `decide_copy`.
-- [ ] El guard `arr_has_file is True → SKIP` solo aplica **cuando no hay destino explícito**.
-- [ ] **RED** en `tests_auto_copy.py`: con `arr_has_file=True` y `has_destination=True`,
+- [x] Añadir `has_destination: bool = False` a `decide_copy`.
+- [x] El guard `arr_has_file is True → SKIP` solo aplica **cuando no hay destino explícito**.
+- [x] **RED** en `tests_auto_copy.py`: con `arr_has_file=True` y `has_destination=True`,
       la traza en `downloaded` **no** debe hacer SKIP por "el arr ya tiene el fichero".
 
 ### T2 — `_grace_gate` no miente cuando hay destino 🔴
-- [ ] Con `has_destination=True`, tras vencer la ventana de gracia → **COPY** con razón
+- [x] Con `has_destination=True`, tras vencer la ventana de gracia → **COPY** con razón
       que diga **el destino queda fuera de la biblioteca** (hoy diría "el arr no lo
       importó", que sería **falso** si `arr_has_file` es `True`).
-- [ ] `arr_has_file is None` (sonda caída) **tampoco** bloquea con destino: la ventana de
+- [x] `arr_has_file is None` (sonda caída) **tampoco** bloquea con destino: la ventana de
       gracia protege de **racing** al arr, no de duplicados.
-- [ ] **Sin destino**: comportamiento **idéntico al de hoy**, sin una sola rama nueva.
+- [x] **Sin destino**: comportamiento **idéntico al de hoy**, sin una sola rama nueva.
 
 ### T3 — el driver pasa el destino a la política 🔴
-- [ ] Subir `find_own_grab` de `_dispatch` a `_handle_trace` (hoy se consulta tarde).
-- [ ] Pasar `has_destination` a `decide_copy`.
-- [ ] **RED** en `tests_auto_copy_driver.py`: una traza con `arr_has_file=True` **y**
+- [x] Subir `find_own_grab` de `_dispatch` a `_handle_trace` (hoy se consulta tarde).
+- [x] Pasar `has_destination` a `decide_copy`.
+- [x] **RED** en `tests_auto_copy_driver.py`: una traza con `arr_has_file=True` **y**
       `own_grab(destination=...)` debe terminar en `COPY`, no en `SKIP`.
 
 ### T4 — ⚠️ **Solo si el destino NO es raíz del arr** 🟠 (seguridad)
@@ -64,11 +64,11 @@ Es un **bug latente ya shipped**: el selector "destino por selección" existe, g
 `tests_copy_engine.py::test_copies_to_the_foreign_root`) → regresión sobre el estado actual,
 donde eso simplemente no ocurre.
 
-- [ ] Resolver las raíces del arr **una vez por sweep** (`arr_root_folders`), solo si algún
+- [x] Resolver las raíces del arr **una vez por sweep** (`arr_root_folders`), solo si algún
       `own_grab` lleva destino. Caché por sweep: el sweep ya hace más llamadas que ésta.
-- [ ] **Fail-closed**: si las raíces no se pueden obtener → el gate **no se abre**. Hoy es
+- [x] **Fail-closed**: si las raíces no se pueden obtener → el gate **no se abre**. Hoy es
       exactamente lo que pasa, así que no hay cambio de comportamiento.
-- [ ] `_handle_trace` solo habilita `has_destination` si el destino está **fuera de todas**
+- [x] `_handle_trace` solo habilita `has_destination` si el destino está **fuera de todas**
       las raíces.
 
 **Por qué fail-closed:** abrir a ciegas introduciría una regresión que hoy no existe.
@@ -77,10 +77,10 @@ ahora**.
 
 ## Criterios de aceptación
 
-- [ ] Una película **con archivo** + destino elegido → el fichero **llega** al destino.
-- [ ] Sin destino → comportamiento **byte a byte igual** al de hoy (los tests viejos no se tocan).
-- [ ] Destino = raíz del arr, o raíces no comprobables → **sigue sin pasar nada** (fail-closed).
-- [ ] Ventana de gracia: **sigue esperando** el mismo tiempo; solo cambia la **razón**.
+- [x] Una película **con archivo** + destino elegido → el fichero **llega** al destino.
+- [x] Sin destino → comportamiento **byte a byte igual** al de hoy (los tests viejos no se tocan).
+- [x] Destino = raíz del arr, o raíces no comprobables → **sigue sin pasar nada** (fail-closed).
+- [x] Ventana de gracia: **sigue esperando** el mismo tiempo; solo cambia la **razón**.
 
 ## Checks
 
