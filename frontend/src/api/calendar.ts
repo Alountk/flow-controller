@@ -136,13 +136,17 @@ export async function grabCalendarRelease(
   movieId: number = 0,
   episodeId: number = 0,
   destination?: string,
+  quality?: string,
 ): Promise<{ ok: boolean; detail: string }> {
   // A rejected fetch (offline, aborted, DNS) must surface as a failed result,
   // not as an unhandled rejection that leaves the modal stuck on "Descargando".
-  // `destination` is only added when set, so a library grab (the default) sends
-  // the same body as before this option existed.
+  // `destination` and `quality` are only added when set, so a library grab (the
+  // default) sends the same body as before either option existed. The server
+  // reads `quality` only when no destination was chosen: it routes, it never
+  // overrides a folder the operator picked.
   const body: Record<string, unknown> = { source, guid, indexerId, movieId, episodeId }
   if (destination) body.destination = destination
+  if (quality) body.quality = quality
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab', {
@@ -167,9 +171,11 @@ export async function grabCalendarReleaseBatch(
   movieId: number = 0,
   episodeId: number = 0,
   destination?: string,
+  quality?: string,
 ): Promise<{ ok: boolean; detail: string; downloaded: string[]; errors: { guid: string; detail: string }[] }> {
   const body: Record<string, unknown> = { source, guids, indexerIds, movieId, episodeId }
   if (destination) body.destination = destination
+  if (quality) body.quality = quality
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab-batch', {

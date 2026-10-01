@@ -209,6 +209,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
       item.type === 'movie' ? item.id : 0,
       item.type === 'episode' ? item.id : 0,
       destination || undefined,
+      release?.quality || undefined,
     )
     if (result.ok) {
       setStep('done')
@@ -237,29 +238,74 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
     setSelectedGuids((prev) => toggleVisibleSelection(prev, visibleReleases, releaseKey))
   }
 
+  /**
+   * One call per quality class, not one call per batch.
+   *
+   * `grab-batch` carries a single `quality`, so a selection mixing 4K and
+   * 1080p has no truthful answer for one call — and naming either class would
+   * send the other one to the wrong folder. Sending none would send both to
+   * the arr's library, which for a 4K release means the arr may import it and
+   * *replace* the 1080p: precisely the coexistence this feature exists to
+   * avoid. Splitting keeps every class where it belongs.
+   *
+   * When a destination was chosen by hand it already wins server-side, so the
+   * split buys nothing and one call is enough.
+   */
+  function splitByQuality(guids: string[]): string[][] {
+    if (destination) return [guids]
+    const groups = new Map<string, string[]>()
+    for (const guid of guids) {
+      const quality = releases.find(r => r.guid === guid)?.quality ?? ''
+      const bucket = groups.get(quality)
+      if (bucket) bucket.push(guid)
+      else groups.set(quality, [guid])
+    }
+    return [...groups.values()]
+  }
+
   async function handleGrabBatch() {
     if (selectedGuids.size === 0) return
     setStep('grabbing')
     setGrabErrors([])
     setMessage(`Descargando ${selectedGuids.size} releases...`)
-    const guids = Array.from(selectedGuids)
-    const indexerIds = guids.map(g => releases.find(r => r.guid === g)?.indexerId || 0)
-    const result = await grabCalendarReleaseBatch(
-      item.source,
-      guids,
-      indexerIds,
-      item.type === 'movie' ? item.id : 0,
-      item.type === 'episode' ? item.id : 0,
-      destination || undefined,
-    )
-    setGrabErrors(result.errors ?? [])
-    if (result.ok) {
+
+    let ok = true
+    let firstDetail = ''
+    let downloaded = 0
+    const errors: { guid: string; detail: string }[] = []
+    const details: string[] = []
+
+    for (const group of splitByQuality(Array.from(selectedGuids))) {
+      const quality = releases.find(r => r.guid === group[0])?.quality ?? ''
+      const indexerIds = group.map(g => releases.find(r => r.guid === g)?.indexerId || 0)
+      const result = await grabCalendarReleaseBatch(
+        item.source,
+        group,
+        indexerIds,
+        item.type === 'movie' ? item.id : 0,
+        item.type === 'episode' ? item.id : 0,
+        destination || undefined,
+        quality || undefined,
+      )
+      errors.push(...(result.errors ?? []))
+      downloaded += result.downloaded?.length ?? 0
+      details.push(result.detail)
+      if (!result.ok) {
+        ok = false
+        if (!firstDetail) firstDetail = result.detail
+      }
+    }
+
+    setGrabErrors(errors)
+    if (ok) {
       setStep('done')
-      setMessage(result.detail)
+      // One group means one call, so its own wording still reaches the user
+      // unchanged; only a split batch needs a summary of its own.
+      setMessage(details.length === 1 ? details[0] : `${downloaded} descargados`)
       setSelectedGuids(new Set())
     } else {
       setStep('error')
-      setMessage(result.detail)
+      setMessage(firstDetail)
     }
   }
 

@@ -8,7 +8,7 @@ from datetime import date, timedelta
 import aiohttp
 from fastapi import APIRouter, Depends
 
-from config import find_service, service_unavailable_reason, path_is_allowed, ALLOWED_ROOTS
+from config import ALLOWED_ROOTS, destination_for_quality, find_service, path_is_allowed, service_unavailable_reason
 from history import record_own_grab
 from clients import (
     fetch_radarr_calendar,
@@ -270,12 +270,16 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
     if not service:
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
-    # Reject an invalid destination BEFORE the grab, so nothing is sent to the
-    # arr and no own-grab row is written. The check uses the app's configured
-    # allowed roots (`path_is_allowed`); it never trusts the path to be safe.
-    # Absent (None) is the library default and skips the check entirely.
-    if req.destination is not None and not path_is_allowed(req.destination):
-        return {"ok": False, "detail": f"Destino no permitido: {req.destination}"}
+    # Resolve the destination BEFORE the grab, so nothing is sent to the arr
+    # and no own-grab row is written. A folder chosen by hand wins; otherwise
+    # the release's own quality class picks one (`quality` is only a hint —
+    # it must never override a decision the operator already made). The
+    # effective path is then checked against the app's configured allowed
+    # roots (`path_is_allowed`); it is never trusted to be safe. Absent (None)
+    # is the library default and skips the check entirely.
+    destination = req.destination or destination_for_quality(req.quality)
+    if destination is not None and not path_is_allowed(destination):
+        return {"ok": False, "detail": f"Destino no permitido: {destination}"}
 
     try:
         # The series lookup rides the grab's own session: it is a single GET to
@@ -305,7 +309,7 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
             series_id=series_id,
             guid=req.guid,
             indexer_id=req.indexerId,
-            destination=req.destination,
+            destination=destination,
         )
     return result
 
@@ -317,14 +321,17 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
     if not service:
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
-    # Same guard as the single grab, applied once for the whole batch: an
-    # invalid destination rejects the request before any guid is sent to the
-    # arr, so no own-grab row is written either. The frontend groups rows by
-    # destination and calls this once per group, so one value covers the batch.
-    if req.destination is not None and not path_is_allowed(req.destination):
+    # Same resolution and guard as the single grab, applied once for the whole
+    # batch: an invalid destination rejects the request before any guid is sent
+    # to the arr, so no own-grab row is written either. The frontend groups
+    # rows by destination and calls this once per group, so one value covers
+    # the batch — and one quality covers it for the same reason, because the
+    # derived destination is what put these rows in the same group.
+    destination = req.destination or destination_for_quality(req.quality)
+    if destination is not None and not path_is_allowed(destination):
         return {
             "ok": False,
-            "detail": f"Destino no permitido: {req.destination}",
+            "detail": f"Destino no permitido: {destination}",
             "downloaded": [],
             "errors": [],
         }
@@ -358,7 +365,7 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                         series_id=series_id,
                         guid=guid,
                         indexer_id=idx_id,
-                        destination=req.destination,
+                        destination=destination,
                     )
                 else:
                     errors.append({"guid": guid, "detail": result.get("detail", "Error desconocido")})

@@ -28,6 +28,10 @@ SERVICES: list[dict] = []
 #: its own hardcoded copy, and the release-destination combo sources its
 #: non-arr options from the same value.
 ALLOWED_ROOTS: list[str] = []
+#: Folder a 4K release is routed to when nobody picked one by hand. Empty means
+#: "not configured", which must read as today's behaviour (the arr's library),
+#: never as a request to write to "".
+PATH_4K: str = ""
 _DOWNLOAD_CLIENT_PATHS: dict[str, str] = {}
 
 ACTIONS: dict[str, dict] = {
@@ -130,6 +134,25 @@ def path_is_allowed(path: str) -> bool:
     return False
 
 
+def destination_for_quality(quality: str) -> str | None:
+    """Folder a release's quality class is routed to; None means the library.
+
+    Radarr reports the quality as one hyphen-joined token — ``Bluray-2160p``,
+    ``WEBDL-2160p``, ``HDTV-2160p`` — so the resolution is matched on its
+    suffix, which is what actually distinguishes the classes; the container
+    varies and the number does not.
+
+    An unconfigured folder resolves to None, so adding this never changes a
+    deployment that has not opted in. It is deliberately NOT authoritative:
+    an explicit destination from the caller wins, because a folder chosen by
+    hand is a decision and a quality is only a hint.
+    """
+    name = (quality or "").strip().lower()
+    if name.endswith("2160p") and PATH_4K:
+        return PATH_4K
+    return None
+
+
 def rebuild() -> None:
     """Re-read every settings-backed value. Called at import and after a save.
 
@@ -157,6 +180,7 @@ def rebuild() -> None:
     global SAFE_MODE, DEVELOPER
     global FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT
     global RETENTION_AMULE_DAYS
+    global PATH_4K
 
     RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
     SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:7878")
@@ -191,6 +215,15 @@ def rebuild() -> None:
     # In place on purpose: rebinding the NAME would never reach a module that
     # did `from config import ALLOWED_ROOTS`.
     ALLOWED_ROOTS[:] = get_setting("paths", "allowed_roots", default=[])
+    PATH_4K = str(get_setting("paths", "path_4k", default="") or "").strip()
+    # The quality folder has to be reachable, not merely named. `copy_engine`
+    # validates `dest_root` against `path_is_allowed`, so a 4K folder missing
+    # from the allowlist would be grabbed, downloaded and then REFUSED at copy
+    # time — the worst possible moment to find out. Naming it here is the
+    # operator saying "this is where those files go", which is the same
+    # authority `allowed_roots` records, one entry earlier.
+    if PATH_4K and PATH_4K not in ALLOWED_ROOTS:
+        ALLOWED_ROOTS.append(PATH_4K)
     _DOWNLOAD_CLIENT_PATHS.clear()
     _DOWNLOAD_CLIENT_PATHS.update({
         "amule": FOLDER_DOWNLOAD_AMULE,

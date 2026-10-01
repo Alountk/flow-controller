@@ -53,6 +53,8 @@ const destinationFolders = {
 
 interface MockOptions {
   destinationsFail?: boolean
+  /** Replace the canned results, for the cases that need a different mix. */
+  releases?: Release[]
 }
 
 function mockFetch(options: MockOptions = {}) {
@@ -68,9 +70,10 @@ function mockFetch(options: MockOptions = {}) {
       return Promise.resolve({ ok: true, json: async () => destinationFolders } as Response)
     }
     if (url.includes('/api/calendar/releases')) {
+      const rows = options.releases ?? releases
       return Promise.resolve({
         ok: true,
-        json: async () => ({ releases, detail: '2 releases encontrados' }),
+        json: async () => ({ releases: rows, detail: `${rows.length} releases encontrados` }),
       } as Response)
     }
     if (url.includes('/api/calendar/grab')) {
@@ -286,5 +289,72 @@ describe('ReleaseSearchModal destination combo', () => {
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     expect(grabBodies(fn)[0]).not.toHaveProperty('destination')
+  })
+})
+
+/**
+ * The release's quality class is what routes it to its own folder when nobody
+ * picked a destination by hand. What is asserted here is only the wire — the
+ * server owns the actual mapping — and the one case where claiming a class
+ * would be a lie: a batch holding more than one.
+ */
+describe('ReleaseSearchModal quality routing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('sends the release quality on a single grab', async () => {
+    const fn = mockFetch({ releases: [makeRelease({ guid: '4k-1', quality: 'Bluray-2160p' })] })
+    await openResults()
+
+    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    expect(grabBodies(fn)[0].quality).toBe('Bluray-2160p')
+  })
+
+  it('sends the shared quality as one call when every release has it', async () => {
+    const fn = mockFetch({
+      releases: [
+        makeRelease({ guid: 'a', quality: 'Bluray-2160p' }),
+        makeRelease({ guid: 'b', quality: 'Bluray-2160p', title: 'Other 2022 2160p' }),
+      ],
+    })
+    await openResults()
+
+    for (const box of document.querySelectorAll<HTMLInputElement>('.release-checkbox input')) {
+      fireEvent.click(box)
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Descargar \(2\)/ }))
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
+    expect(grabBodies(fn)[0].quality).toBe('Bluray-2160p')
+    expect(grabBodies(fn)[0].guids).toEqual(['a', 'b'])
+  })
+
+  it('splits a mixed batch so each class keeps its own quality', async () => {
+    const fn = mockFetch({
+      releases: [
+        makeRelease({ guid: 'a', quality: 'Bluray-2160p' }),
+        makeRelease({ guid: 'b', quality: 'WEBDL-1080p', title: 'Other 2022 1080p' }),
+      ],
+    })
+    await openResults()
+
+    for (const box of document.querySelectorAll<HTMLInputElement>('.release-checkbox input')) {
+      fireEvent.click(box)
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Descargar \(2\)/ }))
+
+    await waitFor(() => expect(grabBodies(fn)).toHaveLength(2))
+
+    // `grab-batch` carries ONE quality, so two classes need two calls. Merging
+    // them would either drop the 4K in the library — where Radarr may import it
+    // and REPLACE the 1080p, the exact coexistence failure this feature exists
+    // to avoid — or ship a quality that does not describe half the batch.
+    const byQuality = Object.fromEntries(
+      grabBodies(fn).map((b) => [b.quality as string, b.guids as string[]]),
+    )
+    expect(byQuality).toEqual({ 'Bluray-2160p': ['a'], 'WEBDL-1080p': ['b'] })
   })
 })

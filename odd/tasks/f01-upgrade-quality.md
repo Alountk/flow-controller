@@ -75,7 +75,39 @@ donde eso simplemente no ocurre.
 Cerrarlo cuando no podemos demostrar que es ajeno deja el comportamiento **idéntico al de
 ahora**.
 
-## Criterios de aceptación
+---
+
+## Tareas — PR B: destino por calidad
+
+**Decisión de arquitectura:** quién posee cada cosa.
+
+| | Quién | Por qué |
+|---|---|---|
+| **Configuración** (`paths.path_4k` / `paths.path_3d`) | backend | Como `ALLOWED_ROOTS`: **una sola autoridad**, no una copia hardcodeada por ruta |
+| **Validación** (`path_is_allowed`) | backend | **Ya existe** y es la única puerta |
+| **Decisión** (¿este release va al 4K?) | **frontend** | Ya tiene `quality` y `title` por fila, y ya agrupa por destino antes de llamar a `grab-batch` |
+
+El cliente elige, el servidor valida — **exactamente como funciona `destination` hoy**.
+
+### T1 — las dos rutas son configuración 🔴
+- [ ] `config.py`: `PATH_4K` / `PATH_3D` leídos en `rebuild()` desde `paths.*`, vacío por defecto.
+- [ ] **Incluidas en `ALLOWED_ROOTS`.** Obligatorio: `copy_engine` valida `dest_root`
+      contra `path_is_allowed` (`tests_copy_engine.py::test_rejects_a_dest_root_outside_the_allowed_roots`),
+      así que una ruta 4K que no esté en las raíces **se copiaría y luego fallaría**.
+- [ ] `Settings` type + 2 campos en el bloque "Rutas".
+
+### T2 — el backend acepta la calidad del release 🔴
+- [ ] `CalendarGrabRequest` / `CalendarGrabBatchRequest` ganan `quality: str = ""`.
+- [ ] `destination_for_quality()` puro en `config.py`, junto a `path_is_allowed`.
+- [ ] En ambos endpoints: `destination = req.destination or destination_for_quality(req.quality)`,
+      y **la misma** validación `path_is_allowed` sobre el destino **efectivo**.
+- [ ] **Elección explícita del usuario gana** sobre lo derivado.
+
+### T3 — el cliente la manda 🔴
+- [ ] `grabCalendarRelease` / `grabCalendarReleaseBatch` envían `quality` solo si está.
+- [ ] El modal pasa `release.quality` de cada fila.
+
+## Criterios de aceptación (PR B)
 
 - [x] Una película **con archivo** + destino elegido → el fichero **llega** al destino.
 - [x] Sin destino → comportamiento **byte a byte igual** al de hoy (los tests viejos no se tocan).

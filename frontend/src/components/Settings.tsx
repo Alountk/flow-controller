@@ -314,6 +314,12 @@ export function Settings() {
         <Field label="Carpeta descargas aMuTorrent" value={form.paths.download_amule} onChange={(v) => update('paths.download_amule', v)} />
         <Field label="Carpeta descargas Torrent" value={form.paths.download_torrent} onChange={(v) => update('paths.download_torrent', v)} />
         <Field label="Raíces permitidas (separadas por coma)" value={(form.paths.allowed_roots ?? []).join(", ")} onChange={(v) => updateList('paths.allowed_roots', v)} />
+        <Field
+          label="Carpeta de los 4K (vacío = biblioteca de Radarr)"
+          value={form.paths.path_4k ?? ''}
+          onChange={(v) => update('paths.path_4k', v)}
+          placeholder="/mnt/storage/peliculas-4k"
+        />
       </Section>
 
       <Section title="Intervalos">
