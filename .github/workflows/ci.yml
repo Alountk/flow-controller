@@ -124,10 +124,22 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
 
   # ── End-to-end tests (Playwright) ──────────────────────────────
-  # Runs the e2e/ suite against a real container. Deliberately a sibling of
-  # docker-verify, not part of it, and NOT in docker-push's needs chain: a
-  # brand-new browser suite must not be able to block image publishing until
-  # it has earned that.
+  # Runs the e2e/ suite against a real container — NOW IN TWO VARIANTS, each
+  # with its own up → test → down -v so a fresh container starts each phase:
+  #   1. bare — docker-compose.yml + docker-compose.ci.yml: a container with
+  #      NO services. specs/auth.spec.ts + specs/dashboard-bare.spec.ts pin
+  #      the bare install (honest empty state, gated nav) and must keep
+  #      running against a service-less container.
+  #   2. stub — + docker-compose.e2e.yml (the fake-arr Radarr stub on the
+  #      same compose network): specs/flow-faltantes.spec.ts +
+  #      specs/flow-release-search.spec.ts pin the headline flow
+  #      (Faltantes → buscar release → encolar).
+  # Phase 2 runs only if phase 1 is green (default fail-fast); the job log is
+  # the record of which variant broke.
+  #
+  # Deliberately a sibling of docker-verify, not part of it, and NOT in
+  # docker-push's needs chain: a brand-new browser suite must not be able to
+  # block image publishing until it has earned that.
   #
   # Promotion criterion (agreed when this job landed, so it is not a vague
   # decision in six months): add `e2e` to docker-push's `needs` once it has
@@ -138,37 +150,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend-tests, frontend-build]
     # The workflow carries no other timeout; without this a hung browser run
-    # would sit on GitHub's 6-hour default.
+    # would sit on GitHub's 6-hour default. It now covers BOTH variants.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
+        # One build serves both phases; the stub image (node:22-alpine) is
+        # pulled, not built, so it is not part of this step.
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml build --no-cache
-
-      - name: Start container
-        run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
-          sleep 15
-
-      - name: Health check (port 8000)
-        run: |
-          # Same bounded loop as docker-verify: /api/health is the liveness
-          # probe, /api/status requires the API key, which CI does not have
-          # in the test runner.
-          for i in $(seq 1 10); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/health 2>/dev/null || true)
-            if [ "$STATUS" = "200" ]; then
-              echo "✅ Backend healthy (HTTP $STATUS)"
-              exit 0
-            fi
-            echo "⏳ Attempt $i: HTTP $STATUS — retrying in 3s..."
-            sleep 3
-          done
-          echo "❌ Backend did not start within 45s"
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=50
-          exit 1
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -197,10 +188,83 @@ jobs:
           cd e2e
           npx playwright install --with-deps chromium
 
-      - name: Run e2e tests
+      # ── Phase 1: bare install (no services) ─────────────────────
+      - name: "Phase 1 — start bare container"
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d
+          sleep 15
+
+      - name: "Phase 1 — health check (port 8000)"
+        run: |
+          # Same bounded loop as docker-verify: /api/health is the liveness
+          # probe, /api/status requires the API key, which CI does not have
+          # in the test runner.
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/health 2>/dev/null || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Backend healthy (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "⏳ Attempt $i: HTTP $STATUS — retrying in 3s..."
+            sleep 3
+          done
+          echo "❌ Backend did not start within 45s"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=50
+          exit 1
+
+      - name: "Phase 1 — run bare specs"
         run: |
           cd e2e
-          npm test
+          npx playwright test specs/auth.spec.ts specs/dashboard-bare.spec.ts
+
+      - name: "Phase 1 — teardown"
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+
+      # ── Phase 2: stub-backed install (fake-arr) ──────────────────
+      - name: "Phase 2 — start stub-backed container"
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml up -d
+          sleep 15
+
+      - name: "Phase 2 — network mode (diagnostic)"
+        run: |
+          # The app inherits `network_mode: host` from docker-compose.yml, which
+          # is why it reaches the stub on the host loopback and NOT through
+          # compose service DNS. Print it: if this ever changes, the RADARR_URL
+          # in docker-compose.e2e.yml must change with it, and this line is
+          # what makes the next failure self-explaining.
+          # Resolved by service, not by container name: docker-compose.yml does
+          # not set `container_name`, so the id must come from compose. And this
+          # step must NEVER fail the job — it is a diagnostic, and a wrong name
+          # once cost a whole run before the specs even started.
+          set +e
+          CID=$(docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml ps -q flow-controller)
+          docker inspect "$CID" --format 'flow-controller network_mode={{.HostConfig.NetworkMode}}'
+          echo "stub __health via 127.0.0.1:4400 -> $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4400/__health)"
+          exit 0
+
+      - name: "Phase 2 — health check (app :8000 + fake-arr __health)"
+        run: |
+          # Both must answer: the app via its liveness probe, the stub via
+          # __health on its published 127.0.0.1:4400 (see docker-compose.e2e.yml).
+          for i in $(seq 1 10); do
+            APP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/health 2>/dev/null || true)
+            STUB=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4400/__health 2>/dev/null || true)
+            if [ "$APP" = "200" ] && [ "$STUB" = "200" ]; then
+              echo "✅ Backend healthy (HTTP $APP), fake-arr healthy (HTTP $STUB)"
+              exit 0
+            fi
+            echo "⏳ Attempt $i: app HTTP $APP, stub HTTP $STUB — retrying in 3s..."
+            sleep 3
+          done
+          echo "❌ App or fake-arr did not come up within 45s"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml logs --tail=50
+          exit 1
+
+      - name: "Phase 2 — run stub specs"
+        run: |
+          cd e2e
+          npx playwright test specs/flow-faltantes.spec.ts specs/flow-release-search.spec.ts
 
       - name: Upload Playwright report
         if: failure()
@@ -212,7 +276,9 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+        # All three files: the same compose project, so this removes whichever
+        # variant (or both) is still up.
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml down -v
 
   # ── Push Docker image (only on main branch push) ───────────────
   docker-push:
