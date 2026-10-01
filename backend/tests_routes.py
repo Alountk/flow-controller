@@ -2218,3 +2218,84 @@ class TestFirstRunSetup:
         client.post("/api/setup", json={"services": {"inventado": {"url": "http://x:1"}}})
 
         assert "inventado" not in fresh.get("services", {})
+
+
+# ── /api/disk ─────────────────────────────────────────────────────────────────
+#
+# The page must show the storages the deployment actually configured, and it
+# must never draw a confident bar for a folder that is really part of the app's
+# own disk. That is how a 63 GB container rootfs came to be labelled
+# "Storage (6TB)" and reported as a working volume.
+
+
+class TestDiskVolumesComeFromConfiguration:
+    def test_the_volumes_are_the_configured_roots_not_a_hardcoded_pair(self, monkeypatch):
+        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", ["/data/custom-storage"])
+
+        body = client.get("/api/disk").json()
+
+        assert [v["path"] for v in body["volumes"]] == ["/data/custom-storage"], (
+            "a hardcoded pair can only ever show the two storages that existed "
+            "when it was written; any other deployment is invisible"
+        )
+
+    def test_a_directory_that_is_not_a_mount_point_is_flagged_not_mislabelled(
+        self, monkeypatch, tmp_path
+    ):
+        # Exactly the reported shape: a plain directory on the container's own
+        # disk, which `shutil.disk_usage` happily measures and the page then
+        # presented as a whole storage volume.
+        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", [str(tmp_path)])
+
+        vol = client.get("/api/disk").json()["volumes"][0]
+
+        assert "montaje" in vol["error"]
+        assert vol["total_bytes"] == 0, (
+            "the numbers describe another filesystem; showing them is the bug"
+        )
+
+    def test_a_mount_point_still_reports_its_usage(self, monkeypatch):
+        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", ["/"])
+
+        vol = client.get("/api/disk").json()["volumes"][0]
+
+        assert "error" not in vol, vol
+        assert vol["total_bytes"] > 0
+        assert vol["percent"] >= 0
+
+    def test_a_missing_path_still_reads_as_unavailable(self, monkeypatch):
+        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", ["/definitely/not/here"])
+
+        vol = client.get("/api/disk").json()["volumes"][0]
+
+        assert vol["error"] == "no disponible"
+
+    def test_an_empty_configuration_reports_no_volumes(self, monkeypatch):
+        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", [])
+
+        assert client.get("/api/disk").json()["volumes"] == []
+
+
+class TestWhatCountsAsItsOwnFilesystem:
+    """The rule `/api/disk` leans on, pinned on real paths.
+
+    Both halves are exercised: a mount point must be trusted, a plain
+    directory must not.
+    """
+
+    def test_a_mount_point_is_not_flagged(self):
+        from routes.calendar import _is_foreign_filesystem
+
+        assert _is_foreign_filesystem("/") is False
+
+    def test_a_plain_directory_is_flagged(self, tmp_path):
+        from routes.calendar import _is_foreign_filesystem
+
+        assert _is_foreign_filesystem(str(tmp_path)) is True
+
+    def test_a_missing_path_is_not_flagged_as_foreign(self):
+        """Absence is a different failure and already has its own message;
+        conflating them would hide "no existe" behind "no es un montaje"."""
+        from routes.calendar import _is_foreign_filesystem
+
+        assert _is_foreign_filesystem("/definitely/not/here") is False
