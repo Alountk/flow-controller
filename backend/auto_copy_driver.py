@@ -406,6 +406,9 @@ async def _handle_trace(
     own_grab = find_own_grab(trace, own_grabs)
     destination = own_grab.get("destination") if own_grab else None
     has_destination = bool(destination) and destination in foreign_destinations
+    # Also carried here for the same reason: `_dispatch` needs it and is called
+    # after the decision. `None` for a row that predates v8 stays `None`.
+    quality = own_grab.get("quality") if own_grab else None
 
     # Ask the arr only when the answer can change the outcome. A probe per trace
     # per sweep would be one request per trace; asking only for a plausibly
@@ -460,7 +463,7 @@ async def _handle_trace(
         return _entry(key, source, title, result, reason, action="proposed")
 
     return await _dispatch(
-        session, trace, key, source, title, reason, destination=destination
+        session, trace, key, source, title, reason, destination=destination, quality=quality
     )
 
 
@@ -495,6 +498,7 @@ async def _dispatch(
     reason: str,
     *,
     destination: str | None = None,
+    quality: str | None = None,
 ) -> dict:
     torrent = trace.get("torrent") or {}
     output_path = torrent.get("content_path")
@@ -516,6 +520,11 @@ async def _dispatch(
     # library, and the engine resolves that root itself.
     if destination:
         payload["dest_root"] = destination
+    # The quality of what was actually grabbed. Present only when the registry
+    # knows it: a copy dispatched without one must not invent a value a
+    # filename will be built from.
+    if quality:
+        payload["quality"] = quality
 
     # Claim before acting: persist the marker FIRST, then dispatch. If the
     # process dies mid-copy the marker already blocks a second sweep; the

@@ -314,6 +314,7 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
             guid=req.guid,
             indexer_id=req.indexerId,
             destination=destination,
+            quality=req.quality or None,
         )
     return result
 
@@ -372,6 +373,7 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                         guid=guid,
                         indexer_id=idx_id,
                         destination=destination,
+                        quality=req.quality or None,
                     )
                 else:
                     errors.append({"guid": guid, "detail": result.get("detail", "Error desconocido")})

@@ -24,7 +24,7 @@ from pathlib import Path
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -90,7 +90,11 @@ CREATE TABLE IF NOT EXISTS own_grabs (
     guid        TEXT,
     indexer_id  INTEGER,
     grabbed_at  REAL NOT NULL,
-    destination TEXT
+    destination TEXT,
+    -- v8: what was grabbed. Nothing else carries it — the trace has none and
+    -- the request drops it after routing — so a name built from Radarr's
+    -- pattern would have no `{Quality Full}` to read from.
+    quality     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_own_grabs_title ON own_grabs (source, movie_id, episode_id);
 -- v4: the "first time we saw this candidate in this condition" reference. Same
@@ -200,6 +204,8 @@ def _apply_migrations(conn: sqlite3.Connection, from_version: int) -> None:
     """
     if from_version < 6 and not _has_column(conn, "own_grabs", "destination"):
         conn.execute("ALTER TABLE own_grabs ADD COLUMN destination TEXT")
+    if from_version < 8 and not _has_column(conn, "own_grabs", "quality"):
+        conn.execute("ALTER TABLE own_grabs ADD COLUMN quality TEXT")
 
 
 def init_db(path: Path | None = None) -> None:
@@ -526,6 +532,7 @@ def record_own_grab(
     indexer_id: int = 0,
     grabbed_at: float | None = None,
     destination: str | None = None,
+    quality: str | None = None,
 ) -> None:
     """Record one grab this app launched. Best-effort: never raises.
 
@@ -537,6 +544,10 @@ def record_own_grab(
     is deliberately no sentinel string, so a later reader can treat a missing
     value as the default without decoding a magic word. The route validates the
     path before it reaches here; this writer only stores it.
+
+    `quality` is Radarr's quality name for the grabbed release. ``None`` means
+    unknown and MUST stay unknown: substituting a guess would put it in a
+    filename later, which is far harder to notice than an empty cell.
     """
     with _lock:
         if _conn is None:
@@ -545,8 +556,8 @@ def record_own_grab(
             _conn.execute(
                 "INSERT INTO own_grabs "
                 "(source, movie_id, episode_id, series_id, guid, indexer_id, "
-                " grabbed_at, destination) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " grabbed_at, destination, quality) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     source,
                     movie_id,
@@ -556,6 +567,7 @@ def record_own_grab(
                     indexer_id or 0,
                     time.time() if grabbed_at is None else grabbed_at,
                     destination or None,
+                    quality or None,
                 ),
             )
             _conn.commit()

@@ -54,7 +54,7 @@ def _trace(
     }
 
 
-def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT, destination=None):
+def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT, destination=None, quality=None):
     return {
         "id": 1,
         "source": source,
@@ -65,6 +65,7 @@ def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT, destination=
         "indexer_id": 1,
         "grabbed_at": grabbed_at,
         "destination": destination,
+        "quality": quality,
     }
 
 
@@ -368,6 +369,21 @@ def test_roots_we_could_not_obtain_leave_the_gate_shut(monkeypatch):
     summary = _sweep(safe_mode=False)
 
     assert summary["entries"][0]["decision"] == SKIP
+
+
+def test_the_grabs_quality_travels_into_the_copy_payload(monkeypatch):
+    """Nothing else carries it: the trace has none and the request throws it
+    away after routing, so `{Quality Full}` would have nowhere to read from."""
+    calls = _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab(quality="Bluray-2160p")],
+    )
+
+    summary = _sweep(safe_mode=False)
+
+    assert summary["entries"][0]["decision"] == COPY
+    assert calls.dispatch[0]["payload"]["quality"] == "Bluray-2160p"
 
 
 def test_no_root_lookup_happens_when_no_grab_carries_a_destination(monkeypatch):

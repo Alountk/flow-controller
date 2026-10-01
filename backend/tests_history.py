@@ -766,7 +766,9 @@ def test_a_v6_database_gains_the_retention_table(tmp_path):
         )
     finally:
         conn.close()
-    assert version == 7
+    # Follows the constant rather than a literal: bumping the schema for an
+    # unrelated column must not turn this retention test red.
+    assert version == history.SCHEMA_VERSION
     assert present, "a v6 file did not gain the v7 table"
 
 
@@ -785,7 +787,7 @@ def test_own_grabs_are_read_newest_first_as_plain_dicts(db):
     assert [row["grabbed_at"] for row in rows] == [200.0, 100.0]
     assert set(rows[0]) == {
         "id", "source", "movie_id", "episode_id", "series_id", "guid",
-        "indexer_id", "grabbed_at", "destination",
+        "indexer_id", "grabbed_at", "destination", "quality",
     }
     assert rows[0]["source"] == "sonarr"
     assert rows[0]["episode_id"] == 2
@@ -1271,3 +1273,89 @@ def test_init_db_migrates_a_v4_database_without_an_alter(tmp_path):
     finally:
         conn.close()
     assert version == history.SCHEMA_VERSION
+
+
+# ── v8: own_grabs gains `quality` ─────────────────────────────────────────────
+
+V7_OWN_GRABS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS own_grabs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    source      TEXT NOT NULL,
+    movie_id    INTEGER,
+    episode_id  INTEGER,
+    series_id   INTEGER,
+    guid        TEXT,
+    indexer_id  INTEGER,
+    grabbed_at  REAL NOT NULL,
+    destination TEXT
+);
+"""
+
+
+def test_init_db_migrates_a_v7_database_by_adding_the_quality_column(tmp_path):
+    """v8 adds a COLUMN, which `CREATE TABLE IF NOT EXISTS` cannot deliver: the
+    table is already there, so the explicit ALTER has to run and the rows
+    already recorded have to survive it.
+
+    The column exists because nothing else carries this fact: the trace has no
+    quality, the copy payload has no quality, and `CalendarGrabRequest.quality`
+    is thrown away after routing. `{Quality Full}` has nowhere to read from
+    without it.
+    """
+    path = tmp_path / "history.db"
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(V7_OWN_GRABS_SCHEMA)
+        conn.execute(
+            "INSERT INTO own_grabs (source, movie_id, guid, indexer_id, grabbed_at, destination) "
+            "VALUES ('radarr', 855, 'legacy-guid', 7, 1000.0, '/mnt/storage/y')"
+        )
+        conn.execute("PRAGMA user_version=7")
+        conn.commit()
+    finally:
+        conn.close()
+
+    history.init_db(path)
+    try:
+        rows = _own_grab_rows(path)
+        assert len(rows) == 1
+        assert rows[0]["guid"] == "legacy-guid"
+        assert rows[0]["destination"] == "/mnt/storage/y"
+        # An older grab simply did not know its quality; NULL is honest, not a
+        # default quality that would silently name a file wrongly later.
+        assert rows[0]["quality"] is None
+        history.record_own_grab(
+            "radarr", movie_id=1, grabbed_at=2000.0, quality="Bluray-2160p"
+        )
+        assert _own_grab_rows(path)[1]["quality"] == "Bluray-2160p"
+    finally:
+        history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(own_grabs)")]
+    finally:
+        conn.close()
+    assert version == history.SCHEMA_VERSION
+    assert "quality" in columns
+
+
+def test_a_fresh_database_is_created_with_the_quality_column(tmp_path):
+    """A fresh file lands on v8 directly: `SCHEMA` already creates the column,
+    so the ALTER must be skipped instead of raising duplicate-column."""
+    path = tmp_path / "history.db"
+    history.close()
+    history.init_db(path)
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(own_grabs)")]
+    finally:
+        conn.close()
+    assert version == history.SCHEMA_VERSION
+    assert "quality" in columns
