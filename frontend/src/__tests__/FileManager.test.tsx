@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FileManager } from '../components/FileManager'
+import type { RetentionFile } from '../types'
 
 /**
  * Wiring-level tests for the file explorer's multi-file selection.
@@ -55,6 +56,8 @@ const SEED_GUARD =
 interface MockOptions {
   /** Browse listings keyed by path; anything else lists as empty. */
   listings?: Record<string, BrowseItem[]>
+  /** Retention rows keyed by directory path; anything else comes back empty. */
+  retention?: Record<string, RetentionFile[]>
   /** Backend answer for one queue/add call, decided per file. */
   onQueueAdd?: (body: Record<string, unknown>) => { ok: boolean; detail: string }
   /** Backend answer for one delete call, decided per path. */
@@ -73,6 +76,7 @@ interface MockedFetch {
 
 function mockFetch(options: MockOptions = {}): MockedFetch {
   const listings = options.listings ?? { '/mnt/storage': [] }
+  const retention = options.retention ?? {}
   const onQueueAdd = options.onQueueAdd ?? (() => ({ ok: true, detail: 'Agregado a la cola' }))
   const onDelete = options.onDelete ?? (() => ({ ok: true, detail: 'Eliminado' }))
   const events: string[] = []
@@ -89,6 +93,11 @@ function mockFetch(options: MockOptions = {}): MockedFetch {
     if (url.includes('/api/files/browse')) {
       const path = new URL(url, 'http://x').searchParams.get('path') ?? ''
       return ok({ ok: true, path, items: listings[path] ?? [] })
+    }
+
+    if (url.includes('/api/files/retention')) {
+      const path = new URL(url, 'http://x').searchParams.get('path') ?? ''
+      return ok({ ok: true, path, days: 7, files: retention[path] ?? [] })
     }
 
     if (url.includes('/api/files/delete')) {
@@ -133,6 +142,11 @@ function deleteBodies(fn: AnyFetch): { remote_path: string }[] {
     .map(([, init]) => JSON.parse(String((init as RequestInit)?.body)) as { remote_path: string })
 }
 
+/** URLs of every call in issue order, so "refetch AFTER the deletes" is provable. */
+function requestOrder(fn: AnyFetch): string[] {
+  return fn.mock.calls.map(([input]) => String(input))
+}
+
 function renderFileManager() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -142,10 +156,10 @@ function renderFileManager() {
   )
 }
 
-/** Renders the explorer and waits for the root listing to be on screen. */
-async function openPane() {
+/** Renders the explorer and waits for a known row of the root listing. */
+async function openPane(firstRow = 'A.mkv') {
   renderFileManager()
-  await screen.findByText('A.mkv')
+  await screen.findByText(firstRow)
 }
 
 /** Accessible name of every row checkbox inside the list. */
@@ -294,5 +308,125 @@ describe('FileManager multi-file selection', () => {
     expect(screen.queryByText('2 seleccionados')).toBeNull()
     expect(screen.queryByText('Limpiar')).toBeNull()
     expect(checkedRowNames()).toEqual([])
+  })
+
+  it('annotates each row with its retention age, and shows nothing when there is no age', async () => {
+    mockFetch({
+      listings: {
+        '/mnt/storage': [file('Recien.mkv'), file('Nuevo.mkv'), file('Viejo.mkv'), file('SinEdad.mkv')],
+      },
+      retention: {
+        '/mnt/storage': [
+          { name: 'Recien.mkv', first_seen_at: 1759200000, age_days: 0.4, expired: false },
+          { name: 'Nuevo.mkv', first_seen_at: 1759000000, age_days: 2.4, expired: false },
+          { name: 'Viejo.mkv', first_seen_at: 1758000000, age_days: 12.4, expired: true },
+          { name: 'SinEdad.mkv', first_seen_at: null, age_days: null, expired: false },
+        ],
+      },
+    })
+    await openPane('Viejo.mkv')
+
+    // Not yet past the window: how long it has been here, in days.
+    expect(await screen.findByText('hace 2 días')).toBeInTheDocument()
+    expect(screen.getByText('hoy')).toBeInTheDocument()
+    // Under a day old is "hoy", not "hace 0 días".
+    expect(screen.queryByText(/hace 0/)).toBeNull()
+
+    // Expired is a STATE, not an error: its own word and its own class,
+    // never the red used for failures.
+    const caducados = screen.getAllByText('caducado')
+    expect(caducados).toHaveLength(1)
+    expect(caducados[0].className).toContain('expired')
+    expect(caducados[0].className).not.toContain('bad')
+
+    // The store was unreadable for this file: no chip and no fabricated age —
+    // a made-up age could justify deleting something never recorded.
+    const row = screen.getByText('SinEdad.mkv').closest('.fm-item') as HTMLElement
+    expect(row.querySelector('.fm-age')).toBeNull()
+    expect(within(row).queryByText(/días|día|hoy|caducado/)).toBeNull()
+  })
+
+  it('Marcar caducados shows only when something is expired, and selects exactly those rows', async () => {
+    // Nothing is past the window: the button must not exist at all.
+    mockFetch({
+      listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv')] },
+      retention: {
+        '/mnt/storage': [
+          { name: 'A.mkv', first_seen_at: 1, age_days: 1.5, expired: false },
+          { name: 'B.mkv', first_seen_at: 1, age_days: 2.5, expired: false },
+        ],
+      },
+    })
+    const first = renderFileManager()
+    // Retention data is on screen — its absence is what hides the button,
+    // not a query still in flight.
+    expect(await screen.findByText('hace 1 día')).toBeInTheDocument()
+    expect(screen.queryByText('Marcar caducados')).toBeNull()
+    first.unmount()
+
+    // With expired rows the button appears and is a pure selection action.
+    const second = mockFetch({
+      listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('C.mkv')] },
+      retention: {
+        '/mnt/storage': [
+          { name: 'A.mkv', first_seen_at: 1, age_days: 12, expired: true },
+          { name: 'B.mkv', first_seen_at: 1, age_days: 2, expired: false },
+          { name: 'C.mkv', first_seen_at: 1, age_days: 12, expired: true },
+        ],
+      },
+    })
+    renderFileManager()
+    expect(await screen.findAllByText('caducado')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar caducados' }))
+
+    // Exactly the expired rows — the fresh one stays unselected — and nothing
+    // is deleted: selecting is the whole action, the delete goes through the
+    // batch bar's own confirmation.
+    expect(screen.getByText('2 seleccionados')).toBeInTheDocument()
+    expect(checkedRowNames()).toEqual(['Seleccionar A.mkv', 'Seleccionar C.mkv'])
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(requestOrder(second.fn).filter((u) => u.includes('/api/files/delete'))).toHaveLength(0)
+  })
+
+  it('a batch delete refetches the retention query after the files are gone', async () => {
+    const mocked = mockFetch({
+      listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('C.mkv')] },
+      retention: {
+        '/mnt/storage': [
+          { name: 'A.mkv', first_seen_at: 1, age_days: 12, expired: true },
+          { name: 'B.mkv', first_seen_at: 1, age_days: 2.5, expired: false },
+          { name: 'C.mkv', first_seen_at: 1, age_days: 12, expired: true },
+        ],
+      },
+      deleteDelayMs: 2,
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await openPane()
+    await screen.findAllByText('caducado')
+
+    const retentionCalls = () =>
+      requestOrder(mocked.fn).filter((u) => u.includes('/api/files/retention'))
+    expect(retentionCalls()).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar todo' }))
+    fireEvent.click(screen.getByText('Eliminar'))
+    await waitFor(() =>
+      expect(screen.getByText('3 eliminados, 0 rechazados')).toBeInTheDocument(),
+    )
+
+    // Assert the REFETCH — a second GET /api/files/retention on the network —
+    // not merely that invalidateQueries was called with some key...
+    await waitFor(() => expect(retentionCalls().length).toBeGreaterThan(1))
+
+    // ...and that it lands strictly after the last unlink, because that is the
+    // moment the ages and the pruned rows actually change.
+    const order = requestOrder(mocked.fn)
+    const lastDelete = Math.max(
+      ...order.map((u, i) => (u.includes('/api/files/delete') ? i : -1)),
+    )
+    expect(deleteBodies(mocked.fn)).toHaveLength(3)
+    expect(retentionCalls().length).toBeGreaterThanOrEqual(2)
+    expect(order.some((u, i) => u.includes('/api/files/retention') && i > lastDelete)).toBe(true)
   })
 })

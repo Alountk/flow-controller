@@ -28,6 +28,9 @@ const settings = {
   },
   intervals: { check: 15, max_retries: 3, retry_delay: 2, request_timeout: 5, import_timeout: 40 },
   tracing: { limit: 25 },
+  // Backend DEFAULTS again: the retention window the settings page reads
+  // directly (`backend/settings.py`: retention.amule_days = 7).
+  retention: { amule_days: 7 },
   server: { port: 8000 },
 }
 
@@ -44,7 +47,8 @@ function result(overrides: Partial<ServiceTestResult> = {}): ServiceTestResult {
 }
 
 function mockFetch(results: ServiceTestResult[] | 'error') {
-  const fn = vi.fn((input: RequestInfo | URL) => {
+  const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    void init
     const url = String(input)
     if (url.includes('/api/services/test')) {
       if (results === 'error') return Promise.resolve({ ok: false, status: 500 } as Response)
@@ -173,5 +177,47 @@ describe('service connection tester', () => {
     expect(rows.filter((r) => r.classList.contains('ok'))).toHaveLength(1)
     expect(rows.filter((r) => r.classList.contains('fail'))).toHaveLength(1)
     expect(within(rows[1] as HTMLElement).getByText(/no respondió a tiempo/)).toBeInTheDocument()
+  })
+})
+
+describe('aMule retention window', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows the window as a plain number without a restart badge and saves it under retention', async () => {
+    const fn = mockFetch([])
+    renderSettings()
+
+    // The backend default of 7 days, straight from the settings payload.
+    const field = await screen.findByLabelText('Días antes de poder borrar una descarga')
+    expect(field).toHaveValue(7)
+
+    // config.rebuild() reads this live, so unlike server.port it must NOT
+    // carry the "Requiere reinicio" badge.
+    expect(
+      (field.closest('.settings-field') as HTMLElement).querySelector('.settings-restart-badge'),
+    ).toBeNull()
+
+    // Changing the window has to reach the backend as retention.amule_days —
+    // the group the endpoint reads (config: RETENTION_AMULE_DAYS).
+    fireEvent.change(field, { target: { value: '14' } })
+    fireEvent.click(screen.getByRole('button', { name: /Guardar configuración/ }))
+
+    await waitFor(() => {
+      const post = fn.mock.calls.find(
+        ([input, init]) =>
+          String(input).includes('/api/settings') && init?.method === 'POST',
+      )
+      expect(post).toBeTruthy()
+      const body = JSON.parse(String(post![1]?.body)) as {
+        retention?: { amule_days?: number }
+      }
+      expect(body.retention).toEqual({ amule_days: 14 })
+    })
   })
 })

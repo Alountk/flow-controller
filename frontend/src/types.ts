@@ -281,6 +281,9 @@ export interface Settings {
     import_timeout: number
   }
   tracing: { limit: number }
+  /** Mirrors `DEFAULTS["retention"]` in backend/settings.py. Read live through
+   *  `config.rebuild()`, so a change needs no restart. */
+  retention: { amule_days: number }
   server: { port: number }
 }
 
@@ -432,6 +435,26 @@ export interface BrowseResponse {
   items: FileItem[]
   path: string
   error?: string
+}
+
+/** One file in GET /api/files/retention's `files` (backend `file_retention`).
+ *  Marking only — the endpoint never deletes. `age_days: null` means the clock
+ *  store could not be read: an UNKNOWN age, never a zero one, so the UI shows
+ *  nothing rather than a number nobody measured. */
+export interface RetentionFile {
+  name: string
+  first_seen_at: number | null
+  age_days: number | null
+  expired: boolean
+}
+
+export interface RetentionResponse {
+  ok: boolean
+  /** The resolved directory the rows belong to — the same resolution
+   *  `/browse` uses, so `path + '/' + name` is the browse `item.path`. */
+  path: string
+  days: number
+  files: RetentionFile[]
 }
 
 export interface RootsResponse {

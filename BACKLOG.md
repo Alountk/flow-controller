@@ -295,7 +295,7 @@ Lo que implica:
 
 ---
 
-### F-05 — Retención y procedencia de las descargas de aMule · **Mediana**
+### F-05 — Retención de las descargas de aMule · ✅ **Entregado**
 
 Pedida: *"en la carpeta de amule me gustaría saber si los archivos están controlados por radarr
 o sonarr, podríamos marcarlos de alguna manera, para localizar los que puedo borrar"*.
@@ -317,6 +317,14 @@ honesto no deja piezas que funcionen por separado — ver `odd/tasks/f04-multise
 Y un dato: **`FileManager.tsx` no tenía ni un test**; este trabajo lo crea (4, RED comprobado).
 
 **Decisión del usuario: el borrado es SUYO, siempre con aviso de irreversibilidad.**
+
+**Parte B (frontend) entregada** — en el explorador: chip `hace N días` / `hoy` / **`caducado`**
+(tono `--warn`, nunca `--bad`: es un *estado*, no un error), y el botón **Marcar caducados**
+que selecciona exactamente los caducados — un clic para localizar lo que puedes borrar, y el
+borrado en lote con el aviso de irreversibilidad que ya traía F-04. El fichero **sin edad**
+(`age_days: null`, almacén ilegible) no lleva chip: nunca una edad inventada.
+
+**La procedencia queda fuera y pasa a F-07** — ver ahí el motivo.
 
 **Parte A (backend) entregada** — `GET /api/files/retention?path=` devuelve
 `{days, files:[{name, first_seen_at, age_days, expired}]}`. Solo marca: **nunca borra**, y si
@@ -418,6 +426,33 @@ resolver eso *antes* de estimar esfuerzo.
 
 ---
 
+### F-07 — Marcar la procedencia de los ficheros de aMule · **Pendiente**
+
+La segunda mitad de lo que se pidió: *"saber si los archivos están controlados por radarr o
+sonarr"*. La primera (F-05, por edad) ya responde a *"localizar los que puedo borrar"*; esta
+da el **por qué**.
+
+| Señal | Fuente | Dice |
+|---|---|---|
+| Cola del arr | `GET /api/v3/queue` | `cola · importando` |
+| Histórico del arr | `GET /api/v3/history` | `histórico` |
+| **Inodo compartido** | `st_nlink > 1` + mismo `(st_dev, st_ino)` | **No aplica a aMule** — montaje distinto; sirve para torrents |
+| Nuestras peticiones | `own_grabs` | `lo pedimos nosotros` |
+
+`traces.py:172` ya pone `"source": key` en cada traza y `:188`/`:192` resuelven `current_path` /
+`content_path`, así que la atribución **existe**: hay que casarla con los nombres de la carpeta.
+
+**Va aparte porque no es gratis:** reutilizar `build_traces` obliga a mover su caché, y esa
+caché vive en `routes/status.py` con tests propios (`tests_trace_cache.py`) que parchean
+`routes.status.build_traces` — moverla los rompe. Es un cambio con su propio coste, no un
+apéndice de la retención.
+
+**Decisión ya tomada:** se **muestra y no bloquea**. La marca no puede decir "puedo borrar sin
+coste": en aMule no hay semilla que romper, pero puede que el arr nunca lo haya importado — y
+ahí borrar sí pierde el dato.
+
+---
+
 ## 🔵 Recomendaciones y reglas del ciclo
 
 C-01…C-07 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.
@@ -447,4 +482,4 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 
 ## Orden propuesto
 
-`B-01` → `C-03` → `F-05` → `F-01` → `C-01/C-02` — **F-06 aparte, sin fecha**
+`B-01` → `C-03` → `F-07` → `F-01` → `C-01/C-02` — **F-06 aparte, sin fecha**

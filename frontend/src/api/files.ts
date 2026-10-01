@@ -1,4 +1,4 @@
-import type { BrowseResponse, RootsResponse } from '../types'
+import type { BrowseResponse, RetentionResponse, RootsResponse } from '../types'
 import { apiFetch } from './auth'
 
 async function handleResponse(res: Response): Promise<{ ok: boolean; detail: string }> {
@@ -40,6 +40,11 @@ export async function fetchRoots(): Promise<RootsResponse> {
 export async function browsePath(path: string): Promise<BrowseResponse> {
   const res = await apiFetch(`/api/files/browse?path=${encodeURIComponent(path)}`, {})
   return (await res.json()) as BrowseResponse
+}
+
+export async function fetchRetention(path: string): Promise<RetentionResponse> {
+  const res = await apiFetch(`/api/files/retention?path=${encodeURIComponent(path)}`, {})
+  return (await res.json()) as RetentionResponse
 }
 
 export async function createDirectory(path: string): Promise<{ ok: boolean; detail: string }> {
