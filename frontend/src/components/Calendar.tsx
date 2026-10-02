@@ -27,7 +27,16 @@ function groupByDate(items: CalendarItem[]): Map<string, CalendarItem[]> {
   return map
 }
 
-export function Calendar() {
+export interface CalendarProps {
+  /**
+   * Show only one item type: "movie" for Películas' Estrenos, "episode" for
+   * Series'. Omitted means BOTH types, exactly as the Calendario page shows
+   * them today.
+   */
+  type?: 'movie' | 'episode'
+}
+
+export function Calendar({ type }: CalendarProps) {
   const [range, setRange] = useState(() => {
     const today = new Date()
     const end = new Date()
@@ -52,9 +61,18 @@ export function Calendar() {
     setRange({ start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) })
   }
 
-  const grouped = data ? groupByDate(data.items) : new Map()
-  const movieCount = data?.items.filter((i) => i.type === 'movie').length ?? 0
-  const episodeCount = data?.items.filter((i) => i.type === 'episode').length ?? 0
+  // Filter the FETCHED items, not the query: both sections ask for the same
+  // range, so they share one cache entry and the type only shapes the render.
+  const items = data ? (type ? data.items.filter((i) => i.type === type) : data.items) : []
+  const grouped = groupByDate(items)
+  const movieCount = items.filter((i) => i.type === 'movie').length
+  const episodeCount = items.filter((i) => i.type === 'episode').length
+  // Unfiltered (the Calendario page) both counts stay side by side, exactly as
+  // before; a filtered section only counts what it can show.
+  const counts: string[] = []
+  if (type !== 'episode') counts.push(`${movieCount} películas`)
+  if (type !== 'movie') counts.push(`${episodeCount} episodios`)
+  const countLabel = counts.join(' · ')
 
   return (
     <section className="calendar">
@@ -66,7 +84,7 @@ export function Calendar() {
             {range.start} — {range.end}
             {data && (
               <span className="calendar-count">
-                {' '}· {movieCount} películas · {episodeCount} episodios
+                {' '}· {countLabel}
               </span>
             )}
           </span>
@@ -76,7 +94,7 @@ export function Calendar() {
 
       {isPending ? (
         <div className="wanted-loading">Cargando calendario...</div>
-      ) : data && data.items.length > 0 ? (
+      ) : data && items.length > 0 ? (
         <div className="calendar-grid">
           {Array.from(grouped.entries()).map(([date, items]: [string, CalendarItem[]]) => (
             <div key={date} className="calendar-day">
