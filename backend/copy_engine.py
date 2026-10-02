@@ -13,7 +13,10 @@ from config import (
     IMPORT_POLL_INTERVAL,
     SERVICES,
 )
+import naming
 from clients import (
+    arr_naming_config,
+
     arr_command,
     arr_episode_metadata,
     arr_episode_season,
@@ -142,6 +145,60 @@ def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool
     return {"ok": False, "detail": f"fuente no es archivo ni directorio: {src}"}
 
 
+async def _radarr_pattern_destination(
+    session,
+    service: dict,
+    meta: dict,
+    *,
+    new_quality: str,
+    ext: str,
+    dest_root: str,
+) -> tuple[str, str, str]:
+    """Where a copy into a foreign folder should be named, and how sure we are.
+
+    Radarr renames what it owns and nothing else, so for a file outside its
+    roots it offers only its pattern. Evaluating somebody else's format string
+    is where a filename gets written wrong with total confidence, so the
+    pattern is never taken on trust: it is re-evaluated for the file Radarr
+    already owns and compared with the name Radarr chose. Only a match earns a
+    name for the file we are about to write.
+
+    Returns ``(root, filename, note)``. A failure returns ``(dest_root,
+    "", note)`` with an empty filename: the caller keeps the name it already
+    built, and the note says why it had to.
+
+    The folder comes from Radarr's own ``movie.path`` rather than from
+    ``movieFolderFormat`` — it is the answer Radarr already acted on.
+    """
+    pattern = (await arr_naming_config(session, service)).get("standard_movie_format", "")
+    if not pattern:
+        return dest_root, "", "Radarr no expone patrón de nombrado"
+    reference = meta.get("file_name") or ""
+    if not reference:
+        return dest_root, "", "la película no tiene fichero de referencia en Radarr"
+    existing = naming.build_values(
+        title=meta.get("title", ""),
+        year=meta.get("year"),
+        quality=meta.get("quality", ""),
+    )
+    if not naming.reproduced_radarr(pattern, existing, reference):
+        return dest_root, "", "el patrón de Radarr no se puede reproducir aquí"
+    if not new_quality:
+        return dest_root, "", "se desconoce la calidad descargada"
+    values = naming.build_values(
+        title=meta.get("title", ""),
+        year=meta.get("year"),
+        quality=new_quality,
+    )
+    rendered = naming.evaluate(pattern, values)
+    if not rendered:
+        return dest_root, "", "el patrón no se pudo evaluar con la calidad nueva"
+    filename = Path(rendered).name + ext
+    folder = meta.get("folder") or ""
+    root = str(Path(dest_root) / folder) if folder else dest_root
+    return root, filename, "nombre según el patrón de Radarr"
+
+
 async def run_copy_background(
     task_id: str,
     src_path: str,
@@ -152,6 +209,7 @@ async def run_copy_background(
     target_name: str | None = None,
     *,
     import_after_copy: bool = True,
+    naming_note: str | None = None,
 ):
     """Copy one download into ``dst_root`` in the background.
 
@@ -183,10 +241,12 @@ async def run_copy_background(
             files_copied=result.get("files_copied", 0),
         )
         if result["ok"] and not import_after_copy:
-            copy_tasks.update(task_id,
-                status="done",
-                detail="copiado a la carpeta elegida; el arr no lo tocará",
-            )
+            detail = "copiado a la carpeta elegida; el arr no lo tocará"
+            if naming_note:
+                # The name used is the whole question for a folder the arr
+                # cannot see, so the task says which answer it settled on.
+                detail = f"{detail} — {naming_note}"
+            copy_tasks.update(task_id, status="done", detail=detail)
             return
         if result["ok"]:
             copy_tasks.update(task_id, detail="importando...", status="importing")
@@ -485,6 +545,11 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                 log.error("copy_files: no se pudo obtener root folder para %s (series_id=%s, movie_id=%s)", source, ids.get("series_id"), ids.get("movie_id"))
                 return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
 
+        # Populated only where a foreign destination asked a question; the
+        # library path leaves it None so the task detail stays byte for byte
+        # what it was.
+        naming_note: str | None = None
+
         # --- Smart rename: construir nombre correcto antes de copiar ---
         # Resolve the container path to a host path ONCE, through the app's
         # single authority. An absolute container path like
@@ -525,6 +590,24 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                         name_parts += f" {quality}"
                     smart_name = name_parts + ext
                     log.info("copy_files: smart rename (radarr) → %s", smart_name)
+                # Only a FOREIGN destination gets here: for the arr's own
+                # library it imports and names the file itself, and overriding
+                # that would be a second opinion nobody asked for.
+                if dest_root:
+                    pattern_root, pattern_name, naming_note = (
+                        await _radarr_pattern_destination(
+                            session,
+                            service,
+                            mv_meta,
+                            new_quality=payload.get("quality") or "",
+                            ext=ext,
+                            dest_root=dest_root,
+                        )
+                    )
+                    log.info("copy_files: patrón de Radarr → %s (%s)", naming_note, pattern_name or "sin cambio")
+                    if pattern_name:
+                        root = pattern_root
+                        smart_name = pattern_name
 
         dst_path = str(Path(root) / smart_name)
         task_id = str(uuid.uuid4())
@@ -538,7 +621,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
             files_total=0,
             detail="preparando copia...",
         )
-        asyncio.create_task(run_copy_background(task_id, resolved_src, root, service, source, ids, target_name=smart_name, import_after_copy=not dest_root))
+        asyncio.create_task(run_copy_background(task_id, resolved_src, root, service, source, ids, target_name=smart_name, import_after_copy=not dest_root, naming_note=naming_note if dest_root else None))
         return {"ok": True, "needs_polling": True, "task_id": task_id, "src_path": resolved_src, "dst_path": dst_path}
 
     else:

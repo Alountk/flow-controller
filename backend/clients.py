@@ -541,12 +541,21 @@ async def arr_movie_metadata(
                 alt.get("title", "") if isinstance(alt, dict) else str(alt)
                 for alt in (data.get("alternateTitles") or [])
             ]
+            path = data.get("path", "")
             return {
                 "title": data.get("title", ""),
                 "year": data.get("year"),
                 "quality": quality,
-                "path": data.get("path", ""),
+                "path": path,
                 "altTitles": alt_titles,
+                # Radarr's OWN answer to "where does this movie live" — no
+                # evaluation needed, which is why it beats deriving the folder
+                # from `movieFolderFormat`.
+                "folder": os.path.basename(path) if path else "",
+                # The name Radarr chose for the file it already owns. This is
+                # the reference the naming self-check compares against; empty
+                # means "no reference", never "no file".
+                "file_name": (mf.get("relativePath") or ""),
             }
     except (asyncio.TimeoutError, aiohttp.ClientError):
         return {}
@@ -783,6 +792,40 @@ async def arr_indexers(session: aiohttp.ClientSession, service: dict) -> dict:
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         log.warning("arr_indexers %s error: %s", service["key"], exc)
         return {"indexers": [], **arr_failure(service, exc=exc)}
+
+
+async def arr_naming_config(session: aiohttp.ClientSession, service: dict) -> dict:
+    """Radarr's naming pattern — the only thing it offers for a file it will
+    never see.
+
+    Radarr renames what it owns (`GET /api/v3/rename`, `RenameMovie`,
+    `RenameFiles`) and exposes no "what would this be called" endpoint for one
+    outside its roots. The pattern is what we have, so the caller must evaluate
+    it AND check the result against `movieFile.relativePath` before trusting it.
+
+    Degrades to `{}` on any doubt: an empty pattern means "rename nothing",
+    which is the safe reading of a config we could not read.
+    """
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/config/naming",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
+        ) as resp:
+            if resp.status != 200:
+                log.warning("arr_naming_config %s status=%d", service["key"], resp.status)
+                return {}
+            data = await resp.json(content_type=None)
+    except (asyncio.TimeoutError, aiohttp.ClientError, ValueError) as exc:
+        log.warning("arr_naming_config %s error: %s", service["key"], exc)
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        "standard_movie_format": str(data.get("standardMovieFormat") or ""),
+        "movie_folder_format": str(data.get("movieFolderFormat") or ""),
+    }
 
 
 async def arr_root_folders(session: aiohttp.ClientSession, service: dict) -> list[str]:

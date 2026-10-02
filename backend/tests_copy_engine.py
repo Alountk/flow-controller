@@ -527,3 +527,121 @@ class TestCopyFilesTranslatesContainerPath:
         assert dispatches[0]["args"][1] == output
         assert result["src_path"] == output
         del copy_tasks._tasks[result["task_id"]]
+
+
+# ── Naming a file Radarr will never see ───────────────────────────────────────
+
+
+def _radarr_meta(**over):
+    base = {
+        "title": "Película",
+        "year": 2020,
+        "quality": "Bluray-1080p",
+        "path": "/movies/Película (2020)",
+        "folder": "Película (2020)",
+        "file_name": "Película (2020) - Bluray-1080p.mkv",
+        "altTitles": [],
+    }
+    base.update(over)
+    return base
+
+
+class TestForeignDestinationFollowsRadarrsPattern:
+    """Radarr renames what it owns and offers no opinion about anything else.
+    So for a file outside its roots we evaluate its pattern — and we only
+    believe the result after it reproduces the name Radarr already chose."""
+
+    def _run(self, monkeypatch, tmp_path, *, meta, pattern, quality):
+        src = tmp_path / "release" / "movie.mkv"
+        payload = _foreign_payload(tmp_path)
+        payload["output_path"] = str(src)
+        payload["quality"] = quality
+        dest_root = tmp_path / "chosen"
+        removals: list[dict] = []
+
+        async def _meta(session, service, movie_id):
+            return dict(meta)
+
+        async def _naming(session, service):
+            return {"standard_movie_format": pattern, "movie_folder_format": ""}
+
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(config, "path_is_allowed", lambda path: True)
+        monkeypatch.setattr(copy_engine, "arr_movie_metadata", _meta)
+        monkeypatch.setattr(copy_engine, "arr_naming_config", _naming)
+        monkeypatch.setattr(
+            clients,
+            "arr_delete_queue",
+            _delete_recorder(removals, {"ok": True, "detail": "Item eliminado de la cola"}),
+        )
+
+        async def _scenario():
+            result = await do_action(None, "copy_files", payload)
+            for _ in range(200):
+                task = copy_tasks.get(result["task_id"]) or {}
+                if task.get("status") in ("done", "error", "cancelled"):
+                    return result, task
+                await asyncio.sleep(0.01)
+            return result, copy_tasks.get(result["task_id"])
+
+        result, task = asyncio.run(_scenario())
+        del copy_tasks._tasks[result["task_id"]]
+        return result, task, dest_root
+
+    def test_a_pattern_radarr_already_agreed_with_names_the_copy(
+        self, tmp_path, monkeypatch
+    ):
+        result, task, dest_root = self._run(
+            monkeypatch,
+            tmp_path,
+            meta=_radarr_meta(),
+            pattern="{Movie Title} ({Release Year}) - {Quality Full}",
+            quality="Bluray-2160p",
+        )
+
+        assert result["ok"] is True, result
+        assert task["status"] == "done", task
+        # Radarr's folder, Radarr's pattern, the quality we actually grabbed —
+        # three answers, none of them invented here.
+        assert (dest_root / "Película (2020)" / "Película (2020) - Bluray-2160p.mkv").exists()
+        assert not (dest_root / "Película (2020) - Bluray-1080p Bluray-2160p.mkv").exists()
+        assert "patrón de Radarr" in task["detail"]
+
+    def test_a_pattern_we_cannot_reproduce_keeps_the_name_we_already_build(
+        self, tmp_path, monkeypatch
+    ):
+        # Radarr's real file carries a release group and codecs we have no way
+        # to read off a file we have not scanned. Failing here is the feature.
+        result, task, dest_root = self._run(
+            monkeypatch,
+            tmp_path,
+            meta=_radarr_meta(
+                file_name="Película (2020) - [BLURAY-1080P][X264]-GROUP.mkv",
+                quality="Bluray-1080p",
+            ),
+            pattern="{Movie Title} ({Release Year}) - {Quality Full}",
+            quality="Bluray-2160p",
+        )
+
+        assert result["ok"] is True, result
+        assert task["status"] == "done", task
+        # Flat, under the name the app built before this feature existed.
+        assert (dest_root / "Película (2020) Bluray-1080p.mkv").exists()
+        assert not (dest_root / "Película (2020)").exists()
+        assert "no se puede reproducir" in task["detail"]
+
+    def test_without_a_quality_the_pattern_is_never_applied(self, tmp_path, monkeypatch):
+        """`{Quality Full}` is what the default pattern is built around. A
+        grab recorded before v8 has no quality, and guessing one would put a
+        made-up word in a filename."""
+        result, task, dest_root = self._run(
+            monkeypatch,
+            tmp_path,
+            meta=_radarr_meta(),
+            pattern="{Movie Title} ({Release Year}) - {Quality Full}",
+            quality="",
+        )
+
+        assert result["ok"] is True, result
+        assert (dest_root / "Película (2020) Bluray-1080p.mkv").exists()
+        assert "calidad descargada" in task["detail"]
