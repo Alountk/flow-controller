@@ -20,6 +20,62 @@
       "status": "discarded",
       "recommend": false,
       "note": "La verificación en línea dentro de cada paso escondía el estado global: no se veía qué quedaba por comprobar de un vistazo."
+    },
+    {
+      "file": "peliculas-01-rejilla.html",
+      "section": "peliculas",
+      "status": "candidate",
+      "recommend": false,
+      "note": "Rejilla de carteles: la más familiar y la que peor deja ver las acciones de descarga."
+    },
+    {
+      "file": "peliculas-02-maestro-detalle.html",
+      "section": "peliculas",
+      "status": "candidate",
+      "recommend": true,
+      "note": "Recomendado: lista densa + panel de detalle; toda la acción (destino, calidad, releases) a un clic, sin modal por fila."
+    },
+    {
+      "file": "peliculas-03-estados.html",
+      "section": "peliculas",
+      "status": "candidate",
+      "recommend": false,
+      "note": "Pestañas por estado: la menos disruptiva, pero obliga a cambiar de contexto con cinco pestañas."
+    },
+    {
+      "file": "peliculas-04-pipeline.html",
+      "section": "peliculas",
+      "status": "candidate",
+      "recommend": false,
+      "note": "Pipeline en columnas: la única que enseña transiciones, pero se queda corta de espacio por tarjeta."
+    },
+    {
+      "file": "series-01-arbol.html",
+      "section": "series",
+      "status": "candidate",
+      "recommend": true,
+      "note": "Recomendado: el árbol serie→temporada→episodio es la misma forma que tienen las carpetas en disco y la lista de faltantes. Si prefieres consistencia con Películas, el gemelo maestro-detalle (#4) es la alternativa."
+    },
+    {
+      "file": "series-02-rejilla.html",
+      "section": "series",
+      "status": "candidate",
+      "recommend": false,
+      "note": "Rejilla + parrilla de episodios: la más familiar, pero el estado de los episodios está oculto hasta entrar en la serie."
+    },
+    {
+      "file": "series-03-agenda.html",
+      "section": "series",
+      "status": "candidate",
+      "recommend": false,
+      "note": "Agenda semanal: la única que absorbe el Calendario de forma natural, y por eso no puede ser la portada de la sección."
+    },
+    {
+      "file": "series-04-maestro-detalle.html",
+      "section": "series",
+      "status": "candidate",
+      "recommend": false,
+      "note": "Maestro-detalle: mismo paradigma que el recomendado de Películas, así las dos secciones se aprenden una sola vez; aplana la jerarquía serie→temporada."
     }
   ]
 }

@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Películas · Prototipo 2: Maestro–detalle</title>
+  <style>
+    :root {
+      --bg: #0f0f11;
+      --bg-elev: #17171a;
+      --bg-elev-2: #1f1f23;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-dim: #a1a1aa;
+      --text-dim2: #71717a;
+      --accent: #4a9eff;
+      --accent-soft: rgba(74, 158, 255, 0.12);
+      --ok: #6cd68f;
+      --ok-soft: rgba(108, 214, 143, 0.12);
+      --warn: #ffc44a;
+      --warn-soft: rgba(255, 196, 74, 0.12);
+      --bad: #ff5c5c;
+      --bad-soft: rgba(255, 92, 92, 0.12);
+      --sidebar-w: 208px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, select { font: inherit; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ===================== Carcasa de la aplicación ===================== */
+    .shell { display: flex; align-items: flex-start; min-height: 100vh; }
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      align-self: stretch;
+      position: sticky;
+      top: 0;
+      max-height: 100vh;
+      overflow-y: auto;
+      background: var(--bg-elev);
+      border-right: 1px solid var(--border);
+      padding: 18px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .sb-brand { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; padding: 0 8px; }
+    .sb-brand span { color: var(--accent); }
+    .sb-version { font-size: 11px; color: var(--text-dim2); padding: 0 8px; margin-top: 2px; }
+    .sb-nav { display: flex; flex-direction: column; gap: 2px; }
+    .sb-link {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 12.5px;
+      color: var(--text-dim);
+    }
+    .sb-link .ico { width: 18px; text-align: center; flex-shrink: 0; }
+    .sb-link:hover { color: var(--text); background: var(--bg-elev-2); }
+    .sb-link.is-active {
+      color: var(--text);
+      background: var(--accent-soft);
+      border-color: rgba(74, 158, 255, 0.45);
+      font-weight: 600;
+    }
+    .sb-link .tag {
+      margin-left: auto;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-radius: 999px;
+      padding: 1px 6px;
+    }
+    .sb-flag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--warn);
+      background: var(--warn-soft);
+      border: 1px solid rgba(255, 196, 74, 0.4);
+      border-radius: 999px;
+      padding: 3px 8px;
+      align-self: flex-start;
+      margin-left: 8px;
+    }
+
+    .content { flex: 1; min-width: 0; padding: 24px 28px 64px; }
+
+    /* ===================== Cabecera del concepto ===================== */
+    .concept {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+      margin-bottom: 20px;
+    }
+    .proto-tag {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim2);
+      margin-bottom: 14px;
+    }
+    .concept-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 22px;
+      margin-bottom: 18px;
+    }
+    .c-block h2 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-dim2);
+      margin-bottom: 8px;
+    }
+    .c-block p { font-size: 13px; color: var(--text-dim); line-height: 1.65; }
+    .c-block p strong, .c-block li b { color: var(--text); font-weight: 600; }
+    .absorbs { list-style: none; display: grid; gap: 6px; }
+    .absorbs li {
+      position: relative;
+      padding-left: 16px;
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--text-dim);
+    }
+    .absorbs li::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
+    .shell-note {
+      margin-top: 12px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--text-dim2);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 8px;
+      padding: 9px 12px;
+    }
+    .rec-block {
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+    .rec-pill {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--warn);
+      background: var(--warn-soft);
+      border: 1px solid rgba(255, 196, 74, 0.45);
+      border-radius: 999px;
+      padding: 3px 10px;
+      margin-right: 8px;
+      vertical-align: 1px;
+    }
+
+    /* ===================== Pestañas de sección ===================== */
+    .subtabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+    .subtab {
+      font-size: 13px;
+      color: var(--text-dim);
+      padding: 9px 13px;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+    }
+    .subtab:hover { color: var(--text); }
+    .subtab.is-active { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+    .subtab .n { font-size: 11px; color: var(--text-dim2); margin-left: 5px; font-weight: 500; }
+    .tab-caption { font-size: 12px; color: var(--text-dim2); margin: 10px 0 16px; }
+    .tab-caption b { color: var(--text-dim); font-weight: 600; }
+
+    /* ===================== Distintivos ===================== */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .pill.ok { color: var(--ok); background: var(--ok-soft); border-color: rgba(108, 214, 143, 0.35); }
+    .pill.warn { color: var(--warn); background: var(--warn-soft); border-color: rgba(255, 196, 74, 0.35); }
+    .pill.acc { color: var(--accent); background: var(--accent-soft); border-color: rgba(74, 158, 255, 0.35); }
+    .pill.neutral { color: var(--text); background: var(--bg-elev-2); border-color: var(--border); }
+
+    /* ===================== Split maestro–detalle ===================== */
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    /* --- Lista maestra --- */
+    .master {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .master-head {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .master-title { font-size: 12.5px; font-weight: 700; }
+    .master-title .n { color: var(--text-dim2); font-weight: 500; }
+    .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+    .chip {
+      font-size: 11px;
+      color: var(--text-dim);
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 9px;
+      white-space: nowrap;
+    }
+    .chip:hover { border-color: var(--text-dim2); color: var(--text); }
+    .chip.is-on { color: var(--text); background: var(--accent-soft); border-color: rgba(74, 158, 255, 0.5); font-weight: 600; }
+    .chip .n { color: var(--text-dim2); margin-left: 4px; }
+
+    .rows { list-style: none; }
+    .row {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 11px;
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      border-left: 3px solid transparent;
+      align-items: center;
+      cursor: pointer;
+    }
+    .row:last-child { border-bottom: none; }
+    .row:hover { background: var(--bg-elev-2); }
+    .row.is-sel { background: var(--accent-soft); border-left-color: var(--accent); }
+    .mini-poster {
+      width: 34px;
+      height: 48px;
+      border-radius: 4px;
+      background: linear-gradient(160deg, var(--g1), var(--g2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.88);
+      letter-spacing: 0.03em;
+      flex-shrink: 0;
+    }
+    .row-body { min-width: 0; }
+    .row-top { display: flex; align-items: center; gap: 8px; }
+    .row-name {
+      font-size: 12.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .row-year { font-size: 11.5px; color: var(--text-dim2); flex-shrink: 0; }
+    .row-state { margin-left: auto; flex-shrink: 0; }
+    .row-bottom {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-top: 4px;
+      min-width: 0;
+    }
+    .q-tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text-dim);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .q-tag.k4 { color: var(--accent); border-color: rgba(74, 158, 255, 0.45); }
+    .q-tag.q3d { color: var(--ok); border-color: rgba(108, 214, 143, 0.45); }
+    .row-path {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .row-path.destino { color: var(--text-dim); }
+
+    /* --- Panel de detalle --- */
+    .detail {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      position: sticky;
+      top: 16px;
+    }
+    .detail-head {
+      display: flex;
+      gap: 14px;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .big-poster {
+      width: 92px;
+      height: 138px;
+      border-radius: 6px;
+      background: linear-gradient(160deg, var(--g1), var(--g2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.88);
+      flex-shrink: 0;
+    }
+    .detail-titles { min-width: 0; }
+    .detail-titles h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+    .detail-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 7px; }
+    .detail-sub .year { font-size: 12.5px; color: var(--text-dim); }
+    .meta {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 4px 12px;
+      margin-top: 12px;
+      font-size: 11.5px;
+    }
+    .meta dt { color: var(--text-dim2); }
+    .meta dd { color: var(--text-dim); }
+
+    .detail-tabs {
+      display: flex;
+      gap: 2px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .dtab {
+      font-size: 12.5px;
+      color: var(--text-dim);
+      padding: 10px 11px;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+    }
+    .dtab.is-active { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+    .dtab .n { font-size: 11px; color: var(--text-dim2); margin-left: 4px; }
+
+    .releases { list-style: none; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .rel {
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr);
+      gap: 10px;
+      padding: 9px 16px;
+      align-items: start;
+      border-bottom: 1px solid rgba(39, 39, 42, 0.6);
+    }
+    .rel:last-child { border-bottom: none; }
+    .rel:hover { background: var(--bg-elev-2); }
+    .rel.is-pick { background: var(--accent-soft); }
+    .radio {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid var(--text-dim2);
+      margin-top: 3px;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .rel.is-pick .radio { border-color: var(--accent); }
+    .rel.is-pick .radio::after {
+      content: "";
+      position: absolute;
+      inset: 2.5px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .rel-name {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rel-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-dim2);
+    }
+    .rel-meta .seed { color: var(--ok); }
+    .rel-meta .seed.low { color: var(--warn); }
+    .rel-meta .pick { color: var(--accent); font-weight: 700; }
+
+    /* --- Acción principal --- */
+    .action { padding: 15px 16px 16px; }
+    .action h3 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-dim2);
+      margin-bottom: 10px;
+    }
+    .field-label { font-size: 11.5px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; display: block; }
+    .quality-row { display: flex; gap: 6px; margin-bottom: 12px; }
+    .q-chip {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 14px;
+      cursor: pointer;
+    }
+    .q-chip:hover { border-color: var(--text-dim2); color: var(--text); }
+    .q-chip.is-on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+    .destino-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .destino-box .k { font-size: 11px; color: var(--text-dim2); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+    .destino-box .v { font-family: var(--mono); font-size: 12.5px; color: var(--text); margin-top: 4px; overflow-wrap: anywhere; }
+    select {
+      width: 100%;
+      background: var(--bg-elev-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 12.5px;
+      padding: 9px 11px;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    select:hover { border-color: var(--text-dim2); }
+    .route-hint { font-size: 11.5px; line-height: 1.6; color: var(--text-dim2); margin-bottom: 14px; }
+    .route-hint code { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+    .route-hint b { color: var(--text-dim); font-weight: 600; }
+    .actions-row { display: flex; gap: 8px; }
+    .btn {
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 8px;
+      padding: 10px 18px;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .btn.primary { background: var(--accent); color: #fff; flex: 1; }
+    .btn.primary:hover { filter: brightness(1.1); }
+    .btn.ghost { background: var(--bg-elev-2); border-color: var(--border); color: var(--text); }
+    .btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .detail-foot {
+      font-size: 11.5px;
+      line-height: 1.6;
+      color: var(--text-dim2);
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 11px 16px;
+    }
+    .detail-foot b { color: var(--text-dim); font-weight: 600; }
+
+    /* ===================== Nota para revisión ===================== */
+    .review {
+      margin-top: 24px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--warn);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .review h3 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--warn);
+      margin-bottom: 10px;
+    }
+    .review ul { list-style: none; display: grid; gap: 7px; }
+    .review li {
+      position: relative;
+      padding-left: 18px;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: var(--text-dim);
+    }
+    .review li::before { content: "•"; position: absolute; left: 4px; color: var(--warn); }
+    .review li b { color: var(--text); font-weight: 600; }
+
+    /* ===================== Adaptación ===================== */
+    @media (max-width: 1180px) {
+      .split { grid-template-columns: minmax(0, 1fr); }
+      .detail { position: static; }
+      .concept-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 860px) {
+      .shell { flex-direction: column; }
+      .sidebar { position: static; max-height: none; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
+      .sb-nav { flex-direction: row; flex-wrap: wrap; }
+      .content { padding: 20px 16px 48px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- ============ Barra lateral (orientativa) ============ -->
+    <aside class="sidebar">
+      <div>
+        <div class="sb-brand">Flow<span>Controller</span></div>
+        <div class="sb-version">v0.1.0 · autoalojado</div>
+      </div>
+      <span class="sb-flag">Orientativa</span>
+      <nav class="sb-nav" aria-label="Navegación principal (maqueta)">
+        <a class="sb-link" href="#"><span class="ico">📊</span>Dashboard</a>
+        <a class="sb-link is-active" href="#" aria-current="page"><span class="ico">🎬</span>Películas<span class="tag">nueva</span></a>
+        <a class="sb-link" href="#"><span class="ico">📺</span>Series<span class="tag">nueva</span></a>
+        <a class="sb-link" href="#"><span class="ico">🔍</span>Trazabilidad</a>
+        <a class="sb-link" href="#"><span class="ico">📥</span>Faltantes</a>
+        <a class="sb-link" href="#"><span class="ico">📅</span>Calendario</a>
+        <a class="sb-link" href="#"><span class="ico">💾</span>Disco</a>
+        <a class="sb-link" href="#"><span class="ico">📂</span>Archivos</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Media Mixer</a>
+        <a class="sb-link" href="#"><span class="ico">⚙️</span>Configuración</a>
+      </nav>
+    </aside>
+
+    <!-- ============ Contenido ============ -->
+    <main class="content">
+      <header class="concept">
+        <p class="proto-tag">Prototipo 2 de 4 · Maestro–detalle</p>
+        <div class="concept-grid">
+          <section class="c-block">
+            <h2>Concepto</h2>
+            <p>
+              Lista densa a la izquierda (cartel pequeño, título, año, estado, calidad y ruta) y
+              <strong>panel de detalle a la derecha</strong>: cartel grande, metadatos, pestañas
+              <b>Releases</b> · <b>Archivos</b> · <b>Historial</b> y la acción principal
+              <strong>Descargar</strong> con el destino y la calidad elegidos <strong>sin abrir ningún modal</strong>.
+            </p>
+            <p class="shell-note">
+              Barra lateral orientativa: así quedaría la navegación con las dos secciones nuevas
+              (Películas y Series). Es una maqueta, no la barra real.
+            </p>
+          </section>
+          <section class="c-block">
+            <h2>Qué reúne de la web actual</h2>
+            <ul class="absorbs">
+              <li><b>Faltantes → Todas y Faltantes</b> — la lista completa con su estado.</li>
+              <li><b>ReleaseSearchModal</b> — la pestaña <b>Releases</b> del detalle, con semillas e idioma.</li>
+              <li><b>Enrutado de calidad</b> — selector 1080p/4K/3D con el destino ya resuelto.</li>
+              <li><b>Calendario</b> — la pestaña <b>Estrenos</b>.</li>
+              <li><b>Archivos</b> — renombrar, escanear y retención en la pestaña <b>Archivos</b>.</li>
+            </ul>
+          </section>
+        </div>
+        <section class="rec-block c-block">
+          <h2>Recomendación</h2>
+          <p>
+            <span class="rec-pill">⭐ Recomendado</span>
+            <strong>Toda la acción del flujo está a un clic</strong>: buscar, mirar releases, elegir
+            destino y calidad y descargar, sin un modal por fila ni saltos de pantalla. Mantiene la
+            densidad de una tabla (caben filtros y 16 filas sin scroll lateral) y escala cuando crece
+            el catálogo, porque el panel de detalle absorbe la complejidad en vez de esconderla.
+            Es el modelo que mejor describe el trabajo real del operador: elegir qué peli, con qué
+            calidad y hacia qué carpeta.
+          </p>
+        </section>
+      </header>
+
+      <!-- ============ Pestañas de sección ============ -->
+      <nav class="subtabs" aria-label="Sub-vistas de Películas">
+        <a class="subtab is-active" href="#">Biblioteca<span class="n">16</span></a>
+        <a class="subtab" href="#">Faltantes<span class="n">5</span></a>
+        <a class="subtab" href="#">Estrenos<span class="n">3</span></a>
+        <a class="subtab" href="#">Calidad</a>
+      </nav>
+      <p class="tab-caption">
+        Pestaña activa: <b>Biblioteca</b> — el catálogo completo en una sola lista; <b>Faltantes</b>
+        deja solo la cola (falta + buscando). Orden por defecto: <b>lo que necesita acción primero</b>.
+      </p>
+
+      <!-- ============ Split ============ -->
+      <div class="split">
+
+        <!-- ---------- Lista maestra ---------- -->
+        <section class="master" aria-label="Lista de películas">
+          <div class="master-head">
+            <span class="master-title">Películas <span class="n">· 16 títulos</span></span>
+            <div class="filters">
+              <span class="chip is-on">Todos<span class="n">16</span></span>
+              <span class="chip">Falta<span class="n">3</span></span>
+              <span class="chip">Buscando<span class="n">2</span></span>
+              <span class="chip">Descargando<span class="n">2</span></span>
+              <span class="chip">Colocado<span class="n">2</span></span>
+              <span class="chip">En biblioteca<span class="n">7</span></span>
+            </div>
+          </div>
+
+          <ul class="rows">
+            <li class="row is-sel" tabindex="0">
+              <span class="mini-poster" style="--g1:#6ba3d4; --g2:#12212f;">TW</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Twisters</span><span class="row-year">2024</span>
+                  <span class="row-state"><span class="pill warn">Falta</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag k4">4K · 2160p</span>
+                  <span class="row-path destino">→ /mnt/storage-6tb/peliculas-4k/</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#d98a2b; --g2:#2b1a0a;">FU</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Furiosa</span><span class="row-year">2024</span>
+                  <span class="row-state"><span class="pill warn">Falta</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag k4">4K · 2160p</span>
+                  <span class="row-path destino">→ /mnt/storage-6tb/peliculas-4k/</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#cbb26a; --g2:#2b2415;">ME</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Megalopolis</span><span class="row-year">2024</span>
+                  <span class="row-state"><span class="pill warn">Falta</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p</span>
+                  <span class="row-path destino">→ /mnt/storage/peliculas/</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#4a5a52; --g2:#12171a;">GM</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Godzilla Minus One</span><span class="row-year">2023</span>
+                  <span class="row-state"><span class="pill acc">Buscando · 6 intentos</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag k4">4K · 2160p</span>
+                  <span class="row-path destino">→ /mnt/storage-6tb/peliculas-4k/</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#c1453f; --g2:#20100f;">CW</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Civil War</span><span class="row-year">2024</span>
+                  <span class="row-state"><span class="pill acc">Buscando · 3 resultados</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p</span>
+                  <span class="row-path destino">→ /mnt/storage/peliculas/</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#c16bb5; --g2:#2c1230;">PT</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Poor Things</span><span class="row-year">2023</span>
+                  <span class="row-state"><span class="pill acc">Descargando 41%</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p · Bluray</span>
+                  <span class="row-path">/mnt/storage/downloads/qbittorrent/completed/…</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#4a6fd4; --g2:#0f1630;">RM</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Rebel Moon: Parte Dos</span><span class="row-year">2024</span>
+                  <span class="row-state"><span class="pill acc">Descargando 68%</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p · WEBDL</span>
+                  <span class="row-path">/mnt/storage/downloads/qbittorrent/completed/…</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#b03a3a; --g2:#1a0d0d;">TB</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">The Batman</span><span class="row-year">2022</span>
+                  <span class="row-state"><span class="pill neutral">Colocado</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p · WEBDL</span>
+                  <span class="row-path">/mnt/storage/downloads/qbittorrent/completed/The.Batman.2022</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#9aa3ad; --g2:#20252b;">AC</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Anatomía de una caída</span><span class="row-year">2023</span>
+                  <span class="row-state"><span class="pill neutral">Colocado</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p · Bluray</span>
+                  <span class="row-path">/mnt/storage/downloads/qbittorrent/completed/Anatomia.de.una.Caida.2023</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#c98a4b; --g2:#4a2d17;">DP</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Dune: Parte Dos</span><span class="row-year">2024</span>
+                  <span class="row-state"><span class="pill ok">En biblioteca</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag k4">4K · Bluray</span>
+                  <span class="row-path">/mnt/storage-6tb/peliculas-4k/Dune.Parte.Dos.2024</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#d96f32; --g2:#2a1408;">OP</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Oppenheimer</span><span class="row-year">2023</span>
+                  <span class="row-state"><span class="pill ok">En biblioteca</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p · Bluray</span>
+                  <span class="row-path">/mnt/storage/peliculas/Oppenheimer.2023</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#e0842f; --g2:#3b1c0a;">BR</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Blade Runner 2049</span><span class="row-year">2017</span>
+                  <span class="row-state"><span class="pill ok">En biblioteca</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag k4">4K · Bluray</span>
+                  <span class="row-path">/mnt/storage-6tb/peliculas-4k/Blade.Runner.2049.2017</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#1fa8c9; --g2:#0a2b3b;">AV</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Avatar: El sentido del agua</span><span class="row-year">2022</span>
+                  <span class="row-state"><span class="pill ok">En biblioteca</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag q3d">3D · Bluray</span>
+                  <span class="row-path">/mnt/storage-6tb/peliculas-3d/Avatar.El.Sentido.del.Agua.2022</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#6b7a8f; --g2:#141a22;">IN</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Interstellar</span><span class="row-year">2014</span>
+                  <span class="row-state"><span class="pill ok">En biblioteca</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag k4">4K · WEBDL</span>
+                  <span class="row-path">/mnt/storage-6tb/peliculas-4k/Interstellar.2014</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#7f8b3f; --g2:#1e2310;">PA</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">Parasitos</span><span class="row-year">2019</span>
+                  <span class="row-state"><span class="pill ok">En biblioteca</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p · WEBDL</span>
+                  <span class="row-path">/mnt/storage/peliculas/Parasitos.2019</span>
+                </span>
+              </span>
+            </li>
+
+            <li class="row" tabindex="0">
+              <span class="mini-poster" style="--g1:#e0a1a8; --g2:#3b2226;">GH</span>
+              <span class="row-body">
+                <span class="row-top">
+                  <span class="row-name">El gran hotel Budapest</span><span class="row-year">2014</span>
+                  <span class="row-state"><span class="pill ok">En biblioteca</span></span>
+                </span>
+                <span class="row-bottom">
+                  <span class="q-tag">1080p · Bluray</span>
+                  <span class="row-path">/mnt/storage/peliculas/El.Gran.Hotel.Budapest.2014</span>
+                </span>
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- ---------- Panel de detalle ---------- -->
+        <section class="detail" aria-label="Detalle de la película seleccionada">
+          <div class="detail-head">
+            <span class="big-poster" style="--g1:#6ba3d4; --g2:#12212f;">TW</span>
+            <div class="detail-titles">
+              <h2>Twisters</h2>
+              <div class="detail-sub">
+                <span class="year">2024</span>
+                <span class="pill warn">Falta</span>
+                <span class="pill acc">4K · 2160p</span>
+              </div>
+              <dl class="meta">
+                <dt>Dirección</dt><dd>Lee Isaac Chung</dd>
+                <dt>Duración</dt><dd>122 min · EE. UU.</dd>
+                <dt>Perfil</dt><dd>Calidad 4K · HDR preferido</dd>
+                <dt>Fuente</dt><dd>Radarr · seguimiento activo</dd>
+                <dt>Última búsqueda</dt><dd>hace 40 min · 0 enlaces usados</dd>
+              </dl>
+            </div>
+          </div>
+
+          <div class="detail-tabs" role="tablist">
+            <span class="dtab is-active" role="tab">Releases<span class="n">4</span></span>
+            <span class="dtab" role="tab">Archivos<span class="n">0</span></span>
+            <span class="dtab" role="tab">Historial<span class="n">3</span></span>
+          </div>
+
+          <ul class="releases">
+            <li class="rel is-pick">
+              <span class="radio"></span>
+              <span>
+                <span class="rel-name">Twisters.2024.2160p.BluRay.x265-GEZO</span>
+                <span class="rel-meta">
+                  <span>Español</span><span>2160p</span><span>22,4 GB</span>
+                  <span class="seed">84 semillas</span><span class="pick">seleccionado</span>
+                </span>
+              </span>
+            </li>
+            <li class="rel">
+              <span class="radio"></span>
+              <span>
+                <span class="rel-name">Twisters.2024.2160p.WEB-DL.HDR.DV.DDP5.1</span>
+                <span class="rel-meta">
+                  <span>Inglés</span><span>2160p</span><span>31,2 GB</span>
+                  <span class="seed">12 semillas</span>
+                </span>
+              </span>
+            </li>
+            <li class="rel">
+              <span class="radio"></span>
+              <span>
+                <span class="rel-name">Twisters.2024.1080p.BluRay.x264-NTb</span>
+                <span class="rel-meta">
+                  <span>Español</span><span>1080p</span><span>9,1 GB</span>
+                  <span class="seed">342 semillas</span>
+                </span>
+              </span>
+            </li>
+            <li class="rel">
+              <span class="radio"></span>
+              <span>
+                <span class="rel-name">Twisters.2024.1080p.WEB-DL.DDP5.1.x264</span>
+                <span class="rel-meta">
+                  <span>Inglés</span><span>1080p</span><span>5,4 GB</span>
+                  <span class="seed low">4 semillas · pocas</span>
+                </span>
+              </span>
+            </li>
+          </ul>
+
+          <div class="action">
+            <h3>Acción principal</h3>
+
+            <span class="field-label">Calidad (enrutado automático)</span>
+            <div class="quality-row">
+              <button class="q-chip" type="button">1080p</button>
+              <button class="q-chip is-on" type="button">4K</button>
+              <button class="q-chip" type="button">3D</button>
+            </div>
+
+            <label class="field-label" for="destino">Carpeta de destino</label>
+            <select id="destino">
+              <option selected>/mnt/storage-6tb/peliculas-4k/ — biblioteca 4K</option>
+              <option>/mnt/storage-6tb/peliculas-3d/ — biblioteca 3D</option>
+              <option>/mnt/storage/peliculas/ — biblioteca 1080p</option>
+              <option>/mnt/storage-6tb/shared-downloads/ — sin importar</option>
+            </select>
+
+            <div class="destino-box">
+              <div class="k">Destino aplicado con la calidad elegida</div>
+              <div class="v">/mnt/storage-6tb/peliculas-4k/Twisters.2024.2160p.BluRay.x265-GEZO</div>
+            </div>
+
+            <p class="route-hint">
+              Reglas de la pestaña <b>Calidad</b>: <b>4K</b> → <code>/mnt/storage-6tb/peliculas-4k/</code> ·
+              <b>3D</b> → <code>/mnt/storage-6tb/peliculas-3d/</code> · <b>1080p</b> → <code>/mnt/storage/peliculas/</code>.
+            </p>
+
+            <div class="actions-row">
+              <button class="btn primary" type="button">⬇ Descargar en esta carpeta</button>
+              <button class="btn ghost" type="button">Buscar otra vez</button>
+            </div>
+          </div>
+
+          <p class="detail-foot">
+            Las pestañas <b>Archivos</b> (renombrar, escanear, retención) y <b>Historial</b> cambian
+            con la película seleccionada; aquí Archivos está en 0 porque Twisters todavía no está en disco.
+          </p>
+        </section>
+      </div>
+
+      <!-- ============ Nota para revisión ============ -->
+      <section class="review">
+        <h3>Nota para revisión</h3>
+        <ul>
+          <li><b>¿El panel de detalle fijo roba demasiada anchura a la lista?</b> A 1280 px quedan unos 530 px por lado; ¿se prefieren listas más estrechas o un panel que se superponga?</li>
+          <li><b>¿El selector de destino debe ser un desplegable o dos botones?</b> Hoy se muestran las cuatro carpetas; si solo hay tres rutas fijas, un desplegable es un clic de más.</li>
+          <li><b>¿Dónde queda el lote?</b> Selección múltiple en la lista + «descargar los 5» al final; ¿se añade un modo de selección o se reserva para la pestaña Faltantes?</li>
+          <li><b>¿Convive «Biblioteca = catálogo completo» con la pestaña Faltantes?</b> Si no, la lista tendría que partirse por estado y este concepto perdería su ventaja.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
