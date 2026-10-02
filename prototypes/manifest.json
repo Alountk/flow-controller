@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "file": "setup-02-focus-card.html",
+      "section": "setup",
+      "status": "selected",
+      "recommend": true,
+      "note": "Elegida por el usuario: la tarjeta con foco mantiene visible el paso actual y el resto queda como contexto."
+    },
+    {
+      "file": "setup-01-sidebar-steps.html",
+      "section": "setup",
+      "status": "discarded",
+      "recommend": false,
+      "note": "Los pasos en la barra lateral se veían todo el rato, pero el área de edición quedaba estrecha y el asistente perdió su carácter de recorrido."
+    },
+    {
+      "file": "setup-03-verify-inline.html",
+      "section": "setup",
+      "status": "discarded",
+      "recommend": false,
+      "note": "La verificación en línea dentro de cada paso escondía el estado global: no se veía qué quedaba por comprobar de un vistazo."
+    }
+  ]
+}

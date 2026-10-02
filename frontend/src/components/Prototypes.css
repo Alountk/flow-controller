@@ -14,37 +14,6 @@
   color: var(--text-dim);
 }
 
-.proto-tabs {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin: 20px 0;
-}
-
-.proto-tab {
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-
-.proto-tab:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.proto-tab.active {
-  border-color: var(--accent);
-  background: rgba(74, 158, 255, 0.12);
-  color: var(--text);
-}
-
 .proto-frame-wrap {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -77,3 +46,162 @@
   font-size: 12px;
 }
 
+
+/* ---- Filters ---- */
+.proto-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 18px 0 4px;
+}
+
+.proto-filter {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.proto-filter:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.proto-filter.active {
+  border-color: var(--accent);
+  background: rgba(74, 158, 255, 0.12);
+  color: var(--text);
+}
+
+.proto-count {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+}
+
+.proto-filter.active .proto-count {
+  background: rgba(74, 158, 255, 0.22);
+  color: var(--text);
+}
+
+/* ---- Sections and cards ---- */
+.proto-section {
+  margin-top: 22px;
+}
+
+.proto-section-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.proto-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.proto-card {
+  font-family: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+
+.proto-card:hover {
+  border-color: var(--accent);
+}
+
+.proto-card.active {
+  border-color: var(--accent);
+  background: rgba(74, 158, 255, 0.1);
+}
+
+/* A discarded design is still useful evidence — dimmed, never hidden. */
+.proto-card.discarded {
+  border-style: dashed;
+}
+
+.proto-card-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.proto-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+}
+
+.proto-badge.selected {
+  background: rgba(74, 158, 255, 0.18);
+  color: var(--accent);
+}
+
+.proto-badge.discarded {
+  background: rgba(255, 92, 92, 0.14);
+  color: var(--bad, #ff5c5c);
+}
+
+.proto-badge.candidate {
+  background: rgba(255, 196, 74, 0.14);
+  color: var(--warn, #ffc44a);
+}
+
+.proto-badge.recommend {
+  background: rgba(108, 214, 143, 0.16);
+  color: var(--ok, #6cd68f);
+}
+
+.proto-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.proto-card-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* ---- Preview ---- */
+.proto-frame-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev-2);
+}
