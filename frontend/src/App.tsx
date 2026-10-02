@@ -14,6 +14,8 @@ import { Settings } from './components/Settings'
 import { Calendar } from './components/Calendar'
 import { DiskSpace } from './components/DiskSpace'
 import { MediaMixer } from './components/MediaMixer'
+import { Peliculas } from './components/Peliculas'
+import { Series } from './components/Series'
 import {
   apiFetch,
   forgetApiKey,
@@ -60,6 +62,8 @@ const SERVICES: { key: ServiceKey; label: string }[] = [
 
 const PAGE_TITLES: Record<Page, string> = {
   dashboard: 'Dashboard',
+  peliculas: 'Películas',
+  series: 'Series',
   trace: 'Trazabilidad',
   wanted: 'Faltantes',
   calendar: 'Calendario',
@@ -175,7 +179,7 @@ function App() {
   // Sonarr. The local pages (disk, files, mixer, config) always work.
   const hiddenPages = useMemo<Page[]>(() => {
     if (!servicesReady || hasAnyArr) return []
-    return ['trace', 'wanted', 'calendar'] as Page[]
+    return ['trace', 'wanted', 'calendar', 'peliculas', 'series'] as Page[]
   }, [servicesReady, hasAnyArr])
 
   useEffect(() => {
@@ -321,6 +325,10 @@ function App() {
               </div>
             </>
           )}
+
+          {page === 'peliculas' && <Peliculas />}
+
+          {page === 'series' && <Series />}
 
           {page === 'trace' && (
             <TraceView

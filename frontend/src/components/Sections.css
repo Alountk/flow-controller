@@ -1,0 +1,354 @@
+/*
+ * Películas and Series — master-detail shell (PR 1 of F-08).
+ *
+ * Same visual language as the chosen prototypes
+ * (peliculas-02-maestro-detalle / series-04-maestro-detalle): sub-view tabs,
+ * dense list on the left, detail panel on the right. The controls are rendered
+ * but genuinely disabled: cursor, no hover, and no opacity trick that would
+ * leave the text unreadable.
+ */
+
+.section-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 32px;
+}
+
+/* ---- Header ---- */
+.sec-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sec-header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* ---- Sub-view tabs ---- */
+.sec-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-subtab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sec-subtab:hover {
+  color: var(--text);
+}
+
+.sec-subtab.is-active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.sec-subtab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---- Master-detail split ---- */
+.sec-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.sec-master,
+.sec-detail {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ---- Master list ---- */
+.sec-master-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-master-title {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.sec-master-sub {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.sec-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.sec-table th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* List empty state: a single cell spanning the five columns. */
+.sec-table .sec-empty {
+  text-align: left;
+}
+
+/* ---- Empty states ---- */
+.sec-empty {
+  padding: 24px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.sec-empty-detail {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- Detail panel ---- */
+.sec-detail-head {
+  display: flex;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-poster {
+  width: 72px;
+  height: 104px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--bg-elev-2);
+  border: 1px dashed var(--border);
+}
+
+.sec-detail-titles {
+  min-width: 0;
+}
+
+.sec-detail-titles h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sec-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 10px 0 0;
+  font-size: 11.5px;
+}
+
+.sec-meta dt {
+  color: var(--text-dim);
+}
+
+.sec-meta dd {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* ---- Detail tabs (disabled until there is a selection) ---- */
+.sec-detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-dtab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 9px 11px;
+}
+
+/* Genuinely disabled: no hover, no opacity, explicit cursor. */
+.sec-dtab:disabled,
+.sec-dtab:disabled:hover {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+/* ---- Primary action ---- */
+.sec-action {
+  padding: 15px 16px 16px;
+}
+
+.sec-action h4 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sec-field-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.sec-quality-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.sec-q-chip {
+  appearance: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 14px;
+}
+
+.sec-q-chip:disabled,
+.sec-q-chip:disabled:hover {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.sec-destino {
+  width: 100%;
+  appearance: none;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 9px 11px;
+  margin-bottom: 12px;
+}
+
+.sec-destino:disabled,
+.sec-destino:disabled:hover {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.sec-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sec-btn {
+  appearance: none;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+}
+
+.sec-btn.primary {
+  background: var(--accent-soft);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: var(--text);
+}
+
+.sec-btn:disabled,
+.sec-btn:disabled:hover {
+  cursor: not-allowed;
+}
+
+.sec-action-hint {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+/* ---- Implementation notes ---- */
+.sec-notes {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+
+.sec-notes h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sec-notes ol {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.sec-notes li {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.sec-notes li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1180px) {
+  .sec-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

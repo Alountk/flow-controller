@@ -1,9 +1,23 @@
 import { useState, useCallback, useEffect } from 'react'
 
-type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'disk' | 'files' | 'mixer' | 'config' | 'prototypes'
+export type Page =
+  | 'dashboard'
+  | 'peliculas'
+  | 'series'
+  | 'trace'
+  | 'wanted'
+  | 'calendar'
+  | 'disk'
+  | 'files'
+  | 'mixer'
+  | 'config'
+  | 'prototypes'
 
-const PAGE_PATHS: Record<Page, string> = {
+/** Single owner of the page → path map: the sidebar reads it, the router derives from it. */
+export const PAGE_PATHS: Record<Page, string> = {
   dashboard: '/dashboard',
+  peliculas: '/peliculas',
+  series: '/series',
   trace: '/trazabilidad',
   wanted: '/faltantes',
   calendar: '/calendario',
