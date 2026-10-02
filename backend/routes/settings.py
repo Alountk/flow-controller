@@ -1,6 +1,7 @@
 """Settings and prototypes routes."""
 
 import copy
+import json
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -160,15 +161,57 @@ async def save_settings_endpoint(body: dict, _key: str = Depends(verify_api_key)
     return {"ok": True, "restart_required": restart_needed}
 
 
+def _read_prototype_manifest() -> dict:
+    """`manifest.json` next to the prototypes, or `{}` on any doubt.
+
+    The gallery is a directory listing with annotations on top — never the
+    other way round. A missing, unreadable or malformed manifest therefore
+    costs the annotations only: every `.html` still appears, as `unlisted`.
+    Making it required would mean a new prototype could silently vanish, and
+    would couple the gallery to a file that is edited by hand.
+
+    Keys are the file names, so an entry that outlives its prototype simply
+    has no key to match and never reaches the response.
+    """
+    path = os.path.join(PROTOTYPES_DIR, "manifest.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return {}
+    return {
+        entry["file"]: entry
+        for entry in items
+        if isinstance(entry, dict) and isinstance(entry.get("file"), str)
+    }
+
+
 @router.get("/api/prototypes")
 async def list_prototypes(_key: str = Depends(verify_api_key)):
+    """Every top-level `.html`, annotated with its status when catalogued.
+
+    Iterating the FILES (not the manifest) is what drops stale entries for
+    prototypes that no longer exist: there is nothing to preview, so a tab
+    with a blank frame would be worse than no tab.
+    """
     if not os.path.isdir(PROTOTYPES_DIR):
         return []
     files = sorted(
         f for f in os.listdir(PROTOTYPES_DIR) if f.endswith(".html")
     )
+    catalogued = _read_prototype_manifest()
     return [
-        {"name": f.removesuffix(".html"), "file": f}
+        {
+            "name": f.removesuffix(".html"),
+            "file": f,
+            "section": (catalogued.get(f) or {}).get("section") or "otros",
+            "status": (catalogued.get(f) or {}).get("status") or "unlisted",
+            "recommend": bool((catalogued.get(f) or {}).get("recommend")),
+            "note": (catalogued.get(f) or {}).get("note") or "",
+        }
         for f in files
     ]
 

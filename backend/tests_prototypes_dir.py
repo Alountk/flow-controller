@@ -16,6 +16,7 @@ Both layouts are legitimate; the resolver has to cope with both instead of
 baking one of them into the constant.
 """
 
+import json
 import os
 import pathlib
 
@@ -97,9 +98,13 @@ class TestTheEndpointUsesIt:
 
         body = client.get("/api/prototypes").json()
 
-        assert body == [{"name": "setup-01", "file": "setup-01.html"}], (
-            "only top-level .html — archive/ and non-html files must not become tabs"
-        )
+        # `name`/`file` are the contract the gallery renders; the rest are the
+        # manifest annotations with their fail-open defaults.
+        assert [(item["name"], item["file"]) for item in body] == [
+            ("setup-01", "setup-01.html")
+        ], "only top-level .html — archive/ and non-html files must not become tabs"
+        assert body[0]["status"] == "unlisted", body[0]
+        assert body[0]["section"] == "otros"
 
     def test_a_missing_directory_is_an_empty_list_not_a_500(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
@@ -116,3 +121,123 @@ def test_the_shipped_constant_points_somewhere_plausible():
     """Locally this is <repo>/prototypes; the point is it is never a bare root."""
     assert PROTOTYPES_DIR.endswith("prototypes"), PROTOTYPES_DIR
     assert PROTOTYPES_DIR != "/prototypes" or not os.path.isdir(PROTOTYPES_DIR)
+
+
+# ── The manifest: what is chosen, what was thrown away ────────────────────────
+
+
+def _catalogued(target, *, files=("a.html",), manifest=None):
+    target.mkdir(parents=True, exist_ok=True)
+    for name in files:
+        (target / name).write_text("<!DOCTYPE html><html></html>")
+    if manifest is not None:
+        (target / "manifest.json").write_text(
+            json.dumps({"items": manifest}), encoding="utf-8"
+        )
+    return str(target)
+
+
+def _listed(target, monkeypatch):
+    import routes.settings as settings_route
+    from fastapi.testclient import TestClient
+    from app import app
+
+    monkeypatch.setattr(settings_route, "PROTOTYPES_DIR", str(target))
+    return TestClient(app, raise_server_exceptions=False).get("/api/prototypes").json()
+
+
+class TestTheManifestMarksChosenAndThrownAway:
+    def test_a_selected_entry_carries_its_status_and_recommendation(
+        self, tmp_path, monkeypatch
+    ):
+        target = _catalogued(
+            tmp_path / "p",
+            files=("setup-02.html",),
+            manifest=[
+                {
+                    "file": "setup-02.html",
+                    "section": "setup",
+                    "status": "selected",
+                    "recommend": True,
+                    "note": "La tarjeta con foco enfoca el paso actual.",
+                }
+            ],
+        )
+
+        [item] = _listed(target, monkeypatch)
+
+        assert item["status"] == "selected"
+        assert item["recommend"] is True
+        assert item["section"] == "setup"
+        assert item["note"].startswith("La tarjeta")
+
+    def test_a_discarded_entry_keeps_the_reason_it_was_thrown_away(
+        self, tmp_path, monkeypatch
+    ):
+        """A discarded design with no reason is a decision nobody can learn
+        from — the next person rebuilds it."""
+        target = _catalogued(
+            tmp_path / "p",
+            files=("setup-01.html",),
+            manifest=[
+                {
+                    "file": "setup-01.html",
+                    "section": "setup",
+                    "status": "discarded",
+                    "note": "Siete pasos en una columna: se perdía el contexto.",
+                }
+            ],
+        )
+
+        [item] = _listed(target, monkeypatch)
+
+        assert item["status"] == "discarded"
+        assert "Siete pasos" in item["note"]
+
+    def test_a_file_nobody_catalogued_is_shown_anyway(self, tmp_path, monkeypatch):
+        """Fail open. The gallery is a directory listing; the manifest only
+        annotates it. Requiring an entry would mean a new .html could vanish."""
+        target = _catalogued(tmp_path / "p", files=("stray.html",))
+
+        [item] = _listed(target, monkeypatch)
+
+        assert item["file"] == "stray.html"
+        assert item["status"] == "unlisted"
+        assert item["section"] == "otros"
+        assert item["recommend"] is False
+
+    def test_a_manifest_that_cannot_be_read_does_not_break_the_gallery(
+        self, tmp_path, monkeypatch
+    ):
+        target = _catalogued(tmp_path / "p", files=("a.html",))
+        pathlib.Path(target, "manifest.json").write_text("{not json", encoding="utf-8")
+
+        body = _listed(target, monkeypatch)
+
+        assert [item["file"] for item in body] == ["a.html"]
+        assert body[0]["status"] == "unlisted"
+
+    def test_an_entry_pointing_at_a_file_that_is_gone_is_dropped(
+        self, tmp_path, monkeypatch
+    ):
+        """There is nothing to preview, so a stale entry is noise — and the
+        obvious naive merge would ship a tab with a blank frame."""
+        target = _catalogued(
+            tmp_path / "p",
+            files=("a.html",),
+            manifest=[{"file": "deleted.html", "status": "selected"}],
+        )
+
+        body = _listed(target, monkeypatch)
+
+        assert [item["file"] for item in body] == ["a.html"]
+
+    def test_the_flat_fields_the_current_page_never_stop_working(
+        self, tmp_path, monkeypatch
+    ):
+        target = _catalogued(tmp_path / "p", files=("setup-02.html",))
+
+        [item] = _listed(target, monkeypatch)
+
+        assert item["name"] == "setup-02"
+        assert item["file"] == "setup-02.html"

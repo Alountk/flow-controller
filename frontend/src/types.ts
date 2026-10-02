@@ -297,9 +297,19 @@ export interface SaveSettingsResponse {
   restart_required: string[]
 }
 
+/** Whether a design made the cut, and why or why not. */
+export type PrototypeStatus = 'selected' | 'discarded' | 'candidate' | 'unlisted'
+
 export interface PrototypeFile {
   name: string
   file: string
+  /** Grouping key: `setup`, `landing`, `peliculas`, `series`, `otros`. */
+  section: string
+  status: PrototypeStatus
+  /** True only where the manifest says so — never inferred from status. */
+  recommend: boolean
+  /** For a discarded design, WHY it was discarded. Empty otherwise. */
+  note: string
 }
 
 /* ---- Wanted / Missing Content ---- */
