@@ -134,8 +134,26 @@ descartada.
 |----|-----------|
 | **1** ✅ | Techo: navegación, `Page`/`PAGE_PATHS` unificados, envolturas maestro–detalle vacías — **PR #110**, `00b042a` |
 | **2** ✅ | Mover **Biblioteca + Faltantes** a las dos secciones — **PR #111**, `32ef040` |
-| **3** | Mover **Estrenos**; el modal de releases → **panel de detalle** |
-| **4** | Mover **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú |
+| **3** ✅ | **Estrenos** en las dos secciones — **PR #112**, `040dd09` |
+| **4** | **Calidad**: backend expone `quality` + sub-vista con badges 4K/3D | ⬜ *nuevo — el plan pasó de 4 a 6* |
+| **5** | El modal de releases → **panel de detalle** | ⬜ |
+| **6** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
 
 **Cada PR deja la app funcionando**: primero se añade el techo, después se mueve el contenido,
 y solo al final se retira lo viejo.
+
+---
+
+## Por qué el plan creció a 6
+
+Al planificar el PR 3 se comprobó que **`AllMovie` no lleva `quality`** y que **ningún
+endpoint** (`routes/wanted.py`, `routes/files.py`) la expone para la biblioteca — solo existe
+la del *grab* (`own_grabs.quality`, v8). La sub-vista **Calidad no tenía de dónde leer**, y
+mostrar solo las carpetas con su ocupación habría sido una pantalla de estado, no la vista de
+biblioteca que prometen los prototipos.
+
+Decisión del usuario: **listado por clase de calidad** → Calidad gana su propio slice de
+backend, y el modal→panel (independiente) se separó en el 5.
+
+**`Calendar` solo tenía 140 líneas** y ya separaba películas/episodios → el filtro de tipo fue
+barato y su **default es "mostrar ambos"**, así que `Calendario` no cambió de comportamiento.

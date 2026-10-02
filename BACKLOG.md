@@ -583,9 +583,15 @@ Lo que absorbe de la web actual, por sección:
 | PR | Contenido | Estado |
 |----|-----------|--------|
 | **1** | Techo: navegación, `Page`/`PAGE_PATHS` **unificados** en el hook, envolturas maestro–detalle con estados vacíos | ✅ **PR #110**, `00b042a`, 284 tests |
-| **2** | Mover **Biblioteca + Faltantes** a las dos secciones | ✅ **PR #111**, `32ef040`, 291 tests |
-| **3** | Mover **Estrenos**; el modal de releases → **panel de detalle** | ⬜ |
-| **4** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
+| **2** | Mover **Biblioteca + Faltantes** (`MediaPane` extraído) | ✅ **PR #111**, `32ef040`, 291 tests |
+| **3** | **Estrenos** en las dos secciones (`Calendar` con filtro por tipo) | ✅ **PR #112**, `040dd09`, 296 tests |
+| **4** | **Calidad**: el backend expone `quality` para la biblioteca (**hoy no existe**) + sub-vista con badges 4K/3D | ⬜ |
+| **5** | El modal de releases → **panel de detalle** (el corazón del diseño) | ⬜ |
+| **6** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
+
+> **El plan creció de 4 a 6 PRs** al comprobar que `AllMovie` **no lleva `quality`** y que
+> **ningún endpoint** la expone para la biblioteca — la sub-vista *Calidad* no tenía de dónde
+> leer. Por eso Calidad ganó su propio slice de backend y el modal→panel se separó.
 
 **La extracción** (PR 2): `MissingContent` pasó de **929 → 84 líneas**; el listado entero —
 4 queries infinitas, observer, búsqueda con debounce, ambos modales, acciones — vive ahora en
