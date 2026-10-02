@@ -66,16 +66,16 @@ lado de los prototipos:
 
 | PR | Contenido | Por qué va solo |
 |----|-----------|-----------------|
-| **A** | Manifiesto + endpoint enriquecido + **rediseño de la galería** + tests | Es la infraestructura; los3 setups existentes ya la validan. Sin ella, 11 pestañas planas |
-| **B** | **4 prototipos de Películas** + entradas en el manifiesto | Artefactos puros, cero dependencia de código |
-| **C** | **4 prototipos de Series** + entradas | Ídem |
+| **A** ✅ | Manifiesto + endpoint enriquecido + **rediseño de la galería** + tests — **PR #107**, `b5cc5b4`, 678 backend / 268 frontend | La galería pasó de 11 pestañas planas a secciones + filtros con recuento + insignias de estado |
+| **B** | **4 prototipos de Películas** + entradas en el manifiesto | ✅ **PR #108**, `912ebd9` — entregado junto con C por decisión del mantenedor |
+| **C** | **4 prototipos de Series** + entradas | ✅ **PR #108** — acoplados a B: el encabezado de `series-01` cita a `peliculas-02` como su alternativa directa |
 
 ## Aceptación
 
-- [ ] **A**: un prototipo con `status: selected` se ve con su insignia; `discarded` muestra el
+- [x] **A**: un prototipo con `status: selected` se ve con su insignia; `discarded` muestra el
       `note` del porqué; un `.html` **sin** entrada sigue apareciendo; manifiesto roto → la
       galería **no** se cae.
-- [ ] **B/C**: 8 prototipos accesibles desde la galería, cada uno con **recomendación** y
+- [x] **B/C**: 8 prototipos accesibles desde la galería, cada uno con **recomendación** y
       justificación escritas.
 
 ## Checks
@@ -94,3 +94,17 @@ cd frontend && npx tsc -b --noEmit && npm run lint && npm test
 - 🟠 **8 HTML no son triviales.** Cada uno es ~300 líneas de maqueta; ir uno a uno y
   verificar que la galería los lista, no maquetarlos todos y descubrir que no cargan.
 - ⬜ Ninguna de las dos secciones **se implementa** aquí: esto es **maqueta para decidir**.
+
+---
+
+## Estado: **ambos entregados** — falta TU decisión
+
+- **`peliculas-02-maestro-detalle`** ⭐ y **`series-01-arbol`** ⭐ son los recomendados.
+- La decisión real de Series no es árbol contra rejilla, es **idiomático por tipo de
+  contenido vs. consistencia entre secciones** — y por eso `series-01` declara en su propio
+  encabezado que, si prefieres un solo lenguaje, la respuesta es `series-04` (el gemelo del
+  recomendado de Películas).
+- Los 8 están como **`candidate`** en el manifiesto. Nadie se ha pronunciado → **nadie debe
+  inventar un `selected`/`discarded`**.
+- Cada fichero cierra con su **`Nota para revisión`**: ahí están las preguntas que hay que
+  cerrar antes de implementar nada.
