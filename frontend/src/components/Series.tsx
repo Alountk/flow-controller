@@ -1,11 +1,16 @@
-import { useId, useState } from 'react'
+import { Fragment, useId, useState } from 'react'
+import { MediaPane, type MediaSelection } from './MediaPane'
 import './Sections.css'
 
 /**
- * PR 1 of the F-08 plan: navigation, routing and an empty shell that already
- * looks like the chosen master–detail prototype — the twin of Películas, same
- * model, different words. Nothing has moved yet, so every state says out loud
- * which PR brings the content it is waiting for.
+ * Series — master–detail (F-08).
+ *
+ * PR 2 of the plan: the sub-view tabs BECOME the filter. Biblioteca shows the
+ * full catalogue and Faltantes the missing episodes — both rendered by
+ * MediaPane, the component extracted from the Faltantes page — so the pane
+ * must not draw a second set of filter controls here. Selecting a row fills
+ * the detail panel with that row's own data; Estrenos and Calidad still wait
+ * for PR 3. The twin of Películas: same model, different words.
  */
 
 type SubView = 'biblioteca' | 'faltantes' | 'estrenos' | 'calidad'
@@ -13,20 +18,13 @@ type SubView = 'biblioteca' | 'faltantes' | 'estrenos' | 'calidad'
 interface SubViewDef {
   id: SubView
   label: string
-  empty: string
+  /** Only the sub-views PR 2 has not filled yet still carry an empty state. */
+  empty?: string
 }
 
 const SUB_VIEWS: SubViewDef[] = [
-  {
-    id: 'biblioteca',
-    label: 'Biblioteca',
-    empty: 'Llega con el PR 2: la lista completa se mueve aquí desde Faltantes.',
-  },
-  {
-    id: 'faltantes',
-    label: 'Faltantes',
-    empty: 'Llega con el PR 2: la cola de faltantes se mueve aquí desde Faltantes.',
-  },
+  { id: 'biblioteca', label: 'Biblioteca' },
+  { id: 'faltantes', label: 'Faltantes' },
   {
     id: 'estrenos',
     label: 'Estrenos',
@@ -39,21 +37,36 @@ const SUB_VIEWS: SubViewDef[] = [
   },
 ]
 
+/** Sub-views whose list is live content (PR 2); the rest show their empty state. */
+const LIVE_VIEWS: SubView[] = ['biblioteca', 'faltantes']
+
 const COLUMNS = ['Título', 'Año', 'Estado', 'Calidad', 'Ruta']
 const DETAIL_TABS = ['Episodios', 'Releases', 'Archivos']
 const QUALITIES = ['1080p', '4K', '3D']
 
 const NOTES: { pr: string; text: string }[] = [
-  { pr: 'PR 1 (este)', text: 'techo: navegación, rutas y esta envoltura vacía. Nada se ha movido todavía.' },
-  { pr: 'PR 2', text: 'Biblioteca y Faltantes: la lista se mueve desde la sección Faltantes.' },
-  { pr: 'PR 3', text: 'Estrenos desde Calendario, Calidad (4K/3D) y el modal de releases pasa a panel de detalle.' },
+  { pr: 'PR 1', text: 'techo: navegación, rutas y la envoltura maestro–detalle.' },
+  { pr: 'PR 2 (este)', text: 'Biblioteca y Faltantes muestran las listas reales, extraídas de la sección Faltantes; la selección rellena el panel de detalle.' },
+  { pr: 'PR 3', text: 'Estrenos desde Calendario, Calidad (4K/3D), y buscar releases, escanear y pedir pasan al panel de detalle.' },
   { pr: 'PR 4', text: 'Archivos entra como pestaña del panel; Faltantes y Calendario se retiran del menú.' },
 ]
 
+const PANEL_EMPTY = 'Selecciona un elemento de la lista para ver su detalle.'
+const PR3_NOTE =
+  'Buscar releases, escanear y pedir descargas pasan a este panel en el PR 3; de momento siguen en cada fila.'
+
 export function Series() {
   const [view, setView] = useState<SubView>('biblioteca')
+  const [selected, setSelected] = useState<MediaSelection | null>(null)
   const uid = useId()
   const active = SUB_VIEWS.find((s) => s.id === view) ?? SUB_VIEWS[0]
+  const live = LIVE_VIEWS.includes(view)
+
+  function changeView(next: SubView) {
+    setView(next)
+    // The selection belongs to the list it came from: a switch resets it.
+    setSelected(null)
+  }
 
   return (
     <section className="section-shell">
@@ -72,7 +85,7 @@ export function Series() {
             aria-selected={view === s.id}
             aria-controls={`${uid}-list`}
             className={`sec-subtab${view === s.id ? ' is-active' : ''}`}
-            onClick={() => setView(s.id)}
+            onClick={() => changeView(s.id)}
           >
             {s.label}
           </button>
@@ -91,40 +104,81 @@ export function Series() {
             <span className="sec-master-sub">{active.label}</span>
           </div>
 
-          <table className="sec-table">
-            <thead>
-              <tr>
-                {COLUMNS.map((c) => (
-                  <th key={c} scope="col">
-                    {c}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="sec-empty" colSpan={COLUMNS.length}>
-                  {active.empty}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          {live ? (
+            // The pane styles its rows under a `.wanted` ancestor (its action
+            // buttons are `.wanted .search-item`), so the column provides it.
+            <div className="wanted">
+              <MediaPane
+                kind="episodes"
+                namespace="series"
+                filter={view === 'biblioteca' ? 'all' : 'missing'}
+                selectedId={selected?.id ?? null}
+                onSelect={setSelected}
+              />
+            </div>
+          ) : (
+            <table className="sec-table">
+              <thead>
+                <tr>
+                  {COLUMNS.map((c) => (
+                    <th key={c} scope="col">
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="sec-empty" colSpan={COLUMNS.length}>
+                    {active.empty}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          )}
         </section>
 
         <section className="sec-detail" aria-label="Panel de detalle">
           <div className="sec-detail-head">
-            <span className="sec-poster" aria-hidden="true" />
+            {selected?.detail.poster ? (
+              <img
+                className="sec-poster sec-poster-img"
+                src={selected.detail.poster}
+                alt=""
+              />
+            ) : (
+              <span className="sec-poster" aria-hidden="true" />
+            )}
             <div className="sec-detail-titles">
-              <h3>Sin selección</h3>
+              <h3>{selected ? selected.detail.title : 'Sin selección'}</h3>
               <dl className="sec-meta">
-                <dt>Año</dt>
-                <dd>—</dd>
-                <dt>Estado</dt>
-                <dd>—</dd>
-                <dt>Calidad</dt>
-                <dd>—</dd>
-                <dt>Ruta</dt>
-                <dd>—</dd>
+                {selected ? (
+                  <>
+                    {selected.detail.meta.map((m) => (
+                      <Fragment key={m.label}>
+                        <dt>{m.label}</dt>
+                        <dd>{m.value}</dd>
+                      </Fragment>
+                    ))}
+                    {selected.detail.grab && (
+                      <>
+                        <dt>Descarga</dt>
+                        <dd className="sec-grabbed">{selected.detail.grab}</dd>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <dt>Año</dt>
+                    <dd>—</dd>
+                    <dt>Estado</dt>
+                    <dd>—</dd>
+                    <dt>Calidad</dt>
+                    <dd>—</dd>
+                    <dt>Ruta</dt>
+                    <dd>—</dd>
+                  </>
+                )}
               </dl>
             </div>
           </div>
@@ -137,9 +191,10 @@ export function Series() {
             ))}
           </div>
 
-          <p className="sec-empty sec-empty-detail">
-            Selecciona un elemento de la lista — la lista llega en el PR 2.
-          </p>
+          {!selected && (
+            <p className="sec-empty sec-empty-detail">{PANEL_EMPTY}</p>
+          )}
+          <p className="sec-pr3-note">{PR3_NOTE}</p>
 
           <div className="sec-action">
             <h4>Acción principal</h4>
@@ -172,7 +227,8 @@ export function Series() {
             </div>
 
             <p className="sec-action-hint">
-              Los controles se activan al seleccionar un elemento de la lista.
+              Los controles de este panel se activan en el PR 3, cuando la acción
+              principal pase a vivir aquí junto a las acciones de la fila.
             </p>
           </div>
         </section>

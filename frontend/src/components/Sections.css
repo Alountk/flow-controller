@@ -310,6 +310,75 @@
   color: var(--text-dim);
 }
 
+/* ---- Pane rows in the master column (PR 2) ---------------------------------
+ * The list column holds MediaPane's own rows — the same cards/rows Faltantes
+ * renders — scoped so they read well in a narrower column. Every action the
+ * row had stays on the row.
+ */
+
+.sec-master .wanted {
+  padding: 12px 14px;
+}
+
+.sec-master .wanted .wanted-actions {
+  margin-bottom: 14px;
+}
+
+/* No Faltantes/Todas buttons here (the sub-view tabs are the filter): the
+   filter pill collapses to the plain search field. */
+.sec-master .wanted-filter {
+  flex: 1;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.sec-master .wanted-search {
+  width: 100%;
+  margin-left: 0;
+}
+
+/* Selectable rows: a pointer cursor, and a focus ring for keyboard users. */
+.sec-master .wanted-card.is-selectable,
+.sec-master .wanted-row.is-selectable {
+  cursor: pointer;
+}
+
+.sec-master .wanted-card.is-selectable:focus-visible,
+.sec-master .wanted-row.is-selectable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The selection is a ring ON TOP of the row's own status colours: a selected
+   card must keep saying whether it is missing/ok/grabbed. */
+.sec-master .wanted-card[aria-current='true'],
+.sec-master .wanted-row[aria-current='true'] {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* ---- Detail panel content (PR 2) ---- */
+.sec-poster-img {
+  object-fit: cover;
+  border-style: solid;
+}
+
+.sec-meta dd.sec-grabbed {
+  color: var(--warn);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* The honest note: those actions live on the rows today and move here in PR 3. */
+.sec-pr3-note {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
 /* ---- Implementation notes ---- */
 .sec-notes {
   background: var(--bg-elev);
