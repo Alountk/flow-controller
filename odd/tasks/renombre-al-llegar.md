@@ -62,17 +62,17 @@ tras usarlo para enrutar.
 
 | PR | Contenido | Por qué va solo |
 |----|-----------|-----------------|
-| **1** | **Plumbing de calidad**: migración v7→v8 (`own_grabs.quality`), se guarda en `record_own_grab`, viaja al payload de copia | Independientemente útil (qué calidad se descargó en cada grab) y es prerequisito. Sin él, PR 2 no puede evaluar `{Quality Full}` |
-| **2** | **Evaluador**: `clients.arr_naming_config` + `arr_movie_files`, módulo `naming.py` (evaluar + autocomprobar), integración en la rama ajena de `copy_engine` | Es toda la lógica; depende de 1 |
+| **1** ✅ | **Plumbing de calidad**: migración v7→v8 (`own_grabs.quality`), se guarda en `record_own_grab`, viaja al payload de copia | Independientemente útil (qué calidad se descargó en cada grab) y es prerequisito. Sin él, PR 2 no puede evaluar `{Quality Full}` |
+| **2** ✅ | **Evaluador**: `clients.arr_naming_config` + `arr_movie_files`, módulo `naming.py` (evaluar + autocomprobar), integración en la rama ajena de `copy_engine` | Es toda la lógica; depende de 1 |
 
 ## Aceptación
 
-- [ ] Patrón **por defecto** de Radarr + fichero existente de referencia → el 4K aterriza como
+- [x] Patrón **por defecto** de Radarr + fichero existente de referencia → el 4K aterriza como
       `path_4k/<carpeta de Radarr>/<fichero con la calidad nueva>`.
-- [ ] Patrón con token desconocido → **nombre de hoy** y el detalle explica por qué.
-- [ ] Sin fichero de referencia (no está en la biblioteca) → **nombre de hoy**.
-- [ ] La autocomprobación **no coincide** → **nombre de hoy**, nunca un nombre inventado.
-- [ ] Sin `dest_root` (biblioteca) → **cero cambios**: Radarr importa y renombra él.
+- [x] Patrón con token desconocido → **nombre de hoy** y el detalle explica por qué.
+- [x] Sin fichero de referencia (no está en la biblioteca) → **nombre de hoy**.
+- [x] La autocomprobación **no coincide** → **nombre de hoy**, nunca un nombre inventado.
+- [x] Sin `dest_root` (biblioteca) → **cero cambios**: Radarr importa y renombra él.
 
 ## Checks
 

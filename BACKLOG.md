@@ -129,7 +129,9 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
    `True`, que en una película con archivo **siempre lo es** → el destino que elijas hoy es
    un no-op. Hay que decidir: upgrade dentro de la biblioteca (Radarr reemplaza y renombra él)
    o copia a carpeta externa (fuera del control de Radarr).
-6. **Renombrado tras la copia.** *(hueco que queda: no entró en el reparto de 3 PRs y nadie lo ha pedido)* Hoy solo se *detecta*: `clients.py:576` lee
+6. **Renombrado al llegar.** ✅ **Cerrado en 2 PRs** (#105 `0fd967e`, #106 `6356104`) —
+   ***pedido explícitamente por el usuario*** y con alcance acotado a **solo las carpetas
+   4K/3D**. Hoy solo se *detecta*: `clients.py:576` lee
    `GET /api/v3/rename` y reporta `renamed_needed`, pero **nadie ejecuta nunca el rename**.
    Falta un paso tras `run_copy_background` (`copy_engine.py:179`).
 
@@ -318,6 +320,31 @@ refresca `SERVICES` en caliente y la lista quedó en `{"server.port"}`.
 
 **Decisión (F-03):** la clave de la app va **al final** — en cuanto existe, `POST /api/setup`
 devuelve 403 y `needs_setup` pasa a false; ponerla antes cortaría el wizard.
+
+#### Renombrado al llegar — cerrado (PRs #105, #106)
+
+**El hecho que lo condiciona todo:** Radarr renombra **lo que es suyo** — `GET /api/v3/rename`,
+`RenameMovie` y `RenameFiles` operan sobre la biblioteca — y **no expone** un endpoint
+*"¿cómo se llamaría este fichero?"* para uno fuera de sus raíces. Solo entrega su **plantilla**
+(`GET /api/v3/config/naming`), y evaluar el formato ajeno es exactamente donde un nombre se
+escribe **mal con toda la confianza**.
+
+Por eso la plantilla **nunca se toma por confianza**: `reproduced_radarr` la re-evalúa para el
+fichero **que Radarr ya posee** y la compara con el nombre **que Radarr eligió**. Solo un
+acierto gana el derecho a nombrar el que vamos a escribir. Si no coincide → el nombre de
+siempre, plano, y **el motivo en el detalle de la tarea**.
+
+| Decisión | Por qué |
+|---|---|
+| **Carpeta desde `movie.path`**, no evaluando `movieFolderFormat` | Es una respuesta que Radarr **ya ejecutó**; no necesita interpretación |
+| **Tokens acotados** (`{Release Group}`, `{MEDIAINFO ...}` → no) | Describen un fichero **que no hemos escaneado**; rellenarlos sería invención |
+| **Token no opcional sin dato → falla toda la evaluación** | Acortar el nombre en silencio es peor que no renombrar |
+| **Lista explícita de extensiones**, no `suffix` | Un `suffix` llamaría `.PROPER` extensión y lo cortaría → **la feature off justo en los despliegues con proper releases** |
+| **La calidad se guarda ahora** (v8, `own_grabs.quality`) | Sin ella `{Quality Full}` — el token del formato por defecto — no tiene dónde leerse. `None` se queda en `None`: una calidad adivinada **es un nombre de fichero que nadie notará mal** |
+
+**No se toca** el rename de biblioteca — decisión de alcance del usuario: Radarr ya renombra lo
+que es suyo.
+
 
 ---
 
