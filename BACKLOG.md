@@ -580,10 +580,19 @@ Lo que absorbe de la web actual, por sección:
 
 #### Qué falta
 
-- [ ] Repartir la implementación en PRs (navegación + envoltura primero, mover contenido después)
-- [ ] `Sidebar` / `usePageRoute` ganan `peliculas` y `series`
-- [ ] Trasladar las sub-vistas; **el modal de releases pasa a panel**
-- [ ] Retirar `Faltantes` y `Calendario` del menú una vez vaciados
+| PR | Contenido | Estado |
+|----|-----------|--------|
+| **1** | Techo: navegación, `Page`/`PAGE_PATHS` **unificados** en el hook, envolturas maestro–detalle con estados vacíos | ✅ **PR #110**, `00b042a`, 284 tests |
+| **2** | Mover **Biblioteca + Faltantes** a las dos secciones | ⬜ |
+| **3** | Mover **Estrenos**; el modal de releases → **panel de detalle** | ⬜ |
+| **4** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
+
+**Detalle que no es cosmético**: las dos páginas van en `hiddenPages` como
+`trace`/`wanted`/`calendar` — leen de Radarr y Sonarr, así que **sin arr desaparecen** en vez
+de mostrar dos envolturas muertas.
+
+**`Page` estaba duplicado** (hook + Sidebar) y nada impedía que se desincronizara; el hook es
+ahora el **único dueño** y el Sidebar re-exporta el tipo.
 
 ## 🔵 Recomendaciones y reglas del ciclo
 

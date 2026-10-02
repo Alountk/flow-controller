@@ -132,7 +132,7 @@ descartada.
 
 | PR | Contenido |
 |----|-----------|
-| **1** | `Sidebar` + `usePageRoute` ganan `peliculas`/`series`; envoltura de sección con las sub-vistas **vacías**; `Faltantes`/`Calendario` siguen donde están |
+| **1** ✅ | Techo: navegación, `Page`/`PAGE_PATHS` unificados, envolturas maestro–detalle vacías — **PR #110**, `00b042a` |
 | **2** | Mover **Biblioteca + Faltantes** a las dos secciones |
 | **3** | Mover **Estrenos**; el modal de releases → **panel de detalle** |
 | **4** | Mover **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú |
