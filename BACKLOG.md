@@ -583,9 +583,18 @@ Lo que absorbe de la web actual, por sección:
 | PR | Contenido | Estado |
 |----|-----------|--------|
 | **1** | Techo: navegación, `Page`/`PAGE_PATHS` **unificados** en el hook, envolturas maestro–detalle con estados vacíos | ✅ **PR #110**, `00b042a`, 284 tests |
-| **2** | Mover **Biblioteca + Faltantes** a las dos secciones | ⬜ |
+| **2** | Mover **Biblioteca + Faltantes** a las dos secciones | ✅ **PR #111**, `32ef040`, 291 tests |
 | **3** | Mover **Estrenos**; el modal de releases → **panel de detalle** | ⬜ |
 | **4** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
+
+**La extracción** (PR 2): `MissingContent` pasó de **929 → 84 líneas**; el listado entero —
+4 queries infinitas, observer, búsqueda con debounce, ambos modales, acciones — vive ahora en
+**`MediaPane`**, que reutilizan las dos secciones. Las **sub-vistas son el filtro**
+(`Biblioteca` → `all`, `Faltantes` → `missing`), y **cada vista tiene su espacio de hash
+propio** para que una búsqueda no se filtre a otra.
+
+🔒 **La garantía**: los **6 tests que fijan el comportamiento de `MissingContent` quedaron con
+`git diff` vacío** — una extracción que obliga a editarlos sería la extracción equivocada.
 
 **Detalle que no es cosmético**: las dos páginas van en `hiddenPages` como
 `trace`/`wanted`/`calendar` — leen de Radarr y Sonarr, así que **sin arr desaparecen** en vez
