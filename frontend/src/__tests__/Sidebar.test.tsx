@@ -46,4 +46,44 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Archivos').closest('a')).toHaveAttribute('href', '/archivos')
   })
+
+  it('renders Películas and Series as nav items', () => {
+    render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
+
+    expect(screen.getByText('Películas')).toBeInTheDocument()
+    expect(screen.getByText('Series')).toBeInTheDocument()
+  })
+
+  it('calls onNavigate with the peliculas page key', () => {
+    const onNavigate = vi.fn()
+    render(<Sidebar active="dashboard" onNavigate={onNavigate} developer={false} />)
+
+    fireEvent.click(screen.getByText('Películas'))
+
+    expect(onNavigate).toHaveBeenCalledWith('peliculas')
+  })
+
+  it('points the new sections at their paths', () => {
+    render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
+
+    expect(screen.getByText('Películas').closest('a')).toHaveAttribute('href', '/peliculas')
+    expect(screen.getByText('Series').closest('a')).toHaveAttribute('href', '/series')
+  })
+
+  it('places Películas and Series before Faltantes', () => {
+    const { container } = render(
+      <Sidebar active="dashboard" onNavigate={() => {}} developer={false} />,
+    )
+
+    const labels = Array.from(container.querySelectorAll('.sb-link')).map(
+      (el) => el.textContent ?? '',
+    )
+    const index = (label: string) => labels.findIndex((text) => text.includes(label))
+
+    expect(index('Películas')).toBeGreaterThan(-1)
+    expect(index('Series')).toBeGreaterThan(-1)
+    expect(index('Películas')).toBeLessThan(index('Faltantes'))
+    expect(index('Series')).toBeLessThan(index('Faltantes'))
+    expect(index('Películas')).toBeLessThan(index('Series'))
+  })
 })

@@ -1,19 +1,10 @@
 import type { ReactNode } from 'react'
+import { PAGE_PATHS, type Page } from '../hooks/usePageRoute'
 import './Sidebar.css'
 
-export type Page = 'dashboard' | 'trace' | 'wanted' | 'calendar' | 'disk' | 'files' | 'mixer' | 'config' | 'prototypes'
-
-const PAGE_PATHS: Record<Page, string> = {
-  dashboard: '/dashboard',
-  trace: '/trazabilidad',
-  wanted: '/faltantes',
-  calendar: '/calendario',
-  disk: '/disco',
-  files: '/archivos',
-  mixer: '/mixer',
-  config: '/configuracion',
-  prototypes: '/prototipos',
-}
+// `Page` is owned by hooks/usePageRoute.ts (the router needs it too). Re-exported
+// here so existing `import type { Page } from '../components/Sidebar'` keeps compiling.
+export type { Page }
 
 interface NavItem {
   key: Page
@@ -23,6 +14,8 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { key: 'peliculas', label: 'Películas', icon: '🎬' },
+  { key: 'series', label: 'Series', icon: '📺' },
   { key: 'trace', label: 'Trazabilidad', icon: '🔍' },
   { key: 'wanted', label: 'Faltantes', icon: '📥' },
   { key: 'calendar', label: 'Calendario', icon: '📅' },
