@@ -531,6 +531,60 @@ ahí borrar sí pierde el dato.
 
 ---
 
+### F-08 — Secciones **Películas** y **Series** · **Grande** · 🔄 *prototipos decididos, falta implementar*
+
+Pedida: dos secciones nuevas que **reunifiquen** lo que hoy está repartido entre
+`Faltantes` · `Calendario` · el modal de releases · `Archivos`.
+
+**Prototipos entregados**: 4 de Películas + 4 de Series (**PR #108**), con la galería
+rediseñada para enseñar elegidos y descartados (**PR #107**).
+
+#### ✅ Decisión del usuario: **maestro–detalle en las dos secciones**
+
+> *"Son el Maestro-detalle. Se aprende una vez y todo funciona igual."*
+
+| Sección | Elegido | El que perdió | Por qué perdió |
+|---|---|---|---|
+| **Películas** | `peliculas-02-maestro-detalle` | rejilla · pestañas · pipeline | Consistencia; y además la rejilla **ocultaba las acciones de descarga** tras un hover |
+| **Series** | `series-04-maestro-detalle` | **`series-01-arbol`** (la recomendada) | **Consistencia ganó a idiomático**: árbol para series y lista para pelis serían **dos lenguajes** |
+
+**El trade-off está registrado en el manifiesto**, no solo aquí: `series-01` lleva en su
+nota que fue **la recomendada** y perdió, para que nadie vuelva a proponerla sin saber que
+ya se decidió.
+
+#### El modelo elegido
+
+```
+┌────────────────┬──────────────────────────────────────┐
+│ Lista densa    │  Póster grande · metadatos           │
+│ (mini póster,  │  ┌────────┬─────────┬────────────┐   │
+│  título, año,  │  │Episodios│ Releases│ Archivos   │   │
+│  estado,       │  └────────┴─────────┴────────────┘   │
+│  calidad, ruta)│  [Destino ▾] [Calidad ▾]  Descargar  │
+└────────────────┴──────────────────────────────────────┘
+```
+
+Lo que absorbe de la web actual, por sección:
+
+| Sub-vista | Películas | Series |
+|---|---|---|
+| **Biblioteca** | pestaña *Todas* de `Faltantes` | ídem |
+| **Faltantes** + escaneo | ✔ | ✔ |
+| **Estrenos** | `Calendario` (pelis) | `Calendario` (episodios) |
+| **Releases / grab** | `ReleaseSearchModal` → **panel de detalle** | ídem, por episodio |
+| **Calidad** (4K/3D, F-01) | ✔ | ✔ |
+| **Archivos** (renombrar, escanear) | pestaña del panel | pestaña del panel |
+
+**Fuera de las dos secciones** (sin cambio): `Dashboard`, `Trazabilidad`, `Disco`,
+`Media Mixer`, `Configuración`.
+
+#### Qué falta
+
+- [ ] Repartir la implementación en PRs (navegación + envoltura primero, mover contenido después)
+- [ ] `Sidebar` / `usePageRoute` ganan `peliculas` y `series`
+- [ ] Trasladar las sub-vistas; **el modal de releases pasa a panel**
+- [ ] Retirar `Faltantes` y `Calendario` del menú una vez vaciados
+
 ## 🔵 Recomendaciones y reglas del ciclo
 
 C-01…C-07 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.

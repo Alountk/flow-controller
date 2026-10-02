@@ -24,58 +24,58 @@
     {
       "file": "peliculas-01-rejilla.html",
       "section": "peliculas",
-      "status": "candidate",
+      "status": "discarded",
       "recommend": false,
-      "note": "Rejilla de carteles: la más familiar y la que peor deja ver las acciones de descarga."
+      "note": "Descartada — además de ceder ante la consistencia, sus acciones de descarga (destino, calidad) quedaban tras un hover: el operador no veía de un vistazo qué había que hacer."
     },
     {
       "file": "peliculas-02-maestro-detalle.html",
       "section": "peliculas",
-      "status": "candidate",
+      "status": "selected",
       "recommend": true,
-      "note": "Recomendado: lista densa + panel de detalle; toda la acción (destino, calidad, releases) a un clic, sin modal por fila."
+      "note": "✅ Elegido. Toda la acción —destino, calidad, releases, renombrar— a un clic en el panel de detalle, sin un modal por fila. Es el modelo que se aprende una vez."
     },
     {
       "file": "peliculas-03-estados.html",
       "section": "peliculas",
-      "status": "candidate",
+      "status": "discarded",
       "recommend": false,
-      "note": "Pestañas por estado: la menos disruptiva, pero obliga a cambiar de contexto con cinco pestañas."
+      "note": "Descartada — una pestaña por estado obliga a cambiar de contexto con cada salto; el maestro-detalle absorbe esos mismos estados en una sola vista con filtros."
     },
     {
       "file": "peliculas-04-pipeline.html",
       "section": "peliculas",
-      "status": "candidate",
+      "status": "discarded",
       "recommend": false,
-      "note": "Pipeline en columnas: la única que enseña transiciones, pero se queda corta de espacio por tarjeta."
+      "note": "Descartada — lo único que aportaba, ver las transiciones en columnas, no compensa el espacio por tarjeta a medida que crece la biblioteca."
     },
     {
       "file": "series-01-arbol.html",
       "section": "series",
-      "status": "candidate",
-      "recommend": true,
-      "note": "Recomendado: el árbol serie→temporada→episodio es la misma forma que tienen las carpetas en disco y la lista de faltantes. Si prefieres consistencia con Películas, el gemelo maestro-detalle (#4) es la alternativa."
+      "status": "discarded",
+      "recommend": false,
+      "note": "Descartada siendo LA RECOMENDADA: era la más idiomática (la jerarquía serie→temporada→episodio es la misma forma que tienen las carpetas en disco). Perdió ante la consistencia — árbol para series y lista para pelis serían dos lenguajes que hay que aprender por separado."
     },
     {
       "file": "series-02-rejilla.html",
       "section": "series",
-      "status": "candidate",
+      "status": "discarded",
       "recommend": false,
-      "note": "Rejilla + parrilla de episodios: la más familiar, pero el estado de los episodios está oculto hasta entrar en la serie."
+      "note": "Descartada — el estado de cada episodio quedaba oculto hasta entrar en la serie, y añadía un tercer modelo a una app que acaba de elegir uno solo."
     },
     {
       "file": "series-03-agenda.html",
       "section": "series",
-      "status": "candidate",
+      "status": "discarded",
       "recommend": false,
-      "note": "Agenda semanal: la única que absorbe el Calendario de forma natural, y por eso no puede ser la portada de la sección."
+      "note": "Descartada — trabaja por tiempo, no por biblioteca: es buena como vista secundaria de estrenos, pero no puede ser la portada de la sección."
     },
     {
       "file": "series-04-maestro-detalle.html",
       "section": "series",
-      "status": "candidate",
-      "recommend": false,
-      "note": "Maestro-detalle: mismo paradigma que el recomendado de Películas, así las dos secciones se aprenden una sola vez; aplana la jerarquía serie→temporada."
+      "status": "selected",
+      "recommend": true,
+      "note": "✅ Elegido. Mismo paradigma que Películas: las dos secciones se aprenden una sola vez y todo se opera igual. Es el gemelo del elegido de Películas."
     }
   ]
 }
