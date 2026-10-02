@@ -108,3 +108,34 @@ cd frontend && npx tsc -b --noEmit && npm run lint && npm test
   inventar un `selected`/`discarded`**.
 - Cada fichero cierra con su **`Nota para revisión`**: ahí están las preguntas que hay que
   cerrar antes de implementar nada.
+
+---
+
+## ✅ DECISIÓN DEL USUARIO (registrada)
+
+> *"creo que el de peliculas el 2 y de series el 4. Son el Maestro-detalle. Se aprende una vez
+> y todo funciona igual."*
+
+- **Películas → `peliculas-02-maestro-detalle`**
+- **Series → `series-04-maestro-detalle`** *(no `series-01-arbol`, que era la recomendada)*
+
+**Ganó la consistencia sobre lo idiomático.** Un solo modelo, aprendido una vez, operado igual
+en ambas secciones. El manifiesto lleva ese razonamiento **en la nota de `series-01`**, para
+que nadie vuelva a proponerla sin saber que ya se decidió.
+
+**Regla para el manifiesto**: `recommend` queda `true` **solo en los seleccionados** — la
+estrella marca *"esto es lo que se construye"*, no *"lo que sugirió el diseño"*. Que `series-01`
+fuera la recomendada vive en su `note`, no en un badge contradictorio sobre una tarjeta
+descartada.
+
+### Siguiente: implementación
+
+| PR | Contenido |
+|----|-----------|
+| **1** | `Sidebar` + `usePageRoute` ganan `peliculas`/`series`; envoltura de sección con las sub-vistas **vacías**; `Faltantes`/`Calendario` siguen donde están |
+| **2** | Mover **Biblioteca + Faltantes** a las dos secciones |
+| **3** | Mover **Estrenos**; el modal de releases → **panel de detalle** |
+| **4** | Mover **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú |
+
+**Cada PR deja la app funcionando**: primero se añade el techo, después se mueve el contenido,
+y solo al final se retira lo viejo.
