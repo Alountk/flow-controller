@@ -13,7 +13,9 @@ import { Series } from '../components/Series'
  * Since PR 2 the panes fetch real content, so every render goes through a
  * QueryClientProvider and a fetch stub that answers with empty listings: the
  * sub-views that no longer promise content are asserted against the pane's own
- * states, and the PR notes are asserted only where they still exist.
+ * states, and the PR notes are asserted only where they still exist. Since
+ * PR 3 Estrenos renders the real calendar (empty under this stub), so only
+ * Calidad is still a sub-view waiting for content.
  */
 
 function ok(body: unknown) {
@@ -38,6 +40,10 @@ function mockFetch() {
           updated_at: 0,
         })
       }
+      // PR 3: Estrenos mounts the calendar, which asks for its date range.
+      if (url.includes('/api/calendar?')) {
+        return ok({ items: [], start: '2026-10-02', end: '2026-11-01' })
+      }
       return ok({})
     }),
   )
@@ -60,11 +66,10 @@ interface SectionCase {
   catalogEmpty: string
 }
 
-/** The exact copy each sub-view still WAITING for content must show. */
+/** The exact copy each sub-view still WAITING for content must show.
+ *  Estrenos is no longer waiting: PR 3 filled it with the calendar. */
 const SUB_VIEW_MESSAGES: Record<string, string> = {
-  Estrenos:
-    'Llega con el PR 3: se mueve desde Calendario, y el modal de releases pasa a panel de detalle.',
-  Calidad: 'Llega con el PR 3.',
+  Calidad: 'Llega con el PR 4.',
 }
 
 /** Biblioteca and Faltantes had a PR-2 promise; PR 2 delivered it. */
@@ -122,8 +127,17 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       expect(screen.queryByText(DELIVERED_PROMISES)).not.toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('tab', { name: 'Estrenos' }))
-      expect(screen.getByText(SUB_VIEW_MESSAGES['Estrenos'])).toBeInTheDocument()
+      // PR 3: the calendar renders INSIDE the list column, and the sub-view
+      // no longer promises content it now has.
+      expect(
+        within(screen.getByRole('tabpanel')).getByRole('heading', {
+          level: 2,
+          name: 'Calendario',
+        }),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/Llega con el PR 3/)).not.toBeInTheDocument()
       expect(screen.queryByText(catalogEmpty)).not.toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'Panel de detalle' })).toBeInTheDocument()
       expect(screen.getByRole('tab', { name: 'Estrenos' })).toHaveAttribute(
         'aria-selected',
         'true',
@@ -135,7 +149,9 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
 
       fireEvent.click(screen.getByRole('tab', { name: 'Calidad' }))
       expect(screen.getByText(SUB_VIEW_MESSAGES['Calidad'])).toBeInTheDocument()
-      expect(screen.queryByText(SUB_VIEW_MESSAGES['Estrenos'])).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { level: 2, name: 'Calendario' }),
+      ).not.toBeInTheDocument()
     })
 
     it('renders the master–detail frame with its columns and its panel', async () => {
@@ -143,8 +159,9 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       await screen.findByText(catalogEmpty)
 
       // The column frame belongs to the sub-views still waiting for content;
-      // Biblioteca and Faltantes hold the pane's rows since PR 2.
-      fireEvent.click(screen.getByRole('tab', { name: 'Estrenos' }))
+      // Biblioteca and Faltantes hold the pane's rows since PR 2 and Estrenos
+      // holds the calendar since PR 3, so the placeholder table is Calidad's.
+      fireEvent.click(screen.getByRole('tab', { name: 'Calidad' }))
 
       const master = screen.getByRole('tabpanel')
       const headers = within(master).getAllByRole('columnheader').map((el) => el.textContent)
@@ -165,6 +182,10 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
         expect(screen.getByText(message)).toBeInTheDocument()
         expect(message).toMatch(/PR [1-4]/)
       }
+
+      // PR 3 delivered Estrenos: it renders the calendar and promises no PR.
+      fireEvent.click(screen.getByRole('tab', { name: 'Estrenos' }))
+      expect(screen.queryByText(/Llega con el PR/)).not.toBeInTheDocument()
 
       // PR 2 delivered Biblioteca and Faltantes: they no longer promise.
       for (const label of ['Biblioteca', 'Faltantes']) {
@@ -194,15 +215,18 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       }
     })
 
-    it('shows the four-PR roadmap from the page itself', () => {
+    it('shows the six-PR roadmap from the page itself', () => {
       renderSection(Component)
 
       const heading = screen.getByRole('heading', { level: 3, name: 'Notas de implementación' })
       const list = heading.nextElementSibling as HTMLElement
       expect(list.tagName).toBe('OL')
-      for (const pr of ['PR 1', 'PR 2 (este)', 'PR 3', 'PR 4']) {
+      for (const pr of ['PR 1', 'PR 2', 'PR 3 (este)', 'PR 4', 'PR 5', 'PR 6']) {
         expect(list.textContent).toContain(pr)
       }
+      // Delivered PRs are marked ✅ and the ones still to come ⬜.
+      expect(list.textContent).toContain('✅')
+      expect(list.textContent).toContain('⬜')
     })
   })
 })

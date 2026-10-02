@@ -1,15 +1,17 @@
 import { Fragment, useId, useState } from 'react'
+import { Calendar } from './Calendar'
 import { MediaPane, type MediaSelection } from './MediaPane'
 import './Sections.css'
 
 /**
  * Películas — master–detail (F-08).
  *
- * PR 2 of the plan: the sub-view tabs BECOME the filter. Biblioteca shows the
+ * PR 3 of the plan: the sub-view tabs BECOME the filter. Biblioteca shows the
  * full catalogue and Faltantes the missing queue — both rendered by MediaPane,
  * the component extracted from the Faltantes page — so the pane must not draw
- * a second set of filter controls here. Selecting a row fills the detail panel
- * with that row's own data; Estrenos and Calidad still wait for PR 3.
+ * a second set of filter controls here. Estrenos now shows the calendar (movie
+ * items only) in the list column; Calidad still waits for PR 4. Selecting a
+ * row fills the detail panel with that row's own data.
  */
 
 type SubView = 'biblioteca' | 'faltantes' | 'estrenos' | 'calidad'
@@ -17,26 +19,22 @@ type SubView = 'biblioteca' | 'faltantes' | 'estrenos' | 'calidad'
 interface SubViewDef {
   id: SubView
   label: string
-  /** Only the sub-views PR 2 has not filled yet still carry an empty state. */
+  /** Only the sub-views whose PR has not landed yet still carry an empty state. */
   empty?: string
 }
 
 const SUB_VIEWS: SubViewDef[] = [
   { id: 'biblioteca', label: 'Biblioteca' },
   { id: 'faltantes', label: 'Faltantes' },
-  {
-    id: 'estrenos',
-    label: 'Estrenos',
-    empty: 'Llega con el PR 3: se mueve desde Calendario, y el modal de releases pasa a panel de detalle.',
-  },
+  { id: 'estrenos', label: 'Estrenos' },
   {
     id: 'calidad',
     label: 'Calidad',
-    empty: 'Llega con el PR 3.',
+    empty: 'Llega con el PR 4.',
   },
 ]
 
-/** Sub-views whose list is live content (PR 2); the rest show their empty state. */
+/** Sub-views whose list is live content via MediaPane (PR 2). */
 const LIVE_VIEWS: SubView[] = ['biblioteca', 'faltantes']
 
 const COLUMNS = ['Título', 'Año', 'Estado', 'Calidad', 'Ruta']
@@ -44,15 +42,17 @@ const DETAIL_TABS = ['Releases', 'Archivos', 'Historial']
 const QUALITIES = ['1080p', '4K', '3D']
 
 const NOTES: { pr: string; text: string }[] = [
-  { pr: 'PR 1', text: 'techo: navegación, rutas y la envoltura maestro–detalle.' },
-  { pr: 'PR 2 (este)', text: 'Biblioteca y Faltantes muestran las listas reales, extraídas de la sección Faltantes; la selección rellena el panel de detalle.' },
-  { pr: 'PR 3', text: 'Estrenos desde Calendario, Calidad (4K/3D), y buscar releases, escanear y pedir pasan al panel de detalle.' },
-  { pr: 'PR 4', text: 'Archivos entra como pestaña del panel; Faltantes y Calendario se retiran del menú.' },
+  { pr: 'PR 1 ✅', text: 'techo: navegación, rutas y la envoltura maestro–detalle.' },
+  { pr: 'PR 2 ✅', text: 'Biblioteca y Faltantes muestran las listas reales, extraídas de la sección Faltantes; la selección rellena el panel de detalle.' },
+  { pr: 'PR 3 (este) ✅', text: 'Estrenos muestra el calendario: solo películas aquí, solo episodios en Series.' },
+  { pr: 'PR 4 (Calidad) ⬜', text: 'la sub-vista Calidad (4K/3D); antes necesita su rebanada de backend.' },
+  { pr: 'PR 5 (modal → panel) ⬜', text: 'buscar releases pasa del modal al panel de detalle; de momento el modal sigue abriéndose desde la lista y el calendario.' },
+  { pr: 'PR 6 (retirar menús) ⬜', text: 'Archivos entra como pestaña del panel; Faltantes y Calendario se retiran del menú.' },
 ]
 
 const PANEL_EMPTY = 'Selecciona un elemento de la lista para ver su detalle.'
-const PR3_NOTE =
-  'Buscar releases, escanear y pedir descargas pasan a este panel en el PR 3; de momento siguen en cada fila.'
+const PANEL_NOTE =
+  'Buscar releases aún se abre como modal, también desde el calendario; en el PR 5 pasa a este panel de detalle, junto con escanear y pedir descargas.'
 
 export function Peliculas() {
   const [view, setView] = useState<SubView>('biblioteca')
@@ -103,7 +103,12 @@ export function Peliculas() {
             <span className="sec-master-sub">{active.label}</span>
           </div>
 
-          {live ? (
+          {view === 'estrenos' ? (
+            // PR 3: the calendar IS the list of this sub-view — movie items
+            // only. It keeps its own date range, navigation and card actions,
+            // including opening the release search.
+            <Calendar type="movie" />
+          ) : live ? (
             // The pane styles its rows under a `.wanted` ancestor (its action
             // buttons are `.wanted .search-item`), so the column provides it.
             <div className="wanted">
@@ -193,7 +198,7 @@ export function Peliculas() {
           {!selected && (
             <p className="sec-empty sec-empty-detail">{PANEL_EMPTY}</p>
           )}
-          <p className="sec-pr3-note">{PR3_NOTE}</p>
+          <p className="sec-panel-note">{PANEL_NOTE}</p>
 
           <div className="sec-action">
             <h4>Acción principal</h4>
@@ -226,7 +231,7 @@ export function Peliculas() {
             </div>
 
             <p className="sec-action-hint">
-              Los controles de este panel se activan en el PR 3, cuando la acción
+              Los controles de este panel se activan en el PR 5, cuando la acción
               principal pase a vivir aquí junto a las acciones de la fila.
             </p>
           </div>

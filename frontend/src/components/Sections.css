@@ -357,6 +357,24 @@
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+/* ---- Calendar in the master column (PR 3) ---------------------------------
+ * For Estrenos the calendar IS the list, so it takes the same inner space the
+ * pane's rows take. Its own header was sized for a full page: in the narrower
+ * column the title shrinks and the range wraps instead of overflowing.
+ */
+
+.sec-master .calendar {
+  padding: 12px 14px;
+}
+
+.sec-master .calendar-header h2 {
+  font-size: 15px;
+}
+
+.sec-master .calendar-range {
+  white-space: normal;
+}
+
 /* ---- Detail panel content (PR 2) ---- */
 .sec-poster-img {
   object-fit: cover;
@@ -369,8 +387,9 @@
   overflow-wrap: anywhere;
 }
 
-/* The honest note: those actions live on the rows today and move here in PR 3. */
-.sec-pr3-note {
+/* The honest note: those actions still live outside the panel (the release
+   search opens as a modal) and move here in PR 5. */
+.sec-panel-note {
   margin: 0;
   padding: 12px 16px;
   font-size: 11.5px;
