@@ -1608,6 +1608,140 @@ class TestAllListingsGrabMarks:
         assert body["items"][0]["grabbed_at"] is None
 
 
+# ── The Calidad sub-view reads facts, never guesses ───────────────────────────
+# PR 4 of F-08 groups every title by class: movies by the quality of the file
+# Radarr owns (`movieFile`), series by the folder they live in. Both are
+# assertions about data the arr already returns, so each field must either
+# carry the real value or read as unknown — a missing field would show up as
+# "desconocida"/wrong class, which is exactly the guess this view must not make.
+
+
+class TestAllListingsCarryQualityAndPath:
+    """`/api/wanted/all` and `/api/wanted/series/all` feed the Calidad view."""
+
+    MOVIE_WITH_FILE = {
+        "id": 1, "title": "Blade Runner 2049", "year": 2017, "hasFile": True,
+        "path": "/movies/Blade Runner 2049 (2017)", "monitored": True,
+        "movieFile": {
+            "quality": {"quality": {"name": "Bluray-2160p"}},
+            "relativePath": "Blade Runner 2049 (2017).mkv",
+        },
+    }
+    MOVIE_WITHOUT_FILE = {
+        "id": 2, "title": "Aún sin archivo", "year": 2026, "hasFile": False,
+        "path": "/movies/Aún sin archivo (2026)", "monitored": True,
+    }
+    MOVIE_MALFORMED_QUALITY = {
+        "id": 3, "title": "Payload raro", "year": 2025, "hasFile": True,
+        "path": "/movies/Payload raro (2025)", "monitored": True,
+        # An odd payload puts the name where the shape says a dict goes.
+        "movieFile": {"quality": "Bluray-1080p"},
+    }
+
+    def _get_movies(self, payload):
+        routes = {f"{CONFIGURED_RADARR_URL}/api/v3/movie": (200, payload)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get("/api/wanted/all")
+
+    def _get_series(self, payload):
+        routes = {f"{ARR_BY_KEY['sonarr']['url']}/api/v3/series": (200, payload)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get("/api/wanted/series/all")
+
+    def test_a_movie_with_a_file_reports_its_quality_name(self):
+        body = self._get_movies([self.MOVIE_WITH_FILE]).json()
+
+        assert body["items"][0]["quality"] == "Bluray-2160p"
+
+    def test_a_movie_without_movieFile_reports_unknown(self):
+        """No file, no quality: "" is unknown, never a guessed class."""
+        body = self._get_movies([self.MOVIE_WITHOUT_FILE]).json()
+
+        assert body["items"][0]["quality"] == ""
+
+    def test_a_malformed_quality_shape_reads_as_unknown(self):
+        """`quality` as a plain string is not Radarr's shape; passing it through
+        would present an unverified value as the file's quality."""
+        body = self._get_movies([self.MOVIE_MALFORMED_QUALITY]).json()
+
+        assert body["items"][0]["quality"] == ""
+
+    def test_movie_rows_carry_the_path_the_folder_flags_are_read_from(self):
+        body = self._get_movies([self.MOVIE_WITH_FILE]).json()
+
+        assert body["items"][0]["path"] == "/movies/Blade Runner 2049 (2017)"
+
+    def test_series_rows_carry_their_path_too(self):
+        """The class of a series comes from its path — the one signal Sonarr's
+        list actually has (there is no per-episode quality here)."""
+        payload = [{
+            "id": 3, "title": "Some Show", "year": 2020, "monitored": True,
+            "path": "/series4k/Some Show",
+            "statistics": {"episodeCount": 10, "episodeFileCount": 4},
+        }]
+
+        body = self._get_series(payload).json()
+
+        assert body["items"][0]["path"] == "/series4k/Some Show"
+
+
+class TestAllListingsSayWhenTheArrIsNotConfigured:
+    """Calidad must tell "no titles in any class" from "Sonarr was never set up".
+
+    Both arrive as an empty ``items`` list; only the reason on the body can
+    put them on screen as different facts.
+    """
+
+    def test_movies_unconfigured_carries_the_reason(self):
+        import config
+
+        unconfigured = {"key": "radarr", "kind": "arr", "url": "", "api_key": "", "configured": False}
+        with patch.object(config, "SERVICES", [unconfigured]):
+            body = client.get("/api/wanted/all").json()
+
+        assert body["items"] == []
+        assert "no configurado" in body.get("error", "")
+
+    def test_series_unconfigured_carries_the_reason(self):
+        import config
+
+        unconfigured = {"key": "sonarr", "kind": "arr", "url": "", "api_key": "", "configured": False}
+        with patch.object(config, "SERVICES", [unconfigured]):
+            body = client.get("/api/wanted/series/all").json()
+
+        assert body["items"] == []
+        assert "no configurado" in body.get("error", "")
+
+    def test_a_configured_service_answers_without_an_error(self):
+        routes = {f"{CONFIGURED_RADARR_URL}/api/v3/movie": (200, [])}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            body = client.get("/api/wanted/all").json()
+
+        assert "error" not in body, "a genuinely empty catalogue stays distinguishable"
+
+
+class TestTheCalidadFoldersReachTheFrontend:
+    """The Calidad view derives classes from `path_4k`/`path_3d`, read from
+    GET /api/settings — the same document `config.PATH_4K`/`PATH_3D` are
+    rebuilt from. The two keys must survive the trip to the client (absent
+    keys are allowed and mean "not configured")."""
+
+    def test_both_routing_folders_are_exposed(self):
+        import settings as settings_mod
+
+        before = copy.deepcopy(settings_mod.get_settings())
+        try:
+            settings_mod._settings.setdefault("paths", {})["path_4k"] = "/mnt/4k"
+            settings_mod._settings["paths"]["path_3d"] = "/mnt/3d"
+
+            body = client.get("/api/settings").json()
+        finally:
+            settings_mod._settings = before
+
+        assert body["paths"]["path_4k"] == "/mnt/4k"
+        assert body["paths"]["path_3d"] == "/mnt/3d"
+
+
 class TestCalendarGrabMarks:
     """`/api/calendar` marks each item by its own `source` and `type`."""
 

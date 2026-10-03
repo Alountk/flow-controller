@@ -14,8 +14,8 @@ import { Series } from '../components/Series'
  * QueryClientProvider and a fetch stub that answers with empty listings: the
  * sub-views that no longer promise content are asserted against the pane's own
  * states, and the PR notes are asserted only where they still exist. Since
- * PR 3 Estrenos renders the real calendar (empty under this stub), so only
- * Calidad is still a sub-view waiting for content.
+ * PR 3 Estrenos renders the real calendar (empty under this stub), and since
+ * PR 4 Calidad renders the real class list, no sub-view is still waiting.
  */
 
 function ok(body: unknown) {
@@ -67,10 +67,8 @@ interface SectionCase {
 }
 
 /** The exact copy each sub-view still WAITING for content must show.
- *  Estrenos is no longer waiting: PR 3 filled it with the calendar. */
-const SUB_VIEW_MESSAGES: Record<string, string> = {
-  Calidad: 'Llega con el PR 4.',
-}
+ *  None is waiting any more: PR 3 filled Estrenos, PR 4 filled Calidad. */
+const SUB_VIEW_MESSAGES: Record<string, string> = {}
 
 /** Biblioteca and Faltantes had a PR-2 promise; PR 2 delivered it. */
 const DELIVERED_PROMISES = /Llega con el PR 2/
@@ -148,7 +146,14 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       )
 
       fireEvent.click(screen.getByRole('tab', { name: 'Calidad' }))
-      expect(screen.getByText(SUB_VIEW_MESSAGES['Calidad'])).toBeInTheDocument()
+      // PR 4: Calidad renders the real class list (empty under this stub),
+      // not the promise of content it used to show.
+      expect(
+        await within(screen.getByRole('tabpanel')).findByRole('group', {
+          name: 'Filtrar por clase',
+        }),
+      ).toBeInTheDocument()
+      expect(screen.queryByText('Llega con el PR 4.')).not.toBeInTheDocument()
       expect(
         screen.queryByRole('heading', { level: 2, name: 'Calendario' }),
       ).not.toBeInTheDocument()
@@ -158,14 +163,17 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       renderSection(Component)
       await screen.findByText(catalogEmpty)
 
-      // The column frame belongs to the sub-views still waiting for content;
-      // Biblioteca and Faltantes hold the pane's rows since PR 2 and Estrenos
-      // holds the calendar since PR 3, so the placeholder table is Calidad's.
+      // Since PR 4 the Calidad tab holds the real class table, so its columns
+      // are the frame this test reads: Biblioteca and Faltantes hold the
+      // pane's rows, Estrenos the calendar. Under this stub the catalogue is
+      // empty, and that empty state must live INSIDE the table, not instead
+      // of it.
       fireEvent.click(screen.getByRole('tab', { name: 'Calidad' }))
+      expect(await screen.findByText(catalogEmpty)).toBeInTheDocument()
 
       const master = screen.getByRole('tabpanel')
       const headers = within(master).getAllByRole('columnheader').map((el) => el.textContent)
-      expect(headers).toEqual(['Título', 'Año', 'Estado', 'Calidad', 'Ruta'])
+      expect(headers).toEqual(['Título', 'Año', 'Clase', 'Calidad', 'Ruta', 'Enrutado'])
 
       const panel = screen.getByRole('region', { name: 'Panel de detalle' })
       for (const tab of detailTabs) {
@@ -221,7 +229,7 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       const heading = screen.getByRole('heading', { level: 3, name: 'Notas de implementación' })
       const list = heading.nextElementSibling as HTMLElement
       expect(list.tagName).toBe('OL')
-      for (const pr of ['PR 1', 'PR 2', 'PR 3 (este)', 'PR 4', 'PR 5', 'PR 6']) {
+      for (const pr of ['PR 1', 'PR 2', 'PR 3', 'PR 4 (este)', 'PR 5', 'PR 6']) {
         expect(list.textContent).toContain(pr)
       }
       // Delivered PRs are marked ✅ and the ones still to come ⬜.

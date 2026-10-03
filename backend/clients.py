@@ -1008,6 +1008,28 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
         return {**_empty_page(page, page_size), **arr_failure(service, exc=exc)}
 
 
+def _movie_quality(movie: dict) -> str:
+    """The quality name of the file Radarr owns, or ``""`` when unknown.
+
+    Same reading as ``arr_movie_metadata``: ``movieFile.quality.quality.name``
+    (e.g. ``Bluray-2160p``). Every step is guarded — ``movieFile`` is absent
+    until the movie has a file, and an odd payload can put a plain string where
+    the shape says a dict — so anything unexpected reads as unknown, never as a
+    guessed quality: the Calidad view turns ``""`` into "desconocida".
+    """
+    movie_file = movie.get("movieFile")
+    if not isinstance(movie_file, dict):
+        return ""
+    quality = movie_file.get("quality")
+    if not isinstance(quality, dict):
+        return ""
+    inner = quality.get("quality")
+    if not isinstance(inner, dict):
+        return ""
+    name = inner.get("name")
+    return name if isinstance(name, str) else ""
+
+
 async def fetch_all_movies_detailed(
     session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50
 ) -> dict:
@@ -1048,6 +1070,11 @@ async def fetch_all_movies_detailed(
                     "year": m.get("year"),
                     "remotePoster": m.get("remotePoster", ""),
                     "has_file": m.get("hasFile", False),
+                    # The path is exposed, not only measured: the Calidad view
+                    # reads the path_4k/path_3d membership off it.
+                    "path": path,
+                    # "" means unknown (no file / odd payload), never a guess.
+                    "quality": _movie_quality(m),
                     "path_exists": path_exists,
                     "monitored": m.get("monitored", False),
                 })
@@ -1096,6 +1123,10 @@ async def fetch_all_series_detailed(
                     "year": s.get("year"),
                     "remotePoster": s.get("remotePoster", ""),
                     "has_file": s.get("statistics", {}).get("episodeFileCount", 0) > 0,
+                    # Exposed because the class of a series IS derived from
+                    # where it lives (path_4k → 4K, path_3d → 3D): Sonarr's list
+                    # carries no quality, so this path is the honest signal.
+                    "path": path,
                     "path_exists": path_exists,
                     "monitored": s.get("monitored", False),
                     "episode_count": s.get("statistics", {}).get("episodeCount", 0),

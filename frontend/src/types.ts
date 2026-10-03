@@ -335,6 +335,13 @@ export interface AllMovie {
   year: number | null
   remotePoster: string
   has_file: boolean
+  /** The movie's folder as Radarr knows it. The Calidad view reads the
+   *  path_4k/path_3d membership off it; "" means Radarr sent no path. */
+  path: string
+  /** Quality of the file Radarr owns (`movieFile.quality.quality.name`, e.g.
+   *  "Bluray-2160p"), or "" when unknown — no file, or an odd payload shape.
+   *  "" must read as unknown on screen, never as a guessed class. */
+  quality: string
   path_exists: boolean
   monitored: boolean
   /** Unix seconds when this app asked to download the title, or null when it
@@ -350,6 +357,10 @@ export interface AllSeries {
   year: number | null
   remotePoster: string
   has_file: boolean
+  /** The series' folder as Sonarr knows it. Sonarr's list carries no quality,
+   *  so the Calidad view derives the class of a series from this path alone
+   *  (path_4k → 4K, path_3d → 3D, anything else → en biblioteca). */
+  path: string
   path_exists: boolean
   monitored: boolean
   episode_count: number
