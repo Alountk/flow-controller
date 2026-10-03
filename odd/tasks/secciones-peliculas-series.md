@@ -135,7 +135,7 @@ descartada.
 | **1** ✅ | Techo: navegación, `Page`/`PAGE_PATHS` unificados, envolturas maestro–detalle vacías — **PR #110**, `00b042a` |
 | **2** ✅ | Mover **Biblioteca + Faltantes** a las dos secciones — **PR #111**, `32ef040` |
 | **3** ✅ | **Estrenos** en las dos secciones — **PR #112**, `040dd09` |
-| **4** | **Calidad**: backend expone `quality` + sub-vista con badges 4K/3D | ⬜ *nuevo — el plan pasó de 4 a 6* |
+| **4** ✅ | **Calidad**: `quality`/`path` en la biblioteca + sub-vista con clases — **PR #113**, `6bc9eab` |
 | **5** | El modal de releases → **panel de detalle** | ⬜ |
 | **6** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
 

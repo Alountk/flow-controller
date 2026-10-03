@@ -585,13 +585,20 @@ Lo que absorbe de la web actual, por sección:
 | **1** | Techo: navegación, `Page`/`PAGE_PATHS` **unificados** en el hook, envolturas maestro–detalle con estados vacíos | ✅ **PR #110**, `00b042a`, 284 tests |
 | **2** | Mover **Biblioteca + Faltantes** (`MediaPane` extraído) | ✅ **PR #111**, `32ef040`, 291 tests |
 | **3** | **Estrenos** en las dos secciones (`Calendar` con filtro por tipo) | ✅ **PR #112**, `040dd09`, 296 tests |
-| **4** | **Calidad**: el backend expone `quality` para la biblioteca (**hoy no existe**) + sub-vista con badges 4K/3D | ⬜ |
+| **4** | **Calidad**: `quality`/`path` en la biblioteca + sub-vista con clases 4K/3D | ✅ **PR #113**, `6bc9eab`, 687 backend / 308 frontend |
 | **5** | El modal de releases → **panel de detalle** (el corazón del diseño) | ⬜ |
 | **6** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
 
 > **El plan creció de 4 a 6 PRs** al comprobar que `AllMovie` **no lleva `quality`** y que
 > **ningún endpoint** la expone para la biblioteca — la sub-vista *Calidad* no tenía de dónde
 > leer. Por eso Calidad ganó su propio slice de backend y el modal→panel se separó.
+
+**Señales distintas por sección, a propósito**: *Películas* se clase con el **juicio de
+Radarr** (`movieFile.quality`, el campo que este repo ya leía en `arr_movie_metadata`);
+*Series* **no tiene esa señal** — Sonarr no expone calidad por serie y el repo **nunca** ha
+llamado a `/api/v3/episodefile`, así que se clasifica por **la carpeta en la que vive**
+(señal que F-01 produce) **y la vista lo dice en pantalla**. *3D manda sobre la resolución*
+aquí también: un fichero dentro de `path_3d` es 3D sea cual sea su calidad.
 
 **La extracción** (PR 2): `MissingContent` pasó de **929 → 84 líneas**; el listado entero —
 4 queries infinitas, observer, búsqueda con debounce, ambos modales, acciones — vive ahora en
