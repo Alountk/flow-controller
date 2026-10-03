@@ -84,6 +84,24 @@
   overflow: hidden;
 }
 
+/* The panel must stay reachable while the list scrolls. The action lives next
+   to the rows it acts on, so a panel that scrolls off the top is a panel you
+   cannot get back to without scrolling up first.
+
+   72px = the sticky topbar (56) + this grid's 16px gap. The panel scrolls
+   internally rather than growing, so a long release list never pushes it
+   below the fold either.
+
+   `sticky` fails SILENTLY the moment an ancestor gains `overflow: hidden` —
+   `.section-shell` and `.layout` must stay free of it. The `overflow: hidden`
+   on the rule above is on this element itself and is harmless. */
+.sec-detail {
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 88px);
+  overflow-y: auto;
+}
+
 /* ---- Master list ---- */
 .sec-master-head {
   display: flex;
