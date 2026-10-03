@@ -85,7 +85,7 @@ const SECTION_CASES: SectionCase[] = [
   {
     title: 'Series',
     Component: Series,
-    detailTabs: ['Episodios', 'Releases', 'Archivos'],
+    detailTabs: ['Episodios', 'Releases', 'Archivos', 'Historial'],
     catalogEmpty: 'No hay series en el catálogo',
   },
 ]
@@ -220,22 +220,25 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       }
 
       const panel = screen.getByRole('region', { name: 'Panel de detalle' })
-      // Releases is the live tab; the tabs PR 6 brings stay honestly disabled.
-      expect(within(panel).getByRole('button', { name: 'Releases' })).toBeEnabled()
-      for (const tab of detailTabs.filter((t) => t !== 'Releases')) {
-        expect(within(panel).getByRole('button', { name: tab })).toBeDisabled()
+      // PR 6 fills the remaining tabs, so every one of them is live now:
+      // none stays a disabled placeholder behind Releases.
+      for (const tab of detailTabs) {
+        expect(within(panel).getByRole('button', { name: tab })).toBeEnabled()
       }
     })
 
-    it('shows the six-PR roadmap from the page itself', () => {
+    it('shows the seven-PR roadmap from the page itself', () => {
       renderSection(Component)
 
       const heading = screen.getByRole('heading', { level: 3, name: 'Notas de implementación' })
       const list = heading.nextElementSibling as HTMLElement
       expect(list.tagName).toBe('OL')
-      for (const pr of ['PR 1', 'PR 2', 'PR 3', 'PR 4 (este)', 'PR 5', 'PR 6']) {
+      for (const pr of ['PR 1', 'PR 2', 'PR 3', 'PR 4', 'PR 5', 'PR 6 (este)', 'PR 7']) {
         expect(list.textContent).toContain(pr)
       }
+      // The stale marker follows the plan: PR 4 was "este" until PR 5, and
+      // the roadmap token now sits on PR 6.
+      expect(list.textContent).not.toContain('PR 4 (este)')
       // Delivered PRs are marked ✅ and the ones still to come ⬜.
       expect(list.textContent).toContain('✅')
       expect(list.textContent).toContain('⬜')
