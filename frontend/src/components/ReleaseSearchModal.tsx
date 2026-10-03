@@ -184,6 +184,11 @@ export function ReleaseSearchModal({
       : undefined
   const [step, setStep] = useState<ModalStep>(restored ? 'results' : 'initial')
   const [message, setMessage] = useState('')
+  // PANEL ONLY: the acknowledgement of a grab that landed while the results
+  // STAYED on screen. It is a separate state on purpose: `message` carries
+  // search/step feedback ("Buscando releases…"), and a results render must
+  // never show that stale string as if it were news.
+  const [notice, setNotice] = useState('')
   const [selectedIndexer, setSelectedIndexer] = useState<string>(restored?.indexer ?? 'all')
   const [releases, setReleases] = useState<Release[]>(restored?.releases ?? [])
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
@@ -322,6 +327,9 @@ export function ReleaseSearchModal({
   async function handleSearch(choice: string = selectedIndexer) {
     setStep('searching')
     setGrabErrors([])
+    // A new search is a new list: the previous grab's ack belongs to the old
+    // one and must not ride above results that have not been fetched yet.
+    setNotice('')
     const idxName = choice !== 'all' ? (indexers.find(i => String(i.id) === choice)?.name || '') : ''
     setMessage(`Buscando releases${idxName ? ` en ${idxName}` : ' en todos los indexadores'}...`)
     try {
@@ -391,6 +399,7 @@ export function ReleaseSearchModal({
   async function handleGrab(guid: string) {
     setStep('grabbing')
     setGrabErrors([])
+    setNotice('')
     setMessage('Descargando...')
     const release = releases.find(r => r.guid === guid)
     // An empty `destination` means the arr's library and must stay absent from
@@ -406,8 +415,20 @@ export function ReleaseSearchModal({
       release ? isThreeD(release) : undefined,
     )
     if (result.ok) {
-      setStep('done')
-      setMessage('Descarga iniciada. Revisa la cola de descargas.')
+      if (inPanel) {
+        // PANEL: the list is the product. This is the COMMON path (a row
+        // click), and leaving it for a 'done' step is exactly the complaint —
+        // "puse uno a descargar y no me deja coger otro". The list stays, the
+        // ack rides above it, the selection starts clean, and nothing cached
+        // is thrown away.
+        setNotice('Descarga iniciada. Revisa la cola de descargas.')
+        setSelectedGuids(new Set())
+        setStep('results')
+      } else {
+        // The overlay IS a dialog: it ends on 'done' with its exit, as ever.
+        setStep('done')
+        setMessage('Descarga iniciada. Revisa la cola de descargas.')
+      }
     } else {
       setStep('error')
       setMessage(result.detail)
@@ -464,6 +485,7 @@ export function ReleaseSearchModal({
     if (selectedGuids.size === 0) return
     setStep('grabbing')
     setGrabErrors([])
+    setNotice('')
     setMessage(`Descargando ${selectedGuids.size} releases...`)
 
     let ok = true
@@ -495,11 +517,21 @@ export function ReleaseSearchModal({
 
     setGrabErrors(errors)
     if (ok) {
-      setStep('done')
       // One group means one call, so its own wording still reaches the user
       // unchanged; only a split batch needs a summary of its own.
-      setMessage(details.length === 1 ? details[0] : `${downloaded} descargados`)
+      const landed = details.length === 1 ? details[0] : `${downloaded} descargados`
       setSelectedGuids(new Set())
+      if (inPanel) {
+        // PANEL: same treatment as the row-click grab — the results the
+        // operator still needs stay on screen, the ack rides above them, and
+        // the cached list (the indexer answered seconds ago) is kept.
+        setNotice(landed)
+        setStep('results')
+      } else {
+        // The overlay IS a dialog: it ends on 'done' with its exit, as ever.
+        setStep('done')
+        setMessage(landed)
+      }
     } else {
       setStep('error')
       setMessage(firstDetail)
@@ -609,6 +641,17 @@ export function ReleaseSearchModal({
     selectedRouting.set(dest, classes)
   }
 
+  // What the status block has to say, if anything. On the panel a successful
+  // grab does NOT leave the results: its ack rides above the list that stayed
+  // on screen — and a plain results render (no ack) draws no box at all,
+  // because `resultsNotice` is empty and `message` (search progress, step
+  // feedback) is never rendered over a results view.
+  const resultsNotice = step === 'results' ? notice : ''
+  const showStatus =
+    step === 'error' || step === 'done' || step === 'adding' || resultsNotice !== ''
+  const statusClass =
+    step === 'error' ? 'status-error' : step === 'done' || resultsNotice !== '' ? 'status-ok' : ''
+
   // One body, two presentations: the overlay wraps it in modal chrome, the
   // panel renders it as-is inside its container.
   const body = (
@@ -689,12 +732,12 @@ export function ReleaseSearchModal({
             </div>
           )}
 
-          {/* Status message */}
-          {(step === 'error' || step === 'done' || step === 'adding') && (
-            <div className={`calendar-modal-status ${
-              step === 'error' ? 'status-error' : step === 'done' ? 'status-ok' : ''
-            }`}>
-              <div>{message}</div>
+          {/* Status message — rendered only when there IS one: error, done,
+              adding, or the panel's post-grab ack above a list that never
+              left. A plain results render must not draw an empty box. */}
+          {showStatus && (
+            <div className={`calendar-modal-status ${statusClass}`}>
+              <div>{resultsNotice || message}</div>
               {grabErrors.length > 0 && (
                 <ul className="calendar-error-list">
                   {grabErrors.slice(0, 5).map((err) => (

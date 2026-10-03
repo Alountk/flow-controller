@@ -12,8 +12,12 @@ import { test, expect, login } from '../fixtures/app';
  *
  * PR 7 retired the Faltantes page: the wanted card now lives in the
  * Películas section's Faltantes sub-view, and the search opens INLINE in the
- * panel — no backdrop, no Escape, and the done step's exit reads
- * "Nueva búsqueda" instead of the overlay's "Cerrar".
+ * panel — no backdrop, no Escape. A successful grab then keeps you ON the
+ * results, so the panel never lands on the done step at all: only the overlay
+ * reaches it (and reads "Cerrar" there). The panel's remaining exit,
+ * "Nueva búsqueda", lives on the error step and trades the results for a new
+ * indexer round-trip — which is exactly what the assertions below pin as
+ * absent after a grab.
  *
  * PR B rewired that inline search: the panel has NO 🔍 Buscar Releases
  * button — it searches by itself when the Releases view mounts (and again
@@ -102,12 +106,18 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   await grabButton.click();
 
   // Success feedback. grab-batch answers detail "1 descargados"
-  // (backend/routes/calendar.py:370) and the done step renders it in the
-  // status block — plain div, no role → text — beside the done-step exit
-  // button.
+  // (backend/routes/calendar.py:370) and the panel now surfaces it as a
+  // notice ABOVE the list — plain div, no role → text — instead of trading
+  // that list for a done step.
   await expect(app.getByText('1 descargados')).toBeVisible({ timeout: 15000 });
-  // In panel presentation the exit reads "Nueva búsqueda": the panel is not
-  // a dialog, so its dismiss restarts the search — "Cerrar" is overlay-only
-  // (dismissLabel).
-  await expect(app.getByRole('button', { name: 'Nueva búsqueda' })).toBeVisible({ timeout: 15000 });
+  // The list SURVIVED the grab: the row that could be grabbed NEXT is still
+  // on screen, because a successful grab in the panel stays on the results
+  // step — that is the complaint this changed ("puse uno a descargar y no me
+  // deja coger otro"). Same locator as the pre-grab assertion above, so it
+  // resolves to the same single row.
+  await expect(app.getByText('Your.Name.2016.1080p.BluRay.x264-GRP')).toBeVisible({ timeout: 15000 });
+  // And the exit that used to trade this list for a fresh indexer round-trip
+  // ("Nueva búsqueda" drops the panel cache and re-searches) is gone —
+  // toHaveCount(0) pins that absence as the post-grab contract.
+  await expect(app.getByRole('button', { name: 'Nueva búsqueda' })).toHaveCount(0);
 });
