@@ -23,6 +23,7 @@ from routes.files import router as files_router
 from routes.actions import router as actions_router
 from routes.auto_copy import router as auto_copy_router
 from routes.downloads import router as downloads_router
+from routes.mediacover import router as mediacover_router
 from routes.settings import router as settings_router, PROTOTYPES_DIR
 from routes_mixer import router as mixer_router
 
@@ -80,6 +81,7 @@ app.include_router(files_router)
 app.include_router(actions_router)
 app.include_router(auto_copy_router)
 app.include_router(downloads_router)
+app.include_router(mediacover_router)
 app.include_router(settings_router)
 app.include_router(mixer_router)
 

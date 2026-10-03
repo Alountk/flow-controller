@@ -1898,6 +1898,14 @@ class TestAuthBoundary:
         # write anything once a key exists (see TestFirstRunSetup), so it is not
         # an open door to a configured deployment.
         "/api/setup",
+        # /api/mediacover serves poster images to an <img src>, which cannot
+        # send an X-Api-Key header: gating it would silently blank every poster
+        # the moment anyone configured a key. The exposure is bounded on
+        # purpose — `source` must resolve through find_service(source, "arr")
+        # and `rest` must normalise to a MediaCover/… path, both else 404 — so
+        # the route serves only poster bytes from already-configured services
+        # and never reveals the arr's URL or API key (see routes/mediacover.py).
+        "/api/mediacover/{source}/{rest}",
         "/openapi.json",
         "/docs",
         "/docs/oauth2-redirect",
