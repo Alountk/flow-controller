@@ -3,7 +3,9 @@ import asyncio
 import json
 import logging
 import os
+import posixpath
 import time
+from urllib.parse import unquote, urlsplit
 
 import aiohttp
 
@@ -966,13 +968,46 @@ def _empty_page(page: int, page_size: int) -> dict:
     return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
 
-def _poster_url(item: dict) -> str:
-    """The poster url in an arr payload's ``images`` (``images[0].url``).
+def _proxied_poster(url: str, source: str) -> str:
+    """``url`` rewritten to ``/api/mediacover/<source>/…`` — or left untouched.
+
+    The arrs word the poster in two shapes: a relative ``/MediaCover/…``
+    (their ``urlBase`` is ``/``) and an absolute
+    ``http://arr:7878/MediaCover/…``. The browser resolves the first against
+    THIS app's origin, where nothing serves ``/MediaCover`` → 404 → initials;
+    the second points at a host it may never reach. Both lose their origin
+    and become the proxy path, so the app is the only thing that ever has to
+    reach the arr — one rule for either shape.
+
+    Anything that is not a MediaCover path (another CDN, another service) is
+    returned exactly as it came: what we do not recognise, we do not mangle.
+    And no rewrite may ever emit ``/api/mediacover/…/../..`` — the path is
+    decoded and normalised FIRST and only then checked against the
+    ``/MediaCover/`` prefix, the same order the proxy route enforces.
+    """
+    parts = urlsplit(url)
+    path = posixpath.normpath(unquote(parts.path))
+    if not path.startswith("/MediaCover/"):
+        return url
+    proxied = f"/api/mediacover/{source}{path}"
+    if parts.query:
+        proxied = f"{proxied}?{parts.query}"
+    return proxied
+
+
+def _poster_url(item: dict, source: str) -> str:
+    """The poster url in an arr payload's ``images`` (``images[0].url``), proxied.
 
     Radarr and Sonarr send ``images: [{"url": ..., "coverType": "poster"}]``
     on movies, series and calendar entries — never a ``remotePoster`` key, so
     reading that one always yielded ``""`` and every section row (and the
     detail panel fed from it) rendered without its poster.
+
+    The value is then rewritten to this app's own poster proxy — see
+    ``_proxied_poster`` — because the arrs report the poster as a
+    ``/MediaCover/…`` path the browser would resolve against OUR origin.
+    ``source`` is the service key (``radarr``/``sonarr``) the fetcher already
+    holds, and it becomes the proxy's ``{source}`` segment.
 
     The first entry is the poster the arrs report for the item. Anything
     missing or malformed — no ``images`` key, ``[]``, a non-list container, a
@@ -987,7 +1022,10 @@ def _poster_url(item: dict) -> str:
     first = images[0]
     if not isinstance(first, dict):
         return ""
-    return first.get("url", "")
+    url = first.get("url")
+    if not isinstance(url, str) or not url:
+        return ""
+    return _proxied_poster(url, source)
 
 
 async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
@@ -1016,7 +1054,7 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
                     "title": m.get("title", ""),
                     "year": m.get("year"),
                     "overview": m.get("overview", ""),
-                    "remotePoster": _poster_url(m),
+                    "remotePoster": _poster_url(m, service["key"]),
                     "has_file": m.get("hasFile", False),
                     # Radarr sends `alternateTitles`; kept as our own `altTitles` key.
                     "altTitles": [
@@ -1135,7 +1173,7 @@ async def fetch_all_movies_detailed(
                     "id": m.get("id"),
                     "title": m.get("title", ""),
                     "year": m.get("year"),
-                    "remotePoster": _poster_url(m),
+                    "remotePoster": _poster_url(m, service["key"]),
                     "has_file": m.get("hasFile", False),
                     # The path is exposed, not only measured: the Calidad view
                     # reads the path_4k/path_3d membership off it.
@@ -1193,7 +1231,7 @@ async def fetch_all_series_detailed(
                     "id": s.get("id"),
                     "title": s.get("title", ""),
                     "year": s.get("year"),
-                    "remotePoster": _poster_url(s),
+                    "remotePoster": _poster_url(s, service["key"]),
                     "has_file": s.get("statistics", {}).get("episodeFileCount", 0) > 0,
                     # Exposed because the class of a series IS derived from
                     # where it lives (path_4k → 4K, path_3d → 3D): Sonarr's list
@@ -1644,7 +1682,7 @@ async def fetch_radarr_calendar(session: aiohttp.ClientSession, service: dict, s
                     "date": release[:10] if release else "",
                     "year": m.get("year"),
                     "has_file": m.get("hasFile", False),
-                    "remotePoster": _poster_url(m),
+                    "remotePoster": _poster_url(m, service["key"]),
                     "series_title": None,
                     "season_number": None,
                     "episode_number": None,
@@ -1681,7 +1719,7 @@ async def fetch_sonarr_calendar(session: aiohttp.ClientSession, service: dict, s
                     "date": air[:10] if air else "",
                     "year": series.get("year"),
                     "has_file": ep.get("hasFile", False),
-                    "remotePoster": _poster_url(series),
+                    "remotePoster": _poster_url(series, service["key"]),
                     "series_title": series.get("title", ""),
                     "season_number": ep.get("seasonNumber"),
                     "episode_number": ep.get("episodeNumber"),

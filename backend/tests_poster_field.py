@@ -10,7 +10,9 @@ already read the poster that way.
 
 The contract pinned here:
 
-- the poster is ``images[0].url``;
+- the poster is ``images[0].url``, rewritten to this app's own poster proxy
+  (``/api/mediacover/<source>/…``) — only a ``/MediaCover/…`` path is
+  rewritten, relative and absolute shapes alike; anything else is left alone;
 - missing / empty / malformed ``images`` reads as **``""``** — the frontend
   falls back to initials, and an empty ``<img src="">`` must not render;
 - no shape of ``images`` may raise (the calendar expression itself used to
@@ -42,7 +44,10 @@ from tests_routes import _StubSession
 RADARR_URL = "http://radarr.test:7878"
 SONARR_URL = "http://sonarr.test:8989"
 
-POSTER_URL = "https://img.example/your-name.jpg"
+# The shape Radarr really reports with `urlBase = /`: a RELATIVE MediaCover
+# path the browser would resolve against our own origin — the value the proxy
+# rewrite below has to recognise (and the one the running app returns today).
+POSTER_URL = "/MediaCover/1/poster.jpg?h=f8b1724d493fa6da0bfc"
 
 # Sentinel: the payload carries no `images` key at all (as opposed to an
 # `images` key holding some value).
@@ -126,6 +131,15 @@ def _poster_of_sonarr_calendar(images) -> str:
     return result[0]["remotePoster"]
 
 
+# The source each runner's fetcher reports. The proxy prefix carries it, so
+# the table below pins the RIGHT prefix for each of the five call sites.
+_poster_of_wanted_movies.source = "radarr"
+_poster_of_movies_detailed.source = "radarr"
+_poster_of_series_detailed.source = "sonarr"
+_poster_of_radarr_calendar.source = "radarr"
+_poster_of_sonarr_calendar.source = "sonarr"
+
+
 FETCHERS = [
     pytest.param(_poster_of_wanted_movies, id="fetch_wanted_movies"),
     pytest.param(_poster_of_movies_detailed, id="fetch_all_movies_detailed"),
@@ -171,10 +185,35 @@ CALENDAR_SAFE_IMAGES = [
 @pytest.mark.parametrize("poster_of", FETCHERS)
 def test_every_fetcher_reads_the_first_images_url(poster_of):
     """The bug, in one assertion: three of five fetchers read a field the arrs
-    never send, so their poster was always ``""``."""
+    never send, so their poster was always ``""`` — and the poster they now
+    read arrives as the proxied path the browser can actually fetch."""
     images = [{"url": POSTER_URL, "coverType": "poster"}]
 
-    assert poster_of(images) == POSTER_URL
+    assert poster_of(images) == f"/api/mediacover/{poster_of.source}{POSTER_URL}"
+
+
+@pytest.mark.parametrize("poster_of", FETCHERS)
+def test_every_fetcher_rewrites_the_absolute_shape_too(poster_of):
+    """Both arr shapes — relative and absolute — land on the same proxied
+    path, origin dropped: the app becomes the only client that reaches the
+    arr, whichever way it worded the poster URL."""
+    images = [
+        {
+            "url": "http://arr.test:7878/MediaCover/1/poster.jpg?h=f8b1724d493fa6da0bfc",
+            "coverType": "poster",
+        }
+    ]
+
+    assert poster_of(images) == f"/api/mediacover/{poster_of.source}{POSTER_URL}"
+
+
+@pytest.mark.parametrize("poster_of", FETCHERS)
+def test_every_fetcher_leaves_a_url_it_does_not_recognise_alone(poster_of):
+    """A poster that is not a MediaCover URL (another CDN, another service)
+    travels untouched — what we do not recognise, we do not mangle."""
+    images = [{"url": "https://img.example/your-name.jpg", "coverType": "poster"}]
+
+    assert poster_of(images) == "https://img.example/your-name.jpg"
 
 
 @pytest.mark.parametrize("poster_of", FETCHERS)
@@ -216,12 +255,57 @@ def _legacy_calendar_poster(item: dict) -> str:
     return (item.get("images") or [{}])[0].get("url", "") if item.get("images") else ""
 
 
+def _legacy_with_proxy_prefix(legacy: str, source: str) -> str:
+    """The baseline output with the one change: a MediaCover path now carries
+    the proxy prefix. Everything else — empty shapes, unrecognised URLs —
+    must come back byte for byte."""
+    return f"/api/mediacover/{source}{legacy}" if legacy.startswith("/MediaCover/") else legacy
+
+
 @pytest.mark.parametrize("images", CALENDAR_SAFE_IMAGES)
 def test_the_calendar_fetchers_keep_their_previous_output(images):
     """Sharing a helper must not move the two fetchers that were correct: same
-    input → same bytes as the expression above."""
+    input → same bytes as the expression above, apart from the proxy prefix a
+    MediaCover poster now carries."""
     movie = _with_images(MOVIE, images)
     series = _with_images(SERIES, images)
 
-    assert _legacy_calendar_poster(movie) == _poster_of_radarr_calendar(images)
-    assert _legacy_calendar_poster(series) == _poster_of_sonarr_calendar(images)
+    assert _poster_of_radarr_calendar(images) == _legacy_with_proxy_prefix(
+        _legacy_calendar_poster(movie), "radarr"
+    )
+    assert _poster_of_sonarr_calendar(images) == _legacy_with_proxy_prefix(
+        _legacy_calendar_poster(series), "sonarr"
+    )
+
+
+# ── the rewrite at the source: _poster_url, both shapes ───────────────────────
+
+
+def test_a_relative_mediacover_path_becomes_the_proxied_path():
+    item = {"images": [{"url": "/MediaCover/1/poster.jpg?h=abc"}]}
+
+    assert clients._poster_url(item, "radarr") == "/api/mediacover/radarr/MediaCover/1/poster.jpg?h=abc"
+
+
+def test_an_absolute_mediacover_url_keeps_path_and_query_and_drops_the_origin():
+    item = {"images": [{"url": "http://sonarr.test:8989/MediaCover/3/poster.jpg?h=abc"}]}
+
+    assert clients._poster_url(item, "sonarr") == "/api/mediacover/sonarr/MediaCover/3/poster.jpg?h=abc"
+
+
+def test_an_empty_poster_stays_empty():
+    assert clients._poster_url({"images": [{"url": ""}]}, "radarr") == ""
+
+
+def test_a_url_that_is_not_mediacover_is_left_alone():
+    untouched = "https://img.example/your-name.jpg"
+
+    assert clients._poster_url({"images": [{"url": untouched}]}, "radarr") == untouched
+
+
+def test_a_traversing_mediacover_path_is_never_rewritten():
+    # Never `/api/mediacover/radarr/…/../..`: the path is normalised first and
+    # only then checked, so a path that escapes MediaCover stays untouched.
+    raw = "http://radarr.test:7878/MediaCover/../../api/v3/system/status"
+
+    assert clients._poster_url({"images": [{"url": raw}]}, "radarr") == raw
