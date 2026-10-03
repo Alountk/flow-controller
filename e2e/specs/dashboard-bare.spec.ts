@@ -21,9 +21,11 @@ test('shows the honest empty state and gates the arr-dependent pages', async ({ 
     app.getByRole('alert').filter({ hasText: 'No hay ningún servicio configurado' }),
   ).toBeVisible();
 
-  // Gating: Faltantes needs an arr service and must be gone; the local
-  // pages must stay.
-  await expect(app.getByRole('link', { name: /Faltantes/ })).toHaveCount(0);
+  // Gating: Películas needs an arr service and must be gone; the local
+  // pages must stay. (Since PR 7 this re-pointed assertion carries real
+  // meaning again: the old /Faltantes/ link never exists in any install,
+  // so its absence would prove nothing.)
+  await expect(app.getByRole('link', { name: /Películas/ })).toHaveCount(0);
   await expect(app.getByRole('link', { name: /Disco/ })).toBeVisible();
   await expect(app.getByRole('link', { name: /Configuración/ })).toBeVisible();
 

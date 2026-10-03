@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MissingContent } from '../components/MissingContent'
+import { Peliculas } from '../components/Peliculas'
 
 /**
  * A failed fetch must never read as "nothing missing".
@@ -9,6 +9,9 @@ import { MissingContent } from '../components/MissingContent'
  * The backend used to return an empty list for a timeout, a rejected API key or
  * an unreachable host, so the UI stated "No hay películas faltantes" with
  * confidence. Now the backend reports WHY, and the UI must show that instead.
+ *
+ * Driven through Películas · Faltantes — the sub-view the retired Faltantes
+ * page became (PR 7 of F-08).
  */
 
 interface WantedPayload {
@@ -21,6 +24,15 @@ interface WantedPayload {
 function mockFetch(radarr: WantedPayload) {
   const fn = vi.fn((input: RequestInfo | URL) => {
     const url = String(input)
+    // The section opens on Biblioteca, which asks for the catalogue; these
+    // tests drive Faltantes, so the catalogue answers empty. It must be a
+    // listing shape: a wanted-shaped body here would crash the pane.
+    if (url.includes('/api/wanted/all')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ items: [], total: 0, page: 1, page_size: 50 }),
+      } as Response)
+    }
     if (url.includes('/api/wanted')) {
       return Promise.resolve({
         ok: true,
@@ -39,13 +51,15 @@ function mockFetch(radarr: WantedPayload) {
   return fn
 }
 
-function renderWanted() {
+/** Películas · Faltantes: where the missing listing lives since PR 7. */
+function renderFaltantes() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  render(
     <QueryClientProvider client={client}>
-      <MissingContent />
+      <Peliculas />
     </QueryClientProvider>,
   )
+  fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
 }
 
 describe('wanted failure is reported, not disguised', () => {
@@ -63,7 +77,7 @@ describe('wanted failure is reported, not disguised', () => {
       error_kind: 'timeout',
     })
 
-    renderWanted()
+    renderFaltantes()
 
     await waitFor(() =>
       expect(screen.getByText('No se pudo consultar Radarr')).toBeInTheDocument(),
@@ -74,7 +88,7 @@ describe('wanted failure is reported, not disguised', () => {
   it('does NOT claim there is nothing missing when the call failed', async () => {
     mockFetch({ error: 'radarr: API key rechazada (HTTP 401)', error_kind: 'auth' })
 
-    renderWanted()
+    renderFaltantes()
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
     expect(screen.queryByText('No hay películas faltantes')).not.toBeInTheDocument()
@@ -83,7 +97,7 @@ describe('wanted failure is reported, not disguised', () => {
   it('still says nothing is missing when Radarr genuinely answered empty', async () => {
     mockFetch({ items: [], total: 0 })
 
-    renderWanted()
+    renderFaltantes()
 
     await waitFor(() =>
       expect(screen.getByText('No hay películas faltantes')).toBeInTheDocument(),
@@ -94,7 +108,7 @@ describe('wanted failure is reported, not disguised', () => {
   it('surfaces the failure as an alert for assistive tech', async () => {
     mockFetch({ error: 'radarr: no se pudo conectar (ClientError)', error_kind: 'unreachable' })
 
-    renderWanted()
+    renderFaltantes()
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('No se pudo consultar Radarr')
@@ -108,7 +122,7 @@ describe('wanted failure is reported, not disguised', () => {
       total: 1,
     })
 
-    renderWanted()
+    renderFaltantes()
 
     await waitFor(() => expect(screen.getByText(/Una Pelicula/)).toBeInTheDocument())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()

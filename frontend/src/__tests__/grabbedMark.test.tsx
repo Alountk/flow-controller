@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MissingContent } from '../components/MissingContent'
+import type { ComponentType } from 'react'
+import { Peliculas } from '../components/Peliculas'
+import { Series } from '../components/Series'
 
 /**
- * Tests for the "descarga pedida" mark in Faltantes.
+ * Tests for the "descarga pedida" mark in Películas/Series · Faltantes — the
+ * sub-views the retired Faltantes page became (PR 7 of F-08).
  *
  * A title the app grabbed and that is still missing is orange with "Pedida el
  * <fecha>". A title with no mark shows NOTHING — not a dash, not an empty slot.
- * The date is Spanish and short ("19 sep 2026").
+ * The date is Spanish and short ("19 sep 2026"). The section row carries the
+ * mark inline (`.wanted-grabbed`), never a `status-grabbed` class.
  */
 
 // Noon UTC on 19 September 2026, so the local date is the same in any timezone.
@@ -54,6 +58,14 @@ function mockFetch(movieItem: unknown, episodeItem: unknown) {
     if (url.includes('/api/services')) {
       return ok({ services: [], configured: ['radarr', 'sonarr'] })
     }
+    // Each section opens on Biblioteca, which asks for the catalogue; these
+    // tests drive Faltantes, so the catalogue answers empty.
+    if (url.includes('/api/wanted/series/all')) {
+      return ok({ items: [], total: 0, page: 1, page_size: 50 })
+    }
+    if (url.includes('/api/wanted/all')) {
+      return ok({ items: [], total: 0, page: 1, page_size: 50 })
+    }
     if (url.includes('/api/wanted?')) {
       return ok({
         wanted: {
@@ -69,13 +81,15 @@ function mockFetch(movieItem: unknown, episodeItem: unknown) {
   return fn
 }
 
-function renderWanted() {
+/** The section's Faltantes sub-view: where the missing listing lives now. */
+function renderFaltantes(Component: ComponentType) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  render(
     <QueryClientProvider client={client}>
-      <MissingContent />
+      <Component />
     </QueryClientProvider>,
   )
+  fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
 }
 
 /** The exact label the component must render, computed the same local way. */
@@ -96,31 +110,29 @@ describe('Faltantes "descarga pedida" mark', () => {
 
   it('shows the mark and the date on a grabbed movie card', async () => {
     mockFetch(movie(GRABBED_AT), episode(GRABBED_AT))
-    renderWanted()
+    renderFaltantes(Peliculas)
 
     await screen.findByText('Your Name.')
     expect(await screen.findByText(expectedLabel(GRABBED_AT))).toBeInTheDocument()
-    expect(document.querySelector('.wanted-card.status-grabbed')).not.toBeNull()
+    expect(document.querySelector('.wanted-card .wanted-grabbed')).not.toBeNull()
   })
 
   it('shows the mark and the date on a grabbed episode row', async () => {
     mockFetch(movie(GRABBED_AT), episode(GRABBED_AT))
-    renderWanted()
+    renderFaltantes(Series)
 
-    await screen.findByText('Your Name.')
-    fireEvent.click(screen.getByText(/Episodios/))
     await screen.findByText('Of Ice Men')
 
     expect(await screen.findByText(expectedLabel(GRABBED_AT))).toBeInTheDocument()
-    expect(document.querySelector('.wanted-row.status-grabbed')).not.toBeNull()
+    expect(document.querySelector('.wanted-row .wanted-grabbed')).not.toBeNull()
   })
 
   it('shows where the download was sent on a grabbed movie card', async () => {
     mockFetch(movie(GRABBED_AT, '/mnt/storage/movies/_manual'), episode(null))
-    renderWanted()
+    renderFaltantes(Peliculas)
 
     await screen.findByText('Your Name.')
-    const mark = document.querySelector('.wanted-card.status-grabbed .wanted-grabbed')
+    const mark = document.querySelector('.wanted-card .wanted-grabbed')
 
     expect(mark?.textContent).toContain(expectedLabel(GRABBED_AT))
     expect(mark?.textContent).toContain('→ _manual')
@@ -129,13 +141,11 @@ describe('Faltantes "descarga pedida" mark', () => {
 
   it('shows where the download was sent on a grabbed episode row', async () => {
     mockFetch(movie(null), episode(GRABBED_AT, '/mnt/storage/series/_manual'))
-    renderWanted()
+    renderFaltantes(Series)
 
-    await screen.findByText('Your Name.')
-    fireEvent.click(screen.getByText(/Episodios/))
     await screen.findByText('Of Ice Men')
 
-    const mark = document.querySelector('.wanted-row.status-grabbed .wanted-grabbed')
+    const mark = document.querySelector('.wanted-row .wanted-grabbed')
 
     expect(mark?.textContent).toContain('→ _manual')
     expect(mark?.getAttribute('title')).toBe('/mnt/storage/series/_manual')
@@ -143,10 +153,10 @@ describe('Faltantes "descarga pedida" mark', () => {
 
   it('keeps the mark unchanged when the grab went to the library', async () => {
     mockFetch(movie(GRABBED_AT, null), episode(null))
-    renderWanted()
+    renderFaltantes(Peliculas)
 
     await screen.findByText('Your Name.')
-    const mark = document.querySelector('.wanted-card.status-grabbed .wanted-grabbed')
+    const mark = document.querySelector('.wanted-card .wanted-grabbed')
 
     expect(mark?.textContent).toBe(expectedLabel(GRABBED_AT))
     expect(mark?.getAttribute('title')).toBeNull()
@@ -154,26 +164,24 @@ describe('Faltantes "descarga pedida" mark', () => {
 
   it('shows nothing for an unmarked movie', async () => {
     mockFetch(movie(null), episode(null))
-    renderWanted()
+    renderFaltantes(Peliculas)
 
     await screen.findByText('Your Name.')
     await waitFor(() => expect(document.querySelectorAll('.wanted-card').length).toBe(1))
 
     expect(screen.queryByText(/Pedida el/)).not.toBeInTheDocument()
     expect(document.querySelectorAll('.wanted-grabbed')).toHaveLength(0)
-    expect(document.querySelector('.wanted-card.status-grabbed')).toBeNull()
+    expect(document.querySelector('.wanted-card .wanted-grabbed')).toBeNull()
   })
 
   it('shows nothing for an unmarked episode', async () => {
     mockFetch(movie(null), episode(null))
-    renderWanted()
+    renderFaltantes(Series)
 
-    await screen.findByText('Your Name.')
-    fireEvent.click(screen.getByText(/Episodios/))
     await screen.findByText('Of Ice Men')
 
     expect(screen.queryByText(/Pedida el/)).not.toBeInTheDocument()
     expect(document.querySelectorAll('.wanted-grabbed')).toHaveLength(0)
-    expect(document.querySelector('.wanted-row.status-grabbed')).toBeNull()
+    expect(document.querySelector('.wanted-row .wanted-grabbed')).toBeNull()
   })
 })

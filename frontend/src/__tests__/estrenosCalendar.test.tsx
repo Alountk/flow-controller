@@ -11,7 +11,9 @@ import { Calendar } from '../components/Calendar'
  *
  * What these guard is the wiring that is NOT covered elsewhere: each section
  * filters the calendar to ITS type (Películas → movies, Series → episodes),
- * the unfiltered calendar still shows both types on the Calendario page, and
+ * the unfiltered calendar still shows both types when no section applies a
+ * filter (PR 7 retired the Calendario page; the component's own default is
+ * what that third describe pins), and
  * the release search still opens as a MODAL from inside the section — it only
  * moves into the detail panel in PR 5.
  */
@@ -150,7 +152,7 @@ describe('Series · Estrenos shows only episode releases', () => {
   })
 })
 
-describe('Calendar without a type filter (the Calendario page)', () => {
+describe('Calendar without a type filter (the component\u2019s own default)', () => {
   beforeEach(() => mockFetch())
 
   afterEach(() => {

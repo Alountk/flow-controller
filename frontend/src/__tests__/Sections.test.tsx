@@ -227,21 +227,22 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       }
     })
 
-    it('shows the seven-PR roadmap from the page itself', () => {
+    it('shows the seven-PR roadmap from the section itself', () => {
       renderSection(Component)
 
       const heading = screen.getByRole('heading', { level: 3, name: 'Notas de implementación' })
       const list = heading.nextElementSibling as HTMLElement
       expect(list.tagName).toBe('OL')
-      for (const pr of ['PR 1', 'PR 2', 'PR 3', 'PR 4', 'PR 5', 'PR 6 (este)', 'PR 7']) {
+      for (const pr of ['PR 1', 'PR 2', 'PR 3', 'PR 4', 'PR 5', 'PR 6', 'PR 7 (este)']) {
         expect(list.textContent).toContain(pr)
       }
-      // The stale marker follows the plan: PR 4 was "este" until PR 5, and
-      // the roadmap token now sits on PR 6.
+      // The stale marker follows the plan: the token moved with each PR and
+      // now sits on PR 7, the last of the chain.
+      expect(list.textContent).not.toContain('PR 6 (este)')
       expect(list.textContent).not.toContain('PR 4 (este)')
-      // Delivered PRs are marked ✅ and the ones still to come ⬜.
+      // The chain is complete: every PR delivered ✅, none pending ⬜.
       expect(list.textContent).toContain('✅')
-      expect(list.textContent).toContain('⬜')
+      expect(list.textContent).not.toContain('⬜')
     })
   })
 })

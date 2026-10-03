@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MissingContent } from '../components/MissingContent'
+import { Peliculas } from '../components/Peliculas'
+import { Series } from '../components/Series'
 
 /**
  * Tests for the "En carpeta" folder navigator.
@@ -9,7 +10,8 @@ import { MissingContent } from '../components/MissingContent'
  * The navigator mirrors what is on disk: a fresh download must be visible
  * without a manual reload, and directories and files alike belong in the
  * listing. These tests drive the real modal through the real queries, with
- * fetch stubbed at the network boundary.
+ * fetch stubbed at the network boundary, from the sections' Faltantes
+ * sub-views — where the retired Faltantes page's rows live now (PR 7).
  */
 
 const movie = {
@@ -94,6 +96,14 @@ function mockFetch(
     if (/\/api\/wanted\/series\/\d+\/episodes/.test(url)) {
       return ok({ episodes })
     }
+    // Each section opens on Biblioteca, which asks for the catalogue; these
+    // tests drive Faltantes, so the catalogue answers empty.
+    if (url.includes('/api/wanted/series/all')) {
+      return ok({ items: [], total: 0, page: 1, page_size: 50 })
+    }
+    if (url.includes('/api/wanted/all')) {
+      return ok({ items: [], total: 0, page: 1, page_size: 50 })
+    }
     if (url.includes('/api/wanted?')) {
       return ok({
         wanted: {
@@ -124,18 +134,20 @@ function mockFetch(
   return fn
 }
 
-function renderWanted() {
+/** The section's Faltantes sub-view: where the missing listing lives now. */
+function renderFaltantes(Component: typeof Peliculas | typeof Series) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  render(
     <QueryClientProvider client={client}>
-      <MissingContent />
+      <Component />
     </QueryClientProvider>,
   )
+  fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
 }
 
 /** Opens the modal and points the volume selector at /mnt/storage. */
 async function openScanModal() {
-  renderWanted()
+  renderFaltantes(Peliculas)
   await screen.findByText('Your Name.')
   fireEvent.click(screen.getByText('📁 En carpeta'))
   // The volume options come from /api/files/roots; selecting a root that is not
@@ -146,11 +158,9 @@ async function openScanModal() {
   await screen.findByText('/mnt/storage')
 }
 
-/** Opens the modal from the Faltantes episode row (a specific episode). */
+/** Opens the modal from the Series · Faltantes episode row (a specific episode). */
 async function openScanModalForSeries() {
-  renderWanted()
-  await screen.findByText('Your Name.')
-  fireEvent.click(screen.getByText(/Episodios/))
+  renderFaltantes(Series)
   await screen.findByText('Of Ice Men')
   fireEvent.click(screen.getByTitle('Buscar en carpeta'))
   await screen.findByRole('option', { name: 'storage' })

@@ -8,7 +8,7 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Trazabilidad')).toBeInTheDocument()
-    expect(screen.getByText('Faltantes')).toBeInTheDocument()
+    expect(screen.getByText('Películas')).toBeInTheDocument()
     expect(screen.getByText('Media Mixer')).toBeInTheDocument()
   })
 
@@ -36,9 +36,9 @@ describe('Sidebar', () => {
     const onNavigate = vi.fn()
     render(<Sidebar active="dashboard" onNavigate={onNavigate} developer={false} />)
 
-    fireEvent.click(screen.getByText('Calendario'))
+    fireEvent.click(screen.getByText('Series'))
 
-    expect(onNavigate).toHaveBeenCalledWith('calendar')
+    expect(onNavigate).toHaveBeenCalledWith('series')
   })
 
   it('renders anchors pointing at the page paths', () => {
@@ -70,7 +70,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Series').closest('a')).toHaveAttribute('href', '/series')
   })
 
-  it('places Películas and Series before Faltantes', () => {
+  it('places Películas and Series before Trazabilidad', () => {
     const { container } = render(
       <Sidebar active="dashboard" onNavigate={() => {}} developer={false} />,
     )
@@ -82,8 +82,8 @@ describe('Sidebar', () => {
 
     expect(index('Películas')).toBeGreaterThan(-1)
     expect(index('Series')).toBeGreaterThan(-1)
-    expect(index('Películas')).toBeLessThan(index('Faltantes'))
-    expect(index('Series')).toBeLessThan(index('Faltantes'))
+    expect(index('Películas')).toBeLessThan(index('Trazabilidad'))
+    expect(index('Series')).toBeLessThan(index('Trazabilidad'))
     expect(index('Películas')).toBeLessThan(index('Series'))
   })
 })
