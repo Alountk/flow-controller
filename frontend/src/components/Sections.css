@@ -318,8 +318,12 @@
   background: var(--bg-elev-2);
 }
 
-/* Mini-poster: a CSS gradient tinted per title + its initials. */
+/* Mini-poster: a CSS gradient tinted per title + its initials. The row's
+   real poster, when the data carries one, layers ON TOP of these initials
+   (below) — they stay in the DOM as the load/error fallback, so the box is
+   never blank. `relative` anchors that overlay to the box. */
 .sec-row-poster {
+  position: relative;
   width: 34px;
   height: 48px;
   border-radius: 4px;
@@ -331,6 +335,21 @@
   letter-spacing: 0.03em;
   color: rgba(255, 255, 255, 0.88);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* The poster itself, drawn over the initials: cover so a portrait image fills
+   the 34×48 box without distortion. Removed on error (MediaPane) — the
+   initials underneath are the fallback, never an empty box. Lazy on purpose:
+   these lists paginate, and a page of 50 posters is 50 requests. */
+.sec-row-poster-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
 }
 
 .sec-row-body {

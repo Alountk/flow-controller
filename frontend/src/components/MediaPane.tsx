@@ -607,7 +607,8 @@ function catalogSeriesRelease(series: AllSeries): ReleaseSearchItem {
 type PillTone = 'ok' | 'warn' | 'bad'
 
 /** Initials for the mini-poster: first letter of the first two words (one
- *  word → its first two letters). Never an external image. */
+ *  word → its first two letters). The row's fallback: drawn when the data
+ *  carries no poster (or the poster URL fails to load). */
 function posterInitials(title: string): string {
   const words = title.trim().split(/\s+/).filter(Boolean)
   if (words.length === 0) return '?'
@@ -652,6 +653,9 @@ interface SectionRowProps {
   title: string
   year?: number | null
   status: { label: string; tone: PillTone }
+  /** The row's real poster, when the data carries one. Empty/absent keeps
+   *  the initials gradient; a URL that fails to load falls back to it too. */
+  poster?: string
   /** The quality/class chip, when the row's data carries one (the Calidad
    *  view keeps its own class badge on top of this). */
   chip?: string
@@ -673,6 +677,7 @@ function SectionRow({
   title,
   year,
   status,
+  poster,
   chip,
   path,
   grabbed,
@@ -681,6 +686,9 @@ function SectionRow({
   children,
 }: SectionRowProps) {
   const hue = posterHue(title)
+  // A poster URL that fails to load drops the image for good on this row:
+  // the initials underneath were always there, so the box never goes blank.
+  const [posterFailed, setPosterFailed] = useState(false)
   return (
     <div className={`sec-row ${className}`} {...wiring}>
       <span
@@ -689,6 +697,17 @@ function SectionRow({
         style={{ background: `linear-gradient(160deg, hsl(${hue} 46% 54%), hsl(${hue} 52% 14%))` }}
       >
         {posterInitials(title)}
+        {poster && !posterFailed && (
+          <img
+            className="sec-row-poster-img"
+            src={poster}
+            // The title sits right beside the box: the image adds nothing a
+            // screen reader should hear twice.
+            alt=""
+            loading="lazy"
+            onError={() => setPosterFailed(true)}
+          />
+        )}
       </span>
       <span className="sec-row-body">
         <span className="sec-row-top">
@@ -970,6 +989,7 @@ export function MediaPane({
                           title={movie.title}
                           year={movie.year}
                           status={faltaStatus()}
+                          poster={movie.remotePoster || undefined}
                           grabbed={grabbed}
                           grabbedDestination={movie.grabbed_destination}
                         >
@@ -1072,6 +1092,9 @@ export function MediaPane({
                         )}
                         title={ep.series_title}
                         status={faltaStatus()}
+                        // The episode payload carries no poster (the wanted
+                        // endpoint returns none): no prop → initials, never a
+                        // guessed series image.
                         grabbed={grabbed}
                         grabbedDestination={ep.grabbed_destination}
                         extra={
@@ -1168,6 +1191,7 @@ export function MediaPane({
                         title={movie.title}
                         year={movie.year}
                         status={catalogRowStatus(movie.has_file, movie.path_exists)}
+                        poster={movie.remotePoster || undefined}
                         // "" is unknown, never a guessed class: no chip at all.
                         chip={movie.quality || undefined}
                         path={movie.path || undefined}
@@ -1270,6 +1294,7 @@ export function MediaPane({
                       title={series.title}
                       year={series.year}
                       status={catalogRowStatus(series.has_file, series.path_exists)}
+                      poster={series.remotePoster || undefined}
                       // Sonarr's list carries no quality: no chip, never a
                       // guessed one (the Calidad view says so on screen).
                       path={series.path || undefined}
