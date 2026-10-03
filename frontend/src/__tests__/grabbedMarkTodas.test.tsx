@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MissingContent } from '../components/MissingContent'
+import type { ComponentType } from 'react'
+import { Peliculas } from '../components/Peliculas'
+import { Series } from '../components/Series'
 
 /**
- * The "descarga pedida" mark on the "Todas" cards.
+ * The "descarga pedida" mark on the Biblioteca cards — the sub-view that
+ * replaced the retired "Todas" filter (PR 7 of F-08).
  *
  * These cards come from `/api/wanted/all` and `/api/wanted/series/all`, a
  * different surface from Faltantes: a title with a file can still carry the
@@ -67,13 +70,13 @@ function mockFetch(movieItem: unknown, seriesItem: unknown) {
   return fn
 }
 
-/** Render directly on a "Todas" state; the filter lives in the URL hash. */
-function renderTodas(hash: string) {
-  window.location.hash = hash
+/** Render on Biblioteca — the section's own filter: it IS the old "Todas". */
+function renderCatalogo(Component: ComponentType) {
+  window.location.hash = ''
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MissingContent />
+      <Component />
     </QueryClientProvider>,
   )
 }
@@ -84,47 +87,47 @@ function expectedLabel(ts: number): string {
   return `Pedida el ${d.getDate()} sep ${d.getFullYear()}`
 }
 
-describe('"Todas" "descarga pedida" mark', () => {
+describe('Biblioteca "descarga pedida" mark', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
   it('shows the mark and the date on a grabbed movie card', async () => {
     mockFetch(allMovie(GRABBED_AT), allSeries(null))
-    renderTodas('#/wanted?filter=all')
+    renderCatalogo(Peliculas)
 
     await screen.findByText('Your Name.')
     expect(await screen.findByText(expectedLabel(GRABBED_AT))).toBeInTheDocument()
-    expect(document.querySelector('.wanted-card.status-grabbed')).not.toBeNull()
+    expect(document.querySelector('.wanted-card .wanted-grabbed')).not.toBeNull()
   })
 
   it('shows nothing for an unmarked movie', async () => {
     mockFetch(allMovie(null), allSeries(null))
-    renderTodas('#/wanted?filter=all')
+    renderCatalogo(Peliculas)
 
     await screen.findByText('Your Name.')
     await waitFor(() => expect(document.querySelectorAll('.wanted-card').length).toBe(1))
 
     expect(screen.queryByText(/Pedida el/)).not.toBeInTheDocument()
     expect(document.querySelectorAll('.wanted-grabbed')).toHaveLength(0)
-    expect(document.querySelector('.wanted-card.status-grabbed')).toBeNull()
+    expect(document.querySelector('.wanted-card .wanted-grabbed')).toBeNull()
   })
 
   it('shows the mark on a series card when one of its episodes was grabbed', async () => {
     mockFetch(allMovie(null), allSeries(GRABBED_AT))
-    renderTodas('#/wanted?tab=episodes&seriesFilter=all')
+    renderCatalogo(Series)
 
     await screen.findByText('Some Show')
     expect(await screen.findByText(expectedLabel(GRABBED_AT))).toBeInTheDocument()
-    expect(document.querySelector('.wanted-card.status-grabbed')).not.toBeNull()
+    expect(document.querySelector('.wanted-card .wanted-grabbed')).not.toBeNull()
   })
 
   it('shows where the download was sent on a grabbed movie card', async () => {
     mockFetch(allMovie(GRABBED_AT, '/mnt/storage/movies/_manual'), allSeries(null))
-    renderTodas('#/wanted?filter=all')
+    renderCatalogo(Peliculas)
 
     await screen.findByText('Your Name.')
-    const mark = document.querySelector('.wanted-card.status-grabbed .wanted-grabbed')
+    const mark = document.querySelector('.wanted-card .wanted-grabbed')
 
     expect(mark?.textContent).toContain('→ _manual')
     expect(mark?.getAttribute('title')).toBe('/mnt/storage/movies/_manual')
@@ -132,10 +135,10 @@ describe('"Todas" "descarga pedida" mark', () => {
 
   it('shows where the download was sent on a grabbed series card', async () => {
     mockFetch(allMovie(null), allSeries(GRABBED_AT, '/mnt/storage/series/_manual'))
-    renderTodas('#/wanted?tab=episodes&seriesFilter=all')
+    renderCatalogo(Series)
 
     await screen.findByText('Some Show')
-    const mark = document.querySelector('.wanted-card.status-grabbed .wanted-grabbed')
+    const mark = document.querySelector('.wanted-card .wanted-grabbed')
 
     expect(mark?.textContent).toContain(expectedLabel(GRABBED_AT))
     expect(mark?.textContent).toContain('→ _manual')
@@ -144,13 +147,13 @@ describe('"Todas" "descarga pedida" mark', () => {
 
   it('shows nothing for an unmarked series', async () => {
     mockFetch(allMovie(null), allSeries(null))
-    renderTodas('#/wanted?tab=episodes&seriesFilter=all')
+    renderCatalogo(Series)
 
     await screen.findByText('Some Show')
     await waitFor(() => expect(document.querySelectorAll('.wanted-card').length).toBe(1))
 
     expect(screen.queryByText(/Pedida el/)).not.toBeInTheDocument()
     expect(document.querySelectorAll('.wanted-grabbed')).toHaveLength(0)
-    expect(document.querySelector('.wanted-card.status-grabbed')).toBeNull()
+    expect(document.querySelector('.wanted-card .wanted-grabbed')).toBeNull()
   })
 })

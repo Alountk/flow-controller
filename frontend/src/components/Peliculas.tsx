@@ -43,8 +43,8 @@ const NOTES: { pr: string; text: string }[] = [
   { pr: 'PR 3 ✅', text: 'Estrenos muestra el calendario: solo películas aquí, solo episodios en Series.' },
   { pr: 'PR 4 ✅', text: 'Calidad agrupa por clase: aquí la clase sale de la calidad del archivo de Radarr, con la carpeta como confirmación; en Series sale de su carpeta (Sonarr no da calidad en su lista).' },
   { pr: 'PR 5 ✅', text: 'buscar releases vive en la pestaña Releases del panel y las filas adoptan la forma del prototipo (mini póster, estado, calidad y ruta); desde la lista ya no se abre ningún modal, el calendario de Estrenos todavía sí.' },
-  { pr: 'PR 6 (este) ✅', text: 'Archivos e Historial dejan de ser marcadores: la pestaña Archivos lista la ruta de la selección con browsePath (solo lectura) y Historial enseña el grabbed_at/grabbed_destination de la propia fila.' },
-  { pr: 'PR 7 (retirar Faltantes/Calendario + migrar sus tests) ⬜', text: 'los menús Faltantes y Calendario se retiran del lateral y sus tests migran a las secciones.' },
+  { pr: 'PR 6 ✅', text: 'Archivos e Historial dejan de ser marcadores: la pestaña Archivos lista la ruta de la selección con browsePath (solo lectura) y Historial enseña el grabbed_at/grabbed_destination de la propia fila.' },
+  { pr: 'PR 7 (este) ✅', text: 'los menús Faltantes y Calendario se retiran del lateral y sus tests migran a las secciones.' },
 ]
 
 const PANEL_EMPTY = 'Selecciona un elemento de la lista para ver su detalle.'
@@ -547,8 +547,7 @@ export function Peliculas() {
           ) : (
             // The pane styles its rows under a `.wanted` ancestor (its action
             // buttons are `.wanted .search-item`), so the column provides it.
-            // 'section' is what gives them the prototype's dense shape; the
-            // Faltantes page keeps its own rows untouched.
+            // 'section' is what gives them the prototype's dense shape.
             <div className="wanted">
               <MediaPane
                 kind="movies"

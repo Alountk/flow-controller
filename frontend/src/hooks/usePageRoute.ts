@@ -5,8 +5,6 @@ export type Page =
   | 'peliculas'
   | 'series'
   | 'trace'
-  | 'wanted'
-  | 'calendar'
   | 'disk'
   | 'files'
   | 'mixer'
@@ -19,8 +17,6 @@ export const PAGE_PATHS: Record<Page, string> = {
   peliculas: '/peliculas',
   series: '/series',
   trace: '/trazabilidad',
-  wanted: '/faltantes',
-  calendar: '/calendario',
   disk: '/disco',
   files: '/archivos',
   mixer: '/mixer',

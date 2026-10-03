@@ -4,19 +4,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ComponentType } from 'react'
 import { Peliculas } from '../components/Peliculas'
 import { Series } from '../components/Series'
-import { MissingContent } from '../components/MissingContent'
 import type { Release } from '../api/calendar'
 
 /**
  * PR 5 of F-08, the two halves the maintainer called out:
  *
  * 1. The sections' rows take the chosen prototype's shape — mini-poster,
- *    status pill, quality chip, path — and ONLY the sections: the Faltantes
- *    page keeps the cards it had, down to the markup.
+ *    status pill, quality chip, path — pinned describe by describe below.
  * 2. The release search leaves the modal: in the sections it renders inline
  *    in the detail panel's Releases tab, and a grab started there reaches the
  *    wire. The overlay's own behaviour is pinned in ReleaseSearchModal.test;
- *    what is pinned here is the ROUTING — sections → panel, page → overlay.
+ *    what is pinned here is the ROUTING — sections → panel.
  */
 
 const catalogMovie = {
@@ -235,32 +233,6 @@ describe('sections · the prototype rows', () => {
     // The icon actions keep their titles: they are what the row offers.
     expect(row.querySelector('button[title="Buscar releases"]')).not.toBeNull()
     expect(row.querySelector('button[title="Buscar en carpeta"]')).not.toBeNull()
-  })
-
-  it('leaves the Faltantes page rows exactly as they were', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MissingContent />
-      </QueryClientProvider>,
-    )
-
-    await screen.findByText('Todo a la vez en todas partes')
-
-    // The prototype row exists ONLY under the sections: no mini-poster, no
-    // chips, no path anywhere on the page surface.
-    expect(document.querySelector('.sec-row')).toBeNull()
-    expect(document.querySelector('.sec-row-poster')).toBeNull()
-    expect(document.querySelector('.sec-q-tag')).toBeNull()
-
-    const card = document.querySelector('.wanted-card') as HTMLElement
-    expect(card.querySelector('img.wanted-poster')).not.toBeNull()
-    expect(card.querySelector('.wanted-card-actions button')).not.toBeNull()
-
-    // …and the page's search action still opens the OVERLAY, not the panel.
-    fireEvent.click(screen.getByRole('button', { name: '🔍 Buscar' }))
-    expect(document.querySelector('.scan-modal-backdrop')).not.toBeNull()
-    expect(document.querySelector('.release-inline')).toBeNull()
   })
 })
 

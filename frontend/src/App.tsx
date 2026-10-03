@@ -6,12 +6,10 @@ import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
 import { TraceView } from './components/TraceView'
-import { MissingContent } from './components/MissingContent'
 import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
 import { QueueSidebar } from './components/QueueSidebar'
 import { Settings } from './components/Settings'
-import { Calendar } from './components/Calendar'
 import { DiskSpace } from './components/DiskSpace'
 import { MediaMixer } from './components/MediaMixer'
 import { Peliculas } from './components/Peliculas'
@@ -65,8 +63,6 @@ const PAGE_TITLES: Record<Page, string> = {
   peliculas: 'Películas',
   series: 'Series',
   trace: 'Trazabilidad',
-  wanted: 'Faltantes',
-  calendar: 'Calendario',
   disk: 'Espacio en Disco',
   files: 'Archivos',
   mixer: 'Media Mixer',
@@ -179,7 +175,7 @@ function App() {
   // Sonarr. The local pages (disk, files, mixer, config) always work.
   const hiddenPages = useMemo<Page[]>(() => {
     if (!servicesReady || hasAnyArr) return []
-    return ['trace', 'wanted', 'calendar', 'peliculas', 'series'] as Page[]
+    return ['trace', 'peliculas', 'series'] as Page[]
   }, [servicesReady, hasAnyArr])
 
   useEffect(() => {
@@ -338,12 +334,6 @@ function App() {
               onActionDone={handleActionDone}
             />
           )}
-
-          {page === 'wanted' && (
-            <MissingContent />
-          )}
-
-          {page === 'calendar' && <Calendar />}
 
           {page === 'disk' && <DiskSpace />}
 

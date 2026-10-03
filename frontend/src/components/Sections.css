@@ -224,9 +224,8 @@
  * the chosen prototype's dense shape (peliculas-02 / series-04): a 34×48
  * CSS-drawn mini-poster with the title's initials — never an external image —
  * title and year, a status pill, a quality chip, the path, and the selection
- * as a left bar. Every selector here is scoped under `.sec-master`: the
- * Faltantes page keeps the cards it has today, and every action the row had
- * stays on the row.
+ * as a left bar. Every selector here is scoped under `.sec-master`, and
+ * every action the row had stays on the row.
  */
 
 /* The rows run edge to edge like the prototype's list; the toolbar and the
