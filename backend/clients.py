@@ -996,25 +996,36 @@ def _proxied_poster(url: str, source: str) -> str:
 
 
 def _poster_url(item: dict, source: str) -> str:
-    """The poster url in an arr payload's ``images`` (``images[0].url``), proxied.
+    """The poster of an arr payload's first ``images`` entry — two-step chain.
 
-    Radarr and Sonarr send ``images: [{"url": ..., "coverType": "poster"}]``
-    on movies, series and calendar entries — never a ``remotePoster`` key, so
-    reading that one always yielded ``""`` and every section row (and the
-    detail panel fed from it) rendered without its poster.
+    Radarr and Sonarr send ``images: [{"url": ..., "remoteUrl": ...,
+    "coverType": "poster"}]`` on movies, series and calendar entries — never
+    a ``remotePoster`` key, so reading that one always yielded ``""`` and
+    every section row (and the detail panel fed from it) rendered without
+    its poster.
 
-    The value is then rewritten to this app's own poster proxy — see
-    ``_proxied_poster`` — because the arrs report the poster as a
-    ``/MediaCover/…`` path the browser would resolve against OUR origin.
-    ``source`` is the service key (``radarr``/``sonarr``) the fetcher already
-    holds, and it becomes the proxy's ``{source}`` segment.
+    1. ``images[0].remoteUrl`` — a non-empty string — is returned untouched.
+       The arrs word it as an absolute external URL (the real, working
+       image: the local copy behind ``url`` is frequently never
+       downloaded), the frontend renders it as ``<img src>``, and an
+       ``https`` image on an ``http`` app is a plain upgrade, not mixed
+       content. It is never rewritten, stripped, resized or proxied — in
+       particular it must never become ``/api/mediacover/…``.
+    2. Otherwise the local ``images[0].url``, rewritten to this app's own
+       poster proxy — see ``_proxied_poster`` — because the arrs report
+       that copy as a ``/MediaCover/…`` path the browser would resolve
+       against OUR origin. ``source`` is the service key
+       (``radarr``/``sonarr``) the fetcher already holds, and it becomes
+       the proxy's ``{source}`` segment. This is the path taken when the
+       payload carries no ``remoteUrl`` (or an empty one).
 
     The first entry is the poster the arrs report for the item. Anything
     missing or malformed — no ``images`` key, ``[]``, a non-list container, a
     non-dict entry, a dict without ``url`` — reads as ``""``: the frontend
     falls back to initials and must never render ``<img src="">``, and no
     payload shape may raise (the expression this replaced died on a string
-    entry with ``AttributeError``).
+    entry with ``AttributeError``). An empty ``remoteUrl`` falls through to
+    step 2 rather than rendering an empty ``<img>``.
     """
     images = item.get("images")
     if not isinstance(images, list) or not images:
@@ -1022,6 +1033,9 @@ def _poster_url(item: dict, source: str) -> str:
     first = images[0]
     if not isinstance(first, dict):
         return ""
+    remote = first.get("remoteUrl")
+    if isinstance(remote, str) and remote:
+        return remote
     url = first.get("url")
     if not isinstance(url, str) or not url:
         return ""

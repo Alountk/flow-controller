@@ -10,9 +10,12 @@ already read the poster that way.
 
 The contract pinned here:
 
-- the poster is ``images[0].url``, rewritten to this app's own poster proxy
-  (``/api/mediacover/<source>/…``) — only a ``/MediaCover/…`` path is
-  rewritten, relative and absolute shapes alike; anything else is left alone;
+- the poster is ``images[0].remoteUrl`` when the payload carries a non-empty
+  one — returned untouched, the absolute external URL the browser fetches
+  directly — and otherwise ``images[0].url``, rewritten to this app's own
+  poster proxy (``/api/mediacover/<source>/…``) — only a ``/MediaCover/…``
+  path is rewritten, relative and absolute shapes alike; anything else is
+  left alone;
 - missing / empty / malformed ``images`` reads as **``""``** — the frontend
   falls back to initials, and an empty ``<img src="">`` must not render;
 - no shape of ``images`` may raise (the calendar expression itself used to
@@ -46,8 +49,13 @@ SONARR_URL = "http://sonarr.test:8989"
 
 # The shape Radarr really reports with `urlBase = /`: a RELATIVE MediaCover
 # path the browser would resolve against our own origin — the value the proxy
-# rewrite below has to recognise (and the one the running app returns today).
+# rewrite below has to recognise when the payload carries no remote copy.
 POSTER_URL = "/MediaCover/1/poster.jpg?h=f8b1724d493fa6da0bfc"
+
+# The real, working image the arr reports NEXT to that local copy — captured
+# from the live Radarr payload, where the `url` above was never downloaded.
+# It must come back byte for byte: never rewritten, never proxied.
+REMOTE_URL = "https://image.tmdb.org/t/p/original/9DZPtuYTKYxt6vzHvZ5FLThG4fl.jpg"
 
 # Sentinel: the payload carries no `images` key at all (as opposed to an
 # `images` key holding some value).
@@ -183,11 +191,31 @@ CALENDAR_SAFE_IMAGES = [
 
 
 @pytest.mark.parametrize("poster_of", FETCHERS)
-def test_every_fetcher_reads_the_first_images_url(poster_of):
-    """The bug, in one assertion: three of five fetchers read a field the arrs
-    never send, so their poster was always ``""`` — and the poster they now
-    read arrives as the proxied path the browser can actually fetch."""
+def test_every_fetcher_prefers_the_remote_url_over_the_local_copy(poster_of):
+    """The live payload shape: both keys present, and the browser must get
+    ``remoteUrl`` — the image that really exists — byte for byte, never a
+    rewritten or proxied variant of it."""
+    images = [{"url": POSTER_URL, "remoteUrl": REMOTE_URL, "coverType": "poster"}]
+
+    assert poster_of(images) == REMOTE_URL
+
+
+@pytest.mark.parametrize("poster_of", FETCHERS)
+def test_every_fetcher_falls_back_to_the_proxied_url_without_a_remote_one(poster_of):
+    """Without a ``remoteUrl`` the payload still has a poster: the local
+    ``url``, rewritten to the proxied path the browser can actually fetch —
+    the behaviour three of five fetchers shipped with once they stopped
+    reading a field the arrs never send."""
     images = [{"url": POSTER_URL, "coverType": "poster"}]
+
+    assert poster_of(images) == f"/api/mediacover/{poster_of.source}{POSTER_URL}"
+
+
+@pytest.mark.parametrize("poster_of", FETCHERS)
+def test_every_fetcher_falls_through_when_the_remote_url_is_empty(poster_of):
+    """``remoteUrl: ""`` is the arr reporting no remote copy — step two of the
+    chain runs on the local ``url`` instead of rendering ``<img src="">``."""
+    images = [{"url": POSTER_URL, "remoteUrl": "", "coverType": "poster"}]
 
     assert poster_of(images) == f"/api/mediacover/{poster_of.source}{POSTER_URL}"
 
@@ -278,7 +306,7 @@ def test_the_calendar_fetchers_keep_their_previous_output(images):
     )
 
 
-# ── the rewrite at the source: _poster_url, both shapes ───────────────────────
+# ── the chain at the source: _poster_url, remoteUrl first, then the rewrite ───
 
 
 def test_a_relative_mediacover_path_becomes_the_proxied_path():
@@ -309,3 +337,25 @@ def test_a_traversing_mediacover_path_is_never_rewritten():
     raw = "http://radarr.test:7878/MediaCover/../../api/v3/system/status"
 
     assert clients._poster_url({"images": [{"url": raw}]}, "radarr") == raw
+
+
+def test_a_remote_url_is_returned_untouched_even_beside_a_local_url():
+    # The exact live payload: remoteUrl wins over the local copy and is never
+    # turned into `/api/mediacover/…` — it travels as the arr worded it.
+    item = {"images": [{"url": POSTER_URL, "remoteUrl": REMOTE_URL, "coverType": "poster"}]}
+
+    assert clients._poster_url(item, "radarr") == REMOTE_URL
+
+
+def test_an_empty_remote_url_falls_through_to_the_proxied_url():
+    item = {"images": [{"url": POSTER_URL, "remoteUrl": ""}]}
+
+    assert clients._poster_url(item, "radarr") == f"/api/mediacover/radarr{POSTER_URL}"
+
+
+def test_a_non_string_remote_url_falls_through_too():
+    # No payload shape may raise: a null remoteUrl reads as "absent" and the
+    # chain reaches step two on the local url.
+    item = {"images": [{"url": POSTER_URL, "remoteUrl": None}]}
+
+    assert clients._poster_url(item, "radarr") == f"/api/mediacover/radarr{POSTER_URL}"
