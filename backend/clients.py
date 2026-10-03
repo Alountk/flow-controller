@@ -966,6 +966,30 @@ def _empty_page(page: int, page_size: int) -> dict:
     return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
 
+def _poster_url(item: dict) -> str:
+    """The poster url in an arr payload's ``images`` (``images[0].url``).
+
+    Radarr and Sonarr send ``images: [{"url": ..., "coverType": "poster"}]``
+    on movies, series and calendar entries — never a ``remotePoster`` key, so
+    reading that one always yielded ``""`` and every section row (and the
+    detail panel fed from it) rendered without its poster.
+
+    The first entry is the poster the arrs report for the item. Anything
+    missing or malformed — no ``images`` key, ``[]``, a non-list container, a
+    non-dict entry, a dict without ``url`` — reads as ``""``: the frontend
+    falls back to initials and must never render ``<img src="">``, and no
+    payload shape may raise (the expression this replaced died on a string
+    entry with ``AttributeError``).
+    """
+    images = item.get("images")
+    if not isinstance(images, list) or not images:
+        return ""
+    first = images[0]
+    if not isinstance(first, dict):
+        return ""
+    return first.get("url", "")
+
+
 async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50) -> dict:
     """Devuelve películas monitorizadas sin archivo (wanted/missing)."""
     headers = arr_headers(service["api_key"])
@@ -992,7 +1016,7 @@ async def fetch_wanted_movies(session: aiohttp.ClientSession, service: dict, pag
                     "title": m.get("title", ""),
                     "year": m.get("year"),
                     "overview": m.get("overview", ""),
-                    "remotePoster": m.get("remotePoster", ""),
+                    "remotePoster": _poster_url(m),
                     "has_file": m.get("hasFile", False),
                     # Radarr sends `alternateTitles`; kept as our own `altTitles` key.
                     "altTitles": [
@@ -1111,7 +1135,7 @@ async def fetch_all_movies_detailed(
                     "id": m.get("id"),
                     "title": m.get("title", ""),
                     "year": m.get("year"),
-                    "remotePoster": m.get("remotePoster", ""),
+                    "remotePoster": _poster_url(m),
                     "has_file": m.get("hasFile", False),
                     # The path is exposed, not only measured: the Calidad view
                     # reads the path_4k/path_3d membership off it.
@@ -1169,7 +1193,7 @@ async def fetch_all_series_detailed(
                     "id": s.get("id"),
                     "title": s.get("title", ""),
                     "year": s.get("year"),
-                    "remotePoster": s.get("remotePoster", ""),
+                    "remotePoster": _poster_url(s),
                     "has_file": s.get("statistics", {}).get("episodeFileCount", 0) > 0,
                     # Exposed because the class of a series IS derived from
                     # where it lives (path_4k → 4K, path_3d → 3D): Sonarr's list
@@ -1620,7 +1644,7 @@ async def fetch_radarr_calendar(session: aiohttp.ClientSession, service: dict, s
                     "date": release[:10] if release else "",
                     "year": m.get("year"),
                     "has_file": m.get("hasFile", False),
-                    "remotePoster": (m.get("images") or [{}])[0].get("url", "") if m.get("images") else "",
+                    "remotePoster": _poster_url(m),
                     "series_title": None,
                     "season_number": None,
                     "episode_number": None,
@@ -1657,7 +1681,7 @@ async def fetch_sonarr_calendar(session: aiohttp.ClientSession, service: dict, s
                     "date": air[:10] if air else "",
                     "year": series.get("year"),
                     "has_file": ep.get("hasFile", False),
-                    "remotePoster": (series.get("images") or [{}])[0].get("url", "") if series.get("images") else "",
+                    "remotePoster": _poster_url(series),
                     "series_title": series.get("title", ""),
                     "season_number": ep.get("seasonNumber"),
                     "episode_number": ep.get("episodeNumber"),
