@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { Fragment, useState, useRef, useCallback, useEffect } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   addCalendarItem,
@@ -55,6 +55,23 @@ function formatSize(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
+/** The facts under a file's name — `idioma · calidad · size · semillas`, in
+ *  the order the operator reads them. An empty `languages` array contributes
+ *  NOTHING, not even a separator: the `·` is a node between rendered spans,
+ *  so it can never appear in front of a missing field. */
+function releaseMetaParts(r: Release): { className: string; text: string }[] {
+  const parts: { className: string; text: string }[] = []
+  if (r.languages && r.languages.length > 0) {
+    parts.push({ className: 'release-lang', text: r.languages.join(', ') })
+  }
+  if (r.quality) parts.push({ className: 'release-quality', text: r.quality })
+  parts.push(
+    { className: 'release-size', text: formatSize(r.size) },
+    { className: 'release-seeders', text: `⬆ ${r.seeders} / ⬇ ${r.leechers}` },
+  )
+  return parts
+}
+
 function groupByIndexer(releases: Release[]): Map<string, Release[]> {
   const map = new Map<string, Release[]>()
   for (const r of releases) {
@@ -64,6 +81,42 @@ function groupByIndexer(releases: Release[]): Map<string, Release[]> {
   }
   return map
 }
+
+interface RoutingFolders {
+  path4k: string
+  path3d: string
+}
+
+/** The two routing folders, from GET /api/settings — the same document
+ *  backend/config.py rebuilds PATH_4K/PATH_3D from, and the exact one the
+ *  Calidad view already reads. Shared ['routing-folders'] key, so a section
+ *  that opened Calidad first never fetches this twice. */
+async function fetchRoutingFolders(): Promise<RoutingFolders> {
+  const res = await apiFetch('/api/settings', {})
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const body = (await res.json()) as { paths?: { path_4k?: string; path_3d?: string } }
+  return {
+    path4k: (body.paths?.path_4k ?? '').trim(),
+    path3d: (body.paths?.path_3d ?? '').trim(),
+  }
+}
+
+/**
+ * The panel's results, per ITEM, across the tab switches that unmount it.
+ *
+ * The Releases view is conditionally rendered, so leaving it used to destroy
+ * everything — and with auto-search that means re-opening the tab would re-run
+ * a search that can take 240 seconds and already returned. Keyed by
+ * source/type/id (never by visit): a different title is a different search,
+ * the same title is the same results. Session-scoped module state: overlay
+ * presentations never read or write it.
+ */
+const panelResults = new Map<
+  string,
+  { indexer: string; releases: Release[]; threeDOverrides: Record<string, boolean> }
+>()
+
+const LIBRARY = 'Biblioteca (la del arr)'
 
 /**
  * One component, two presentations.
@@ -91,10 +144,22 @@ export function ReleaseSearchModal({
   presentation = 'overlay',
 }: ReleaseSearchModalProps) {
   const inPanel = presentation === 'panel'
-  const [step, setStep] = useState<ModalStep>('initial')
+  // The population the removed 🔍 button served: a title that still needs a
+  // file, and one already inside the library (id 0 must be ADDED first — its
+  // ➕ button's job). Both panel triggers share this gate, so the honest
+  // "✓ Ya tiene archivo descargado" answer survives for PR C to rework.
+  const autoSearchable = !item.has_file && item.id !== 0
+  // A re-open of the panel lands straight back on the results this item
+  // already produced (see panelResults); the overlay — and an item that no
+  // longer needs a search — always start fresh.
+  const restored =
+    inPanel && autoSearchable
+      ? panelResults.get(`${item.source}:${item.type}:${item.id}`)
+      : undefined
+  const [step, setStep] = useState<ModalStep>(restored ? 'results' : 'initial')
   const [message, setMessage] = useState('')
-  const [selectedIndexer, setSelectedIndexer] = useState<string>('all')
-  const [releases, setReleases] = useState<Release[]>([])
+  const [selectedIndexer, setSelectedIndexer] = useState<string>(restored?.indexer ?? 'all')
+  const [releases, setReleases] = useState<Release[]>(restored?.releases ?? [])
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
   const [destinations, setDestinations] = useState<string[]>([])
   const [destination, setDestination] = useState('')
@@ -102,10 +167,15 @@ export function ReleaseSearchModal({
   const [grabErrors, setGrabErrors] = useState<{ guid: string; detail: string }[]>([])
   // Per-row corrections to the 3D suggestion. An absent guid means "no human
   // has spoken, trust the title"; present means "this is what I said".
-  const [threeDOverrides, setThreeDOverrides] = useState<Record<string, boolean>>({})
+  const [threeDOverrides, setThreeDOverrides] = useState<Record<string, boolean>>(
+    restored?.threeDOverrides ?? {},
+  )
   const [elapsed, setElapsed] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Mount-once guard for the panel's auto-search: React's development
+  // double-invoke of effects must not fire two 240-second searches.
+  const autoSearched = useRef(false)
 
   // Overlay only: the panel is not a dialog, so it never owns a backdrop or
   // an Escape key — there is nothing for either of them to close.
@@ -152,6 +222,49 @@ export function ReleaseSearchModal({
       .catch(() => {})
   }, [item.source])
 
+  // The routing folders behind the readout: only the results step shows it, so
+  // only the results step asks. A failed read must never read as "not
+  // configured" — the backend still has its own copy and routes with it.
+  const foldersQuery = useQuery({
+    queryKey: ['routing-folders'],
+    queryFn: fetchRoutingFolders,
+    enabled: step === 'results',
+    retry: false,
+  })
+  const path4k = foldersQuery.data?.path4k ?? ''
+  const path3d = foldersQuery.data?.path3d ?? ''
+  const foldersUnreadable = foldersQuery.isError
+
+  // PANEL ONLY: the search starts itself. It replaces the 🔍 Buscar Releases
+  // button the panel no longer draws, under exactly the conditions that
+  // button had: it never rendered for a title that already has its file (the
+  // honest "✓" answer stays for PR C), nor for an id 0 item — that one must
+  // be ADDED to the library first, which is its ➕ button's job. A re-open
+  // with cached results never reaches this effect: it mounts on 'results'.
+  useEffect(() => {
+    if (!inPanel || autoSearched.current) return
+    // A re-open restores straight onto 'results' (see panelResults): the
+    // search that already returned must not run again just because the view
+    // was rebuilt around it.
+    if (step !== 'initial') return
+    if (!autoSearchable) return
+    autoSearched.current = true
+    void handleSearch()
+    // Mount-only by design (the panel never returns to 'initial' on its own),
+    // so the deps stay empty; this repo does not run react-hooks rules.
+  }, [])
+
+  // Keep the cached state of this item truthful while the panel changes it,
+  // so the next tab switch restores what the operator actually left behind.
+  useEffect(() => {
+    if (!inPanel || step !== 'results' || releases.length === 0) return
+    panelResults.set(`${item.source}:${item.type}:${item.id}`, {
+      indexer: selectedIndexer,
+      releases,
+      threeDOverrides,
+    })
+  }, [inPanel, step, item.source, item.type, item.id, selectedIndexer, releases, threeDOverrides])
+
   // Timer for loading state
   useEffect(() => {
     if (step === 'searching' || step === 'adding') {
@@ -168,17 +281,24 @@ export function ReleaseSearchModal({
     }
   }, [step])
 
-  async function handleSearch() {
+  /**
+   * `choice` is the indexer the search runs under. It is a real parameter,
+   * not state, because the panel's auto-search on an indexer change fires in
+   * the same tick as setSelectedIndexer — reading state there would search
+   * under the PREVIOUS choice. The overlay passes nothing (its button always
+   * searches what the select already shows).
+   */
+  async function handleSearch(choice: string = selectedIndexer) {
     setStep('searching')
     setGrabErrors([])
-    const idxName = selectedIndexer !== 'all' ? (indexers.find(i => String(i.id) === selectedIndexer)?.name || '') : ''
+    const idxName = choice !== 'all' ? (indexers.find(i => String(i.id) === choice)?.name || '') : ''
     setMessage(`Buscando releases${idxName ? ` en ${idxName}` : ' en todos los indexadores'}...`)
     try {
       const result = await fetchCalendarReleases(item.source, item.type, item.id)
-      const selectedName = selectedIndexer === 'all'
+      const selectedName = choice === 'all'
         ? null
-        : indexers.find(i => String(i.id) === selectedIndexer)?.name
-      const filtered = selectedIndexer === 'all'
+        : indexers.find(i => String(i.id) === choice)?.name
+      const filtered = choice === 'all'
         ? result.releases
         : result.releases.filter(r => r.indexer === selectedName)
       if (filtered.length > 0) {
@@ -189,8 +309,8 @@ export function ReleaseSearchModal({
         setStep('results')
       } else {
         setStep('error')
-        if (selectedIndexer !== 'all' && result.releases.length > 0) {
-          const nameFound = indexers.find(i => String(i.id) === selectedIndexer)?.name || selectedIndexer
+        if (choice !== 'all' && result.releases.length > 0) {
+          const nameFound = indexers.find(i => String(i.id) === choice)?.name || choice
           setMessage(`${nameFound}: 0 releases encontrados. Hay ${result.releases.length} releases en total en otros indexadores.`)
         } else {
           setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
@@ -372,15 +492,18 @@ export function ReleaseSearchModal({
 
   /**
    * Leaving the search. The overlay IS a dialog: it ends through the caller's
-   * `onClose`. The panel is not — there is nothing to close — so the search
-   * starts over for the same selection instead of vanishing under the user.
+   * `onClose`. The panel is not — there is nothing to close — so its exit is
+   * literally "Nueva búsqueda": the search runs again for the same selection
+   * instead of parking the operator on an initial step whose button no longer
+   * exists. The cached results go with it, so a later re-open searches fresh
+   * instead of restoring what this exit just discarded.
    */
   function dismiss() {
     if (inPanel) {
-      setStep('initial')
-      setMessage('')
+      panelResults.delete(`${item.source}:${item.type}:${item.id}`)
       setSelectedGuids(new Set())
       setGrabErrors([])
+      void handleSearch()
       return
     }
     onClose?.()
@@ -388,6 +511,53 @@ export function ReleaseSearchModal({
 
   /** What the exit button reads in each presentation. */
   const dismissLabel = inPanel ? 'Nueva búsqueda' : 'Cerrar'
+
+  /**
+   * The readout of `Acción principal` — a READOUT, never a second control.
+   *
+   * Every rule below mirrors backend/config.py `destination_for_quality`,
+   * which is the code that actually routes the grab: 3D outranks the
+   * resolution, only a `2160p` suffix is 4K, an unconfigured folder falls
+   * through (to the library), and a folder chosen by hand would beat all of
+   * it — which is why the combo is labelled an override.
+   */
+  function routingClass(r: Release): string {
+    if (isThreeD(r)) return '3D'
+    const quality = r.quality.trim().toLowerCase()
+    if (quality.endsWith('2160p')) return '4K'
+    // Empty quality is unknown, never "1080": the class of a fact the arr
+    // could not tell us is not a fact.
+    return quality ? '1080 o menor' : 'calidad desconocida'
+  }
+
+  /** Where this row lands when nobody picked a folder by hand. */
+  function destinationFor(r: Release): string {
+    if (foldersUnreadable) return 'la que decida el backend (configuración ilegible)'
+    if (isThreeD(r) && path3d) return path3d
+    if (r.quality.trim().toLowerCase().endsWith('2160p') && path4k) return path4k
+    return LIBRARY
+  }
+
+  /** One rule line: the folder when it exists, the key's own honest state
+   *  when it does not — "not configured" and "could not be read" are
+   *  different facts and must not read the same. */
+  function ruleFolder(key: 'path_4k' | 'path_3d', value: string): string {
+    if (foldersUnreadable) return `${key} — no se pudo leer la configuración`
+    return value || `${key} sin configurar`
+  }
+
+  // The selection, grouped by the destination it resolves to: that grouping
+  // is the answer to "where does what I picked go". A manual destination
+  // replaces every row's own routing — one group, one folder, as the grab
+  // itself will behave.
+  const selectedRows = releases.filter((r) => selectedGuids.has(r.guid))
+  const selectedRouting = new Map<string, Set<string>>()
+  for (const r of selectedRows) {
+    const dest = destination || destinationFor(r)
+    const classes = selectedRouting.get(dest) ?? new Set<string>()
+    classes.add(routingClass(r))
+    selectedRouting.set(dest, classes)
+  }
 
   // One body, two presentations: the overlay wraps it in modal chrome, the
   // panel renders it as-is inside its container.
@@ -422,14 +592,25 @@ export function ReleaseSearchModal({
           </div>
           )}
 
-          {/* Indexer selector — only on initial step */}
-          {step === 'initial' && (
+          {/* Indexer selector. Overlay: only on the initial step, as always.
+              Panel: persistent — it IS the search control now that the
+              button is gone, so the operator can re-route the search while
+              results are on screen. `disabled` never bites the overlay: its
+              select only exists when no search is processing. */}
+          {(inPanel || step === 'initial') && (
             <div className="calendar-indexer-select">
-              <label className="calendar-indexer-label">Indexador:</label>
+              <label className="calendar-indexer-label" htmlFor="release-indexer">Indexador:</label>
               <select
+                id="release-indexer"
                 className="calendar-indexer-dropdown"
                 value={selectedIndexer}
-                onChange={(e) => setSelectedIndexer(e.target.value)}
+                disabled={isProcessing}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setSelectedIndexer(next)
+                  // PANEL ONLY: changing the indexer IS the trigger now.
+                  if (inPanel && autoSearchable) void handleSearch(next)
+                }}
               >
                 <option value="all">Todos los indexadores</option>
                 {indexers.map((idx) => (
@@ -481,20 +662,26 @@ export function ReleaseSearchModal({
             </div>
           )}
 
-          {/* Step: Initial — show buttons */}
-          {step === 'initial' && (
+          {/* Step: Initial. The overlay keeps its 🔍 button and the body it
+              has always rendered. The panel has no button to render — its
+              search fires by itself — so the block appears there only when
+              something still has something to say: the honest has_file
+              answer, or the add-first button an id 0 item needs. */}
+          {step === 'initial' && (item.has_file || item.id === 0 || !inPanel) && (
             <div className="calendar-modal-actions">
               {item.has_file ? (
                 <div className="calendar-modal-info-text">✓ Ya tiene archivo descargado</div>
               ) : (
                 <>
-                  <button
-                    className="action-btn search-all"
-                    onClick={handleSearch}
-                    disabled={isProcessing}
-                  >
-                    🔍 Buscar Releases
-                  </button>
+                  {!inPanel && (
+                    <button
+                      className="action-btn search-all"
+                      onClick={() => void handleSearch()}
+                      disabled={isProcessing}
+                    >
+                      🔍 Buscar Releases
+                    </button>
+                  )}
                   {item.id === 0 && (
                     <button
                       className="action-btn scan-folder-btn"
@@ -558,27 +745,10 @@ export function ReleaseSearchModal({
                       ⬇️ Descargar ({selectedGuids.size})
                     </button>
                   )}
-                  <button className="action-btn" onClick={handleSearch} disabled={isProcessing}>
+                  <button className="action-btn" onClick={() => void handleSearch()} disabled={isProcessing}>
                     🔄 Refrescar
                   </button>
                 </div>
-              </div>
-
-              {/* The chosen folder applies to the marked rows (per-row and batch
-                  grabs). The library default sends no destination at all. */}
-              <div className="calendar-indexer-select">
-                <label className="calendar-indexer-label" htmlFor="release-destination">Destino:</label>
-                <select
-                  id="release-destination"
-                  className="calendar-indexer-dropdown"
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                >
-                  <option value="">Biblioteca (la del arr)</option>
-                  {destinations.map((folder) => (
-                    <option key={folder} value={folder}>{folder}</option>
-                  ))}
-                </select>
               </div>
 
               <div className="release-filters">
@@ -677,9 +847,21 @@ export function ReleaseSearchModal({
                           />
                         </label>
                         <div className="release-content" onClick={() => handleGrab(r.guid)}>
+                          {/* The file selector's row: the file's name alone on
+                              its line, the four facts that pick a file beneath
+                              it. The 3D mark rides the facts line — it changes
+                              where the row routes, and that is what the line
+                              describes. */}
                           <div className="release-title">{r.title}</div>
                           <div className="release-meta">
-                            <span className="release-quality">{r.quality}</span>
+                            {releaseMetaParts(r).map((part, i) => (
+                              <Fragment key={part.className}>
+                                {i > 0 && (
+                                  <span className="release-sep" aria-hidden="true">·</span>
+                                )}
+                                <span className={part.className}>{part.text}</span>
+                              </Fragment>
+                            ))}
                             <button
                               type="button"
                               className={`release-3d ${isThreeD(r) ? 'active' : ''}`}
@@ -698,13 +880,6 @@ export function ReleaseSearchModal({
                             >
                               3D
                             </button>
-                            <span className="release-size">{formatSize(r.size)}</span>
-                            {r.seeders > 0 && (
-                              <span className="release-seeders">⬆ {r.seeders} / ⬇ {r.leechers}</span>
-                            )}
-                            {r.languages && r.languages.length > 0 && (
-                              <span className="release-lang">{r.languages.join(', ')}</span>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -713,6 +888,61 @@ export function ReleaseSearchModal({
                 </div>
                 ))
               )}
+
+              {/* Acción principal — the routing, visible. A readout of what
+                  the selection resolves to, the three rules behind it, and
+                  the destination combo inside the block it overrides: a
+                  folder chosen by hand beats the derived routing, and the
+                  label says so instead of hiding it. */}
+              <div className="release-action">
+                <h4 className="release-action-title">Acción principal</h4>
+
+                {selectedRows.length > 0 && (
+                  <>
+                    <p className="release-action-sub">Destino de la selección:</p>
+                    <ul className="release-action-selected">
+                      {[...selectedRouting].map(([dest, classes]) => (
+                        <li key={dest}>
+                          <strong>{[...classes].join(' · ')}</strong> → {dest}
+                          {destination && (
+                            <span className="release-action-note">
+                              {' '}
+                              — elegido a mano: manda sobre el enrutado
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                <p className="release-action-sub">Reglas de enrutado (si no eliges carpeta a mano):</p>
+                <ul className="release-action-rules">
+                  <li>1080 o menor → biblioteca (la del arr)</li>
+                  <li>4K → {ruleFolder('path_4k', path4k)}</li>
+                  <li>3D → {ruleFolder('path_3d', path3d)}</li>
+                </ul>
+
+                {/* The chosen folder applies to the marked rows (per-row and
+                    batch grabs). The library default sends no destination at
+                    all — absent is what "library" means end to end. */}
+                <div className="calendar-indexer-select">
+                  <label className="calendar-indexer-label" htmlFor="release-destination">
+                    Destino (anulación manual):
+                  </label>
+                  <select
+                    id="release-destination"
+                    className="calendar-indexer-dropdown"
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                  >
+                    <option value="">{LIBRARY}</option>
+                    {destinations.map((folder) => (
+                      <option key={folder} value={folder}>{folder}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           )}
 
