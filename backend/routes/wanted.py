@@ -304,7 +304,10 @@ async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: 
     """Todas las películas de Radarr con estado de archivo y ruta (paginado)."""
     service = find_service("radarr", "arr")
     if not service:
-        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+        # The same reason `/api/wanted` carries: an unconfigured arr and an
+        # empty catalogue are different facts, and the Calidad view shows both.
+        return {"items": [], "total": 0, "page": page, "page_size": page_size,
+                "error_kind": "unknown", "error": "radarr: servicio no configurado"}
     # page_size=0 tells the client not to slice, so the filter sees everything.
     fetch_size = 0 if normalize_for_search(q) else page_size
     async with http_session() as session:
@@ -320,7 +323,10 @@ async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: 
     """Todas las series de Sonarr con estado de archivo y ruta (paginado)."""
     service = find_service("sonarr", "arr")
     if not service:
-        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+        # See `get_all_movies`: "Sonarr no está configurado" must not read as
+        # "ninguna serie en ninguna clase".
+        return {"items": [], "total": 0, "page": page, "page_size": page_size,
+                "error_kind": "unknown", "error": "sonarr: servicio no configurado"}
     fetch_size = 0 if normalize_for_search(q) else page_size
     async with http_session() as session:
         result = await fetch_all_series_detailed(session, service, page, fetch_size)
