@@ -586,12 +586,19 @@ Lo que absorbe de la web actual, por sección:
 | **2** | Mover **Biblioteca + Faltantes** (`MediaPane` extraído) | ✅ **PR #111**, `32ef040`, 291 tests |
 | **3** | **Estrenos** en las dos secciones (`Calendar` con filtro por tipo) | ✅ **PR #112**, `040dd09`, 296 tests |
 | **4** | **Calidad**: `quality`/`path` en la biblioteca + sub-vista con clases 4K/3D | ✅ **PR #113**, `6bc9eab`, 687 backend / 308 frontend |
-| **5** | El modal de releases → **panel de detalle** (el corazón del diseño) | ⬜ |
+| **5** | El modal de releases → **panel de detalle** + **filas al estilo del prototipo** | ✅ **PR #114**, `265e7b3`, 316 frontend |
 | **6** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
 
 > **El plan creció de 4 a 6 PRs** al comprobar que `AllMovie` **no lleva `quality`** y que
 > **ningún endpoint** la expone para la biblioteca — la sub-vista *Calidad* no tenía de dónde
 > leer. Por eso Calidad ganó su propio slice de backend y el modal→panel se separó.
+
+**Los dos huecos que el usuario detectó al mirar el resultado** quedaron cerrados en el PR 5:
+la **lista** seguía con las filas viejas de `MissingContent` (ya no: mini-póster, píldora de
+estado, chip de calidad, ruta, seleccionado con barra lateral — **acotado a `.sec-master`**, la
+página *Faltantes* no cambia), y el **panel** era un montaje con todos los controles
+`disabled` (ahora la búsqueda de releases se renderiza **dentro** del panel vía
+`presentation: 'overlay' | 'panel'`, compartiendo un solo cuerpo con el overlay).
 
 **Señales distintas por sección, a propósito**: *Películas* se clase con el **juicio de
 Radarr** (`movieFile.quality`, el campo que este repo ya leía en `arr_movie_metadata`);
