@@ -8,7 +8,7 @@ import { browsePath } from '../api/files'
 import { fetchSeriesEpisodes } from '../api/wanted'
 import { episodeTagKey } from '../utils/episodeTag'
 import { formatGrabMark } from '../utils/grabMark'
-import type { AllSeries, BrowseResponse, PaginatedResponse } from '../types'
+import type { AllSeries, BrowseResponse, CalendarItem, PaginatedResponse } from '../types'
 import './Sections.css'
 
 /**
@@ -45,14 +45,14 @@ const NOTES: { pr: string; text: string }[] = [
   { pr: 'PR 2 ✅', text: 'Biblioteca y Faltantes muestran las listas reales, extraídas de la sección Faltantes; la selección rellena el panel de detalle.' },
   { pr: 'PR 3 ✅', text: 'Estrenos muestra el calendario: solo episodios aquí, solo películas en Películas.' },
   { pr: 'PR 4 ✅', text: 'Calidad agrupa por clase: aquí la clase sale de la carpeta en la que vive cada serie (Sonarr no da calidad en su lista); en Películas sale de la calidad del archivo de Radarr.' },
-  { pr: 'PR 5 ✅', text: 'buscar releases vive en la pestaña Releases del panel y las filas adoptan la forma del prototipo (mini póster, estado, calidad y ruta); desde la lista ya no se abre ningún modal, el calendario de Estrenos todavía sí.' },
+  { pr: 'PR 5 ✅', text: 'buscar releases vive en la pestaña Releases del panel y las filas adoptan la forma del prototipo (mini póster, estado, calidad y ruta); desde la lista y desde el calendario de Estrenos ya no se abre ningún modal.' },
   { pr: 'PR 6 ✅', text: 'Episodios, Archivos e Historial dejan de ser marcadores: los episodios salen de /api/wanted/series/{id}/episodes, la ruta de la selección se lista con browsePath (solo lectura) y Historial enseña el grabbed_at/grabbed_destination de la propia fila.' },
   { pr: 'PR 7 (este) ✅', text: 'los menús Faltantes y Calendario se retiran del lateral y sus tests migran a las secciones.' },
 ]
 
 const PANEL_EMPTY = 'Selecciona un elemento de la lista para ver su detalle.'
 const PANEL_NOTE =
-  'La búsqueda de releases vive en la pestaña Releases de este panel (PR 5); desde el calendario de Estrenos todavía se abre como modal. Las pestañas Episodios, Archivos e Historial se llenan con datos reales desde el PR 6.'
+  'La búsqueda de releases vive en la pestaña Releases de este panel (PR 5): las filas del calendario de Estrenos seleccionan aquí como cualquier otra. Las pestañas Episodios, Archivos e Historial se llenan con datos reales desde el PR 6.'
 
 /* ── Calidad (PR 4) ─────────────────────────────────────────────────────────
  * The same four classes as in Películas, derived from a different fact: a
@@ -159,6 +159,51 @@ function calidadSeriesRelease(series: AllSeries): ReleaseSearchItem {
     source: 'sonarr',
     remotePoster: series.remotePoster,
     has_file: series.has_file,
+  }
+}
+
+/* ── Estrenos (the calendar selects, PR 5's last gap) ───────────────────────
+ * A CalendarItem carries only its own fields: the episode's air date, the
+ * series year Sonarr reported, the has_file flag and the grab mark. Nothing
+ * else — no path, no series id (Sonarr's calendar payload omits it) — so
+ * nothing else is built here.
+ */
+
+function estrenoDetail(item: CalendarItem): MediaDetail {
+  const s = String(item.season_number ?? 0).padStart(2, '0')
+  const e = String(item.episode_number ?? 0).padStart(2, '0')
+  const meta: { label: string; value: string }[] = [
+    { label: 'Episodio', value: `S${s}E${e} · ${item.title}` },
+  ]
+  // The date Sonarr's calendar put the card on is the episode's air date —
+  // the only date the item knows.
+  if (item.date) meta.push({ label: 'Emitido', value: item.date })
+  // Straight from the flag the card's own ✓ badge reads: the calendar has no
+  // path_exists, so a folder-based claim would be a guess.
+  meta.push({ label: 'Estado', value: item.has_file ? 'Con archivo' : 'Sin archivo' })
+  return {
+    title: item.series_title || item.title,
+    poster: item.remotePoster || undefined,
+    meta,
+    grab: formatGrabMark(item.grabbed_at, item.grabbed_destination) ?? undefined,
+  }
+}
+
+/** What a calendar card hands the panel's Releases tab: exactly the item the
+ *  overlay modal used to open for it — every field read off the item itself. */
+function estrenoRelease(item: CalendarItem): ReleaseSearchItem {
+  return {
+    type: item.type,
+    id: item.id,
+    title: item.title,
+    source: item.source,
+    date: item.date,
+    year: item.year,
+    series_title: item.series_title,
+    season_number: item.season_number,
+    episode_number: item.episode_number,
+    has_file: item.has_file,
+    remotePoster: item.remotePoster,
   }
 }
 
@@ -334,9 +379,10 @@ function TableHead() {
  * The tabs read facts the SELECTION does not carry: MediaPane hands the panel
  * only { id, detail, release } — MediaDetail deliberately holds no path (its
  * docstring says the panel must not invent one), no raw grab fields and no
- * series id. So the tabs re-read the very list the pane rendered the row
- * from, by the pane's own query keys: the clicked row is always in one of
- * those loaded pages, and this join issues no request of its own.
+ * series id. So the tabs re-read the very list the sub-view rendered the row
+ * from, by that list's own query keys: the clicked row is always in one of
+ * those loaded pages (a pane listing, or in Estrenos the calendar's own
+ * cache), and this join issues no request of its own.
  */
 
 type RowFacts =
@@ -376,6 +422,28 @@ function selectedRowFacts(
   selected: MediaSelection | null,
 ): RowFacts {
   if (!selected) return { state: 'empty' }
+  if (view === 'estrenos') {
+    // Estrenos renders the CALENDAR: its rows live in the ['calendar', ...]
+    // cache the Calendar itself fills, and in NONE of the pane's listings —
+    // looking there would report "missing" for a row we hold in full. The
+    // type filter keeps an episode from matching a movie of the same id: the
+    // cache holds BOTH types.
+    const row = loadedRows(queryClient, 'calendar').find(
+      (r) => r.id === selected.id && r.type === 'episode',
+    )
+    if (!row) return { state: 'missing' }
+    return {
+      state: 'ready',
+      // A CalendarItem carries no folder and no series id (Sonarr's calendar
+      // payload omits it): null is what the item said — never a guess, so
+      // Archivos answers "no tiene ruta" and Episodios cannot name a series.
+      path: null,
+      grabbedAt: typeof row.grabbed_at === 'number' ? row.grabbed_at : null,
+      grabbedDestination:
+        typeof row.grabbed_destination === 'string' ? row.grabbed_destination : null,
+      seriesId: null,
+    }
+  }
   const prefix =
     view === 'faltantes'
       ? 'wanted-episodes-infinite'
@@ -620,9 +688,19 @@ export function Series() {
 
           {view === 'estrenos' ? (
             // The calendar IS the list of this sub-view — episode items only.
-            // It keeps its own date range, navigation and card actions,
-            // including opening the release search.
-            <Calendar type="episode" />
+            // It keeps its own date range and navigation; a card click
+            // reports the selection instead of opening the release search
+            // as a modal, which is what the other sub-views' rows do.
+            <Calendar
+              type="episode"
+              onSelect={(item) =>
+                setSelected({
+                  id: item.id,
+                  detail: estrenoDetail(item),
+                  release: estrenoRelease(item),
+                })
+              }
+            />
           ) : view === 'calidad' ? (
             // PR 4: the class list. Its rows are selectable like the pane's.
             <CalidadSeries selectedId={selected?.id ?? null} onSelect={setSelected} />

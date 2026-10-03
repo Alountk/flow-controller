@@ -111,25 +111,35 @@ describe('Películas · Estrenos shows only movie releases', () => {
     expect(countLabel()).not.toContain('episodios')
   })
 
-  it('still opens the release search as a modal from inside the section', async () => {
+  it('selects the missing item into the detail panel instead of a modal', async () => {
     renderWith(Peliculas)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Estrenos' }))
     fireEvent.click(await screen.findByText('Estreno de Película'))
 
-    // Until PR 5 this is a modal, not the detail panel.
-    expect(document.querySelector('.scan-modal-backdrop')).not.toBeNull()
-    expect(document.querySelector('.scan-modal')).not.toBeNull()
+    // The click is a SELECTION: the panel shows the item — its own heading,
+    // inside the panel's own column —
+    const detail = document.querySelector('.sec-detail')
+    expect(detail?.querySelector('h3')?.textContent).toBe('Estreno de Película')
+    // — and the release search for it renders INLINE in that panel,
+    expect(document.querySelector('.release-inline')).not.toBeNull()
+    expect(detail?.contains(document.querySelector('.release-inline') as Node)).toBe(true)
+    // never as an overlay: no backdrop, no modal chrome.
+    expect(document.querySelector('.scan-modal-backdrop')).toBeNull()
+    expect(document.querySelector('.scan-modal')).toBeNull()
   })
 
-  it('keeps the honest note: the release search is still a modal until PR 5', () => {
+  it('keeps the honest note: the release search lives in the panel, not as a modal', () => {
     renderWith(Peliculas)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Estrenos' }))
 
     const note = document.querySelector('.sec-panel-note')
-    expect(note?.textContent).toMatch(/modal/)
     expect(note?.textContent).toContain('PR 5')
+    expect(note?.textContent).toMatch(/Releases/)
+    // The calendar selects since this change, so the note must no longer
+    // promise a modal from Estrenos.
+    expect(note?.textContent).not.toMatch(/modal/)
   })
 })
 

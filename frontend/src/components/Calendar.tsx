@@ -34,9 +34,17 @@ export interface CalendarProps {
    * them today.
    */
   type?: 'movie' | 'episode'
+  /**
+   * When provided, clicking a card REPORTS the selection to the caller — the
+   * sections' detail panel takes over and NOTHING opens as a modal, for every
+   * card (with a file or without one). When absent the calendar keeps its
+   * standalone behaviour exactly: a card missing its file opens the release
+   * search overlay, one that has its file does nothing.
+   */
+  onSelect?: (item: CalendarItem) => void
 }
 
-export function Calendar({ type }: CalendarProps) {
+export function Calendar({ type, onSelect }: CalendarProps) {
   const [range, setRange] = useState(() => {
     const today = new Date()
     const end = new Date()
@@ -109,8 +117,13 @@ export function Calendar({ type }: CalendarProps) {
                     <div
                       key={`${item.source}-${item.id}`}
                       className={`calendar-card ${item.has_file ? 'status-ok' : 'status-pending'}${grabbed ? ' status-grabbed' : ''}`}
-                      onClick={() => !item.has_file && setScanItem(item)}
-                      style={!item.has_file ? { cursor: 'pointer' } : undefined}
+                      onClick={() => {
+                        // A caller that selects gets EVERY card; standalone,
+                        // only a missing one opens the overlay — as ever.
+                        if (onSelect) onSelect(item)
+                        else if (!item.has_file) setScanItem(item)
+                      }}
+                      style={onSelect || !item.has_file ? { cursor: 'pointer' } : undefined}
                     >
                       {item.remotePoster && (
                         <img className="calendar-poster" src={item.remotePoster} alt={item.title} />
