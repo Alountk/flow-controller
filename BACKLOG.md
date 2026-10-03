@@ -656,6 +656,29 @@ de mostrar dos envolturas muertas.
 **`Page` estaba duplicado** (hook + Sidebar) y nada impedía que se desincronizara; el hook es
 ahora el **único dueño** y el Sidebar re-exporta el tipo.
 
+### F-09 — Retirar **Disco** y **Trazabilidad** · ⏸ *Pendiente — sin fecha*
+
+Pedida en voz alta al revisar el diseño nuevo, **postergada por el usuario**:
+
+> *«La sección de Disco la podemos quitar; más adelante pondremos algo mejor.
+> Trazabilidad pasa lo mismo.»*
+
+| Página | Ruta | Estado |
+|---|---|---|
+| **Disco** | `/disco` — `DiskSpace.tsx` · `GET /api/disk` | ⏸ se queda por ahora |
+| **Trazabilidad** | `/trazabilidad` — `TraceView` · `GET /api/trace` | ⏸ se queda por ahora |
+
+**No tocar hasta que el usuario diga cuándo.** Cuando llegue el momento hay que tener en
+cuenta:
+
+- `GET /api/disk` **se arregló** en B-06 (PR `#103`): deriva de `paths.allowed_roots` y ya no
+  miente sobre el rootfs. Su valor no depende de la página.
+- `Trazabilidad` es la **única vista** de `Trace` / cola / etapas — retirarla sin sustituirla
+  deja a la app sin observabilidad de las descargas.
+- Ambas están en `NAV_ITEMS`, `PAGE_PATHS`, `PAGE_TITLES` y en `hiddenPages` (leer de
+  Radarr/Sonarr): el retiro es el mismo patrón que ya se aplicó a `Faltantes`/`Calendario` en
+  el **PR `#116`**, incluida la **migración de sus tests**.
+
 ## 🔵 Recomendaciones y reglas del ciclo
 
 C-01…C-07 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.
