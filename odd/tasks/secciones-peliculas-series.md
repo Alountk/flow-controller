@@ -137,7 +137,8 @@ descartada.
 | **3** ✅ | **Estrenos** en las dos secciones — **PR #112**, `040dd09` |
 | **4** ✅ | **Calidad**: `quality`/`path` en la biblioteca + sub-vista con clases — **PR #113**, `6bc9eab` |
 | **5** ✅ | Modal → **panel** + **filas del prototipo** — **PR #114**, `265e7b3` |
-| **6** | **Archivos** como pestaña del panel; retirar `Faltantes`/`Calendario` del menú | ⬜ |
+| **6** ✅ | Pestañas `Archivos`/`Historial`/`Episodios` con datos reales — **PR #115**, `bad851f` |
+| **7** | Retirar `Faltantes`/`Calendario` del menú **+ migrar sus tests** | ⬜ *el plan pasó de 6 a 7* |
 
 **Cada PR deja la app funcionando**: primero se añade el techo, después se mueve el contenido,
 y solo al final se retira lo viejo.
