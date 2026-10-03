@@ -198,11 +198,13 @@ describe('sections · the prototype rows', () => {
     const row = firstRow()
     expect(row.classList.contains('wanted-card')).toBe(true)
 
-    // The mini-poster is CSS-drawn initials: no external image on the row,
-    // even though this row's data carries one for the detail panel.
+    // The mini-poster layers the row's real poster over the initials, which
+    // stay in the DOM as the load/error fallback and as the box's text.
     const poster = row.querySelector('.sec-row-poster')
     expect(poster?.textContent).toBe('YN')
-    expect(row.querySelector('img')).toBeNull()
+    const img = poster?.querySelector('img')
+    expect(img).not.toBeNull()
+    expect(img?.getAttribute('src')).toBe('https://img.example/your-name.jpg')
 
     expect(row.querySelector('.sec-row-name')?.textContent).toBe('Your Name.')
     expect(row.querySelector('.sec-row-year')?.textContent).toBe('2016')
