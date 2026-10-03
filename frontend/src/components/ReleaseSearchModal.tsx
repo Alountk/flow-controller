@@ -65,10 +65,18 @@ function groupByIndexer(releases: Release[]): Map<string, Release[]> {
   return map
 }
 
-export interface ReleaseSearchModalProps {
-  item: ReleaseSearchItem
-  onClose: () => void
-}
+/**
+ * One component, two presentations.
+ *
+ * Overlay mode is the modal this app has always opened: `onClose` is required
+ * and Escape/backdrop/close-button all end the dialog. Panel mode has no
+ * dialog to end, so it takes no `onClose` at all — the type makes that
+ * impossible to get wrong.
+ */
+export type ReleaseSearchModalProps = { item: ReleaseSearchItem } & (
+  | { presentation?: 'overlay'; onClose: () => void }
+  | { presentation: 'panel'; onClose?: undefined }
+)
 
 /** Rows that would all land in the same folder, and must travel as one call. */
 interface RoutingGroup {
@@ -77,7 +85,12 @@ interface RoutingGroup {
   guids: string[]
 }
 
-export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
+export function ReleaseSearchModal({
+  item,
+  onClose,
+  presentation = 'overlay',
+}: ReleaseSearchModalProps) {
+  const inPanel = presentation === 'panel'
   const [step, setStep] = useState<ModalStep>('initial')
   const [message, setMessage] = useState('')
   const [selectedIndexer, setSelectedIndexer] = useState<string>('all')
@@ -94,15 +107,18 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Overlay only: the panel is not a dialog, so it never owns a backdrop or
+  // an Escape key — there is nothing for either of them to close.
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose()
+    if (e.target === e.currentTarget) onClose?.()
   }, [onClose])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    if (inPanel) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose?.() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, inPanel])
 
   // Cached per SOURCE. Asking Radarr once must not ask it again a few minutes
   // later, and Sonarr's list is a different list — that separation is the cache
@@ -354,19 +370,32 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
     return `${Math.floor(s / 60)}m ${s % 60}s`
   }
 
-  return (
-    <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
-      <div className="scan-modal scan-modal-wide" ref={modalRef}>
-        <div className="scan-modal-header">
-          <div className="scan-selected-info">
-            <span className="scan-selected-type">{item.type === 'movie' ? '🎬' : '📺'}</span>
-            <strong>{item.series_title || item.title}</strong>
-          </div>
-          <button className="scan-modal-close" onClick={onClose}>×</button>
-        </div>
+  /**
+   * Leaving the search. The overlay IS a dialog: it ends through the caller's
+   * `onClose`. The panel is not — there is nothing to close — so the search
+   * starts over for the same selection instead of vanishing under the user.
+   */
+  function dismiss() {
+    if (inPanel) {
+      setStep('initial')
+      setMessage('')
+      setSelectedGuids(new Set())
+      setGrabErrors([])
+      return
+    }
+    onClose?.()
+  }
 
+  /** What the exit button reads in each presentation. */
+  const dismissLabel = inPanel ? 'Nueva búsqueda' : 'Cerrar'
+
+  // One body, two presentations: the overlay wraps it in modal chrome, the
+  // panel renders it as-is inside its container.
+  const body = (
         <div className="scan-modal-body">
-          {/* Item details */}
+          {/* Item details — the overlay's own header repeats them; the panel's
+              detail header already shows poster, title and metadata. */}
+          {!inPanel && (
           <div className="calendar-modal-details">
             {item.remotePoster && (
               <img className="calendar-modal-poster" src={item.remotePoster} alt={item.title} />
@@ -391,6 +420,7 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
               )}
             </div>
           </div>
+          )}
 
           {/* Indexer selector — only on initial step */}
           {step === 'initial' && (
@@ -689,8 +719,8 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
           {/* Step: Done */}
           {step === 'done' && (
             <div className="calendar-modal-actions">
-              <button className="action-btn search-all" onClick={onClose}>
-                Cerrar
+              <button className="action-btn search-all" onClick={dismiss}>
+                {dismissLabel}
               </button>
             </div>
           )}
@@ -709,12 +739,30 @@ export function ReleaseSearchModal({ item, onClose }: ReleaseSearchModalProps) {
                   ← Volver a los resultados
                 </button>
               )}
-              <button className="action-btn" onClick={onClose}>
-                Cerrar
+              <button className="action-btn" onClick={dismiss}>
+                {dismissLabel}
               </button>
             </div>
           )}
         </div>
+  )
+
+  if (inPanel) {
+    // Fills its container: no backdrop, no modal chrome, no positioning.
+    return <div className="release-inline">{body}</div>
+  }
+
+  return (
+    <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
+      <div className="scan-modal scan-modal-wide" ref={modalRef}>
+        <div className="scan-modal-header">
+          <div className="scan-selected-info">
+            <span className="scan-selected-type">{item.type === 'movie' ? '🎬' : '📺'}</span>
+            <strong>{item.series_title || item.title}</strong>
+          </div>
+          <button className="scan-modal-close" onClick={() => onClose?.()}>×</button>
+        </div>
+        {body}
       </div>
     </div>
   )

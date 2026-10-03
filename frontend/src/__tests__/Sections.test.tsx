@@ -204,21 +204,25 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       expect(screen.getByText(PANEL_EMPTY)).toBeInTheDocument()
     })
 
-    it('renders the destination and quality controls disabled', async () => {
+    it('replaces the placeholder action controls with the live Releases tab', async () => {
       renderSection(Component)
       await screen.findByText(catalogEmpty)
 
-      expect(screen.getByLabelText('Carpeta de destino')).toBeDisabled()
-
+      // PR 5: the mock-up controls are gone. The real quality chips,
+      // destination combo and download buttons live inside the Releases tab
+      // (they render with a selection), so leaving two sets here would make
+      // the panel contradict itself.
+      expect(screen.queryByLabelText('Carpeta de destino')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Descargar en esta carpeta' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Buscar otra vez' })).not.toBeInTheDocument()
       for (const quality of ['1080p', '4K', '3D']) {
-        expect(screen.getByRole('button', { name: quality })).toBeDisabled()
+        expect(screen.queryByRole('button', { name: quality })).not.toBeInTheDocument()
       }
 
-      expect(screen.getByRole('button', { name: 'Descargar en esta carpeta' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Buscar otra vez' })).toBeDisabled()
-
       const panel = screen.getByRole('region', { name: 'Panel de detalle' })
-      for (const tab of detailTabs) {
+      // Releases is the live tab; the tabs PR 6 brings stay honestly disabled.
+      expect(within(panel).getByRole('button', { name: 'Releases' })).toBeEnabled()
+      for (const tab of detailTabs.filter((t) => t !== 'Releases')) {
         expect(within(panel).getByRole('button', { name: tab })).toBeDisabled()
       }
     })

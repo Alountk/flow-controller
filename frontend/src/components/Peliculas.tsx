@@ -2,6 +2,7 @@ import { Fragment, useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Calendar } from './Calendar'
 import { MediaPane, type MediaDetail, type MediaSelection } from './MediaPane'
+import { ReleaseSearchModal, type ReleaseSearchItem } from './ReleaseSearchModal'
 import { apiFetch } from '../api/auth'
 import { formatGrabMark } from '../utils/grabMark'
 import type { AllMovie, PaginatedResponse } from '../types'
@@ -10,10 +11,13 @@ import './Sections.css'
 /**
  * Películas — master–detail (F-08).
  *
- * PR 4 of the plan: every sub-view tab is now live. Biblioteca and Faltantes
- * render MediaPane, Estrenos the calendar, and Calidad the class list — movies
- * grouped by the quality of the file Radarr owns, with a chip row as the
- * filter. Selecting a row fills the detail panel with that row's own data.
+ * PR 5 of the plan: the release search leaves the modal and lives in the
+ * detail panel's Releases tab (inline, no backdrop), and the pane's rows in
+ * the master column take the chosen prototype's dense shape. Biblioteca and
+ * Faltantes render MediaPane, Estrenos the calendar, and Calidad the class
+ * list — movies grouped by the quality of the file Radarr owns, with a chip
+ * row as the filter. Selecting a row fills the detail panel with that row's
+ * own data.
  */
 
 type SubView = 'biblioteca' | 'faltantes' | 'estrenos' | 'calidad'
@@ -31,20 +35,19 @@ const SUB_VIEWS: SubViewDef[] = [
 ]
 
 const DETAIL_TABS = ['Releases', 'Archivos', 'Historial']
-const QUALITIES = ['1080p', '4K', '3D']
 
 const NOTES: { pr: string; text: string }[] = [
   { pr: 'PR 1 ✅', text: 'techo: navegación, rutas y la envoltura maestro–detalle.' },
   { pr: 'PR 2 ✅', text: 'Biblioteca y Faltantes muestran las listas reales, extraídas de la sección Faltantes; la selección rellena el panel de detalle.' },
   { pr: 'PR 3 ✅', text: 'Estrenos muestra el calendario: solo películas aquí, solo episodios en Series.' },
   { pr: 'PR 4 (este) ✅', text: 'Calidad agrupa por clase: aquí la clase sale de la calidad del archivo de Radarr, con la carpeta como confirmación; en Series sale de su carpeta (Sonarr no da calidad en su lista).' },
-  { pr: 'PR 5 (modal → panel + filas al estilo del prototipo) ⬜', text: 'buscar releases pasa del modal al panel de detalle; de momento el modal sigue abriéndose desde la lista y el calendario.' },
+  { pr: 'PR 5 (modal → panel + filas al estilo del prototipo) ✅', text: 'buscar releases vive en la pestaña Releases del panel y las filas adoptan la forma del prototipo (mini póster, estado, calidad y ruta); desde la lista ya no se abre ningún modal, el calendario de Estrenos todavía sí.' },
   { pr: 'PR 6 (retirar menús) ⬜', text: 'Archivos entra como pestaña del panel; Faltantes y Calendario se retiran del menú.' },
 ]
 
 const PANEL_EMPTY = 'Selecciona un elemento de la lista para ver su detalle.'
 const PANEL_NOTE =
-  'Buscar releases aún se abre como modal, también desde el calendario; en el PR 5 pasa a este panel de detalle, junto con escanear y pedir descargas.'
+  'La búsqueda de releases vive en la pestaña Releases de este panel (PR 5); desde el calendario de Estrenos todavía se abre como modal. Las pestañas Archivos e Historial siguen siendo marcadores hasta el PR 6.'
 
 /* ── Calidad (PR 4) ─────────────────────────────────────────────────────────
  * The four classes a title can land in, mirroring F-01's routing: 4K and 3D
@@ -138,6 +141,20 @@ function calidadMovieDetail(movie: AllMovie, folders: RoutingFolders): MediaDeta
     poster: movie.remotePoster || undefined,
     meta,
     grab: formatGrabMark(movie.grabbed_at, movie.grabbed_destination) ?? undefined,
+  }
+}
+
+/** What a Calidad row hands the panel's Releases tab: the same item the
+ *  release-search modal would open for this movie. */
+function calidadMovieRelease(movie: AllMovie): ReleaseSearchItem {
+  return {
+    type: 'movie',
+    id: movie.id,
+    title: movie.title,
+    year: movie.year,
+    source: 'radarr',
+    remotePoster: movie.remotePoster,
+    has_file: movie.has_file,
   }
 }
 
@@ -256,11 +273,19 @@ function CalidadMovies({
                   className="sec-q-row"
                   tabIndex={0}
                   aria-current={selectedId === movie.id ? 'true' : undefined}
-                  onClick={() => onSelect({ id: movie.id, detail: calidadMovieDetail(movie, folders) })}
+                  onClick={() => onSelect({
+                    id: movie.id,
+                    detail: calidadMovieDetail(movie, folders),
+                    release: calidadMovieRelease(movie),
+                  })}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      onSelect({ id: movie.id, detail: calidadMovieDetail(movie, folders) })
+                      onSelect({
+                        id: movie.id,
+                        detail: calidadMovieDetail(movie, folders),
+                        release: calidadMovieRelease(movie),
+                      })
                     }
                   }}
                 >
@@ -357,6 +382,8 @@ export function Peliculas() {
           ) : (
             // The pane styles its rows under a `.wanted` ancestor (its action
             // buttons are `.wanted .search-item`), so the column provides it.
+            // 'section' is what gives them the prototype's dense shape; the
+            // Faltantes page keeps its own rows untouched.
             <div className="wanted">
               <MediaPane
                 kind="movies"
@@ -364,6 +391,7 @@ export function Peliculas() {
                 filter={view === 'biblioteca' ? 'all' : 'missing'}
                 selectedId={selected?.id ?? null}
                 onSelect={setSelected}
+                variant="section"
               />
             </div>
           )}
@@ -416,7 +444,15 @@ export function Peliculas() {
 
           <div className="sec-detail-tabs" role="group" aria-label="Pestañas del detalle">
             {DETAIL_TABS.map((t) => (
-              <button key={t} type="button" className="sec-dtab" disabled>
+              <button
+                key={t}
+                type="button"
+                className={`sec-dtab${t === 'Releases' ? ' is-active' : ''}`}
+                // Releases is live since PR 5. The others are an honest
+                // placeholder until PR 6 fills them: disabled, never a dead
+                // click that pretends to work.
+                disabled={t !== 'Releases'}
+              >
                 {t}
               </button>
             ))}
@@ -425,43 +461,21 @@ export function Peliculas() {
           {!selected && (
             <p className="sec-empty sec-empty-detail">{PANEL_EMPTY}</p>
           )}
+
+          {/* PR 5: the real release search, inline in the panel, for the row
+              the operator selected. Same state machine as the modal; no
+              backdrop, no Escape — it simply fills this panel. */}
+          {selected && (
+            <ReleaseSearchModal
+              // A different row is a different search: remount so no state
+              // (results, filters, marks) leaks from one title to the next.
+              key={selected.id}
+              item={selected.release}
+              presentation="panel"
+            />
+          )}
+
           <p className="sec-panel-note">{PANEL_NOTE}</p>
-
-          <div className="sec-action">
-            <h4>Acción principal</h4>
-
-            <span className="sec-field-label" id={`${uid}-quality`}>
-              Calidad (enrutado automático)
-            </span>
-            <div className="sec-quality-row" role="group" aria-labelledby={`${uid}-quality`}>
-              {QUALITIES.map((q) => (
-                <button key={q} type="button" className="sec-q-chip" disabled>
-                  {q}
-                </button>
-              ))}
-            </div>
-
-            <label className="sec-field-label" htmlFor={`${uid}-destino`}>
-              Carpeta de destino
-            </label>
-            <select id={`${uid}-destino`} className="sec-destino" disabled defaultValue="">
-              <option value="">— sin selección —</option>
-            </select>
-
-            <div className="sec-actions-row">
-              <button type="button" className="sec-btn primary" disabled>
-                Descargar en esta carpeta
-              </button>
-              <button type="button" className="sec-btn" disabled>
-                Buscar otra vez
-              </button>
-            </div>
-
-            <p className="sec-action-hint">
-              Los controles de este panel se activan en el PR 5, cuando la acción
-              principal pase a vivir aquí junto a las acciones de la fila.
-            </p>
-          </div>
         </section>
       </div>
 

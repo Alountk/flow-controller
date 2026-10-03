@@ -1,11 +1,13 @@
 /*
- * Películas and Series — master-detail shell (PR 1 of F-08).
+ * Películas and Series — master-detail shell (PR 1 of F-08, rows + panel
+ * search in PR 5).
  *
  * Same visual language as the chosen prototypes
  * (peliculas-02-maestro-detalle / series-04-maestro-detalle): sub-view tabs,
- * dense list on the left, detail panel on the right. The controls are rendered
- * but genuinely disabled: cursor, no hover, and no opacity trick that would
- * leave the text unreadable.
+ * dense list on the left, detail panel on the right. PR 5 gives the pane's
+ * rows the prototype's shape and hosts the release search inline in the
+ * panel; the mock-up's disabled placeholder controls are gone — the real
+ * ones live inside the Releases tab.
  */
 
 .section-shell {
@@ -182,7 +184,9 @@
   color: var(--text-dim);
 }
 
-/* ---- Detail tabs (disabled until there is a selection) ---- */
+/* ---- Detail tabs ----
+ * Releases is live since PR 5 (it holds the real search); the tabs PR 6
+ * brings stay genuinely disabled: cursor, no hover, no opacity trick. */
 .sec-detail-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -203,6 +207,21 @@
   padding: 9px 11px;
 }
 
+.sec-dtab:not(:disabled) {
+  cursor: pointer;
+}
+
+.sec-dtab:not(:disabled):hover {
+  color: var(--text);
+}
+
+/* The tab whose content is on screen. */
+.sec-dtab.is-active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
 /* Genuinely disabled: no hover, no opacity, explicit cursor. */
 .sec-dtab:disabled,
 .sec-dtab:disabled:hover {
@@ -210,118 +229,25 @@
   cursor: not-allowed;
 }
 
-/* ---- Primary action ---- */
-.sec-action {
-  padding: 15px 16px 16px;
-}
-
-.sec-action h4 {
-  margin: 0 0 10px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.sec-field-label {
-  display: block;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  margin-bottom: 6px;
-}
-
-.sec-quality-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.sec-q-chip {
-  appearance: none;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 14px;
-}
-
-.sec-q-chip:disabled,
-.sec-q-chip:disabled:hover {
-  color: var(--text-dim);
-  cursor: not-allowed;
-}
-
-.sec-destino {
-  width: 100%;
-  appearance: none;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text-dim);
-  font: inherit;
-  font-size: 12.5px;
-  padding: 9px 11px;
-  margin-bottom: 12px;
-}
-
-.sec-destino:disabled,
-.sec-destino:disabled:hover {
-  color: var(--text-dim);
-  cursor: not-allowed;
-}
-
-.sec-actions-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.sec-btn {
-  appearance: none;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 8px;
-  padding: 9px 16px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev-2);
-  color: var(--text-dim);
-}
-
-.sec-btn.primary {
-  background: var(--accent-soft);
-  border-color: rgba(99, 102, 241, 0.45);
-  color: var(--text);
-}
-
-.sec-btn:disabled,
-.sec-btn:disabled:hover {
-  cursor: not-allowed;
-}
-
-.sec-action-hint {
-  margin: 12px 0 0;
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--text-dim);
-}
-
-/* ---- Pane rows in the master column (PR 2) ---------------------------------
- * The list column holds MediaPane's own rows — the same cards/rows Faltantes
- * renders — scoped so they read well in a narrower column. Every action the
- * row had stays on the row.
+/* ---- Pane rows in the master column (PR 2 → restyled in PR 5) -------------
+ * The list column holds MediaPane's own rows. PR 5 gives the SECTION variant
+ * the chosen prototype's dense shape (peliculas-02 / series-04): a 34×48
+ * CSS-drawn mini-poster with the title's initials — never an external image —
+ * title and year, a status pill, a quality chip, the path, and the selection
+ * as a left bar. Every selector here is scoped under `.sec-master`: the
+ * Faltantes page keeps the cards it has today, and every action the row had
+ * stays on the row.
  */
 
+/* The rows run edge to edge like the prototype's list; the toolbar and the
+   pane's own states (loading, error, empty) keep their breathing room. */
 .sec-master .wanted {
-  padding: 12px 14px;
+  padding: 0;
 }
 
 .sec-master .wanted .wanted-actions {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
+  padding: 12px 14px 0;
 }
 
 /* No Faltantes/Todas buttons here (the sub-view tabs are the filter): the
@@ -338,23 +264,208 @@
   margin-left: 0;
 }
 
+/* Dense list, not a card grid: one row after another, hairline separated. */
+.sec-master .wanted-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sec-master .wanted-list {
+  gap: 0;
+}
+
+/* One row: mini-poster · body · actions. Two classes on purpose — `sec-row`
+   carries the shape, `wanted-card`/`wanted-row` is what every existing query
+   and the pane's own styles key on. */
+.sec-master .sec-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 11px;
+  padding: 9px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  align-items: center;
+}
+
+.sec-master .sec-row:last-child {
+  border-bottom: none;
+}
+
+.sec-master .sec-row:hover {
+  background: var(--bg-elev-2);
+}
+
+/* Mini-poster: a CSS gradient tinted per title + its initials. */
+.sec-row-poster {
+  width: 34px;
+  height: 48px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.88);
+  flex-shrink: 0;
+}
+
+.sec-row-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sec-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sec-row-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sec-row-year {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.sec-row-state {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.sec-row-bottom {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The status pill — the prototype's `pill` shape, labelled only with what
+   the row's own data can back. */
+.sec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.sec-pill::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sec-pill-ok {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+.sec-pill-warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+}
+
+.sec-pill-bad {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  border-color: color-mix(in srgb, var(--bad) 35%, transparent);
+}
+
+/* The quality chip: the file's own quality name, or nothing — never a guess. */
+.sec-q-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sec-row-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.sec-row-ep {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.sec-row-ep-title,
+.sec-row-date,
+.sec-row-ep-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Every action the row had stays ON the row — same buttons, same labels. */
+.sec-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sec-row .wanted-grabbed {
+  flex-shrink: 0;
+}
+
 /* Selectable rows: a pointer cursor, and a focus ring for keyboard users. */
-.sec-master .wanted-card.is-selectable,
-.sec-master .wanted-row.is-selectable {
+.sec-master .sec-row.is-selectable {
   cursor: pointer;
 }
 
-.sec-master .wanted-card.is-selectable:focus-visible,
-.sec-master .wanted-row.is-selectable:focus-visible {
+.sec-master .sec-row.is-selectable:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-/* The selection is a ring ON TOP of the row's own status colours: a selected
-   card must keep saying whether it is missing/ok/grabbed. */
-.sec-master .wanted-card[aria-current='true'],
-.sec-master .wanted-row[aria-current='true'] {
-  box-shadow: 0 0 0 2px var(--accent);
+/* The selection is the prototype's left bar ON TOP of the row: the pill and
+   the grab mark keep saying what the row is, the bar says "this one". */
+.sec-master .sec-row[aria-current='true'] {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
 }
 
 /* ---- Calendar in the master column (PR 3) ---------------------------------
@@ -505,15 +616,32 @@
   overflow-wrap: anywhere;
 }
 
-/* The honest note: those actions still live outside the panel (the release
-   search opens as a modal) and move here in PR 5. */
+/* ---- Inline release search (PR 5) ----------------------------------------
+ * The panel's Releases tab: ReleaseSearchModal in its 'panel' presentation —
+ * no backdrop, no modal chrome, no positioning. The search fills the panel it
+ * lives in; every class inside it keeps the styling CalendarModal.css already
+ * gives the modal's results, filters and destination combo.
+ */
+.release-inline {
+  width: 100%;
+  min-width: 0;
+}
+
+.release-inline .scan-modal-body {
+  padding: 14px 16px;
+  overflow: visible;
+}
+
+/* The honest note, at the panel's foot like the prototype's detail-foot:
+   releases live here since PR 5, the calendar still opens its modal, and the
+   remaining tabs wait for PR 6. */
 .sec-panel-note {
   margin: 0;
   padding: 12px 16px;
   font-size: 11.5px;
   line-height: 1.6;
   color: var(--text-dim);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 
 /* ---- Implementation notes ---- */
