@@ -96,9 +96,9 @@ si hace falta antes de construirlo**.
 
 | PR | Contenido | Estado |
 |----|-----------|--------|
-| **A** | `.sec-detail` sticky | 🔄 |
-| **B** | Reposición del `Releases`: auto-búsqueda, selector de archivo con 4 metadatos, `Acción principal` que explica el enrutado | ⬜ |
-| **C** | Estado de fila/panel: nombre del fichero, tags 1080-color / 4K-3D-gris, idiomas (+ slice de backend `movieFile.file_name` / `languages`) | ⬜ |
+| **A** ✅ | `.sec-detail` sticky — **PR #117**, `c6c7ece`, 136 líneas |
+| **B** ✅ | `Releases` recompuesto — **PR #118**, `ed36203`, 562 líneas |
+| **C** ✅ | Fichero + idiomas + tags + **botón `Buscar versiones`** — **PR #119**, `f685d14`, 765 líneas |
 
 ## Checks
 
@@ -116,3 +116,36 @@ cd backend && python -m pytest -q      # si hay slice de backend
   overlay | panel`) — el overlay **no debe cambiar de comportamiento** (Calendario y el
   flujo e2e lo usan).
 - ⬜ Los tags de calidad de Series son ambiguos (calidad por episodio) → decidir antes.
+
+
+---
+
+## 🏁 LOS TRES CAMBIOS ENTREGADOS
+
+| | PR | Líneas |
+|---|---|---|
+| A | `.sec-detail` sticky | 136 |
+| B | `Releases`: auto-búsqueda · selector de archivo · `Acción principal` | 562 |
+| C | Fichero + idiomas + tags + **entrada de F-01** | 765 |
+
+### Hallazgo importante del PR C
+
+El `✓ Ya tiene archivo descargado` **no era un mensaje: era el único bloqueo de F-01**.
+`autoSearchable = !item.has_file` → un título con fichero **no se podía buscar**, y el
+BACKLOG lo arrastraba como hueco desde que la feature se entregó (*«sin esto no hay upgrade»*).
+
+**Resuelto en las secciones** con el botón `Buscar versiones`. Decidido explícitamente por el
+usuario (opción: *«Añadir el botón»*) en vez de auto-búsqueda, porque cada búsqueda puede
+tardar **hasta 240 s**.
+
+### Dos huecos que quedan (reportados, fuera del alcance de estos PRs)
+
+1. **La vista `Calidad` no pasa los campos nuevos** (`file_name`/`languages`/`quality`) →
+   el bloque se degrada ahí. ~4 líneas en `Peliculas.tsx` / `Series.tsx`.
+2. **`Calendar.tsx:112` sigue sin abrir el modal** para un título con fichero → la entrada de
+   F-01 **desde Estrenos** sigue tapada.
+
+### Decisión tomada sin preguntar (declarada)
+
+**Tags de Series**: el `1080`/`4K` se quedan **gris** porque la lista de Sonarr **no trae
+calidad por serie** — misma razón que el PR 4. `3D` sigue la regla de la carpeta.
