@@ -42,6 +42,19 @@ export interface ReleaseSearchItem {
   series_title?: string | null
   season_number?: number | null
   episode_number?: number | null
+  /** The downloaded file's name (`movieFile.relativePath`), when the surface
+   *  that built this item carries it — the sections' rows do, the calendar's
+   *  cards do not. Absent means "this view cannot say": the has-file block
+   *  degrades to an explicit "not available" instead of inventing a name. */
+  file_name?: string
+  /** Languages of THAT file, when the surface carries them. Absent or empty
+   *  renders nothing at all — no dash, no "sin idioma". */
+  languages?: string[]
+  /** Quality of the file Radarr owns, when the surface carries it. Absent or
+   *  "" is unknown: every quality tag stays grey, never a guessed class. */
+  quality?: string
+  /** The title's folder, the one signal the 3D tag reads (path_3d membership). */
+  path?: string
 }
 
 type ModalStep = 'initial' | 'searching' | 'adding' | 'results' | 'grabbing' | 'done' | 'error'
@@ -119,6 +132,18 @@ const panelResults = new Map<
 const LIBRARY = 'Biblioteca (la del arr)'
 
 /**
+ * True when `path` is `folder` or lives under it. An unconfigured folder ("")
+ * matches nothing: empty means "not configured", never "everything". Same rule
+ * the Calidad views already read `path_4k`/`path_3d` membership with, kept
+ * local because both of those keep their own copy too.
+ */
+function inFolder(path: string, folder: string): boolean {
+  if (!path || !folder) return false
+  const root = folder.endsWith('/') ? folder.slice(0, -1) : folder
+  return path === root || path.startsWith(`${root}/`)
+}
+
+/**
  * One component, two presentations.
  *
  * Overlay mode is the modal this app has always opened: `onClose` is required
@@ -146,8 +171,9 @@ export function ReleaseSearchModal({
   const inPanel = presentation === 'panel'
   // The population the removed 🔍 button served: a title that still needs a
   // file, and one already inside the library (id 0 must be ADDED first — its
-  // ➕ button's job). Both panel triggers share this gate, so the honest
-  // "✓ Ya tiene archivo descargado" answer survives for PR C to rework.
+  // ➕ button's job). Both panel triggers share this gate, so a title that
+  // already has its file never auto-searches: it meets the has-file block,
+  // whose "Buscar versiones" button searches on demand instead.
   const autoSearchable = !item.has_file && item.id !== 0
   // A re-open of the panel lands straight back on the results this item
   // already produced (see panelResults); the overlay — and an item that no
@@ -228,7 +254,11 @@ export function ReleaseSearchModal({
   const foldersQuery = useQuery({
     queryKey: ['routing-folders'],
     queryFn: fetchRoutingFolders,
-    enabled: step === 'results',
+    // Two consumers, one fetch: the results step draws the routing readout,
+    // and the has-file block needs the same folders EARLIER — its 3D tag is
+    // "`path` inside `path_3d`". A failed read still lights nothing: 3D can
+    // only be claimed from a folder we actually read.
+    enabled: step === 'results' || (step === 'initial' && !!item.has_file),
     retry: false,
   })
   const path4k = foldersQuery.data?.path4k ?? ''
@@ -237,10 +267,11 @@ export function ReleaseSearchModal({
 
   // PANEL ONLY: the search starts itself. It replaces the 🔍 Buscar Releases
   // button the panel no longer draws, under exactly the conditions that
-  // button had: it never rendered for a title that already has its file (the
-  // honest "✓" answer stays for PR C), nor for an id 0 item — that one must
-  // be ADDED to the library first, which is its ➕ button's job. A re-open
-  // with cached results never reaches this effect: it mounts on 'results'.
+  // button had: it never fired for a title that already has its file (that
+  // one meets the has-file block and searches from its own "Buscar versiones"
+  // button), nor for an id 0 item — that one must be ADDED to the library
+  // first, which is its ➕ button's job. A re-open with cached results never
+  // reaches this effect: it mounts on 'results'.
   useEffect(() => {
     if (!inPanel || autoSearched.current) return
     // A re-open restores straight onto 'results' (see panelResults): the
@@ -485,6 +516,25 @@ export function ReleaseSearchModal({
   const allVisibleSelected = areAllVisibleSelected(selectedGuids, visibleReleases, releaseKey)
   const isSearching = step === 'searching'
 
+  /**
+   * The downloaded file's classes, as the maintainer phrased them: colour for
+   * what you HAVE, grey for what you are MISSING — that grey IS the answer to
+   * "cuáles son los que faltan".
+   *
+   * Rules, one per tag, mirroring backend/config.py `destination_for_quality`:
+   * `1080` ← the quality contains `1080p`, `4K` ← it contains `2160p`, and
+   * `3D` is not a quality but a PLACE — the title's `path` inside `path_3d`,
+   * the same membership PR #113 established for Series. An unknown/empty
+   * quality claims NOTHING (both resolution tags stay grey — no guessing), and
+   * an unconfigured or unreadable `path_3d` can never light 3D either.
+   */
+  const fileQuality = (item.quality ?? '').trim().toLowerCase()
+  const hasFileTags = [
+    { label: '1080', on: fileQuality.includes('1080p') },
+    { label: '4K', on: fileQuality.includes('2160p') },
+    { label: '3D', on: inFolder(item.path ?? '', path3d) },
+  ]
+
   function formatElapsed(s: number): string {
     if (s < 60) return `${s}s`
     return `${Math.floor(s / 60)}m ${s % 60}s`
@@ -665,35 +715,72 @@ export function ReleaseSearchModal({
           {/* Step: Initial. The overlay keeps its 🔍 button and the body it
               has always rendered. The panel has no button to render — its
               search fires by itself — so the block appears there only when
-              something still has something to say: the honest has_file
-              answer, or the add-first button an id 0 item needs. */}
+              something still has something to say: the downloaded file's own
+              facts (PR C), or the add-first button an id 0 item needs. */}
           {step === 'initial' && (item.has_file || item.id === 0 || !inPanel) && (
-            <div className="calendar-modal-actions">
-              {item.has_file ? (
-                <div className="calendar-modal-info-text">✓ Ya tiene archivo descargado</div>
-              ) : (
-                <>
-                  {!inPanel && (
-                    <button
-                      className="action-btn search-all"
-                      onClick={() => void handleSearch()}
-                      disabled={isProcessing}
+            item.has_file ? (
+              /* What IS on disk (the real name, its languages), what you HAVE
+                 vs what you are MISSING (the tags), and the way out of the
+                 dead end: a title that already has a file can still be
+                 searched — the entry point into F-01's upgrade. A surface
+                 without this data (the calendar's cards) degrades to an
+                 explicit "not available" and grey tags: it never invents a
+                 name and never claims a class the arr did not report. */
+              <div className="has-file-block">
+                <span className="has-file-label">Fichero descargado</span>
+                {item.file_name ? (
+                  <code className="has-file-name">{item.file_name}</code>
+                ) : (
+                  <span className="has-file-name has-file-missing">
+                    Nombre no disponible en esta vista
+                  </span>
+                )}
+                {/* Only when the file's languages exist: an empty list renders
+                    nothing — no dash, no "sin idioma" invention. */}
+                {(item.languages?.length ?? 0) > 0 && (
+                  <span className="has-file-langs">{(item.languages ?? []).join(', ')}</span>
+                )}
+                <div className="has-file-tags">
+                  {hasFileTags.map((tag) => (
+                    <span
+                      key={tag.label}
+                      className={`has-file-tag ${tag.on ? 'is-on' : 'is-off'}`}
                     >
-                      🔍 Buscar Releases
-                    </button>
-                  )}
-                  {item.id === 0 && (
-                    <button
-                      className="action-btn scan-folder-btn"
-                      onClick={handleAddAndSearch}
-                      disabled={isProcessing}
-                    >
-                      ➕ Agregar a Biblioteca y Buscar
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
+                      {tag.label}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="action-btn search-all"
+                  onClick={() => void handleSearch()}
+                  disabled={isProcessing}
+                >
+                  Buscar versiones
+                </button>
+              </div>
+            ) : (
+              <div className="calendar-modal-actions">
+                {!inPanel && (
+                  <button
+                    className="action-btn search-all"
+                    onClick={() => void handleSearch()}
+                    disabled={isProcessing}
+                  >
+                    🔍 Buscar Releases
+                  </button>
+                )}
+                {item.id === 0 && (
+                  <button
+                    className="action-btn scan-folder-btn"
+                    onClick={handleAddAndSearch}
+                    disabled={isProcessing}
+                  >
+                    ➕ Agregar a Biblioteca y Buscar
+                  </button>
+                )}
+              </div>
+            )
           )}
 
           {/* Step: Searching — show progress */}

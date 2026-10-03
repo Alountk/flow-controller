@@ -410,9 +410,78 @@
   color: var(--accent);
 }
 
-.calendar-modal-info-text {
-  color: var(--ok);
+/* ── The downloaded-file block ──────────────────────────────────────────────
+   What replaces "✓ Ya tiene archivo descargado": the file that IS on disk,
+   its languages, and the three classes — `is-on` in colour (you have it) and
+   `is-off` grey (you don't), so the grey tags literally answer "cuáles son
+   los que faltan". */
+.has-file-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.has-file-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Monospace AND wrapping: a file name is one long unbroken token, and it has
+   to break inside the block instead of pushing the panel wider. */
+.has-file-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* The honest "this surface cannot say" — never a title-derived name. */
+.has-file-missing {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.has-file-langs {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.has-file-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.has-file-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.has-file-tag.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.has-file-tag.is-off {
+  color: var(--text-dim);
+  background: transparent;
 }
 
 .calendar-indexer-group {

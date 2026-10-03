@@ -114,9 +114,18 @@ Pedida: acceso a las películas ya agregadas en Radarr, descargar en formato de 
 
 **Los huecos (etapas):**
 
-1. **Entrada para películas con archivo.** El modal es un callejón sin salida:
-   `ReleaseSearchModal.tsx:349` solo pinta "✓ Ya tiene archivo descargado" y no ofrece buscar;
-   `Calendar.tsx:94` ni siquiera deja abrirlo. Sin esto no hay upgrade.
+1. **Entrada para películas con archivo.** ✅ **Cerrado en el panel de secciones** (PR C de
+   `odd/tasks/panel-y-estado-fila.md`): el bloque que antes solo pintaba
+   "✓ Ya tiene archivo descargado" ahora enseña **qué fichero es el descargado**
+   (`movieFile.relativePath`), **sus idiomas** (`movieFile.languages`), los tags
+   **`1080` · `4K` · `3D`** — en color lo que ya tienes, en gris lo que falta — y el botón
+   **`Buscar versiones`**, que dispara la búsqueda para ese título: ese botón ES la entrada,
+   porque sin él el bloque solo te decía lo que te faltaba. ⚠️ **Dos vías siguen sin ella:**
+   el **Calendario** no deja ni abrir el modal para un artículo con archivo
+   (`Calendar.tsx:112`, `onClick={() => !item.has_file && ...}`) y la vista **Calidad**
+   (`calidadMovieRelease` en `Peliculas.tsx`) no pasa todavía `file_name`/`languages`/`quality`,
+   así que ahí el bloque degrada (sin nombre, tags en gris) en vez de inventar datos —
+   ninguna de las dos vistas se tocó en este PR.
 2. **Eje "resolución" + presets 4K.** `releaseFilters.ts` solo compara la calidad *exacta*;
    no hay 2160p/1080p/720p ni noción de "4K". Como `quality` ya llega al cliente, **esto no
    toca backend**.
