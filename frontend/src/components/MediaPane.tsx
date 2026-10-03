@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { WantedMovie, WantedEpisode, AllMovie, AllSeries, ScanMatch, ScanResult } from '../types'
 import {
@@ -33,6 +33,11 @@ import './MissingContent.css'
  * The caller must render it inside an element carrying the `wanted` class:
  * the row action buttons are styled by `.wanted .search-item` in
  * MissingContent.css (which this file imports).
+ *
+ * Two row shapes (PR 5 of F-08): 'page' is the markup Faltantes has always
+ * rendered, 'section' is the chosen prototype's dense row — mini-poster,
+ * status pill, quality chip, path — scoped to the master column of the
+ * Películas/Series sections by the `variant` prop, never by a global restyle.
  */
 
 /** Movies (Radarr) or episodes/series (Sonarr). */
@@ -66,7 +71,14 @@ export interface MediaDetail {
 export interface MediaSelection {
   id: number
   detail: MediaDetail
+  /** The exact item the overlay modal would open for this row: the section
+   *  panel's Releases tab searches it inline (PR 5 of F-08). */
+  release: ReleaseSearchItem
 }
+
+/** Where the rows live. The Faltantes page keeps the markup it has always
+ *  had; the sections render the chosen prototype's dense rows instead. */
+export type MediaRowVariant = 'page' | 'section'
 
 interface MediaPaneProps {
   kind: MediaKind
@@ -85,6 +97,10 @@ interface MediaPaneProps {
   onSelect?: (selection: MediaSelection) => void
   /** Reports the query totals so a caller can label its own tabs. */
   onTotalsChange?: (totals: MediaTotals) => void
+  /** 'section' renders the prototype's dense rows (mini-poster, status chip,
+   *  quality chip, path) inside the master column. Default 'page' keeps the
+   *  Faltantes cards/rows byte for byte. */
+  variant?: MediaRowVariant
 }
 
 const PAGE_SIZE = 50
@@ -510,6 +526,180 @@ function catalogSeriesDetail(series: AllSeries): MediaDetail {
   return { title: series.title, poster: series.remotePoster || undefined, meta, grab: grabOf(series) }
 }
 
+/** The release-search item of each row — the SAME object the overlay modal
+ *  receives, so the panel's Releases tab searches exactly what the modal
+ *  would have opened for that row. */
+function wantedMovieRelease(movie: WantedMovie): ReleaseSearchItem {
+  return {
+    type: 'movie',
+    id: movie.id,
+    title: movie.title,
+    year: movie.year,
+    source: 'radarr',
+    remotePoster: movie.remotePoster,
+    has_file: movie.has_file,
+  }
+}
+
+function catalogMovieRelease(movie: AllMovie): ReleaseSearchItem {
+  return {
+    type: 'movie',
+    id: movie.id,
+    title: movie.title,
+    year: movie.year,
+    source: 'radarr',
+    remotePoster: movie.remotePoster,
+    has_file: movie.has_file,
+  }
+}
+
+function wantedEpisodeRelease(ep: WantedEpisode): ReleaseSearchItem {
+  return {
+    type: 'episode',
+    id: ep.id,
+    title: ep.title,
+    series_title: ep.series_title,
+    season_number: ep.season_number,
+    episode_number: ep.episode_number,
+    date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
+    source: 'sonarr',
+    has_file: false,
+  }
+}
+
+function catalogSeriesRelease(series: AllSeries): ReleaseSearchItem {
+  return {
+    type: 'episode',
+    id: series.id,
+    title: series.title,
+    series_title: series.title,
+    year: series.year,
+    source: 'sonarr',
+    remotePoster: series.remotePoster,
+    has_file: series.has_file,
+  }
+}
+
+/* ── Section rows (PR 5 of F-08) ───────────────────────────────────────────
+ * The chosen prototypes (peliculas-02 / series-04) draw a dense row: a
+ * CSS-drawn mini-poster, title + year, a status pill, a quality chip and the
+ * path. These build exactly that — and only claims the row's own data can
+ * back: a status the listing does not carry is never invented ("Descargando"
+ * and "Colocado" appear only when some field says so, and none does; a grab
+ * keeps its own honest mark instead).
+ */
+
+type PillTone = 'ok' | 'warn' | 'bad'
+
+/** Initials for the mini-poster: first letter of the first two words (one
+ *  word → its first two letters). Never an external image. */
+function posterInitials(title: string): string {
+  const words = title.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '?'
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return `${words[0][0]}${words[1][0]}`.toUpperCase()
+}
+
+/** A stable hue per title, so two rows never share a gradient by accident. */
+function posterHue(title: string): number {
+  let hue = 0
+  for (let i = 0; i < title.length; i++) hue = (hue * 31 + title.charCodeAt(i)) % 360
+  return hue
+}
+
+/** A row of the missing queue: it is missing, whatever a grab has done. */
+function faltaStatus(): { label: string; tone: PillTone } {
+  return { label: 'Falta', tone: 'warn' }
+}
+
+/** A row of the catalogue, from the same two facts the panel reports. */
+function catalogRowStatus(hasFile: boolean, pathExists: boolean): { label: string; tone: PillTone } {
+  if (hasFile && pathExists) return { label: 'En biblioteca', tone: 'ok' }
+  if (!hasFile) return { label: 'Sin archivo', tone: 'bad' }
+  return { label: 'Ruta no encontrada', tone: 'bad' }
+}
+
+/** What `rowProps` puts on a row when the caller selects: pointer, keyboard
+ *  and aria-current. `{}` when the caller selects nothing (Faltantes). */
+interface RowWiring {
+  tabIndex?: number
+  'aria-current'?: boolean
+  onClick?: () => void
+  onKeyDown?: (e: ReactKeyboardEvent) => void
+}
+
+interface SectionRowProps {
+  /** The row's own classes: wanted-card|wanted-row + is-selectable. The
+   *  wanted-* class is what every existing query and style keys on. */
+  className: string
+  /** Selection wiring from `rowProps` — `{}` when nothing selects. */
+  wiring: RowWiring
+  title: string
+  year?: number | null
+  status: { label: string; tone: PillTone }
+  /** The quality/class chip, when the row's data carries one (the Calidad
+   *  view keeps its own class badge on top of this). */
+  chip?: string
+  path?: string
+  grabbed?: string | null
+  grabbedDestination?: string | null
+  /** The rest of the second line: episode code + title + date, counts… */
+  extra?: ReactNode
+  /** Every action the row had — the same buttons, nothing dropped. */
+  children: ReactNode
+}
+
+/** One prototype-shaped row. Scoped to the sections by construction: this
+ *  component only renders when the caller asked for the 'section' variant, so
+ *  the Faltantes page's DOM is untouched. */
+function SectionRow({
+  className,
+  wiring,
+  title,
+  year,
+  status,
+  chip,
+  path,
+  grabbed,
+  grabbedDestination,
+  extra,
+  children,
+}: SectionRowProps) {
+  const hue = posterHue(title)
+  return (
+    <div className={`sec-row ${className}`} {...wiring}>
+      <span
+        className="sec-row-poster"
+        aria-hidden="true"
+        style={{ background: `linear-gradient(160deg, hsl(${hue} 46% 54%), hsl(${hue} 52% 14%))` }}
+      >
+        {posterInitials(title)}
+      </span>
+      <span className="sec-row-body">
+        <span className="sec-row-top">
+          <span className="sec-row-name">{title}</span>
+          {year != null && <span className="sec-row-year">{year}</span>}
+          <span className="sec-row-state">
+            <span className={`sec-pill sec-pill-${status.tone}`}>{status.label}</span>
+          </span>
+        </span>
+        <span className="sec-row-bottom">
+          {chip && <span className="sec-q-tag">{chip}</span>}
+          {path && <span className="sec-row-path" title={path}>{path}</span>}
+          {extra}
+          {/* Null means never requested: show nothing, not a dash. */}
+          {grabbed && (
+            <span className="wanted-grabbed" title={grabbedDestination ?? undefined}>
+              {grabbed}
+            </span>
+          )}
+        </span>
+      </span>
+      <span className="sec-row-actions">{children}</span>
+    </div>
+  )
+}
+
 export function MediaPane({
   kind,
   filter,
@@ -519,8 +709,10 @@ export function MediaPane({
   selectedId = null,
   onSelect,
   onTotalsChange,
+  variant = 'page',
 }: MediaPaneProps) {
   const isMovies = kind === 'movies'
+  const isSection = variant === 'section'
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
   const [releaseSearchItem, setReleaseSearchItem] = useState<ReleaseSearchItem | null>(null)
   const [query, setQuery] = useHashState<string>(namespace, 'q', '')
@@ -659,9 +851,13 @@ export function MediaPane({
    *  the Faltantes page keeps the exact DOM it has today. */
   const selectableClass = onSelect ? ' is-selectable' : ''
 
-  function rowProps(id: number, makeDetail: () => MediaDetail) {
+  function rowProps(
+    id: number,
+    makeDetail: () => MediaDetail,
+    makeRelease: () => ReleaseSearchItem,
+  ): RowWiring {
     if (!onSelect) return {}
-    const select = () => onSelect({ id, detail: makeDetail() })
+    const select = () => onSelect({ id, detail: makeDetail(), release: makeRelease() })
     return {
       tabIndex: 0,
       'aria-current': selectedId === id ? true : undefined,
@@ -673,6 +869,20 @@ export function MediaPane({
         }
       },
     }
+  }
+
+  /**
+   * What the row's search action (🔍) does.
+   *
+   * In the sections the search lives in the detail panel: the click bubbles
+   * to the row, which selects it, and the panel renders its Releases tab for
+   * that selection — no modal ever opens per row, which is the whole point of
+   * the chosen prototype. Without a panel to drive (the Faltantes page) the
+   * overlay opens exactly as it always has.
+   */
+  function openReleases(item: ReleaseSearchItem) {
+    if (isSection && onSelect) return
+    setReleaseSearchItem(item)
   }
 
   return (
@@ -716,13 +926,53 @@ export function MediaPane({
                 <div className="wanted-grid">
                   {allWantedMovies.map((movie) => {
                     const grabbed = formatGrabMark(movie.grabbed_at, movie.grabbed_destination)
+                    const actions = (
+                      <>
+                        <button
+                          className="action-btn search-item"
+                          onClick={() => openReleases(wantedMovieRelease(movie))}
+                        >
+                          🔍 Buscar
+                        </button>
+                        <button
+                          className="action-btn scan-folder-btn"
+                          onClick={() => handleScanForMovie(movie)}
+                        >
+                          📁 En carpeta
+                        </button>
+                      </>
+                    )
+                    if (isSection) {
+                      return (
+                        <SectionRow
+                          key={movie.id}
+                          className={`wanted-card${selectableClass}`}
+                          wiring={rowProps(
+                            movie.id,
+                            () => wantedMovieDetail(movie),
+                            () => wantedMovieRelease(movie),
+                          )}
+                          title={movie.title}
+                          year={movie.year}
+                          status={faltaStatus()}
+                          grabbed={grabbed}
+                          grabbedDestination={movie.grabbed_destination}
+                        >
+                          {actions}
+                        </SectionRow>
+                      )
+                    }
                     return (
                       // `status-grabbed` is layered ON TOP OF `status-error`: the
                       // card is still missing, it was also already requested. Two
                       // facts, neither overwriting the other.
                       <div
                         key={movie.id}
-                        {...rowProps(movie.id, () => wantedMovieDetail(movie))}
+                        {...rowProps(
+                          movie.id,
+                          () => wantedMovieDetail(movie),
+                          () => wantedMovieRelease(movie),
+                        )}
                         className={`wanted-card status-error${grabbed ? ' status-grabbed' : ''}${selectableClass}`}
                       >
                         {movie.remotePoster && (
@@ -743,26 +993,7 @@ export function MediaPane({
                             </div>
                           )}
                           <div className="wanted-card-actions">
-                            <button
-                              className="action-btn search-item"
-                              onClick={() => setReleaseSearchItem({
-                                type: 'movie',
-                                id: movie.id,
-                                title: movie.title,
-                                year: movie.year,
-                                source: 'radarr',
-                                remotePoster: movie.remotePoster,
-                                has_file: movie.has_file,
-                              })}
-                            >
-                              🔍 Buscar
-                            </button>
-                            <button
-                              className="action-btn scan-folder-btn"
-                              onClick={() => handleScanForMovie(movie)}
-                            >
-                              📁 En carpeta
-                            </button>
+                            {actions}
                           </div>
                         </div>
                       </div>
@@ -788,17 +1019,73 @@ export function MediaPane({
               <div className="wanted-list">
                 {allWantedEpisodes.map((ep) => {
                   const grabbed = formatGrabMark(ep.grabbed_at, ep.grabbed_destination)
+                  const code = `S${String(ep.season_number ?? 0).padStart(2, '0')}E${String(ep.episode_number ?? 0).padStart(2, '0')}`
+                  const actions = (
+                    <>
+                      <button
+                        className="action-btn search-item"
+                        title="Buscar releases"
+                        onClick={() => openReleases(wantedEpisodeRelease(ep))}
+                      >
+                        🔍
+                      </button>
+                      <button
+                        className="action-btn scan-folder-btn"
+                        title="Buscar en carpeta"
+                        onClick={() => handleScanForSeries({
+                          id: ep.series_id,
+                          title: ep.series_title,
+                          season_number: ep.season_number,
+                          episode_number: ep.episode_number,
+                          episode_title: ep.title,
+                          air_date: ep.air_date,
+                        })}
+                      >
+                        📁
+                      </button>
+                    </>
+                  )
+                  if (isSection) {
+                    return (
+                      <SectionRow
+                        key={ep.id}
+                        className={`wanted-row${selectableClass}`}
+                        wiring={rowProps(
+                          ep.id,
+                          () => wantedEpisodeDetail(ep),
+                          () => wantedEpisodeRelease(ep),
+                        )}
+                        title={ep.series_title}
+                        status={faltaStatus()}
+                        grabbed={grabbed}
+                        grabbedDestination={ep.grabbed_destination}
+                        extra={
+                          <>
+                            <span className="sec-row-ep">{code}</span>
+                            <span className="sec-row-ep-title">{ep.title}</span>
+                            {ep.air_date && (
+                              <span className="sec-row-date">{ep.air_date.slice(0, 10)}</span>
+                            )}
+                          </>
+                        }
+                      >
+                        {actions}
+                      </SectionRow>
+                    )
+                  }
                   return (
                     <div
                       key={ep.id}
-                      {...rowProps(ep.id, () => wantedEpisodeDetail(ep))}
+                      {...rowProps(
+                        ep.id,
+                        () => wantedEpisodeDetail(ep),
+                        () => wantedEpisodeRelease(ep),
+                      )}
                       className={`wanted-row${grabbed ? ' status-grabbed' : ''}${selectableClass}`}
                     >
                       <div className="wanted-row-info">
                         <span className="wanted-series">{ep.series_title}</span>
-                        <span className="wanted-ep">
-                          S{String(ep.season_number ?? 0).padStart(2, '0')}E{String(ep.episode_number ?? 0).padStart(2, '0')}
-                        </span>
+                        <span className="wanted-ep">{code}</span>
                         <span className="wanted-ep-title">{ep.title}</span>
                         {ep.air_date && <span className="wanted-date">{ep.air_date.slice(0, 10)}</span>}
                         {/* Null means never requested: show nothing at all. */}
@@ -809,37 +1096,7 @@ export function MediaPane({
                         )}
                       </div>
                       <div className="wanted-row-actions">
-                        <button
-                          className="action-btn search-item"
-                          title="Buscar releases"
-                          onClick={() => setReleaseSearchItem({
-                            type: 'episode',
-                            id: ep.id,
-                            title: ep.title,
-                            series_title: ep.series_title,
-                            season_number: ep.season_number,
-                            episode_number: ep.episode_number,
-                            date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
-                            source: 'sonarr',
-                            has_file: false,
-                          })}
-                        >
-                          🔍
-                        </button>
-                        <button
-                          className="action-btn scan-folder-btn"
-                          title="Buscar en carpeta"
-                          onClick={() => handleScanForSeries({
-                            id: ep.series_id,
-                            title: ep.series_title,
-                            season_number: ep.season_number,
-                            episode_number: ep.episode_number,
-                            episode_title: ep.title,
-                            air_date: ep.air_date,
-                          })}
-                        >
-                          📁
-                        </button>
+                        {actions}
                       </div>
                     </div>
                   )
@@ -867,10 +1124,53 @@ export function MediaPane({
               <div className="wanted-grid">
                 {allCatalogMovies.map((movie) => {
                   const grabbed = formatGrabMark(movie.grabbed_at, movie.grabbed_destination)
+                  const actions = (
+                    <>
+                      <button
+                        className="action-btn search-item"
+                        onClick={() => openReleases(catalogMovieRelease(movie))}
+                      >
+                        🔍 Buscar
+                      </button>
+                      <button
+                        className="action-btn scan-folder-btn"
+                        onClick={() => handleScanForMovie({ id: movie.id, title: movie.title, year: movie.year, overview: '', remotePoster: movie.remotePoster, has_file: movie.has_file, altTitles: [] })}
+                      >
+                        📁 En carpeta
+                      </button>
+                    </>
+                  )
+                  if (isSection) {
+                    return (
+                      <SectionRow
+                        key={movie.id}
+                        className={`wanted-card${selectableClass}`}
+                        wiring={rowProps(
+                          movie.id,
+                          () => catalogMovieDetail(movie),
+                          () => catalogMovieRelease(movie),
+                        )}
+                        title={movie.title}
+                        year={movie.year}
+                        status={catalogRowStatus(movie.has_file, movie.path_exists)}
+                        // "" is unknown, never a guessed class: no chip at all.
+                        chip={movie.quality || undefined}
+                        path={movie.path || undefined}
+                        grabbed={grabbed}
+                        grabbedDestination={movie.grabbed_destination}
+                      >
+                        {actions}
+                      </SectionRow>
+                    )
+                  }
                   return (
                     <div
                       key={movie.id}
-                      {...rowProps(movie.id, () => catalogMovieDetail(movie))}
+                      {...rowProps(
+                        movie.id,
+                        () => catalogMovieDetail(movie),
+                        () => catalogMovieRelease(movie),
+                      )}
                       className={`wanted-card ${movie.has_file && movie.path_exists ? 'status-ok' : 'status-error'}${grabbed ? ' status-grabbed' : ''}${selectableClass}`}
                     >
                       {movie.remotePoster && (
@@ -898,26 +1198,7 @@ export function MediaPane({
                           </div>
                         )}
                         <div className="wanted-card-actions">
-                          <button
-                            className="action-btn search-item"
-                            onClick={() => setReleaseSearchItem({
-                              type: 'movie',
-                              id: movie.id,
-                              title: movie.title,
-                              year: movie.year,
-                              source: 'radarr',
-                              remotePoster: movie.remotePoster,
-                              has_file: movie.has_file,
-                            })}
-                          >
-                            🔍 Buscar
-                          </button>
-                          <button
-                            className="action-btn scan-folder-btn"
-                            onClick={() => handleScanForMovie({ id: movie.id, title: movie.title, year: movie.year, overview: '', remotePoster: movie.remotePoster, has_file: movie.has_file, altTitles: [] })}
-                          >
-                            📁 En carpeta
-                          </button>
+                          {actions}
                         </div>
                       </div>
                     </div>
@@ -945,10 +1226,60 @@ export function MediaPane({
             <div className="wanted-grid">
               {allCatalogSeries.map((series) => {
                 const grabbed = formatGrabMark(series.grabbed_at, series.grabbed_destination)
+                const actions = (
+                  <>
+                    <button
+                      className="action-btn search-item"
+                      onClick={() => openReleases(catalogSeriesRelease(series))}
+                    >
+                      🔍 Buscar
+                    </button>
+                    <button
+                      className="action-btn scan-folder-btn"
+                      onClick={() => handleScanForSeries({ id: series.id, title: series.title })}
+                    >
+                      📁 En carpeta
+                    </button>
+                  </>
+                )
+                if (isSection) {
+                  return (
+                    <SectionRow
+                      key={series.id}
+                      className={`wanted-card${selectableClass}`}
+                      wiring={rowProps(
+                        series.id,
+                        () => catalogSeriesDetail(series),
+                        () => catalogSeriesRelease(series),
+                      )}
+                      title={series.title}
+                      year={series.year}
+                      status={catalogRowStatus(series.has_file, series.path_exists)}
+                      // Sonarr's list carries no quality: no chip, never a
+                      // guessed one (the Calidad view says so on screen).
+                      path={series.path || undefined}
+                      grabbed={grabbed}
+                      grabbedDestination={series.grabbed_destination}
+                      extra={
+                        series.episode_count > 0 ? (
+                          <span className="sec-row-ep-count">
+                            {series.episode_file_count}/{series.episode_count} episodios
+                          </span>
+                        ) : undefined
+                      }
+                    >
+                      {actions}
+                    </SectionRow>
+                  )
+                }
                 return (
                   <div
                     key={series.id}
-                    {...rowProps(series.id, () => catalogSeriesDetail(series))}
+                    {...rowProps(
+                      series.id,
+                      () => catalogSeriesDetail(series),
+                      () => catalogSeriesRelease(series),
+                    )}
                     className={`wanted-card ${series.has_file && series.path_exists ? 'status-ok' : 'status-error'}${grabbed ? ' status-grabbed' : ''}${selectableClass}`}
                   >
                     {series.remotePoster && (
@@ -980,27 +1311,7 @@ export function MediaPane({
                         </div>
                       )}
                       <div className="wanted-card-actions">
-                        <button
-                          className="action-btn search-item"
-                          onClick={() => setReleaseSearchItem({
-                            type: 'episode',
-                            id: series.id,
-                            title: series.title,
-                            series_title: series.title,
-                            year: series.year,
-                            source: 'sonarr',
-                            remotePoster: series.remotePoster,
-                            has_file: series.has_file,
-                          })}
-                        >
-                          🔍 Buscar
-                        </button>
-                        <button
-                          className="action-btn scan-folder-btn"
-                          onClick={() => handleScanForSeries({ id: series.id, title: series.title })}
-                        >
-                          📁 En carpeta
-                        </button>
+                        {actions}
                       </div>
                     </div>
                   </div>
