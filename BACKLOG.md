@@ -531,7 +531,7 @@ ahí borrar sí pierde el dato.
 
 ---
 
-### F-08 — Secciones **Películas** y **Series** · **Grande** · 🔄 *prototipos decididos, falta implementar*
+### F-08 — Secciones **Películas** y **Series** · **Grande** · ✅ **Cerrado** (PRs #107–#116)
 
 Pedida: dos secciones nuevas que **reunifiquen** lo que hoy está repartido entre
 `Faltantes` · `Calendario` · el modal de releases · `Archivos`.
@@ -578,6 +578,21 @@ Lo que absorbe de la web actual, por sección:
 **Fuera de las dos secciones** (sin cambio): `Dashboard`, `Trazabilidad`, `Disco`,
 `Media Mixer`, `Configuración`.
 
+#### ✅ Entregado — 7 PRs de implementación + 3 de diseño
+
+| | |
+|---|---|
+| `#107` | Galería de prototipos rediseñada (secciones + estado elegido/descartado) |
+| `#108` | Los **8 prototipos** (4 Películas + 4 Series) |
+| `#109` | Decisión: **maestro–detalle en las dos secciones** |
+| `#110` → `#116` | Las 7 rebanadas de implementación |
+
+**Bug real encontrado por el e2e en el último PR**: a 1280px **el título de la fila colapsaba a
+`width: 0`** — las filas enseñaban año, píldora y botones, **sin título**. Causa: un flex item
+con `overflow: hidden` **anula su tamaño mínimo automático**, y la columna `auto` de las
+acciones no cedía. Se arregló con `flex-wrap`, **sin tocar la aserción** — la aserción tenía
+razón y la fila estaba mal.
+
 #### Qué falta
 
 | PR | Contenido | Estado |
@@ -588,7 +603,7 @@ Lo que absorbe de la web actual, por sección:
 | **4** | **Calidad**: `quality`/`path` en la biblioteca + sub-vista con clases 4K/3D | ✅ **PR #113**, `6bc9eab`, 687 backend / 308 frontend |
 | **5** | El modal de releases → **panel de detalle** + **filas al estilo del prototipo** | ✅ **PR #114**, `265e7b3`, 316 frontend |
 | **6** | Pestañas `Archivos` / `Historial` / `Episodios` del panel con datos reales | ✅ **PR #115**, `bad851f`, 326 frontend |
-| **7** | Retirar `Faltantes`/`Calendario` del menú **+ migrar sus tests** a las secciones | ⬜ |
+| **7** | Retirar `Faltantes`/`Calendario` **+ migrar sus tests** + specs e2e | ✅ **PR #116**, `506bf5b`, 325 tests + e2e verdes |
 
 > **El plan creció de 4 a 6 PRs** al comprobar que `AllMovie` **no lleva `quality`** y que
 > **ningún endpoint** la expone para la biblioteca — la sub-vista *Calidad* no tenía de dónde

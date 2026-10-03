@@ -138,7 +138,7 @@ descartada.
 | **4** ✅ | **Calidad**: `quality`/`path` en la biblioteca + sub-vista con clases — **PR #113**, `6bc9eab` |
 | **5** ✅ | Modal → **panel** + **filas del prototipo** — **PR #114**, `265e7b3` |
 | **6** ✅ | Pestañas `Archivos`/`Historial`/`Episodios` con datos reales — **PR #115**, `bad851f` |
-| **7** | Retirar `Faltantes`/`Calendario` del menú **+ migrar sus tests** | ⬜ *el plan pasó de 6 a 7* |
+| **7** ✅ | Retirar páginas + migrar tests + specs e2e — **PR #116**, `506bf5b` |
 
 **Cada PR deja la app funcionando**: primero se añade el techo, después se mueve el contenido,
 y solo al final se retira lo viejo.
@@ -158,3 +158,21 @@ backend, y el modal→panel (independiente) se separó en el 5.
 
 **`Calendar` solo tenía 140 líneas** y ya separaba películas/episodios → el filtro de tipo fue
 barato y su **default es "mostrar ambos"**, así que `Calendario` no cambió de comportamiento.
+
+
+---
+
+## 🏁 CERRADO
+
+**10 PRs** en total: 3 de diseño (`#107`–`#109`) + 7 de implementación (`#110`–`#116`).
+CI verde en todos, **`e2e` incluido** en el último.
+
+**Lo que el e2e encontró y yo no habría visto**: a 1280px el título de la fila colapsaba a
+`width: 0`. Un flex item con `overflow: hidden` **anula su `min-width: auto`**, y la columna
+`auto` de las acciones no cedía → el nombre absorbía los 115px de desbordamiento y llegaba a
+cero. **Bug visible**: las filas se veían **sin título**.
+
+**Y su causa de fondo**: la fila del prototipo es `34px minmax(0,1fr)` **sin columna de
+acciones** — el manifierto de `peliculas-01` dice que las acciones vivían en el panel. El PR 5
+las devolvió a la fila **sobre reglas copiadas de ese prototipo**. El título se murió de esa
+colisión.
