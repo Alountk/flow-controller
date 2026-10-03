@@ -1030,6 +1030,49 @@ def _movie_quality(movie: dict) -> str:
     return name if isinstance(name, str) else ""
 
 
+def _movie_file_name(movie: dict) -> str:
+    """``movieFile.relativePath`` — the file Radarr owns, or ``""`` when absent.
+
+    The same guarded read as ``_movie_quality``: ``movieFile`` only exists once
+    the movie has a file, and an odd payload can put anything where the shape
+    says a string. Empty means "no name to show" and is NEVER filled in from
+    the title — the panel would then present a name this app made up as the
+    file that is on disk.
+    """
+    movie_file = movie.get("movieFile")
+    if not isinstance(movie_file, dict):
+        return ""
+    relative_path = movie_file.get("relativePath")
+    return relative_path if isinstance(relative_path, str) else ""
+
+
+def _movie_languages(movie: dict) -> list[str]:
+    """The names in ``movieFile.languages``, or ``[]`` when unknown.
+
+    Radarr sends ``[{"id": 1, "name": "Spanish"}, ...]`` — objects, not
+    strings. Every step is guarded so the list can only ever contain names the
+    arr actually reported: a non-list container, an entry without ``name``, an
+    empty or non-string ``name`` are all dropped rather than stringified
+    (``{"id": 3}`` must never reach the screen as ``"undefined"``), and the
+    result is never padded — ``[]`` renders nothing, ``[""]`` would render a
+    language nobody spoke.
+    """
+    movie_file = movie.get("movieFile")
+    if not isinstance(movie_file, dict):
+        return []
+    languages = movie_file.get("languages")
+    if not isinstance(languages, list):
+        return []
+    names = []
+    for entry in languages:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if isinstance(name, str) and name:
+            names.append(name)
+    return names
+
+
 async def fetch_all_movies_detailed(
     session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50
 ) -> dict:
@@ -1075,6 +1118,11 @@ async def fetch_all_movies_detailed(
                     "path": path,
                     # "" means unknown (no file / odd payload), never a guess.
                     "quality": _movie_quality(m),
+                    # The file itself, from the same `movieFile` the quality
+                    # came from: its name and its languages. "" / [] mean "not
+                    # available", never a title-derived name or a placeholder.
+                    "file_name": _movie_file_name(m),
+                    "languages": _movie_languages(m),
                     "path_exists": path_exists,
                     "monitored": m.get("monitored", False),
                 })

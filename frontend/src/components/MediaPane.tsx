@@ -550,6 +550,15 @@ function catalogMovieRelease(movie: AllMovie): ReleaseSearchItem {
     source: 'radarr',
     remotePoster: movie.remotePoster,
     has_file: movie.has_file,
+    // The row IS where AllMovie lives, so the panel's has-file block reads the
+    // file's own facts from here: its name and languages (both "" / [] when
+    // the payload has none — the block degrades instead of inventing), the
+    // quality behind the 1080/4K tags, and the path the 3D tag tests against
+    // path_3d.
+    file_name: movie.file_name,
+    languages: movie.languages,
+    quality: movie.quality,
+    path: movie.path,
   }
 }
 
@@ -577,6 +586,12 @@ function catalogSeriesRelease(series: AllSeries): ReleaseSearchItem {
     source: 'sonarr',
     remotePoster: series.remotePoster,
     has_file: series.has_file,
+    // Sonarr's list has NO per-episode file name, languages or quality — so
+    // none of them travel and the block says the name is unavailable rather
+    // than borrowing an episode's file as if it were the series'. The path
+    // does exist, and path_3d membership is the rule PR #113 established for
+    // Series, so the 3D tag can still be lit honestly.
+    path: series.path,
   }
 }
 

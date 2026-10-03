@@ -342,6 +342,15 @@ export interface AllMovie {
    *  "Bluray-2160p"), or "" when unknown — no file, or an odd payload shape.
    *  "" must read as unknown on screen, never as a guessed class. */
   quality: string
+  /** The file Radarr owns, by its own `movieFile.relativePath`. Optional: a
+   *  settings/response written before this field existed has none, and "" (or
+   *  a missing key) means "no name available here" — never a title-derived
+   *  name the app would pass off as the file on disk. */
+  file_name?: string
+  /** Languages OF THAT FILE (`movieFile.languages` → names), or [] when the
+   *  payload carries none. An empty list renders nothing; it is never [""] and
+   *  an entry Radarr sent without a `name` never becomes "undefined". */
+  languages?: string[]
   path_exists: boolean
   monitored: boolean
   /** Unix seconds when this app asked to download the title, or null when it
