@@ -43,6 +43,21 @@ const wantedMovie = {
   grabbed_destination: null,
 }
 
+/** A second missing title: the auto-search tests drive THIS row so they
+ *  always meet a panel with no cached results of its own — the module-level
+ *  panel cache keys results per item, and each test needs a fresh one. */
+const secondWanted = {
+  id: 902,
+  title: 'Otra Película Sin Archivo',
+  year: 2021,
+  overview: '',
+  remotePoster: '',
+  has_file: false,
+  altTitles: [],
+  grabbed_at: null,
+  grabbed_destination: null,
+}
+
 const episode = {
   id: 7,
   title: 'Of Ice Men',
@@ -108,7 +123,7 @@ function stubFetch() {
     if (url.includes('/api/wanted?')) {
       return ok({
         wanted: {
-          radarr: { items: [wantedMovie], total: 1 },
+          radarr: { items: [wantedMovie, secondWanted], total: 2 },
           sonarr: { items: [episode], total: 1 },
         },
         updated_at: 0,
@@ -278,15 +293,24 @@ describe('sections · the release search in the panel', () => {
     await screen.findByText('Your Name.')
 
     // A missing title: a catalogue movie that already has a file honestly
-    // answers "ya tiene archivo" instead of offering a search.
+    // answers "ya tiene archivo" instead of offering a search — the row this
+    // test picks is a wanted one, which searches BY ITSELF (PR B): the panel
+    // no longer draws a 🔍 Buscar Releases button to press.
     fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
     await screen.findByText('Todo a la vez en todas partes')
     fireEvent.click(firstRow())
-    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
 
-    // Results arrive inside the panel — the filter bar is the proof.
+    // The auto-search replaces the click the panel used to need: results are
+    // the proof it ran, and the button's absence is the proof it is gone.
     await screen.findByPlaceholderText('Filtrar por título...')
+    expect(screen.queryByRole('button', { name: /Buscar Releases/ })).toBeNull()
     expect(screen.getByText('1 releases encontrados')).toBeInTheDocument()
+
+    // The routing readout is on duty under the file list, rules and all.
+    expect(
+      within(panel()).getByRole('heading', { name: 'Acción principal' }),
+    ).toBeInTheDocument()
+    expect(within(panel()).getByText('1080 o menor → biblioteca (la del arr)')).toBeInTheDocument()
 
     fireEvent.click(document.querySelector('.release-content') as HTMLElement)
 
@@ -301,6 +325,59 @@ describe('sections · the release search in the panel', () => {
     await screen.findByText(/Descarga iniciada/)
     // The grab never left the panel: no backdrop was ever opened.
     expect(document.querySelector('.scan-modal-backdrop')).toBeNull()
+  })
+
+  it('searches by itself on mount and on an indexer change — and not again on re-open', async () => {
+    renderSection(Peliculas)
+    await screen.findByText('Your Name.')
+
+    const searchCalls = () =>
+      fn.mock.calls.filter(([input]) => String(input).includes('/api/calendar/releases')).length
+
+    // Trigger 1: the Releases view mounts for a title with nothing to show
+    // and fires the search no button asks for any more.
+    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    await screen.findByText('Otra Película Sin Archivo')
+    fireEvent.click(screen.getByText('Otra Película Sin Archivo'))
+    await screen.findByPlaceholderText('Filtrar por título...')
+    expect(searchCalls()).toBe(1)
+
+    // Trigger 2: picking an indexer IS the request now — exactly one new
+    // search, under the newly chosen value (and the select is labelled for
+    // assistive tech, so the change is addressable by role).
+    const indexerSelect = screen.getByRole('combobox', { name: /Indexador/ }) as HTMLSelectElement
+    const next = indexerSelect.value === 'all' ? '1' : 'all'
+    fireEvent.change(indexerSelect, { target: { value: next } })
+    await waitFor(() => expect(searchCalls()).toBe(2))
+    await screen.findByPlaceholderText('Filtrar por título...')
+
+    // The guarantee: a tab switch unmounts the view, and coming back must
+    // restore THIS item's results — a search that already returned never
+    // runs again just because the panel was rebuilt around it.
+    fireEvent.click(screen.getByRole('button', { name: 'Archivos' }))
+    expect(inlineSearch()).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Releases' }))
+
+    await screen.findByPlaceholderText('Filtrar por título...')
+    expect(searchCalls()).toBe(2)
+    expect(screen.getByText('1 releases encontrados')).toBeInTheDocument()
+
+    // Acción principal with NOTHING selected shows the rules only — no fake
+    // "selected" row…
+    expect(within(panel()).queryByText('Destino de la selección:')).toBeNull()
+
+    // …and the moment a row is marked it answers the real question: class
+    // AND exact destination. path_4k is "" under this stub, and an
+    // unconfigured folder resolves to the library — which is exactly where
+    // backend destination_for_quality would send this 4K row. The row is
+    // read from its own element: a text query would match the list too (a
+    // single-child list carries exactly its child's text), and an `li` has
+    // no content-derived accessible name to query by.
+    fireEvent.click(document.querySelector('.release-checkbox input') as HTMLInputElement)
+    expect(within(panel()).getByText('Destino de la selección:')).toBeInTheDocument()
+    expect(panel().querySelector('.release-action-selected li')?.textContent).toBe(
+      '4K → Biblioteca (la del arr)',
+    )
   })
 
   it('keeps the panel honest when nothing is selected', async () => {

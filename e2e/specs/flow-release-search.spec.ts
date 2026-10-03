@@ -5,15 +5,22 @@ import { test, expect, login } from '../fixtures/app';
  * against the STUB-backed install (phase 2: + docker-compose.e2e.yml).
  *
  * Row → search inside the detail panel's Releases tab (PR 5 of F-08) →
- * Buscar Releases → results from fake-arr → select one → Descargar → the
- * grab-batch confirmation. The stub answers POST /api/v3/release with 201,
- * so this proves the UI flow end to end; it does NOT download anything (see
+ * results from fake-arr → select one → Descargar → the grab-batch
+ * confirmation. The stub answers POST /api/v3/release with 201, so this
+ * proves the UI flow end to end; it does NOT download anything (see
  * e2e/README.md).
  *
  * PR 7 retired the Faltantes page: the wanted card now lives in the
  * Películas section's Faltantes sub-view, and the search opens INLINE in the
  * panel — no backdrop, no Escape, and the done step's exit reads
  * "Nueva búsqueda" instead of the overlay's "Cerrar".
+ *
+ * PR B rewired that inline search: the panel has NO 🔍 Buscar Releases
+ * button — it searches by itself when the Releases view mounts (and again
+ * when the indexer choice changes), the rows read as the file selector
+ * (name · idioma · calidad · size · semillas), and "Acción principal" below
+ * the list spells the routing out. The overlay modal keeps its button and
+ * its initial step; this spec never leaves the panel to prove the split.
  *
  * Same rules as flow-faltantes: role/accessible-name selectors, text only
  * where markup has no role (justified inline), web-first assertions with
@@ -34,13 +41,13 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // the starting point this spec has always used.
   await app.getByRole('tab', { name: 'Faltantes' }).click();
 
-  // The movie row keeps the page's own action — MediaPane.tsx:935,
+  // The movie row keeps the page's own action — MediaPane.tsx,
   // button "🔍 Buscar" (sectionsPanel.test's routing test proves this exact
   // click). In the section it bubbles to the row: the row selects and the
   // search opens inside the panel's Releases tab — no modal ever.
-  // Playwright matches role names by substring: this resolves to ONE button
-  // because the panel's "🔍 Buscar Releases" does not exist until this click
-  // selects the row. Never re-query it after the click.
+  // Playwright matches role names by substring; this resolves to ONE button
+  // even so, because the panel draws NO "🔍 Buscar Releases" of its own —
+  // that button went away with PR B's panel-only auto-search.
   await app.getByRole('button', { name: '🔍 Buscar' }).click();
 
   // Releases is what must be showing now: it is the panel's default tab and
@@ -49,50 +56,58 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // role=group button — so the class is the only honest "active" selector.
   await expect(app.locator('.sec-dtab.is-active')).toHaveText('Releases', { timeout: 15000 });
 
-  // The panel's search action — the SAME body the overlay modal renders,
-  // ReleaseSearchModal.tsx:496, button "🔍 Buscar Releases".
-  const searchButton = app.getByRole('button', { name: /Buscar Releases/ });
-  await expect(searchButton).toBeVisible({ timeout: 15000 });
+  // The behaviour split, pinned: the PANEL has no search button to press
+  // (the overlay modal elsewhere still renders its own).
+  await expect(app.getByRole('button', { name: /Buscar Releases/ })).toHaveCount(0);
 
   // The indexer dropdown carries the stub's list (indexers.json → "Torznab")
-  // — ReleaseSearchModal.tsx:435 renders {idx.name} as an <option>. Count,
-  // not visibility: options of a closed <select> are not painted.
+  // — ReleaseSearchModal renders {idx.name} as an <option>. It stays as the
+  // trigger for a re-search. Count, not visibility: options of a closed
+  // <select> are not painted.
   await expect(app.getByRole('option', { name: 'Torznab' })).toHaveCount(1, { timeout: 15000 });
 
-  await searchButton.click();
-
-  // Results appeared. The select-all checkbox's accessible name comes from
-  // its wrapping label's count text — ReleaseSearchModal.tsx:436-447,
-  // "3 releases encontrados" (releases.json has 3).
+  // Results appeared WITHOUT anyone pressing a button: mounting the view
+  // searched by itself. The select-all checkbox's accessible name comes from
+  // its wrapping label's count text, "3 releases encontrados"
+  // (releases.json has 3).
   await expect(app.getByRole('checkbox', { name: '3 releases encontrados' })).toHaveCount(1, { timeout: 15000 });
 
-  // The release title itself — ReleaseSearchModal.tsx:574, div.release-title
-  // (no role → text selector, justified as above).
+  // The file selector's first row: the file's name alone on its line —
+  // div.release-title (no role → text selector, justified as above).
   await expect(app.getByText('Your.Name.2016.1080p.BluRay.x264-GRP')).toBeVisible({ timeout: 15000 });
 
+  // Acción principal, below the file list: the readout that spells the
+  // routing out — its heading, then the first rule. `exact` so only the `li`
+  // matches: the rule list's own text is all three rules concatenated, and an
+  // `li` has no reliable content-derived accessible name across engines.
+  await expect(app.getByRole('heading', { name: 'Acción principal' })).toBeVisible({ timeout: 15000 });
+  await expect(
+    app.getByText('1080 o menor → biblioteca (la del arr)', { exact: true }),
+  ).toBeVisible({ timeout: 15000 });
+
   // The destination combo offers the stub's root folder (rootfolders.json)
-  // — ReleaseSearchModal.tsx:473 renders each folder as an <option>.
+  // — ReleaseSearchModal renders each folder as an <option>.
   await expect(app.getByRole('option', { name: '/mnt/storage/movies' })).toHaveCount(1, { timeout: 15000 });
 
   // Select ONE release. The row checkbox sits in a label with no text
-  // (ReleaseSearchModal.tsx:566-572), so it has no accessible name to query
+  // (its label holds no text), so it has no accessible name to query
   // by: within role=checkbox, index 0 is the named select-all asserted above
   // and index 1 is the first release row.
   await app.getByRole('checkbox').nth(1).check();
 
-  // The batch grab button only appears with a selection —
-  // ReleaseSearchModal.tsx:451-452, button "⬇️ Descargar (1)".
+  // The batch grab button only appears with a selection — button
+  // "⬇️ Descargar (1)".
   const grabButton = app.getByRole('button', { name: /Descargar \(1\)/ });
   await expect(grabButton).toBeVisible({ timeout: 15000 });
   await grabButton.click();
 
   // Success feedback. grab-batch answers detail "1 descargados"
   // (backend/routes/calendar.py:370) and the done step renders it in the
-  // status block — ReleaseSearchModal.tsx:360, plain div (no role → text) —
-  // beside the done-step exit button, ReleaseSearchModal.tsx:722-723.
+  // status block — plain div, no role → text — beside the done-step exit
+  // button.
   await expect(app.getByText('1 descargados')).toBeVisible({ timeout: 15000 });
   // In panel presentation the exit reads "Nueva búsqueda": the panel is not
   // a dialog, so its dismiss restarts the search — "Cerrar" is overlay-only
-  // (ReleaseSearchModal.tsx:390, dismissLabel).
+  // (dismissLabel).
   await expect(app.getByRole('button', { name: 'Nueva búsqueda' })).toBeVisible({ timeout: 15000 });
 });
