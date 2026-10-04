@@ -57,9 +57,9 @@ class TestMixerProbeIsOffTheEventLoop:
             "audio_tracks": [{"index": 1, "codec": "aac", "language": "eng", "channels": 6,
                               "bitrate": 128000, "default": True}],
         }
-        with patch("routes_mixer.os.path.isfile", return_value=True), \
-             patch("routes_mixer.check_compatibility", return_value={"ok": True, "warnings": []}), \
-             patch("routes_mixer.probe_file",
+        with patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True), \
+             patch("interfaces.http.routes_mixer.check_compatibility", return_value={"ok": True, "warnings": []}), \
+             patch("interfaces.http.routes_mixer.probe_file",
                    side_effect=lambda p: (seen.__setitem__("probe", _ran_on_the_event_loop()), probe)[1]):
             resp = client.post(
                 "/api/mixer/probe",
@@ -81,7 +81,7 @@ class TestFileEndpointsAreOffTheEventLoop:
     """
 
     def _post(self, url: str, body: dict):
-        with patch("routes.files._validate_path", side_effect=lambda p: p):
+        with patch("interfaces.http.routes.files._validate_path", side_effect=lambda p: p):
             return client.post(url, json=body)
 
     def test_rename_does_not_run_on_the_event_loop(self, tmp_path):
@@ -90,7 +90,7 @@ class TestFileEndpointsAreOffTheEventLoop:
         src = tmp_path / "a.mkv"
         src.write_bytes(b"x")
         seen: dict = {}
-        with patch("routes.files.os.rename",
+        with patch("interfaces.http.routes.files.os.rename",
                    side_effect=_spy(seen, "rename", os.rename)):
             resp = self._post("/api/files/rename",
                               {"remote_path": str(src), "local_path": str(tmp_path / "b.mkv")})
@@ -106,7 +106,7 @@ class TestFileEndpointsAreOffTheEventLoop:
         victim.mkdir()
         (victim / "inner.mkv").write_bytes(b"x")
         seen: dict = {}
-        with patch("routes.files.shutil.rmtree",
+        with patch("interfaces.http.routes.files.shutil.rmtree",
                    side_effect=_spy(seen, "rmtree", shutil.rmtree)):
             resp = self._post("/api/files/delete", {"remote_path": str(victim)})
 
@@ -122,7 +122,7 @@ class TestFileEndpointsAreOffTheEventLoop:
         src.write_bytes(b"x")
         dst = tmp_path / "b.mkv"
         seen: dict = {}
-        with patch("routes.files.shutil.copy2",
+        with patch("interfaces.http.routes.files.shutil.copy2",
                    side_effect=_spy(seen, "copy2", shutil.copy2)):
             resp = self._post("/api/files/copy",
                               {"remote_path": str(src), "local_path": str(dst)})
@@ -150,10 +150,10 @@ class TestScanScoringIsOffTheEventLoop:
 
         meta = {"title": "Whatever", "year": 2016,
                 "path": "/data/movies/Whatever", "altTitles": []}
-        with patch("routes.wanted._validate_path", side_effect=lambda p: p), \
-             patch("routes.wanted.arr_movie_metadata",
+        with patch("interfaces.http.routes.wanted._validate_path", side_effect=lambda p: p), \
+             patch("interfaces.http.routes.wanted.arr_movie_metadata",
                    new_callable=AsyncMock, return_value=meta), \
-             patch("routes.wanted._match_score", side_effect=score):
+             patch("interfaces.http.routes.wanted._match_score", side_effect=score):
             resp = client.post(
                 "/api/wanted/scan",
                 json={"source": "radarr", "remote_path": str(tmp_path),

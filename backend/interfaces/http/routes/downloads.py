@@ -14,14 +14,14 @@ import time
 
 from fastapi import APIRouter, Depends
 
-from clients import (
+from application.gateways import (
     arr_categories_for,
     amu_torrent_categories,
     fetch_amu_torrents_by_category,
     fetch_arr_queue,
 )
 from config import configured_services
-from routes.status import verify_api_key
+from interfaces.http.routes.status import verify_api_key
 from traces import normalize_hash
 from state import http_session
 

@@ -10,7 +10,7 @@ The bug this pins: Dune's `path_4k` held a `.srt` (and `.nfo` files) and
 nothing else, and `holdsCopy` counted that subtitle as "we have the 4K".
 """
 
-from routes.files import _file_entry
+from interfaces.http.routes.files import _file_entry
 
 
 def test_a_video_file_is_classified_as_video(tmp_path):

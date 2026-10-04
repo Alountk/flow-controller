@@ -11,8 +11,8 @@ import aiohttp
 from fastapi import APIRouter, Depends
 
 from config import ALLOWED_ROOTS, destination_for_quality, find_service, path_is_allowed, service_unavailable_reason
-from history import record_own_grab
-from clients import (
+from application.gateways import record_own_grab
+from application.gateways import (
     fetch_radarr_calendar,
     fetch_sonarr_calendar,
     arr_search_movie,
@@ -36,8 +36,8 @@ from models import (
     CalendarGrabRequest,
     CalendarGrabBatchRequest,
 )
-from routes.status import verify_api_key
-from routes.wanted import _attach_grabbed_at
+from interfaces.http.routes.status import verify_api_key
+from interfaces.http.routes.wanted import _attach_grabbed_at
 from state import http_session
 
 log = logging.getLogger("flow-controller")

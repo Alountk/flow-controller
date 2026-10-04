@@ -1,8 +1,20 @@
-"""Flow Controller — Main application entry point.
+"""Flow Controller — the composition root.
 
-Routes are organized in routes/*.py modules.
-Shared state lives in state.py.
-Pydantic models live in models.py.
+Everything below is wiring: it decides which adapter meets which port, hands
+delivery what it is allowed to touch, and mounts the result. No decision of
+consequence is made here, and none should be added — a rule with an exception
+in `app.py` is a rule nobody can check.
+
+The layers, and the one direction that matters::
+
+    domain  <-  application  <-  infrastructure
+                      ^
+                      |
+                  interfaces          (delivery; may hold an adapter only
+                                       because THIS file put it in its hand)
+
+`tests_architecture.py` enforces that direction over the real imports. Shared
+state lives in `state.py`; Pydantic models live in `models.py`.
 """
 
 import asyncio
@@ -13,19 +25,34 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-import history
+from application import gateways
+from infrastructure import credentials as credentials_module
+from infrastructure import arr_client
+from infrastructure import settings_store
+from infrastructure import sqlite_history
+from infrastructure import sqlite_history as history
 from config import FRONTEND_DIST
 from state import buf_handler, _load_log_file, close_shared_session, open_shared_session
-from routes.status import router as status_router, background_checker
-from routes.wanted import router as wanted_router
-from routes.calendar import router as calendar_router
-from routes.files import router as files_router
-from routes.actions import router as actions_router
-from routes.auto_copy import router as auto_copy_router
-from routes.downloads import router as downloads_router
-from routes.mediacover import router as mediacover_router
-from routes.settings import router as settings_router, PROTOTYPES_DIR
-from routes_mixer import router as mixer_router
+
+# Before the routes, and not after: they bind their adapter names at import, so
+# a router imported first would be handed a `gateways` full of None.
+gateways.bind(
+    arr=arr_client,
+    settings=settings_store,
+    sqlite_history=sqlite_history,
+    credentials_module=credentials_module,
+)
+
+from interfaces.http.routes.status import router as status_router, background_checker
+from interfaces.http.routes.wanted import router as wanted_router
+from interfaces.http.routes.calendar import router as calendar_router
+from interfaces.http.routes.files import router as files_router
+from interfaces.http.routes.actions import router as actions_router
+from interfaces.http.routes.auto_copy import router as auto_copy_router
+from interfaces.http.routes.downloads import router as downloads_router
+from interfaces.http.routes.mediacover import router as mediacover_router
+from interfaces.http.routes.settings import router as settings_router, PROTOTYPES_DIR
+from interfaces.http.routes_mixer import router as mixer_router
 
 logging.basicConfig(
     level=logging.INFO,

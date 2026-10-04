@@ -106,7 +106,7 @@ es refactor puro. Cualquier cambio observable es un bug de este trabajo.
 - [x] **T-11** — `interfaces/http/routes/` + `routes_mixer` + alias de paquete · ratchet **5989 → 3049**
 - [x] **T-10a** — `application/use_cases/copy_files.py` + `code` en resultados · **+8 tests sin disco** · ratchet **3049 → 3011**
 - [x] **T-10b** — `application/use_cases/sweep_downloads.py` + `OwnGrabStore` y 4 callables · ratchet **3011 → 2630**
-- [ ] T-12 pendiente
+- [x] **T-12** — shims retirados, `application/gateways.py` + `app.py` raíz de composición · **0 violaciones** · ratchet **2630 → 2433** · MIGRACIÓN COMPLETA
 - [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
 - [x] **T-3** — `domain/policy.py` + shim · ratchet **9434 → 9162**
 - [x] **T-4** — `domain/quality.py` (regla pura) + envoltorio en `config.py` · ratchet **9162 → 9147** · +9 tests
@@ -117,7 +117,7 @@ es refactor puro. Cualquier cambio observable es un bug de este trabajo.
 - [x] **T-11** — `interfaces/http/routes/` + `routes_mixer` + alias de paquete · ratchet **5989 → 3049**
 - [x] **T-10a** — `application/use_cases/copy_files.py` + `code` en resultados · **+8 tests sin disco** · ratchet **3049 → 3011**
 - [x] **T-10b** — `application/use_cases/sweep_downloads.py` + `OwnGrabStore` y 4 callables · ratchet **3011 → 2630**
-- [ ] T-12 pendiente
+- [x] **T-12** — shims retirados, `application/gateways.py` + `app.py` raíz de composición · **0 violaciones** · ratchet **2630 → 2433** · MIGRACIÓN COMPLETA
 
 ## Próximo paso
 

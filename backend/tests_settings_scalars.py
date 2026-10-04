@@ -13,7 +13,7 @@ import copy
 import pytest
 
 import config
-import settings as settings_mod
+from infrastructure import settings_store as settings_mod
 
 
 @pytest.fixture(autouse=True)
@@ -66,7 +66,7 @@ class TestTheTimeoutIsReadAtCallTime:
         assert config.REQUEST_TIMEOUT == 12.5
 
     def test_it_is_no_longer_asked_for_a_restart(self):
-        from routes.settings import RESTART_REQUIRED_FIELDS
+        from interfaces.http.routes.settings import RESTART_REQUIRED_FIELDS
 
         assert "intervals.request_timeout" not in RESTART_REQUIRED_FIELDS, (
             "the timeout applies immediately now; asking for a restart would be a lie"

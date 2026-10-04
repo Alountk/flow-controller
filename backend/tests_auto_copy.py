@@ -7,7 +7,7 @@ reaches it.
 
 from pathlib import Path
 
-from auto_copy import (
+from domain.policy import (
     COPY,
     DEFAULT_GRAB_WINDOW_SECONDS,
     DEFAULT_GRACE_SECONDS,

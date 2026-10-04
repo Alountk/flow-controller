@@ -22,7 +22,7 @@ user's external timer (cron/systemd) calling that endpoint.
 
 import logging
 
-from auto_copy import (
+from domain.policy import (
     COPY,
     DEFAULT_GRACE_SECONDS,
     SKIP,
@@ -40,10 +40,10 @@ from application.use_cases.sweep_downloads import (
     PROPOSED_DECISION,
     SweepDownloads,
 )
-from clients import arr_has_file, arr_root_folders
+from infrastructure.arr_client import arr_has_file, arr_root_folders
 from config import find_service
 from copy_engine import do_action
-from history import (
+from infrastructure.sqlite_history import (
     DECISION_ACTIONED,
     is_auto_copy_handled,
     latest_auto_copy_decisions,

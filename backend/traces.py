@@ -11,7 +11,7 @@ from config import (
     _DOWNLOAD_CLIENT_PATHS,
     _VOLUME_MAP,
 )
-from clients import (
+from infrastructure.arr_client import (
     arr_download_clients,
     fetch_arr_all_movies,
     fetch_arr_all_series,

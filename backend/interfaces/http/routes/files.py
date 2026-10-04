@@ -13,11 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException
 import state
 from config import find_service
 from traces import host_path
-import history
+from application.gateways import history
 from import_service import post_move_import
 from models import ActionRequest
-from naming import MEDIA_EXTENSIONS
-from routes.status import verify_api_key
+from domain.naming import MEDIA_EXTENSIONS
+from interfaces.http.routes.status import verify_api_key
 from state import file_queue, queue_lock, http_session
 import config
 

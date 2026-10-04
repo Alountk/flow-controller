@@ -26,13 +26,13 @@ class TestTheTraceFanOutIsShared:
         return client.get("/api/trace")
 
     def _cold(self):
-        import routes.status as status
+        from interfaces.http.routes import status as status
 
         status._trace_cache = None
 
     def test_a_repeated_poll_inside_the_ttl_does_not_rebuild(self):
         self._cold()
-        with patch("routes.status.build_traces", new_callable=AsyncMock) as build:
+        with patch("interfaces.http.routes.status.build_traces", new_callable=AsyncMock) as build:
             build.return_value = list(_TRACE)
             first = self._get()
             second = self._get()
@@ -47,11 +47,11 @@ class TestTheTraceFanOutIsShared:
         """Age the entry out by hand rather than sleeping past the TTL."""
         import time
 
-        import routes.status as status
-        from routes.status import _TRACE_TTL
+        from interfaces.http.routes import status as status
+        from interfaces.http.routes.status import _TRACE_TTL
 
         self._cold()
-        with patch("routes.status.build_traces", new_callable=AsyncMock) as build:
+        with patch("interfaces.http.routes.status.build_traces", new_callable=AsyncMock) as build:
             build.return_value = list(_TRACE)
             self._get()
             built = status._trace_cache
@@ -63,6 +63,6 @@ class TestTheTraceFanOutIsShared:
 
     def test_the_ttl_is_shorter_than_the_frontend_poll(self):
         """If this ever inverts, one tab pays the full fan-out every cycle again."""
-        from routes.status import _TRACE_TTL
+        from interfaces.http.routes.status import _TRACE_TTL
 
         assert _TRACE_TTL < 15, "the frontend polls /api/trace every 15 s"

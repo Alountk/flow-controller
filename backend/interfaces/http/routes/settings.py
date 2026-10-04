@@ -6,12 +6,12 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException
 
-import credentials
+from application.gateways import credentials as credentials
 from config import BASE_DIR
-from settings import get_settings, save_settings
-from clients import test_service_connection
+from application.gateways import get_settings, save_settings
+from application.gateways import test_service_connection
 from config import SERVICES, configured_services
-from routes.status import verify_api_key
+from interfaces.http.routes.status import verify_api_key
 from state import http_session
 import config
 
@@ -289,7 +289,7 @@ async def setup_status():
     with, and it is already fully open in that state, so this reveals nothing
     that /api/config does not.
     """
-    from settings import auth_required
+    from application.gateways import auth_required
 
     return {
         "needs_setup": not auth_required() and not configured_services(),
@@ -305,7 +305,7 @@ async def run_setup(body: dict):
     would let anyone rewrite the deployment's credentials, since it has to be
     reachable before authentication can work.
     """
-    from settings import auth_required, get_settings
+    from application.gateways import auth_required, get_settings
 
     if auth_required():
         raise HTTPException(

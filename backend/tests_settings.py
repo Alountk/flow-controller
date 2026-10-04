@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-import settings
+from infrastructure import settings_store as settings
 
 
 @pytest.fixture
@@ -19,14 +19,14 @@ def cfg(tmp_path, monkeypatch):
     directory = tmp_path / "config"
     directory.mkdir()
     monkeypatch.setattr(settings, "CONFIG_DIR", str(directory))
-    monkeypatch.setattr(settings, "SETTINGS_FILE", str(directory / "settings.json"))
+    monkeypatch.setattr(settings, "SETTINGS_FILE", str(directory / "infrastructure.settings_store.json"))
     monkeypatch.setattr(settings, "_settings", {}, raising=False)
     yield directory
     monkeypatch.setattr(settings, "_settings", {}, raising=False)
 
 
 def _file(cfg) -> dict:
-    return json.loads((cfg / "settings.json").read_text())
+    return json.loads((cfg / "infrastructure.settings_store.json").read_text())
 
 
 class TestFirstRunSeedsFromEnvironment:
@@ -52,7 +52,7 @@ class TestFirstRunSeedsFromEnvironment:
         assert settings.get_setting("services", "radarr", "url") == "http://localhost:7878"
 
     def test_migration_does_not_run_again_once_the_file_exists(self, cfg):
-        (cfg / "settings.json").write_text(json.dumps({"developer": True}))
+        (cfg / "infrastructure.settings_store.json").write_text(json.dumps({"developer": True}))
 
         assert settings.migrate_env_vars() is False
 
@@ -60,7 +60,7 @@ class TestFirstRunSeedsFromEnvironment:
 class TestTheFileWinsAfterwards:
     def test_the_environment_no_longer_overrides_the_file(self, cfg, monkeypatch):
         """The bug: an env var silently beat the Settings UI."""
-        (cfg / "settings.json").write_text(
+        (cfg / "infrastructure.settings_store.json").write_text(
             json.dumps({"services": {"radarr": {"url": "http://from-ui:7878", "api_key": "from-ui"}}})
         )
         monkeypatch.setenv("RADARR_URL", "http://from-env:7878")
@@ -72,7 +72,7 @@ class TestTheFileWinsAfterwards:
         assert settings.get_setting("services", "radarr", "api_key") == "from-ui"
 
     def test_other_env_keys_are_not_overridden_either(self, cfg, monkeypatch):
-        (cfg / "settings.json").write_text(json.dumps({"security": {"safe_mode": False}}))
+        (cfg / "infrastructure.settings_store.json").write_text(json.dumps({"security": {"safe_mode": False}}))
         monkeypatch.setenv("SAFE_MODE", "true")
 
         settings.load_settings()
@@ -80,7 +80,7 @@ class TestTheFileWinsAfterwards:
         assert settings.get_setting("security", "safe_mode") is False
 
     def test_missing_keys_still_fall_back_to_defaults(self, cfg):
-        (cfg / "settings.json").write_text(json.dumps({"services": {"radarr": {"url": "http://x:1"}}}))
+        (cfg / "infrastructure.settings_store.json").write_text(json.dumps({"services": {"radarr": {"url": "http://x:1"}}}))
 
         settings.load_settings()
 
