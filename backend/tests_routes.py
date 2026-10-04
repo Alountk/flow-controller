@@ -420,8 +420,8 @@ class TestGrabOwnRegistry:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
-        self._db_path = tmp_path / "infrastructure.sqlite_history.db"
+        history.init_db(tmp_path / "history.db")
+        self._db_path = tmp_path / "history.db"
         yield
         history.close()
 
@@ -940,8 +940,8 @@ class TestGrabWritesSeriesId:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
-        self._db_path = tmp_path / "infrastructure.sqlite_history.db"
+        history.init_db(tmp_path / "history.db")
+        self._db_path = tmp_path / "history.db"
         yield
         history.close()
 
@@ -1370,7 +1370,7 @@ class TestWantedGrabMarks:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+        history.init_db(tmp_path / "history.db")
         from interfaces.http.routes.wanted import _all_wanted_cache
 
         _all_wanted_cache.clear()
@@ -1523,7 +1523,7 @@ class TestGrabsForOneTitle:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        self._db_path = tmp_path / "infrastructure.sqlite_history.db"
+        self._db_path = tmp_path / "history.db"
         history.init_db(self._db_path)
         yield
         history.close()
@@ -1640,7 +1640,7 @@ class TestGrabsSeriesKeying:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+        history.init_db(tmp_path / "history.db")
         yield
         history.close()
 
@@ -1750,7 +1750,7 @@ class TestOwnGrabsForCoversItsThreeKinds:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+        history.init_db(tmp_path / "history.db")
         yield
         history.close()
 
@@ -1814,7 +1814,7 @@ class TestAllListingsGrabMarks:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+        history.init_db(tmp_path / "history.db")
         yield
         history.close()
 
@@ -2050,7 +2050,7 @@ class TestCalendarGrabMarks:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+        history.init_db(tmp_path / "history.db")
         yield
         history.close()
 
