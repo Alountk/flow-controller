@@ -32,9 +32,10 @@ log = logging.getLogger("flow-controller")
 
 # The transfer itself lives behind the FileStorage port. This module knows HOW
 # the app tracks a copy; infrastructure knows HOW bytes move. Neither has any
-# business knowing the other, which is what `copy_file_chunked` below exists to
-# keep true at the seam.
+# business knowing the other, which is what `copy_files_to_root` below exists
+# to keep true at the seam.
 from application.ports import CopyCancelled, FileStorage  # noqa: F401  (CopyCancelled is caught here)
+from application.use_cases.copy_files import copy_files
 from infrastructure.file_storage import storage as _local_storage
 
 #: Typed at the port, not at the adapter. This module's question is "something
@@ -49,84 +50,45 @@ def cleanup_tasks():
     copy_tasks.cleanup()
 
 
-def copy_file_chunked(src: Path, dst: Path, task_id: str | None = None, total_bytes: int = 0, copied_bytes: int = 0) -> int:
-    """Copy one file, reporting through the app's task record.
-
-    A thin seam: the transfer only ever sees two callables and cannot know that
-    a task manager exists. `copy_tasks` and `task_id` are wired in here, where
-    the app's vocabulary is the caller's vocabulary.
-    """
-
-    def _is_cancelled() -> bool:
-        return bool(task_id) and copy_tasks.is_cancelled(task_id)
-
-    def _on_progress(written: int) -> None:
-        if task_id:
-            copy_tasks.update(task_id, copied_bytes=copied_bytes + written, total_bytes=total_bytes)
-
-    return file_storage.copy_file(
-        src,
-        dst,
-        is_cancelled=_is_cancelled if task_id else None,
-        on_progress=_on_progress if task_id else None,
-    )
-
-
 def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool = False, task_id: str | None = None, target_name: str | None = None) -> dict:
+    """Copy one download into `root_folder`, reporting through the task record.
+
+    Wiring only. WHAT to copy is `application.use_cases.copy_files`; HOW the
+    bytes move is `FileStorage`. This translates between the app's vocabulary
+    (`task_id`, `copy_tasks`) and the use case's two callables — which is why
+    the use case can be tested without a task manager existing.
+    """
     src = Path(output_path if is_host_path else host_path(output_path))
     dst_dir = Path(root_folder)
     log.info("copy_files: src=%s  dst=%s  is_host_path=%s target_name=%s", src, dst_dir, is_host_path, target_name)
 
-    def _update_task(copied_bytes: int, total_bytes: int, files_done: int, files_total: int):
-        if task_id:
-            copy_tasks.update(task_id, copied_bytes=copied_bytes, total_bytes=total_bytes, files_done=files_done, files_total=files_total)
-
     def _is_cancelled() -> bool:
         return bool(task_id and copy_tasks.is_cancelled(task_id))
 
-    if not src.exists():
-        log.error("copy_files: fuente no encontrada: %s", src)
+    def _on_progress(copied_bytes: int, total_bytes: int, files_done: int, files_total: int) -> None:
         if task_id:
-            copy_tasks.update(task_id, status="error", detail=f"fuente no encontrada: {src}")
-        return {"ok": False, "detail": f"fuente no encontrada: {src}"}
+            copy_tasks.update(
+                task_id,
+                copied_bytes=copied_bytes,
+                total_bytes=total_bytes,
+                files_done=files_done,
+                files_total=files_total,
+            )
 
-    dst_dir.mkdir(parents=True, exist_ok=True)
-
-    if src.is_file():
-        total = src.stat().st_size
-        final_name = target_name if target_name else src.name
-        dst = dst_dir / final_name
-        _update_task(0, total, 0, 1)
-        copy_file_chunked(src, dst, task_id, total, 0)
-        _update_task(total, total, 1, 1)
-        return {"ok": True, "detail": f"copiado: {final_name} → {dst_dir}", "files_copied": 1}
-
-    if src.is_dir():
-        # Walk the whole tree, not just the first level: a release folder carries
-        # its payload in subfolders (Sample/, Subs/) and flattening them would
-        # drop files or leave the sample next to the feature as a second video.
-        all_files = sorted(f for f in src.rglob("*") if f.is_file())
-        # Decide which files will actually be copied before reporting any total.
-        # Counting files that already exist would make the progress bar never
-        # reach 100% because those bytes are never written.
-        to_copy = [f for f in all_files if not (dst_dir / f.relative_to(src)).exists()]
-        skipped = len(all_files) - len(to_copy)
-        total_bytes = sum(f.stat().st_size for f in to_copy)
-        copied_bytes = 0
-        count = 0
-        _update_task(0, total_bytes, 0, len(to_copy))
-        for item in to_copy:
-            if _is_cancelled():
-                return {"ok": False, "detail": f"cancelado por el usuario ({count}/{len(to_copy)} archivos copiados)", "files_copied": count}
-            dst = dst_dir / item.relative_to(src)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            written = copy_file_chunked(item, dst, task_id, total_bytes, copied_bytes)
-            copied_bytes += written
-            count += 1
-            _update_task(copied_bytes, total_bytes, count, len(to_copy))
-        return {"ok": True, "detail": f"copiados {count} archivos a {dst_dir} ({skipped} ya existían)", "files_copied": count}
-
-    return {"ok": False, "detail": f"fuente no es archivo ni directorio: {src}"}
+    result = copy_files(
+        src,
+        dst_dir,
+        storage=file_storage,
+        target_name=target_name,
+        is_cancelled=_is_cancelled if task_id else None,
+        on_progress=_on_progress if task_id else None,
+    )
+    if task_id and result.get("code") == "not_found":
+        # The one outcome the task record must hear about even with no bytes
+        # moved: a missing source is a failure of the request, not a no-op.
+        log.error("copy_files: fuente no encontrada: %s", src)
+        copy_tasks.update(task_id, status="error", detail=result["detail"])
+    return result
 
 
 async def _radarr_pattern_destination(

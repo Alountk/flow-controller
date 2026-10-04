@@ -104,7 +104,8 @@ es refactor puro. Cualquier cambio observable es un bug de este trabajo.
 - [x] **T-8** — `infrastructure/settings_store.py` + `infrastructure/credentials.py` + alias · ratchet **6515 → 6005**
 - [x] **T-5 (primer puerto) + T-9** — `application/ports.py` (`FileStorage`, `CopyCancelled`) + `infrastructure/file_storage.py` · ratchet **6005 → 5989**
 - [x] **T-11** — `interfaces/http/routes/` + `routes_mixer` + alias de paquete · ratchet **5989 → 3049**
-- [ ] T-10, T-12 pendientes
+- [x] **T-10a** — `application/use_cases/copy_files.py` + `code` en resultados · **+8 tests sin disco** · ratchet **3049 → 3011**
+- [ ] T-10b (sweep), T-12 pendientes
 - [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
 - [x] **T-3** — `domain/policy.py` + shim · ratchet **9434 → 9162**
 - [x] **T-4** — `domain/quality.py` (regla pura) + envoltorio en `config.py` · ratchet **9162 → 9147** · +9 tests
@@ -113,7 +114,8 @@ es refactor puro. Cualquier cambio observable es un bug de este trabajo.
 - [x] **T-8** — `infrastructure/settings_store.py` + `infrastructure/credentials.py` + alias · ratchet **6515 → 6005**
 - [x] **T-5 (primer puerto) + T-9** — `application/ports.py` (`FileStorage`, `CopyCancelled`) + `infrastructure/file_storage.py` · ratchet **6005 → 5989**
 - [x] **T-11** — `interfaces/http/routes/` + `routes_mixer` + alias de paquete · ratchet **5989 → 3049**
-- [ ] T-10, T-12 pendientes
+- [x] **T-10a** — `application/use_cases/copy_files.py` + `code` en resultados · **+8 tests sin disco** · ratchet **3049 → 3011**
+- [ ] T-10b (sweep), T-12 pendientes
 
 ## Próximo paso
 
