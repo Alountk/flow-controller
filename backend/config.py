@@ -2,6 +2,7 @@ import os
 
 from dotenv import load_dotenv
 from settings import load_settings, get_setting, migrate_env_vars
+from domain import quality as _quality_rules
 
 load_dotenv()
 migrate_env_vars()
@@ -140,32 +141,16 @@ def path_is_allowed(path: str) -> bool:
 def destination_for_quality(quality: str, *, is3d: bool = False) -> str | None:
     """Folder a release should land in; None means the arr's library.
 
-    Radarr reports the quality as one hyphen-joined token — ``Bluray-2160p``,
-    ``WEBDL-2160p``, ``HDTV-2160p`` — so the resolution is matched on its
-    suffix, which is what actually distinguishes the classes; the container
-    varies and the number does not.
-
-    **3D outranks the resolution.** A 3D rip is 3D whatever it was encoded at,
-    so keying it off resolution would scatter the 3D collection across two
-    destinations based on a property nobody picked. The cost of the other
-    order — a 4K3D title sitting in the 3D folder — keeps the 3D collection
-    whole, which is the entire reason that folder exists.
-
-    `is3d` arrives already resolved: unlike a quality, "is this 3D?" is an
-    interpretation of the title plus a human correction, so the caller decides
-    and this function only routes.
-
-    An unconfigured folder resolves to None, so adding this never changes a
-    deployment that has not opted in. It is deliberately NOT authoritative:
-    an explicit destination from the caller wins, because a folder chosen by
-    hand is a decision and a quality is only a hint.
+    The rule is pure and lives in ``domain.quality``, with the reasoning (3D
+    outranks the resolution, the match is on the quality's suffix, an
+    unconfigured folder means the arr's library and the caller's explicit
+    destination still wins). This wrapper only supplies the configured folders
+    and reads them at call time, so a test can reconfigure them without the
+    rule knowing anything about a deployment.
     """
-    if is3d and PATH_3D:
-        return PATH_3D
-    name = (quality or "").strip().lower()
-    if name.endswith("2160p") and PATH_4K:
-        return PATH_4K
-    return None
+    return _quality_rules.destination_for_quality(
+        quality, is3d=is3d, path_4k=PATH_4K, path_3d=PATH_3D
+    )
 
 
 def rebuild() -> None:
