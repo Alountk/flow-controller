@@ -538,6 +538,7 @@ function wantedMovieRelease(movie: WantedMovie): ReleaseSearchItem {
     source: 'radarr',
     remotePoster: movie.remotePoster,
     has_file: movie.has_file,
+    idKind: 'movie',
   }
 }
 
@@ -559,6 +560,7 @@ function catalogMovieRelease(movie: AllMovie): ReleaseSearchItem {
     languages: movie.languages,
     quality: movie.quality,
     path: movie.path,
+    idKind: 'movie',
   }
 }
 
@@ -573,6 +575,7 @@ function wantedEpisodeRelease(ep: WantedEpisode): ReleaseSearchItem {
     date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
     source: 'sonarr',
     has_file: false,
+    idKind: 'episode',
   }
 }
 
@@ -592,6 +595,11 @@ function catalogSeriesRelease(series: AllSeries): ReleaseSearchItem {
     // does exist, and path_3d membership is the rule PR #113 established for
     // Series, so the 3D tag can still be lit honestly.
     path: series.path,
+    // The id is the SERIES', not an episode's, even though the type says
+    // episode: asking the grabs history for `episode_id=<seriesId>` would
+    // match whatever show owns an episode with that number — a class this
+    // series never downloaded, lit as if we had it.
+    idKind: 'series',
   }
 }
 

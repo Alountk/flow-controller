@@ -1621,6 +1621,174 @@ class TestGrabsForOneTitle:
         assert body["grabs"] == []
 
 
+# ── GET /api/grabs by the third kind: the SERIES ─────────────────────────────
+#
+# A Series card is typed `episode` for the release search (an episode is the
+# only thing Sonarr can grab) but carries the SERIES id, so asking the history
+# for `episode_id=<seriesId>` matches whatever show owns an episode with that
+# number — a lit tag for a class THIS series does not have, which is the wrong
+# answer that stops the download the user actually needed. Keyed by
+# `series_id` the collision cannot occur: the query only ever returns rows
+# whose own `series_id` claims them for this title.
+
+
+class TestGrabsSeriesKeying:
+    """`GET /api/grabs?series_id=…`: this series' rows, and nothing else."""
+
+    @pytest.fixture(autouse=True)
+    def _isolated_history(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        yield
+        history.close()
+
+    def _get(self, **params):
+        return client.get("/api/grabs", params=params)
+
+    def test_a_series_id_that_collides_with_a_real_episode_id_returns_nothing(self):
+        # Episode 7 of ANOTHER show: the exact number this series card has.
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=999, grabbed_at=100.0,
+            quality="Bluray-2160p",
+        )
+
+        body = self._get(source="sonarr", series_id=7).json()
+
+        # The false positive this branch exists to kill: NOT that episode's
+        # 2160p grab. No row claims series 7 → empty, which reads as "not
+        # proven", never as "we already have it in 4K".
+        assert body["grabs"] == []
+
+    def test_series_id_returns_the_series_own_grabs_oldest_first(self):
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=3, grabbed_at=200.0,
+            quality="Bluray-1080p",
+        )
+        history.record_own_grab(
+            "sonarr", episode_id=8, series_id=3, grabbed_at=100.0,
+            quality="Bluray-2160p",
+        )
+
+        grabs = self._get(source="sonarr", series_id=3).json()["grabs"]
+
+        # Every episode grab of the series counts — "we asked for something
+        # from this series" — oldest first, exactly like the other kinds.
+        assert [g["quality"] for g in grabs] == ["Bluray-2160p", "Bluray-1080p"]
+
+    def test_the_three_kinds_do_not_cross_match(self):
+        history.record_own_grab(
+            "radarr", movie_id=7, grabbed_at=100.0, quality="Bluray-1080p"
+        )
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=3, grabbed_at=200.0,
+            quality="WEBRip-720p",
+        )
+
+        movie = self._get(source="radarr", movie_id=7).json()["grabs"]
+        episode = self._get(source="sonarr", episode_id=7).json()["grabs"]
+        series = self._get(source="sonarr", series_id=3).json()["grabs"]
+        wrong_series = self._get(source="sonarr", series_id=7).json()["grabs"]
+
+        assert [g["quality"] for g in movie] == ["Bluray-1080p"]
+        assert [g["quality"] for g in episode] == ["WEBRip-720p"]
+        assert [g["quality"] for g in series] == ["WEBRip-720p"]
+        # Id 7 is an EPISODE under sonarr: as a series it must match nothing.
+        assert wrong_series == []
+
+    def test_movie_id_wins_over_episode_id_when_both_arrive(self):
+        history.record_own_grab(
+            "radarr", movie_id=7, grabbed_at=100.0, quality="Bluray-1080p"
+        )
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=3, grabbed_at=200.0,
+            quality="WEBRip-720p",
+        )
+
+        grabs = self._get(source="radarr", movie_id=7, episode_id=7).json()["grabs"]
+
+        # Precedence movie > episode > series, mirroring how
+        # own_grabs_latest_rows resolves a row that carries several ids.
+        assert [g["quality"] for g in grabs] == ["Bluray-1080p"]
+
+    def test_episode_id_wins_over_series_id_when_both_arrive(self):
+        history.record_own_grab(
+            "sonarr", episode_id=8, series_id=3, grabbed_at=100.0,
+            quality="Bluray-2160p",
+        )
+
+        body = self._get(source="sonarr", episode_id=7, series_id=3).json()
+
+        # Episode takes the key: episode 7 never grabbed → empty, even though
+        # series 3 has grabs. The caller asked for an episode, it gets one.
+        assert body["grabs"] == []
+
+    def test_without_any_of_the_three_ids_the_detail_names_all_three(self):
+        resp = self._get(source="radarr")
+
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert "movie_id" in detail and "episode_id" in detail, (
+            "the detail must name what is missing, not just complain"
+        )
+        assert "series_id" in detail, "all three kinds are now valid keys"
+
+
+# ── The reader behind that endpoint, exercised directly ──────────────────────
+#
+# `history.own_grabs_for` gained its `series` branch in #126 with NO test
+# calling the reader at all — the route tests above go through HTTP, these go
+# to the function itself, so the branch stays covered even if the route's
+# shape ever changes. The reader's code is not modified by these: they pin
+# the keying it already documents (identical to own_grabs_latest_rows').
+
+
+class TestOwnGrabsForCoversItsThreeKinds:
+    """`history.own_grabs_for` directly: movie, episode and series keys."""
+
+    @pytest.fixture(autouse=True)
+    def _isolated_history(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        yield
+        history.close()
+
+    def test_the_series_branch_returns_the_series_rows_oldest_first(self):
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=3, grabbed_at=200.0,
+            quality="Bluray-1080p",
+        )
+        history.record_own_grab(
+            "sonarr", episode_id=8, series_id=3, grabbed_at=100.0,
+            quality="Bluray-2160p",
+        )
+
+        rows = history.own_grabs_for("sonarr", "series", 3)
+
+        assert [r["quality"] for r in rows] == ["Bluray-2160p", "Bluray-1080p"]
+
+    def test_the_three_kinds_do_not_cross_match(self):
+        history.record_own_grab(
+            "radarr", movie_id=7, grabbed_at=100.0, quality="Bluray-1080p"
+        )
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=3, grabbed_at=200.0,
+            quality="WEBRip-720p",
+        )
+
+        assert [r["quality"] for r in history.own_grabs_for("radarr", "movie", 7)] == [
+            "Bluray-1080p",
+        ]
+        assert [r["quality"] for r in history.own_grabs_for("sonarr", "episode", 7)] == [
+            "WEBRip-720p",
+        ]
+        assert [r["quality"] for r in history.own_grabs_for("sonarr", "series", 3)] == [
+            "WEBRip-720p",
+        ]
+        # Same numbers, different kinds: each key answers only for ITS kind.
+        assert history.own_grabs_for("sonarr", "series", 7) == []
+        assert history.own_grabs_for("sonarr", "episode", 3) == []
+
+
 # ── "Todas" and the calendar mark their own items ────────────────────────────
 #
 # Same mark, three more surfaces. `/api/wanted/all` lists movies, `/api/wanted/

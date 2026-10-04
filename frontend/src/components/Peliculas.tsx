@@ -157,6 +157,7 @@ function calidadMovieRelease(movie: AllMovie): ReleaseSearchItem {
     source: 'radarr',
     remotePoster: movie.remotePoster,
     has_file: movie.has_file,
+    idKind: 'movie',
   }
 }
 
@@ -198,6 +199,9 @@ function estrenoRelease(item: CalendarItem): ReleaseSearchItem {
     episode_number: item.episode_number,
     has_file: item.has_file,
     remotePoster: item.remotePoster,
+    // A calendar item's id is its own kind — the card says which one, and
+    // the grabs history must be asked under exactly that key.
+    idKind: item.type,
   }
 }
 
