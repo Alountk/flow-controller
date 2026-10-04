@@ -1,10 +1,18 @@
-"""Driver for one auto-copy sweep.
+"""Wiring for one auto-copy sweep.
 
-The policy lives in ``domain.policy`` and stays pure; this module is where the
-I/O lives: the traces the app already computes, the own-grab registry, the arr
-probe, the durable idempotency marker and the copy engine.
+The decisions live in ``application.use_cases.sweep_downloads``. This module is
+the seam: it hands the sweep the things it needs and keeps the app's vocabulary
+(``task_id``, a database, an arr) out of a use case that has no business
+knowing any of it exists.
 
-The trigger is deliberate: an explicit ``POST /api/auto-copy/sweep`` (see
+It also keeps the import path. Everything below looks its collaborators up
+**on every call** — as module globals, through ``_OwnGrabStore`` and the two
+probe helpers. That is deliberate and it is load-bearing: the suite
+monkeypatches ``list_own_grabs``, ``arr_has_file``, ``do_action`` and friends on
+THIS module, and a reference captured at import would hand the sweep the
+unpatched originals while the tests went on passing against a copy.
+
+The trigger is deliberate too: an explicit ``POST /api/auto-copy/sweep`` (see
 ``routes/auto_copy.py``), never a background loop and never a side effect of the
 ``GET /api/trace`` the UI polls every 15 s. Copying into the library is a
 mutation, so it must be an explicit action: hooking the polled GET would turn a
@@ -12,10 +20,7 @@ read into a write and make two open tabs two sweeps. Unattended operation is the
 user's external timer (cron/systemd) calling that endpoint.
 """
 
-import asyncio
 import logging
-import os
-import time
 
 from auto_copy import (
     COPY,
@@ -27,6 +32,13 @@ from auto_copy import (
     decide_copy,
     find_own_grab,
     matches_own_grab,
+)
+from application.use_cases.sweep_downloads import (
+    FAILED_DECISION,
+    OWN_GRAB_LIMIT,
+    OWN_GRAB_LOOKBACK_SECONDS,
+    PROPOSED_DECISION,
+    SweepDownloads,
 )
 from clients import arr_has_file, arr_root_folders
 from config import find_service
@@ -42,271 +54,54 @@ from history import (
 )
 from traces import build_traces
 
+__all__ = [
+    "COPY",
+    "DEFAULT_GRACE_SECONDS",
+    "FAILED_DECISION",
+    "OWN_GRAB_LIMIT",
+    "OWN_GRAB_LOOKBACK_SECONDS",
+    "PROPOSED_DECISION",
+    "SKIP",
+    "UNIDENTIFIED",
+    "WAIT",
+    "auto_copy_key",
+    "decide_copy",
+    "find_own_grab",
+    "matches_own_grab",
+    "sweep",
+]
+
 log = logging.getLogger("flow-controller")
 
-#: Stored decision labels the driver writes for the outcomes that are NOT an
-#: action taken. history.py owns `DECISION_ACTIONED` (the only value its reader
-#: counts); these two live here because they describe what the driver did.
-PROPOSED_DECISION = "proposed"
-FAILED_DECISION = "dispatch_failed"
 
-#: How far back the own-grab registry is read. A trace's `date` is fixed at the
-#: arr's grab instant, so a grab we launched can still match a live trace hours
-#: later; the lookback only has to outlive the traces we still see. Traces are
-#: capped per arr (TRACE_LIMIT), so anything older has already fallen off the
-#: list this sweep can act on.
-OWN_GRAB_LOOKBACK_SECONDS = 30 * 24 * 3600.0
+class _OwnGrabStore:
+    """`OwnGrabStore` over THIS module's bindings.
 
-#: Upper bound on registry rows loaded per sweep. The registry is small (one row
-#: per grab the user made from the app) and the lookback above already bounds it.
-OWN_GRAB_LIMIT = 500
-
-#: Stages whose trace can still reach a COPY decision. Used to decide whether an
-#: arr `has_file` probe is worth a request (see `_arr_probe`).
-_ACTIONABLE_STAGES = frozenset({"import_blocked", "downloaded"})
-
-#: The shared sentinel suffix `auto_copy_key` returns for a trace with no
-#: identifier at all. Every such trace shares it, so a marker built from it would
-#: block unrelated downloads; these traces are skipped without reading or
-#: writing a marker.
-_UNIDENTIFIED_SUFFIX = f":title:{UNIDENTIFIED}"
-
-
-def _grace_relevant(stage: str | None, trace: dict) -> bool:
-    """Whether the grace window can decide this trace's outcome.
-
-    Only two branches of the policy call the grace gate: `downloaded` and
-    `import_blocked` WITHOUT an import warning. Every other stage resolves before
-    it (a warning copies at once; an in-progress or failed download resolves
-    earlier), so persisting a first-seen reference for them would only fill the
-    table with rows nothing ever reads.
+    Every method calls the bare NAME below rather than a stored reference, so
+    `monkeypatch.setattr(driver, "mark_auto_copy", fake)` lands on the code the
+    sweep actually runs. A method name is not in scope inside its own body, so
+    these resolve to the module globals — and to whatever a test has just put
+    there. A reference captured at class definition would patch a copy and leave
+    the real one calling the database.
     """
-    if stage == "downloaded":
-        return True
-    if stage == "import_blocked":
-        queue = trace.get("queue") or {}
-        return queue.get("status") != "warning"
-    return False
 
+    def list_own_grabs(self, since: float, *, limit: int = OWN_GRAB_LIMIT) -> list[dict]:
+        return list_own_grabs(since, limit=limit)
 
-#: One sweep at a time. Two concurrent triggers must not both dispatch: the
-#: marker protects against a later sweep, not against a second copy racing the
-#: first. The lock is module-level so every caller shares it; a second caller
-#: gets an honest "already running" result instead of being queued behind the
-#: first.
-_sweep_lock = asyncio.Lock()
+    def is_auto_copy_handled(self, key: str) -> bool:
+        return is_auto_copy_handled(key)
 
+    def mark_auto_copy(self, key: str, *, source: str, title, decision: str, reason=None) -> None:
+        mark_auto_copy(key, source=source, title=title, decision=decision, reason=reason)
 
-def _zero_counts() -> dict:
-    return {
-        "traces": 0,
-        "copy": 0,
-        "copied": 0,
-        "proposed": 0,
-        "wait": 0,
-        "skip": 0,
-        "failed": 0,
-    }
+    def note_auto_copy_seen(self, key: str, stage: str, *, seen_at=None):
+        return note_auto_copy_seen(key, stage, seen_at=seen_at)
 
+    def latest_auto_copy_decisions(self) -> dict[str, str]:
+        return latest_auto_copy_decisions()
 
-def _entry(
-    key: str,
-    source: str,
-    title: str,
-    decision: str,
-    reason: str,
-    *,
-    action: str | None = None,
-    detail: str | None = None,
-) -> dict:
-    """One per-trace line of the summary. `reason` is user-facing (Spanish)."""
-    return {
-        "key": key,
-        "source": source,
-        "title": title,
-        "decision": decision,
-        "reason": reason,
-        "action": action,
-        "detail": detail,
-    }
-
-
-def _summary(
-    *,
-    ok: bool,
-    running: bool,
-    safe_mode: bool | None,
-    counts: dict,
-    entries: list[dict],
-    errors: list[str],
-    detail: str = "",
-    started_at: int | None = None,
-) -> dict:
-    return {
-        "ok": ok,
-        "running": running,
-        "safe_mode": safe_mode,
-        "detail": detail,
-        "counts": counts,
-        "entries": entries,
-        "errors": errors,
-        "started_at": started_at,
-        "finished_at": int(time.time()),
-    }
-
-
-def _already_running(safe_mode: bool) -> dict:
-    """Honest refusal when a sweep is in flight: no queueing, no second run."""
-    return _summary(
-        ok=False,
-        running=True,
-        safe_mode=safe_mode,
-        counts=_zero_counts(),
-        entries=[],
-        errors=[],
-        detail="ya hay un barrido en curso",
-    )
-
-
-async def sweep(
-    session,
-    *,
-    now: float | None = None,
-    safe_mode: bool,
-    grace_seconds: float | None = None,
-) -> dict:
-    """Run ONE sweep over the current traces and return its summary.
-
-    Single-flight: a second concurrent call returns immediately with
-    ``running=True`` instead of queueing. Never raises: an unavailable database
-    or arr degrades to empty inputs and unknown answers, which the policy turns
-    into "do not act", and the summary says so.
-    """
-    if _sweep_lock.locked():
-        return _already_running(safe_mode)
-    # No await between the check and the acquire, and an uncontended
-    # `Lock.acquire()` does not yield, so this pair is atomic in asyncio.
-    await _sweep_lock.acquire()
-    try:
-        return await _run_sweep(
-            session, now=now, safe_mode=safe_mode, grace_seconds=grace_seconds
-        )
-    finally:
-        _sweep_lock.release()
-
-
-async def _run_sweep(
-    session,
-    *,
-    now: float | None,
-    safe_mode: bool,
-    grace_seconds: float | None,
-) -> dict:
-    started = time.time()
-    current = time.time() if now is None else now
-    grace = DEFAULT_GRACE_SECONDS if grace_seconds is None else grace_seconds
-    counts = _zero_counts()
-    entries: list[dict] = []
-    errors: list[str] = []
-
-    try:
-        traces = await build_traces(session)
-    except Exception as exc:  # noqa: BLE001 — the endpoint must never 500
-        log.warning("auto-copy sweep: no se pudieron obtener las trazas: %s", exc)
-        return _summary(
-            ok=False,
-            running=False,
-            safe_mode=safe_mode,
-            counts=counts,
-            entries=entries,
-            errors=[f"fallo al obtener las trazas: {type(exc).__name__}: {exc}"],
-            detail="no se pudieron obtener las trazas",
-            started_at=int(started),
-        )
-
-    counts["traces"] = len(traces)
-    # An unavailable registry degrades to []: nothing is provably ours, so the
-    # policy skips instead of copying on a guess.
-    own_grabs = list_own_grabs(current - OWN_GRAB_LOOKBACK_SECONDS, limit=OWN_GRAB_LIMIT)
-    # The last logged outcome per key, read in ONE grouped query for the whole
-    # sweep. The transition log below only appends when this differs.
-    last_outcomes = latest_auto_copy_decisions()
-
-    # ONE arr round trip for the whole sweep, and only if some grab actually
-    # carries a destination. Resolved once because root folders do not move
-    # between two traces of the same sweep, and because every trace has to be
-    # judged against the same list — judging them against different answers
-    # would make the gate's behaviour depend on loop order.
-    foreign_destinations = await _foreign_destinations(session, own_grabs)
-
-    for trace in traces:
-        try:
-            entry = await _handle_trace(
-                session,
-                trace,
-                own_grabs=own_grabs,
-                foreign_destinations=foreign_destinations,
-                now=current,
-                safe_mode=safe_mode,
-                grace_seconds=grace,
-            )
-        except Exception as exc:  # noqa: BLE001 — one bad trace must not abort
-            label = trace.get("title") or trace.get("download_id") or "?"
-            log.exception("auto-copy sweep: la traza %s falló", label)
-            errors.append(f"traza {label}: {type(exc).__name__}: {exc}")
-            continue
-        entries.append(entry)
-        if entry["decision"] in counts:
-            counts[entry["decision"]] += 1
-        if entry["action"] == "copied":
-            counts["copied"] += 1
-        elif entry["action"] == "proposed":
-            counts["proposed"] += 1
-        elif entry["action"] == "failed":
-            counts["failed"] += 1
-        _log_outcome(entry, last_outcomes)
-
-    return _summary(
-        ok=True,
-        running=False,
-        safe_mode=safe_mode,
-        counts=counts,
-        entries=entries,
-        errors=errors,
-        detail="",
-        started_at=int(started),
-    )
-
-
-def _log_outcome(entry: dict, last_outcomes: dict[str, str]) -> None:
-    """Append one history row when this trace's outcome changed.
-
-    Called from the ONE place the sweep computes every trace's outcome (the loop
-    in ``_run_sweep``), so no policy branch can forget to record something. The
-    log is history, not state: it claims nothing and blocks nothing, so unlike
-    the marker it also records ``wait`` and ``skip`` — they are the "why not"
-    answer this log exists to give.
-
-    The shared sentinel key is never logged. Every unidentified trace shares it,
-    so a row for it would describe no particular download. ``last_outcomes``
-    comes from one grouped read for the whole sweep, so the transition check is
-    not one query per trace.
-    """
-    key = entry.get("key") or ""
-    if not key or key.endswith(_UNIDENTIFIED_SUFFIX):
-        return
-    # The action when there is one, the policy's decision otherwise. One value,
-    # so the UI needs no second lookup.
-    outcome = entry.get("action") or entry.get("decision")
-    if not outcome or last_outcomes.get(key) == outcome:
-        return
-    log_auto_copy_decision(
-        key,
-        source=entry.get("source") or "",
-        title=entry.get("title"),
-        decision=outcome,
-        reason=entry.get("reason"),
-    )
+    def log_auto_copy_decision(self, key: str, *, source: str, title, decision: str, reason=None) -> None:
+        log_auto_copy_decision(key, source=source, title=title, decision=decision, reason=reason)
 
 
 async def _arr_roots(session, source: str) -> list[str]:
@@ -325,146 +120,18 @@ async def _arr_roots(session, source: str) -> list[str]:
         return []
 
 
-def _inside(path: str, root: str) -> bool:
-    """`path` is `root` itself or lies under it — compared by component.
+async def _handle_trace(session, trace: dict, **kwargs) -> dict:
+    """Judge one trace. Kept at this path because the suite patches it.
 
-    A bare ``startswith`` would file ``/movies-4k`` under ``/movies``, which is
-    precisely the pair this feature tells apart.
+    `test_one_failing_trace_does_not_abort_the_sweep` swaps this out to make one
+    trace blow up and asserts the other survives — which only means anything if
+    the replacement reaches the loop. It does, because `_build` reads the name
+    at call time like every other collaborator here.
+
+    Stateless per trace: `own_grabs` and `foreign_destinations` travel as
+    arguments, so a fresh sweep object per call is free.
     """
-    candidate = os.path.normpath(path or "")
-    base = os.path.normpath(root or "")
-    if not base or base == os.curdir:
-        return False
-    return candidate == base or candidate.startswith(base + os.sep)
-
-
-async def _foreign_destinations(session, own_grabs: list[dict]) -> set[str]:
-    """Chosen destinations that are provably outside every arr root.
-
-    Asked for only when someone actually picked a destination: the sweep
-    already probes the arr per actionable trace, and the overwhelmingly common
-    grab has no destination at all.
-
-    **Fails closed.** An unreadable root list contributes nothing here, so the
-    gate stays exactly as shut as it is today — widening a safety policy
-    because the arr happened to be down would be backwards. `GET
-    /api/calendar/destinations` offers the arr's own roots first, so "has a
-    destination" alone says nothing about whether the file is leaving the
-    library.
-    """
-    wanted = {
-        (g.get("source") or "", g.get("destination"))
-        for g in own_grabs
-        if g.get("destination")
-    }
-    if not wanted:
-        return set()
-
-    foreign: set[str] = set()
-    resolved: dict[str, list[str]] = {}
-    for source, destination in sorted(wanted):
-        if source not in resolved:
-            resolved[source] = await _arr_roots(session, source)
-        roots = resolved[source]
-        if not roots:
-            continue
-        if not any(_inside(destination, root) for root in roots):
-            foreign.add(destination)
-    return foreign
-
-
-async def _handle_trace(
-    session,
-    trace: dict,
-    *,
-    own_grabs: list[dict],
-    foreign_destinations: set[str],
-    now: float,
-    safe_mode: bool,
-    grace_seconds: float,
-) -> dict:
-    source = trace.get("source") or ""
-    title = trace.get("title") or ""
-    key = auto_copy_key(trace)
-
-    if key.endswith(_UNIDENTIFIED_SUFFIX):
-        # Shared sentinel: never touch it. A marker here would suppress every
-        # other unidentified download, and no decision about this trace is
-        # trustworthy anyway.
-        return _entry(
-            key, source, title, SKIP, "sin identificador de descarga: no se actúa"
-        )
-
-    is_own = matches_own_grab(trace, own_grabs)
-    already = is_auto_copy_handled(key)
-    stage = trace.get("stage")
-
-    # Resolved here, not inside `_dispatch`, because the policy below must know
-    # it: the probe exists solely to answer "would copying this duplicate into
-    # the library", and a chosen destination puts the file somewhere the
-    # library does not reach — so it does not even need asking.
-    own_grab = find_own_grab(trace, own_grabs)
-    destination = own_grab.get("destination") if own_grab else None
-    has_destination = bool(destination) and destination in foreign_destinations
-    # Also carried here for the same reason: `_dispatch` needs it and is called
-    # after the decision. `None` for a row that predates v8 stays `None`.
-    quality = own_grab.get("quality") if own_grab else None
-
-    # Ask the arr only when the answer can change the outcome. A probe per trace
-    # per sweep would be one request per trace; asking only for a plausibly
-    # actionable one (ours, not already handled, a stage that can lead to a
-    # copy) keeps the sweep cheap. `None` means "unknown", and the policy treats
-    # that as unknown, never as "no file", so gating this is safe by design.
-    has_file = None
-    if is_own and not already and stage in _ACTIONABLE_STAGES and not has_destination:
-        has_file = await _arr_probe(session, trace)
-
-    # The reference the grace window is measured from. The trace does not carry
-    # the instant the current condition was first observed, and its only
-    # timestamp — the grab `date` — predates the download, so deriving it from
-    # the trace would start the clock before completion and race the arr (exactly
-    # what T3 warned against). We persist our own first-sighting instead. Only
-    # the grace-gated stages need it, and only when this trace is actually ours
-    # and not yet handled: for anything else the policy resolves before the gate,
-    # so a row would be pure noise. `note_auto_copy_seen` returns the STORED
-    # instant when the key was already seen in the same stage, which is what lets
-    # a later sweep observe the window elapse.
-    since = None
-    if is_own and not already and _grace_relevant(stage, trace):
-        since = note_auto_copy_seen(key, stage)
-
-    decision = decide_copy(
-        trace,
-        now=now,
-        since=since,
-        grace_seconds=grace_seconds,
-        already_handled=already,
-        is_own_grab=is_own,
-        arr_has_file=has_file,
-        has_destination=has_destination,
-    )
-    result = decision["decision"]
-    reason = decision["reason"]
-
-    if result in (WAIT, SKIP):
-        # Nothing durable. WAIT is transient (the arr may resolve it on its own)
-        # and SKIP would freeze a condition that may change (a warning that
-        # clears, a marker another path adds). A row here would be noise.
-        return _entry(key, source, title, result, reason)
-
-    # result == COPY.
-    if safe_mode:
-        # Record the proposal and touch nothing: safe mode means "detect and
-        # propose". The marker is written with the non-actioned label so it can
-        # never block a later sweep that runs with safe mode off.
-        mark_auto_copy(
-            key, source=source, title=title, decision=PROPOSED_DECISION, reason=reason
-        )
-        return _entry(key, source, title, result, reason, action="proposed")
-
-    return await _dispatch(
-        session, trace, key, source, title, reason, destination=destination, quality=quality
-    )
+    return await _build().handle_trace(session, trace, **kwargs)
 
 
 async def _arr_probe(session, trace: dict) -> bool | None:
@@ -489,86 +156,38 @@ async def _arr_probe(session, trace: dict) -> bool | None:
         return None
 
 
-async def _dispatch(
+def _build() -> SweepDownloads:
+    """Assemble the sweep from this module's current bindings.
+
+    Built on every call for the reason spelled out on `_OwnGrabStore`: the
+    suite replaces these names here, and a sweep assembled once at import would
+    keep using the originals.
+    """
+    return SweepDownloads(
+        traces=build_traces,
+        own_grabs=_OwnGrabStore(),
+        arr_probe=_arr_probe,
+        arr_roots=_arr_roots,
+        dispatch=do_action,
+        handle_trace=_handle_trace,
+        actioned_decision=DECISION_ACTIONED,
+    )
+
+
+async def sweep(
     session,
-    trace: dict,
-    key: str,
-    source: str,
-    title: str,
-    reason: str,
     *,
-    destination: str | None = None,
-    quality: str | None = None,
+    now: float | None = None,
+    safe_mode: bool,
+    grace_seconds: float | None = None,
 ) -> dict:
-    torrent = trace.get("torrent") or {}
-    output_path = torrent.get("content_path")
-    if not output_path:
-        detail = "la traza no trae la ruta del contenido"
-        mark_auto_copy(
-            key, source=source, title=title, decision=FAILED_DECISION, reason=detail
-        )
-        return _entry(key, source, title, COPY, reason, action="failed", detail=detail)
+    """Run ONE sweep over the current traces and return its summary.
 
-    payload = {
-        "source": source,
-        "ids": trace.get("ids") or {},
-        "output_path": output_path,
-    }
-
-    # The destination the user picked, already resolved by the caller. When it
-    # is NULL the payload stays exactly as before: the copy goes to the arr's
-    # library, and the engine resolves that root itself.
-    if destination:
-        payload["dest_root"] = destination
-    # The quality of what was actually grabbed. Present only when the registry
-    # knows it: a copy dispatched without one must not invent a value a
-    # filename will be built from.
-    if quality:
-        payload["quality"] = quality
-
-    # Claim before acting: persist the marker FIRST, then dispatch. If the
-    # process dies mid-copy the marker already blocks a second sweep; the
-    # claim's cost is that a crash before the copy completes is at-most-once,
-    # never a duplicate into the library.
-    mark_auto_copy(
-        key, source=source, title=title, decision=DECISION_ACTIONED, reason=reason
+    Single-flight: a second concurrent call returns immediately with
+    ``running=True`` instead of queueing. Never raises: an unavailable database
+    or arr degrades to empty inputs and unknown answers, which the policy turns
+    into "do not act", and the summary says so.
+    """
+    return await _build().run(
+        session, now=now, safe_mode=safe_mode, grace_seconds=grace_seconds
     )
-
-    try:
-        result = await do_action(session, "copy_files", payload)
-    except Exception as exc:  # noqa: BLE001 — a failure must stay retryable
-        detail = f"{type(exc).__name__}: {exc}"
-        mark_auto_copy(
-            key, source=source, title=title, decision=FAILED_DECISION, reason=detail
-        )
-        return _entry(key, source, title, COPY, reason, action="failed", detail=detail)
-
-    if not result.get("ok"):
-        detail = _first_detail(result) or "el motor de copia devolvió un error"
-        # Downgrade the claim so the next sweep may retry. `FAILED_DECISION` is
-        # not counted as handled by `is_auto_copy_handled`.
-        mark_auto_copy(
-            key, source=source, title=title, decision=FAILED_DECISION, reason=detail
-        )
-        return _entry(key, source, title, COPY, reason, action="failed", detail=detail)
-
-    return _entry(
-        key,
-        source,
-        title,
-        COPY,
-        reason,
-        action="copied",
-        detail=result.get("dst_path") or result.get("task_id"),
-    )
-
-
-def _first_detail(result: dict) -> str:
-    """Best available reason from a `do_action` failure shape."""
-    detail = result.get("detail")
-    if detail:
-        return str(detail)
-    for step in result.get("steps") or []:
-        if step.get("detail"):
-            return str(step["detail"])
-    return ""
