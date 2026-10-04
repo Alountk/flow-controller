@@ -351,6 +351,7 @@ async def get_grabs(
     source: str = "",
     movie_id: int | None = None,
     episode_id: int | None = None,
+    series_id: int | None = None,
     _key: str = Depends(verify_api_key),
 ):
     """Todas las descargas que hizo ESTA app para un título, de más antigua a
@@ -361,17 +362,30 @@ async def get_grabs(
     A diferencia de las marcas de "Faltantes" (la fila más reciente por
     título), aquí NO se colapsa ni se limita el historial: cada descarga
     cuenta, porque una descarga ausente se leería como "nunca se pidió".
+
+    `series_id` es la tercera llave, para la tarjeta de una serie: esa
+    tarjeta viaja como episodio (lo único que Sonarr puede descargar) pero
+    lleva el id de la SERIE, y preguntar `episode_id=<id de serie>` devolvería
+    el episodio de OTRA serie que comparta número — una clase ajena contando
+    como propia.
     """
-    if movie_id is None and episode_id is None:
-        raise HTTPException(status_code=400, detail="Se requiere movie_id o episode_id")
+    if movie_id is None and episode_id is None and series_id is None:
+        raise HTTPException(
+            status_code=400, detail="Se requiere movie_id, episode_id o series_id"
+        )
     # Same answer as the neighbouring routes when the service cannot be used:
     # the normal body plus `error`, never an exception.
     if not find_service(source, "arr"):
         return {"grabs": [], "error": service_unavailable_reason(source)}
-    # "movie_id wins", matching how the own-grab keying resolves a row that
-    # somehow carries both ids.
-    kind = "movie" if movie_id is not None else "episode"
-    item_id = movie_id if movie_id is not None else episode_id
+    # Precedence movie > episode > series, mirroring how the own-grab keying
+    # resolves a row that somehow carries several ids: the caller gets the
+    # kind it asked for FIRST, never another kind's rows.
+    if movie_id is not None:
+        kind, item_id = "movie", movie_id
+    elif episode_id is not None:
+        kind, item_id = "episode", episode_id
+    else:
+        kind, item_id = "series", series_id
     # `history.py`'s contract: the synchronous reader goes through a thread.
     rows = await asyncio.to_thread(history.own_grabs_for, source, kind, item_id)
     return {

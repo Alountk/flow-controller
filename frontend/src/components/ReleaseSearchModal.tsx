@@ -9,6 +9,7 @@ import {
   type Release,
 } from '../api/calendar'
 import { apiFetch } from '../api/auth'
+import type { BrowseResponse, FileItem } from '../types'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
 import { looksThreeD } from '../utils/threeD'
 import {
@@ -29,6 +30,10 @@ interface Indexer {
   implementation: string
   enableSearch: boolean
 }
+
+/** Which kind of id a `ReleaseSearchItem.id` carries — the three the grabs
+ *  history can be asked under, one query parameter each. */
+export type ReleaseIdKind = 'movie' | 'episode' | 'series'
 
 export interface ReleaseSearchItem {
   type: 'movie' | 'episode'
@@ -55,6 +60,14 @@ export interface ReleaseSearchItem {
   quality?: string
   /** The title's folder, the one signal the 3D tag reads (path_3d membership). */
   path?: string
+  /** What `id` IS, when the surface knows better than `type` can say. A
+   *  Series card is typed `episode` — the only thing Sonarr can grab — while
+   *  carrying the SERIES id, and asking the grabs history for that under
+   *  `episode_id` returns a DIFFERENT show's episode with the same number:
+   *  a lit tag for a class this series does not have. Absent → derived from
+   *  `type` (movie → movie_id, anything else → episode_id), which is the
+   *  answer for every surface whose ids cannot be confused. */
+  idKind?: ReleaseIdKind
 }
 
 type ModalStep = 'initial' | 'searching' | 'adding' | 'results' | 'grabbing' | 'done' | 'error'
@@ -114,6 +127,60 @@ async function fetchRoutingFolders(): Promise<RoutingFolders> {
   }
 }
 
+/** One row of GET /api/grabs — a download THIS app made for ONE title, oldest
+ *  first. `quality` and `destination` are null on rows older than those
+ *  columns: null is unknown, never "" — an empty quality name must not be
+ *  rendered as if the arr had reported it. */
+interface OwnGrab {
+  quality: string | null
+  destination: string | null
+  grabbed_at: number | null
+}
+
+/** The query parameter each id kind is asked under — the exact names
+ *  GET /api/grabs accepts, one per kind, so a Series card can never be
+ *  mistaken for an episode by a string built from `type` alone. */
+const GRABS_ID_PARAM: Record<ReleaseIdKind, string> = {
+  movie: 'movie_id',
+  episode: 'episode_id',
+  series: 'series_id',
+}
+
+/** The app's own grabs for ONE title — the second source behind the has-file
+ *  tags. Anything that is not a real answer (HTTP failure, the `error` field
+ *  the backend reports when the history cannot be read, a body without the
+ *  `grabs` array) THROWS: a failed read is "unknown", never `[]` — `[]` would
+ *  say "we have nothing", which is exactly the misread this feature exists to
+ *  prevent. The caller then leaves the tags as the library said. */
+async function fetchOwnGrabs(
+  source: string,
+  kind: ReleaseIdKind,
+  id: number,
+): Promise<OwnGrab[]> {
+  const res = await apiFetch(
+    `/api/grabs?source=${encodeURIComponent(source)}&${GRABS_ID_PARAM[kind]}=${id}`,
+    {},
+  )
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const body = (await res.json()) as { grabs?: OwnGrab[]; error?: string }
+  if (body.error || !Array.isArray(body.grabs)) {
+    throw new Error(body.error || `HTTP ${res.status}`)
+  }
+  return body.grabs
+}
+
+/** The top-level entries of ONE routing folder — the third source behind the
+ *  has-file tags. An unreadable folder (`ok: false`: not a directory, no
+ *  permission) throws for the same reason a transport failure does: it must
+ *  leave the tags untouched instead of reading as "the folder is empty". */
+async function fetchRoutingListing(folder: string): Promise<FileItem[]> {
+  const res = await apiFetch(`/api/files/browse?path=${encodeURIComponent(folder)}`, {})
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const body = (await res.json()) as BrowseResponse
+  if (!body.ok || !Array.isArray(body.items)) throw new Error(body.error || `HTTP ${res.status}`)
+  return body.items
+}
+
 /**
  * The panel's results, per ITEM, across the tab switches that unmount it.
  *
@@ -141,6 +208,21 @@ function inFolder(path: string, folder: string): boolean {
   if (!path || !folder) return false
   const root = folder.endsWith('/') ? folder.slice(0, -1) : folder
   return path === root || path.startsWith(`${root}/`)
+}
+
+/**
+ * The name `path` ends in — the string this app's copies keep at the FRONT of
+ * their entry name inside a routing folder: `path_4k/<name>/<file>` after the
+ * rename logic, and `path_4k/<name>….mkv` flat for the historical copies, so
+ * a prefix test covers both layouts (exact equality would miss every flat
+ * one). A path with no segments yields "", which must never be used as a
+ * prefix: every string starts with "", so an absent `path` would "find" a
+ * copy of this title in every entry of every folder.
+ */
+function baseName(path: string): string {
+  const clean = path.replace(/\/+$/, '')
+  const at = clean.lastIndexOf('/')
+  return at === -1 ? clean : clean.slice(at + 1)
 }
 
 /**
@@ -269,6 +351,54 @@ export function ReleaseSearchModal({
   const path4k = foldersQuery.data?.path4k ?? ''
   const path3d = foldersQuery.data?.path3d ?? ''
   const foldersUnreadable = foldersQuery.isError
+
+  // ── The has-file block's other two sources ─────────────────────────────────
+  // The tags are drawn on the initial step, for a title that HAS a file, and
+  // only then may any of these ask — no request on mount for an item with no
+  // file. Each query is keyed by what it is ABOUT: grabs by source:type:id (a
+  // different title is a different history), the listings by folder path (the
+  // folder does not change with the selection, so a whole session browses
+  // path_4k and path_3d at most once each — two calls, not one per item). The
+  // settings document needs no new key at all: ['routing-folders'] above is
+  // the same one the Calidad view reads.
+  const blockShown = step === 'initial' && !!item.has_file
+
+  // Which id `item.id` IS: the surface says when it knows (a Series card is
+  // `type:'episode'` but carries the SERIES id), the type decides when it
+  // cannot be wrong. Keyed with the kind because the kind changes the URL —
+  // a series and an episode of the same number are different histories.
+  const grabsIdKind: ReleaseIdKind =
+    item.idKind ?? (item.type === 'movie' ? 'movie' : 'episode')
+
+  const grabsQuery = useQuery({
+    queryKey: ['grabs', item.source, grabsIdKind, item.id],
+    queryFn: () => fetchOwnGrabs(item.source, grabsIdKind, item.id),
+    enabled: blockShown,
+    // Terminal on purpose: an errored history must settle as "unknown" (the
+    // tags keep whatever the sources that DID answer said) instead of being
+    // retried into the backend on every render of the block.
+    retry: false,
+  })
+
+  // An unconfigured folder ("" while the settings read is pending, failed, or
+  // reporting it unconfigured) never enables its query: a folder that does not
+  // exist cannot hold a copy, and the request would be refused anyway.
+  const listing4kQuery = useQuery({
+    queryKey: ['routing-listing', path4k],
+    queryFn: () => fetchRoutingListing(path4k),
+    enabled: blockShown && !!path4k,
+    retry: false,
+    // Settings, not live data — same 5-minute window Calidad gives them, and
+    // the reason a selection change costs zero browse calls.
+    staleTime: 5 * 60_000,
+  })
+  const listing3dQuery = useQuery({
+    queryKey: ['routing-listing', path3d],
+    queryFn: () => fetchRoutingListing(path3d),
+    enabled: blockShown && !!path3d,
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
 
   // PANEL ONLY: the search starts itself. It replaces the 🔍 Buscar Releases
   // button the panel no longer draws, under exactly the conditions that
@@ -553,19 +683,78 @@ export function ReleaseSearchModal({
    * what you HAVE, grey for what you are MISSING — that grey IS the answer to
    * "cuáles son los que faltan".
    *
-   * Rules, one per tag, mirroring backend/config.py `destination_for_quality`:
-   * `1080` ← the quality contains `1080p`, `4K` ← it contains `2160p`, and
-   * `3D` is not a quality but a PLACE — the title's `path` inside `path_3d`,
-   * the same membership PR #113 established for Series. An unknown/empty
-   * quality claims NOTHING (both resolution tags stay grey — no guessing), and
-   * an unconfigured or unreadable `path_3d` can never light 3D either.
+   * THREE sources feed these tags, mirroring backend/config.py
+   * `destination_for_quality` — a tag lights when any of them PROVES the
+   * class, and stays grey while none can:
+   *
+   * 1. the arr's library: `item.quality` — contains `1080p` → 1080, contains
+   *    `2160p` → 4K;
+   * 2. THIS app's own grabs: every grab's `quality` says the same, and a grab
+   *    whose `destination` is `path_3d` proves 3D — 3D has no quality token to
+   *    read, so its destination IS the claim (the same way a path inside
+   *    `path_3d` is the library's);
+   * 3. the routing folders on disk: an entry whose name starts with this
+   *    title's folder name is a copy of it — in `path_4k` it proves 4K, in
+   *    `path_3d` it proves 3D.
+   *
+   * Never inferred from a missing value: an unknown/empty quality claims
+   * NOTHING, an absent `path` finds NO copy (an empty prefix would match
+   * every entry), a source that failed to load leaves a tag EXACTLY as the
+   * sources that answered left it — never greyed DOWN — and an unconfigured
+   * or unreadable folder can only fail to prove, never disprove. Grey is
+   * "not proven", never "checked everywhere and absent": `hasFileNote` below
+   * is where the UI says which case it is.
    */
-  const fileQuality = (item.quality ?? '').trim().toLowerCase()
+  const libraryQuality = (item.quality ?? '').trim().toLowerCase()
+  const grabs = grabsQuery.data ?? []
+  const grabQualities = grabs.map((grab) => (grab.quality ?? '').toLowerCase())
+  const copyPrefix = baseName(item.path ?? '')
+  const holdsCopy = (listing: FileItem[] | undefined): boolean =>
+    copyPrefix !== '' && !!listing?.some((entry) => entry.name.startsWith(copyPrefix))
+
   const hasFileTags = [
-    { label: '1080', on: fileQuality.includes('1080p') },
-    { label: '4K', on: fileQuality.includes('2160p') },
-    { label: '3D', on: inFolder(item.path ?? '', path3d) },
+    {
+      label: '1080',
+      on:
+        libraryQuality.includes('1080p') ||
+        grabQualities.some((quality) => quality.includes('1080p')),
+    },
+    {
+      label: '4K',
+      on:
+        libraryQuality.includes('2160p') ||
+        grabQualities.some((quality) => quality.includes('2160p')) ||
+        holdsCopy(listing4kQuery.data),
+    },
+    {
+      label: '3D',
+      on:
+        inFolder(item.path ?? '', path3d) ||
+        grabs.some((grab) => inFolder(grab.destination ?? '', path3d)) ||
+        holdsCopy(listing3dQuery.data),
+    },
   ]
+
+  /**
+   * The one thing the tags cannot say alone: WHY a source is not here. Grey
+   * is "no source proved this class" (absent) — but a source that could not
+   * be consulted (a failed read) or that does not exist (an unconfigured
+   * folder) is UNKNOWN, and saying so out loud is what keeps "we could not
+   * check" from reading as "we checked and there is nothing".
+   */
+  const hasFileNoteParts: string[] = []
+  if (grabsQuery.isError) hasFileNoteParts.push('las descargas de la app no se pudieron leer')
+  if (foldersUnreadable) hasFileNoteParts.push('la configuración de carpetas no se pudo leer')
+  if (listing4kQuery.isError) hasFileNoteParts.push('la carpeta path_4k no se pudo leer')
+  if (listing3dQuery.isError) hasFileNoteParts.push('la carpeta path_3d no se pudo leer')
+  // Only a SUCCESSFUL settings read may call "" "unconfigured": while the
+  // read is pending the value is unknown (not yet a fact), and a failed read
+  // stays unknown too — neither may be reported as "sin configurar".
+  if (foldersQuery.isSuccess && !path4k) hasFileNoteParts.push('path_4k sin configurar')
+  if (foldersQuery.isSuccess && !path3d) hasFileNoteParts.push('path_3d sin configurar')
+  const hasFileNote = hasFileNoteParts.length
+    ? `Comprobación parcial: ${hasFileNoteParts.join(' · ')}`
+    : ''
 
   function formatElapsed(s: number): string {
     if (s < 60) return `${s}s`
@@ -793,6 +982,11 @@ export function ReleaseSearchModal({
                     </span>
                   ))}
                 </div>
+                {/* Unknown is not absent: this line exists only when some
+                    source could not be consulted (or does not exist), so a
+                    grey tag is never mistaken for a check that came back
+                    empty. Nothing to explain → nothing rendered. */}
+                {hasFileNote && <span className="has-file-note">{hasFileNote}</span>}
                 <button
                   type="button"
                   className="action-btn search-all"

@@ -159,6 +159,10 @@ function calidadSeriesRelease(series: AllSeries): ReleaseSearchItem {
     source: 'sonarr',
     remotePoster: series.remotePoster,
     has_file: series.has_file,
+    // Typed episode (what Sonarr grabs) but keyed as the SERIES it is: the
+    // grabs history asked for `episode_id=<seriesId>` would return another
+    // show's episode with the same number and light a class we do not have.
+    idKind: 'series',
   }
 }
 
@@ -204,6 +208,9 @@ function estrenoRelease(item: CalendarItem): ReleaseSearchItem {
     episode_number: item.episode_number,
     has_file: item.has_file,
     remotePoster: item.remotePoster,
+    // A calendar item's id is its own kind — the card says which one, and
+    // the grabs history must be asked under exactly that key.
+    idKind: item.type,
   }
 }
 

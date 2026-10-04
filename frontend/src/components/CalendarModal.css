@@ -484,6 +484,16 @@
   background: transparent;
 }
 
+/* Unknown ≠ absent: why some source is not behind the tags above (a failed
+   read, an unconfigured folder). Dim, small, wraps — it explains, it does not
+   shout, and it is rendered only when there is something to explain. */
+.has-file-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .calendar-indexer-group {
   margin-bottom: 12px;
 }
