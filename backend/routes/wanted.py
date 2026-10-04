@@ -6,7 +6,7 @@ import re
 import time
 import unicodedata
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 import history
 from config import configured_services, find_service, service_unavailable_reason
@@ -344,6 +344,48 @@ async def get_series_episodes(series_id: int, _key: str = Depends(verify_api_key
         return {"episodes": [], "error": service_unavailable_reason("sonarr")}
     async with http_session() as session:
         return await arr_series_episodes(session, service, series_id)
+
+
+@router.get("/api/grabs")
+async def get_grabs(
+    source: str = "",
+    movie_id: int | None = None,
+    episode_id: int | None = None,
+    _key: str = Depends(verify_api_key),
+):
+    """Todas las descargas que hizo ESTA app para un título, de más antigua a
+    más reciente.
+
+    Para el panel de detalle de Calidad: distingue "ya lo tenemos en 4K y en
+    1080p" de "nunca lo pedimos", que es lo que evita volver a descargar algo.
+    A diferencia de las marcas de "Faltantes" (la fila más reciente por
+    título), aquí NO se colapsa ni se limita el historial: cada descarga
+    cuenta, porque una descarga ausente se leería como "nunca se pidió".
+    """
+    if movie_id is None and episode_id is None:
+        raise HTTPException(status_code=400, detail="Se requiere movie_id o episode_id")
+    # Same answer as the neighbouring routes when the service cannot be used:
+    # the normal body plus `error`, never an exception.
+    if not find_service(source, "arr"):
+        return {"grabs": [], "error": service_unavailable_reason(source)}
+    # "movie_id wins", matching how the own-grab keying resolves a row that
+    # somehow carries both ids.
+    kind = "movie" if movie_id is not None else "episode"
+    item_id = movie_id if movie_id is not None else episode_id
+    # `history.py`'s contract: the synchronous reader goes through a thread.
+    rows = await asyncio.to_thread(history.own_grabs_for, source, kind, item_id)
+    return {
+        "grabs": [
+            {
+                # NULL stays null: a row older than those columns is unknown,
+                # not "" — the frontend must not render an empty quality name.
+                "quality": row["quality"],
+                "destination": row["destination"],
+                "grabbed_at": row["grabbed_at"],
+            }
+            for row in rows
+        ]
+    }
 
 
 @router.post("/api/wanted/search")

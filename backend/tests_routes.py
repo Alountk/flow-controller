@@ -1499,6 +1499,128 @@ class TestWantedGrabMarks:
         assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] is None
 
 
+# ── GET /api/grabs — every grab THIS app made for ONE title ──────────────────
+#
+# The Calidad detail panel must know what a title already has (Radarr's
+# movieFile, the filesystem) AND what this app already asked for, because one
+# title can have been grabbed twice: 1080p into the library, then 2160p into
+# `path_4k`. The mark readers above deliberately collapse history to the
+# NEWEST row per title; this endpoint is the uncollapsed history for exactly
+# one title, because a dropped row reads as "we never downloaded this" — which
+# is the wrong answer that authorizes downloading it a second time.
+
+
+class TestGrabsForOneTitle:
+    """`GET /api/grabs`: every own-grab row for one title, oldest first.
+
+    Full history, not a mark: two grabs of the same movie must both come back,
+    each keeping its own quality and destination, so a caller can say
+    "first we had 1080, then 4K".
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolated_history(self, tmp_path):
+        history.close()
+        self._db_path = tmp_path / "history.db"
+        history.init_db(self._db_path)
+        yield
+        history.close()
+
+    def _get(self, **params):
+        return client.get("/api/grabs", params=params)
+
+    def test_a_movie_grabbed_twice_returns_both_rows_oldest_first(self):
+        history.record_own_grab(
+            "radarr", movie_id=855, grabbed_at=100.0,
+            quality="Bluray-1080p", destination=None,
+        )
+        history.record_own_grab(
+            "radarr", movie_id=855, grabbed_at=200.0,
+            quality="Bluray-2160p", destination="/mnt/storage/4k",
+        )
+
+        grabs = self._get(source="radarr", movie_id=855).json()["grabs"]
+
+        # Each row keeps ITS quality and ITS destination: 1080p went to the
+        # library (NULL), 2160p to the 4K folder — never collapsed to newest.
+        assert [g["quality"] for g in grabs] == ["Bluray-1080p", "Bluray-2160p"]
+        assert [g["destination"] for g in grabs] == [None, "/mnt/storage/4k"]
+        assert [g["grabbed_at"] for g in grabs] == [100.0, 200.0]
+
+    def test_a_title_never_grabbed_returns_an_empty_list(self):
+        body = self._get(source="radarr", movie_id=4242).json()
+
+        assert body["grabs"] == [], "no grabs is an empty list, not an error"
+
+    def test_movie_and_episode_ids_do_not_cross_match(self):
+        history.record_own_grab(
+            "radarr", movie_id=7, grabbed_at=100.0, quality="Bluray-1080p"
+        )
+        history.record_own_grab(
+            "sonarr", episode_id=7, series_id=3, grabbed_at=200.0,
+            quality="WEBRip-720p",
+        )
+
+        # Both titles carry id 7: each key must return only its own row.
+        movie = self._get(source="radarr", movie_id=7).json()["grabs"]
+        episode = self._get(source="sonarr", episode_id=7).json()["grabs"]
+
+        assert [g["grabbed_at"] for g in movie] == [100.0]
+        assert [g["grabbed_at"] for g in episode] == [200.0]
+
+    def test_neither_id_is_a_400_with_a_spanish_detail(self):
+        resp = self._get(source="radarr")
+
+        assert resp.status_code == 400
+        detail = resp.json()["detail"]
+        assert "movie_id" in detail and "episode_id" in detail, (
+            "the detail must name what is missing, not just complain"
+        )
+
+    def test_an_unknown_source_uses_the_neighbour_error_shape(self):
+        resp = self._get(source="nope", movie_id=1)
+
+        # Neighbours (`/api/wanted/series/episodes`, `/api/wanted/search`)
+        # answer an unusable service with the normal body plus `error`, not
+        # with a status code.
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["grabs"] == []
+        assert body["error"] == "servicio desconocido: nope"
+
+    def test_null_quality_and_destination_stay_null(self):
+        # A row recorded before those columns existed: both are SQL NULL.
+        history.record_own_grab("radarr", movie_id=9, grabbed_at=100.0)
+
+        grab = self._get(source="radarr", movie_id=9).json()["grabs"][0]
+
+        assert grab["quality"] is None, 'unknown must stay null, never ""'
+        assert grab["destination"] is None
+
+    def test_an_unavailable_store_returns_an_empty_list(self):
+        history.close()
+
+        body = self._get(source="radarr", movie_id=1).json()
+
+        assert body["grabs"] == []
+
+    def test_a_store_read_error_returns_an_empty_list_without_raising(self):
+        import sqlite3
+
+        # A real sqlite failure, not a mock: the table the reader needs is
+        # gone, and the reader's own except branch must catch it.
+        conn = sqlite3.connect(self._db_path)
+        try:
+            conn.execute("DROP TABLE own_grabs")
+            conn.commit()
+        finally:
+            conn.close()
+
+        body = self._get(source="radarr", movie_id=1).json()
+
+        assert body["grabs"] == []
+
+
 # ── "Todas" and the calendar mark their own items ────────────────────────────
 #
 # Same mark, three more surfaces. `/api/wanted/all` lists movies, `/api/wanted/
