@@ -32,7 +32,7 @@ def _isolated(tmp_path, monkeypatch):
     """A private database and restored settings/constants per test."""
     before = copy.deepcopy(settings_mod.get_settings())
     history.close()
-    history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+    history.init_db(tmp_path / "history.db")
     yield
     history.close()
     settings_mod._settings = before

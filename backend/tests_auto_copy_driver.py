@@ -738,7 +738,7 @@ def test_one_failing_trace_does_not_abort_the_sweep(monkeypatch):
 @pytest.fixture
 def db(tmp_path):
     history.close()
-    history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+    history.init_db(tmp_path / "history.db")
     yield
     history.close()
 

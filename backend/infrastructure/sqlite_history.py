@@ -178,7 +178,7 @@ _lock = threading.RLock()
 
 
 def _default_path() -> Path:
-    return Path(os.environ.get("CONFIG_DIR", "/app/config")) / "infrastructure.sqlite_history.db"
+    return Path(os.environ.get("CONFIG_DIR", "/app/config")) / "history.db"
 
 
 def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
