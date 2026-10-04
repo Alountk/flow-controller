@@ -37,7 +37,15 @@ from state import queue_consumer_task
 # driver (auto_copy_driver.py) calls `decide_copy`, `auto_copy_key`,
 # `matches_own_grab`, `arr_has_file`, `mark_auto_copy` and
 # `is_auto_copy_handled` in production, so the declared T4/T6 debt is repaid.
+# `application.gateways.__getattr__` is a MODULE PROTOCOL hook: Python calls it
+# when a name is not found on the module, so nothing in the source ever mentions
+# it and no static analysis can see it is used. It is what keeps a constant
+# (settings_store.encryption_error) from being wrapped into a function — see
+# tests_gateways.py for what that cost when it was.
+from application.gateways import __getattr__ as _gateways_module_getattr  # noqa: F401
+
 __all__ = [
+    "_gateways_module_getattr",
     "queue_consumer_task",
     "select_best_video",
 ]

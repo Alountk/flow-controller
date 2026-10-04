@@ -249,7 +249,12 @@ function App() {
             {configData?.encryption_ok === false && (
               <div className="wanted-error" role="alert">
                 <strong>No se pudieron leer las credenciales guardadas</strong>
-                <span>{configData.encryption_error}</span>
+                {/* Coerced to text on purpose. A non-string here once arrived as
+                    `encryption_error: {}` and React error #31 — objects are not
+                    valid as a React child — took the whole dashboard down behind
+                    ErrorBoundary while every request stayed green. No shape of
+                    data should be able to unmount the app. */}
+                <span>{String(configData.encryption_error ?? '')}</span>
               </div>
             )}
             {page === 'dashboard' && (

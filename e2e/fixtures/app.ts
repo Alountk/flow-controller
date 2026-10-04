@@ -13,7 +13,27 @@ export { expect };
  */
 export const test = base.extend<{ app: Page }>({
   app: async ({ page }, use) => {
+    // The lamp this suite was missing. A React tree that throws renders
+    // whatever ErrorBoundary shows and NOTHING reaches the server — so the
+    // container log looks healthy and the spec times out on a heading. These
+    // lines are the only place that failure can say anything.
+    const noise: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error' || msg.type() === 'warning') {
+        noise.push(`[console.${msg.type()}] ${msg.text()}`);
+      }
+    });
+    page.on('pageerror', (err) => noise.push(`[pageerror] ${err.message}\n${err.stack ?? ''}`));
+    page.on('requestfailed', (req) =>
+      noise.push(`[requestfailed] ${req.method()} ${req.url()} — ${req.failure()?.errorText}`),
+    );
     await use(page);
+    if (noise.length) {
+      // Printed, never thrown: this is a lamp, not a gate.
+      console.log('\n===== browser said =====');
+      for (const line of noise) console.log('  ' + line);
+      console.log('===== /browser said =====\n');
+    }
   },
 });
 
