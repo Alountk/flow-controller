@@ -451,7 +451,17 @@ describe('the tags · what each request costs', () => {
       />,
     )
 
-    // The auto-search is what such a title meets instead of the block.
+    // The 🔍 button is what such a title meets instead of the block, and
+    // selecting it asks NONE of the three (they are the has-file block's
+    // sources): no grabs, no browse — not before the press…
+    expect(await screen.findByRole('button', { name: /Buscar Releases/ })).toBeInTheDocument()
+    expect(document.querySelector('.has-file-block')).toBeNull()
+    expect(callsWith(fn, '/api/grabs')).toHaveLength(0)
+    expect(callsWith(fn, '/api/files/browse')).toHaveLength(0)
+
+    // …and not after it either: the press reaches the results, and the
+    // three sources are still the block's, not the list's.
+    fireEvent.click(screen.getByRole('button', { name: /Buscar Releases/ }))
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(document.querySelector('.has-file-block')).toBeNull()
     expect(callsWith(fn, '/api/grabs')).toHaveLength(0)

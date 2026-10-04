@@ -10,6 +10,10 @@ import type { Release } from '../api/calendar'
  * step, and the only way back dropped the cache and re-asked the indexer for
  * data it had answered seconds ago.
  *
+ * How every panel result below is reached: SELECTION starts nothing (the
+ * operator initiates), then the 🔍 Buscar Releases press runs the search.
+ * From that state on, everything is pinned unchanged:
+ *
  * What is pinned here, PANEL ONLY:
  *   1. a successful grab (BOTH paths: batch button and row click) STAYS on
  *      the results — the ack rides above the list that never left;
@@ -114,6 +118,8 @@ const resultsReady = () => screen.findByPlaceholderText('Filtrar por título...'
 const selectAll = () => screen.findByRole('checkbox', { name: /1 releases encontrados/ })
 
 async function openResultsAndGrabBatch(fn: FetchMock) {
+  // Selection started nothing: this press is how the results are reached.
+  fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
   await resultsReady()
   expect(searchCalls(fn)).toBe(1)
   fireEvent.click(await selectAll())
@@ -155,6 +161,7 @@ describe('panel · a grab leaves the results alone', () => {
   it('does the same on the row-click grab — the common path', async () => {
     stubFetch()
     renderPanel(7102)
+    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
     await resultsReady()
 
     fireEvent.click(document.querySelector('.release-content') as HTMLElement)
@@ -186,6 +193,7 @@ describe('panel · a grab leaves the results alone', () => {
   it('renders a plain results with no status box and no stale search text', async () => {
     stubFetch()
     renderPanel(7104)
+    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
     await resultsReady()
 
     expect(document.querySelector('.calendar-modal-status')).toBeNull()

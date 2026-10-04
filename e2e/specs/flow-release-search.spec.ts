@@ -19,12 +19,13 @@ import { test, expect, login } from '../fixtures/app';
  * indexer round-trip — which is exactly what the assertions below pin as
  * absent after a grab.
  *
- * PR B rewired that inline search: the panel has NO 🔍 Buscar Releases
- * button — it searches by itself when the Releases view mounts (and again
- * when the indexer choice changes), the rows read as the file selector
- * (name · idioma · calidad · size · semillas), and "Acción principal" below
- * the list spells the routing out. The overlay modal keeps its button and
- * its initial step; this spec never leaves the panel to prove the split.
+ * The operator initiates every search: selecting a row NEVER searches. The
+ * panel lands on its own 🔍 Buscar Releases button, THAT press starts the
+ * request (and changing the indexer re-runs it), the rows read as the file
+ * selector (name · idioma · calidad · size · semillas), and "Acción
+ * principal" below the list spells the routing out. The overlay modal keeps
+ * its button and its initial step; this spec never leaves the panel to prove
+ * the split.
  *
  * Same rules as flow-faltantes: role/accessible-name selectors, text only
  * where markup has no role (justified inline), web-first assertions with
@@ -48,10 +49,11 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // The movie row keeps the page's own action — MediaPane.tsx,
   // button "🔍 Buscar" (sectionsPanel.test's routing test proves this exact
   // click). In the section it bubbles to the row: the row selects and the
-  // search opens inside the panel's Releases tab — no modal ever.
-  // Playwright matches role names by substring; this resolves to ONE button
-  // even so, because the panel draws NO "🔍 Buscar Releases" of its own —
-  // that button went away with PR B's panel-only auto-search.
+  // Releases tab opens with the panel's OWN "🔍 Buscar Releases" waiting —
+  // no modal ever, and no search either (selection never searches). This
+  // resolves to ONE button even though Playwright matches role names by
+  // substring, because the panel is not open yet: the click below is what
+  // opens it.
   await app.getByRole('button', { name: '🔍 Buscar' }).click();
 
   // Releases is what must be showing now: it is the panel's default tab and
@@ -60,9 +62,10 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // role=group button — so the class is the only honest "active" selector.
   await expect(app.locator('.sec-dtab.is-active')).toHaveText('Releases', { timeout: 15000 });
 
-  // The behaviour split, pinned: the PANEL has no search button to press
-  // (the overlay modal elsewhere still renders its own).
-  await expect(app.getByRole('button', { name: /Buscar Releases/ })).toHaveCount(0);
+  // The contract, pinned: the panel's OWN search button is here, waiting —
+  // selection did not press it. (The overlay modal elsewhere renders the
+  // same button; this spec never leaves the panel to reach it.)
+  await expect(app.getByRole('button', { name: /Buscar Releases/ })).toBeVisible();
 
   // The indexer dropdown carries the stub's list (indexers.json → "Torznab")
   // — ReleaseSearchModal renders {idx.name} as an <option>. It stays as the
@@ -70,10 +73,11 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // <select> are not painted.
   await expect(app.getByRole('option', { name: 'Torznab' })).toHaveCount(1, { timeout: 15000 });
 
-  // Results appeared WITHOUT anyone pressing a button: mounting the view
-  // searched by itself. The select-all checkbox's accessible name comes from
-  // its wrapping label's count text, "3 releases encontrados"
-  // (releases.json has 3).
+  // The operator presses 🔍 Buscar Releases — THE way a search starts now —
+  // and the results below are the proof the press ran. The select-all
+  // checkbox's accessible name comes from its wrapping label's count text,
+  // "3 releases encontrados" (releases.json has 3).
+  await app.getByRole('button', { name: /Buscar Releases/ }).click();
   await expect(app.getByRole('checkbox', { name: '3 releases encontrados' })).toHaveCount(1, { timeout: 15000 });
 
   // The file selector's first row: the file's name alone on its line —

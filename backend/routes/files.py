@@ -16,6 +16,7 @@ from traces import host_path
 import history
 from import_service import post_move_import
 from models import ActionRequest
+from naming import MEDIA_EXTENSIONS
 from routes.status import verify_api_key
 from state import file_queue, queue_lock, http_session
 import config
@@ -83,6 +84,12 @@ def _file_entry(p: Path) -> dict:
         "name": p.name,
         "path": str(p),
         "is_dir": is_dir,
+        # `naming.MEDIA_EXTENSIONS` is the repo's single definition of "this
+        # file is a video" (promoted public in #128 so a second list cannot
+        # drift): a `.srt`/`.nfo` sitting in path_4k must not read as "we
+        # have the 4K copy" — the Dune false positive. A directory is never a
+        # video: the nested layout is proved by `is_dir` alone.
+        "is_video": (not is_dir) and p.suffix.lower() in MEDIA_EXTENSIONS,
         "size": 0 if is_dir else stat.st_size,
         "modified": int(stat.st_mtime),
     }
