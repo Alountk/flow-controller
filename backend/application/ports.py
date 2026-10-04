@@ -16,7 +16,7 @@ and can be interrupted is a contract in every shape but the type.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Protocol, runtime_checkable
+from typing import Awaitable, Callable, Protocol, runtime_checkable
 
 
 class CopyCancelled(Exception):
@@ -62,3 +62,73 @@ class FileStorage(Protocol):
         temporary file is removed before it propagates.
         """
         ...
+
+
+# ── The auto-copy sweep ───────────────────────────────────────────────────────
+#
+# These are named from what the sweep needs, not from the module that happens to
+# provide them today. `OwnGrabStore` is one port and not six because the six
+# methods are one cohesive record of "what did we ask for, and what became of
+# it" — splitting them would leak the shape of a table into a use case that
+# only cares that the question has an answer.
+#
+# The one-shot collaborators are callables rather than protocols on purpose: a
+# single function is the honest type for a single question. A Protocol with one
+# `__call__` would be ceremony, and it would hide that these arrive as plain
+# functions the composition root can bind to anything.
+
+
+#: Build the traces the sweep judges — one per live download.
+TraceLoader = Callable[..., Awaitable[list[dict]]]
+
+
+#: Does the arr already hold this item? `None` on any doubt — never "no file".
+ArrProbe = Callable[..., Awaitable[bool | None]]
+
+
+#: Root folders the arr manages for a source; ``[]`` whenever unknown.
+ArrRoots = Callable[..., Awaitable[list[str]]]
+
+
+#: Run a named action (`copy_files`, …) and report what happened.
+ActionDispatcher = Callable[..., Awaitable[dict]]
+
+
+@runtime_checkable
+class OwnGrabStore(Protocol):
+    """What this app asked for, and what became of it.
+
+    Six questions, one record. The sweep reads it to decide whether a download
+    is ours, and writes it so a later sweep does not repeat itself.
+    """
+
+    def list_own_grabs(self, since: float, *, limit: int = 500) -> list[dict]:
+        ...
+
+    def is_auto_copy_handled(self, key: str) -> bool:
+        """Whether an earlier sweep already claimed this one."""
+
+    def mark_auto_copy(
+        self, key: str, *, source: str, title: str | None, decision: str, reason: str | None = None
+    ) -> None:
+        """Record an outcome. Claiming happens BEFORE acting, never after."""
+
+    def note_auto_copy_seen(self, key: str, stage: str, *, seen_at: float | None = None) -> float:
+        """Return the instant this stage was first observed.
+
+        The trace's only timestamp is the grab instant, which predates the
+        download: deriving the grace window from it would start the clock
+        before completion and race the arr. So the app keeps its own.
+        """
+
+    def latest_auto_copy_decisions(self) -> dict[str, str]:
+        """Last logged outcome per key, read once for the whole sweep."""
+
+    def log_auto_copy_decision(
+        self, key: str, *, source: str, title: str | None, decision: str, reason: str | None = None
+    ) -> None:
+        """Append to the "why not" log. History, not state: blocks nothing."""
+
+
+#: Judge one trace and return its summary line.
+TraceHandler = Callable[..., Awaitable[dict]]
