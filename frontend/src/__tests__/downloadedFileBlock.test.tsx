@@ -252,7 +252,8 @@ describe('the block without file data (overlay)', () => {
 
 /**
  * A title that still needs a file never meets this block: `WantedMovie` has no
- * file at all, so its panel offers the auto-search instead of a status.
+ * file at all, so its panel offers the 🔍 button instead of a status — and
+ * sits there until the operator presses it.
  */
 describe('a title without a file', () => {
   beforeEach(() => {
@@ -263,7 +264,7 @@ describe('a title without a file', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders no file block and searches by itself', async () => {
+  it('renders no file block — and the press, not the selection, is what searches', async () => {
     const fn = mockFetch()
     // A fresh id: `panelResults` is module-level, and a title that already
     // produced results restores them instead of searching again.
@@ -278,8 +279,15 @@ describe('a title without a file', () => {
       }),
     )
 
-    await screen.findByPlaceholderText('Filtrar por título...')
+    // The two halves of the claim, split: no block and no search on
+    // selection…
+    expect(await screen.findByRole('button', { name: /Buscar Releases/ })).toBeInTheDocument()
+    expect(document.querySelector('.has-file-block')).toBeNull()
+    expect(releaseCalls(fn)).toHaveLength(0)
 
+    // …and exactly one search from the press.
+    fireEvent.click(screen.getByRole('button', { name: /Buscar Releases/ }))
+    await screen.findByPlaceholderText('Filtrar por título...')
     expect(document.querySelector('.has-file-block')).toBeNull()
     expect(releaseCalls(fn)).toHaveLength(1)
   })

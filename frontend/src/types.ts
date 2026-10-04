@@ -468,6 +468,11 @@ export interface FileItem {
   name: string
   path: string
   is_dir: boolean
+  /** The backend's classification of a FILE as video
+   *  (`_file_entry.is_video`, from `naming.MEDIA_EXTENSIONS`). Absent on a
+   *  payload that was never classified (an older build, a test stub): absent
+   *  is UNKNOWN — never read as "not a video". */
+  is_video?: boolean
   size: number
   modified: number
 }

@@ -195,7 +195,7 @@ def _basename(path: str) -> str:
 #: Two lists would drift, and the second one would silently stop matching.
 MEDIA_EXTENSIONS = {
     ".mkv", ".mp4", ".avi", ".m2ts", ".ts", ".wmv", ".mov", ".m4v",
-    ".mpg", ".mpeg", ".webm", ".flv", ".ogm", ".rmvb", ".divx",
+    ".mpg", ".mpeg", ".webm", ".flv", ".ogm", ".rmvb", ".divx", ".iso",
 }
 
 

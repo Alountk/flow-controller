@@ -43,7 +43,7 @@ const wantedMovie = {
   grabbed_destination: null,
 }
 
-/** A second missing title: the auto-search tests drive THIS row so they
+/** A second missing title: the search-contract tests drive THIS row so they
  *  always meet a panel with no cached results of its own — the module-level
  *  panel cache keys results per item, and each test needs a fresh one. */
 const secondWanted = {
@@ -296,14 +296,17 @@ describe('sections · the release search in the panel', () => {
 
     // A missing title: a catalogue movie that already has a file honestly
     // answers "ya tiene archivo" instead of offering a search — the row this
-    // test picks is a wanted one, which searches BY ITSELF (PR B): the panel
-    // no longer draws a 🔍 Buscar Releases button to press.
+    // test picks is a wanted one, which lands the panel on its own 🔍
+    // Buscar Releases button.
     fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
     await screen.findByText('Todo a la vez en todas partes')
     fireEvent.click(firstRow())
 
-    // The auto-search replaces the click the panel used to need: results are
-    // the proof it ran, and the button's absence is the proof it is gone.
+    // The press is what reaches the results (selection searched nothing),
+    // and once they are on screen the initial step's button is not drawn
+    // at all — the list and its counter are the proof the press ran.
+    expect(await screen.findByRole('button', { name: /Buscar Releases/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Buscar Releases/ }))
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(screen.queryByRole('button', { name: /Buscar Releases/ })).toBeNull()
     expect(screen.getByText('1 releases encontrados')).toBeInTheDocument()
@@ -329,24 +332,33 @@ describe('sections · the release search in the panel', () => {
     expect(document.querySelector('.scan-modal-backdrop')).toBeNull()
   })
 
-  it('searches by itself on mount and on an indexer change — and not again on re-open', async () => {
+  it('searches only on the press and on an indexer change — never on selection, never on re-open', async () => {
     renderSection(Peliculas)
     await screen.findByText('Your Name.')
 
     const searchCalls = () =>
       fn.mock.calls.filter(([input]) => String(input).includes('/api/calendar/releases')).length
 
-    // Trigger 1: the Releases view mounts for a title with nothing to show
-    // and fires the search no button asks for any more.
+    // Trigger 1: SELECTION. The Releases view mounts for a title with
+    // nothing to show and sits on the initial step — the operator's press
+    // is the only way the first search starts.
     fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
     await screen.findByText('Otra Película Sin Archivo')
     fireEvent.click(screen.getByText('Otra Película Sin Archivo'))
+    expect(await screen.findByRole('button', { name: /Buscar Releases/ })).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(searchCalls()).toBe(0)
+
+    // Trigger 2: the 🔍 press. Exactly one search, and the results it
+    // returned are what the rest of this test drives.
+    fireEvent.click(screen.getByRole('button', { name: /Buscar Releases/ }))
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(searchCalls()).toBe(1)
 
-    // Trigger 2: picking an indexer IS the request now — exactly one new
-    // search, under the newly chosen value (and the select is labelled for
-    // assistive tech, so the change is addressable by role).
+    // Trigger 3: picking an indexer re-runs it — exactly one NEW search,
+    // under the newly chosen value (and the select is labelled for
+    // assistive tech, so the change is addressable by role). Not before:
+    // the count was 1 through both triggers above.
     const indexerSelect = screen.getByRole('combobox', { name: /Indexador/ }) as HTMLSelectElement
     const next = indexerSelect.value === 'all' ? '1' : 'all'
     fireEvent.change(indexerSelect, { target: { value: next } })

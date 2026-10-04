@@ -13,8 +13,9 @@ import { Calendar } from '../components/Calendar'
  * itself and the corrected panel note; what is pinned HERE:
  *
  * 1. Both sections: the movie/episode selection reaches the panel on the
- *    Releases tab a view switch already resets it to, and the release search
- *    receives the calendar item's own identity.
+ *    Releases tab a view switch already resets it to — and searches NOTHING
+ *    until the operator presses 🔍; the press then sends the calendar
+ *    item's own identity.
  * 2. The panel's tabs stay HONEST for a calendar item: its grab record is
  *    read from the CalendarItem, and what the item does NOT carry (path,
  *    series id) says so instead of reporting the row unreadable — the lie
@@ -131,7 +132,7 @@ describe('Películas · Estrenos selects into the detail panel', () => {
     vi.unstubAllGlobals()
   })
 
-  it('lands on the Releases tab the view switch already resets to, and searches there', async () => {
+  it('lands on the Releases tab the view switch resets to, and waits for the press', async () => {
     renderWith(Peliculas)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Estrenos' }))
@@ -142,8 +143,15 @@ describe('Películas · Estrenos selects into the detail panel', () => {
     expect(document.querySelector('.sec-detail h3')?.textContent).toBe('Estreno de Película')
     expect(document.querySelector('.scan-modal-backdrop')).toBeNull()
 
-    // The search the panel runs IS the calendar item's own identity — the
-    // fields the release item was built from, not a fresh guess.
+    // Selection is not a trigger: the panel sits on the initial step with
+    // the button waiting, and NOTHING has been asked of the indexers.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(releaseBodies(fn)).toHaveLength(0)
+
+    // The operator presses — and the search the panel runs IS the calendar
+    // item's own identity, the fields the release item was built from, not
+    // a fresh guess.
+    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
     await waitFor(() => expect(releaseBodies(fn)).toHaveLength(1))
     expect(releaseBodies(fn)[0]).toMatchObject({
       source: 'radarr',
@@ -211,6 +219,11 @@ describe('Series · Estrenos selects into the detail panel', () => {
     expect(screen.getByText('S01E02 · Estreno de Episodio')).toBeInTheDocument()
     expect(activeTab()).toBe('Releases')
     expect(document.querySelector('.scan-modal-backdrop')).toBeNull()
+    // Selection asks nothing; the press is what runs the search — and what
+    // it sends IS this calendar item's own identity.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(releaseBodies(fn)).toHaveLength(0)
+    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
     await waitFor(() => expect(releaseBodies(fn)).toHaveLength(1))
     expect(releaseBodies(fn)[0]).toMatchObject({
       source: 'sonarr',
@@ -260,9 +273,9 @@ describe('every calendar card selects — a title with its file too', () => {
     expect(document.querySelector('.scan-modal-backdrop')).toBeNull()
     expect(document.querySelector('.scan-modal')).toBeNull()
 
-    // A title that already has its file never auto-searches: it meets the
-    // has-file block, which degrades honestly — the calendar carries no
-    // file name to show.
+    // A title that already has its file never searches from selection: it
+    // meets the has-file block (no 🔍 of its own), which degrades honestly —
+    // the calendar carries no file name to show.
     expect(await screen.findByText('Nombre no disponible en esta vista')).toBeInTheDocument()
     expect(releaseBodies(fn)).toHaveLength(0)
   })

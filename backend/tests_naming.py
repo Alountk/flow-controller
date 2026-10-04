@@ -119,6 +119,27 @@ def test_clean_title_drops_everything_radarr_drops():
     assert clean_title("L'Étranger: La Película!") == "letrangerlapelicula"
 
 
+def test_the_self_check_also_agrees_when_radarr_kept_an_iso():
+    """`.iso` counts as video (a disc image we have), so the extension is
+    stripped from BOTH sides exactly as it is for `.mkv`: the gate compares
+    the name, and Radarr appends the container itself."""
+    pattern = "{Movie Title} ({Release Year}) - {Quality Full}"
+    existing = build_values(title="Película", year=2020, quality="Bluray-1080p")
+
+    assert reproduced_radarr(pattern, existing, "Película (2020) - Bluray-1080p.iso") is True
+
+
+def test_the_self_check_still_fails_on_a_different_name_with_an_iso():
+    """Stripping `.iso` must agree on the STEM, never on a different name:
+    an extension-only shortcut would hand the pattern a pass it did not earn."""
+    pattern = "{Movie Title} ({Release Year}) - {Quality Full}"
+    existing = build_values(title="Película", year=2020, quality="Bluray-1080p")
+
+    assert (
+        reproduced_radarr(pattern, existing, "Otra Película (2020) - Bluray-1080p.iso") is False
+    )
+
+
 def test_a_proper_suffix_is_not_mistaken_for_an_extension():
     """`suffix` alone would call `.PROPER` an extension and chop it, turning a
     name Radarr would have written into a mismatch — and the feature off."""

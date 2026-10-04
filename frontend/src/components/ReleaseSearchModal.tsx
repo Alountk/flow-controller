@@ -184,12 +184,13 @@ async function fetchRoutingListing(folder: string): Promise<FileItem[]> {
 /**
  * The panel's results, per ITEM, across the tab switches that unmount it.
  *
- * The Releases view is conditionally rendered, so leaving it used to destroy
- * everything — and with auto-search that means re-opening the tab would re-run
- * a search that can take 240 seconds and already returned. Keyed by
- * source/type/id (never by visit): a different title is a different search,
- * the same title is the same results. Session-scoped module state: overlay
- * presentations never read or write it.
+ * The Releases view is conditionally rendered, so leaving it destroys
+ * everything — and re-opening the tab would then sit on the initial step
+ * with a 🔍 button over a search that can take 240 seconds and already
+ * returned. Keyed by source/type/id (never by visit): a different title is
+ * a different search, the same title is the same results — a re-open mounts
+ * straight on 'results' and does nothing. Session-scoped module state:
+ * overlay presentations never read or write it.
  */
 const panelResults = new Map<
   string,
@@ -251,11 +252,13 @@ export function ReleaseSearchModal({
   presentation = 'overlay',
 }: ReleaseSearchModalProps) {
   const inPanel = presentation === 'panel'
-  // The population the removed 🔍 button served: a title that still needs a
-  // file, and one already inside the library (id 0 must be ADDED first — its
-  // ➕ button's job). Both panel triggers share this gate, so a title that
-  // already has its file never auto-searches: it meets the has-file block,
+  // The population the panel's 🔍 Buscar Releases button serves: a title
+  // that still needs a file, and one already inside the library (id 0 must
+  // be ADDED first — its ➕ button's job). The same gate guards the
+  // indexer-change re-run and the results cache, so a title that already has
+  // its file never searches from out here: it meets the has-file block,
   // whose "Buscar versiones" button searches on demand instead.
+  // Selection itself is NOT a trigger: the operator initiates, always.
   const autoSearchable = !item.has_file && item.id !== 0
   // A re-open of the panel lands straight back on the results this item
   // already produced (see panelResults); the overlay — and an item that no
@@ -286,8 +289,12 @@ export function ReleaseSearchModal({
   const [elapsed, setElapsed] = useState(0)
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  // Mount-once guard for the panel's auto-search: React's development
-  // double-invoke of effects must not fire two 240-second searches.
+  // Once-per-mount guard for the panel's 🔍 button: a second click in the
+  // same tick must not fire two 240-second searches. It is the same guard
+  // the removed mount auto-search owned, riding on the ONE trigger that is
+  // left — the panel never returns to 'initial' (nothing calls
+  // setStep('initial')), so one press per mount is all the operator gets
+  // before Refrescar/Nueva búsqueda take over. Overlay presses stay unguarded.
   const autoSearched = useRef(false)
 
   // Overlay only: the panel is not a dialog, so it never owns a backdrop or
@@ -400,25 +407,10 @@ export function ReleaseSearchModal({
     staleTime: 5 * 60_000,
   })
 
-  // PANEL ONLY: the search starts itself. It replaces the 🔍 Buscar Releases
-  // button the panel no longer draws, under exactly the conditions that
-  // button had: it never fired for a title that already has its file (that
-  // one meets the has-file block and searches from its own "Buscar versiones"
-  // button), nor for an id 0 item — that one must be ADDED to the library
-  // first, which is its ➕ button's job. A re-open with cached results never
-  // reaches this effect: it mounts on 'results'.
-  useEffect(() => {
-    if (!inPanel || autoSearched.current) return
-    // A re-open restores straight onto 'results' (see panelResults): the
-    // search that already returned must not run again just because the view
-    // was rebuilt around it.
-    if (step !== 'initial') return
-    if (!autoSearchable) return
-    autoSearched.current = true
-    void handleSearch()
-    // Mount-only by design (the panel never returns to 'initial' on its own),
-    // so the deps stay empty; this repo does not run react-hooks rules.
-  }, [])
+  // NO MOUNT TRIGGER — selecting a row never searches: the operator presses
+  // 🔍 Buscar Releases below (or the has-file block's "Buscar versiones", or
+  // an id 0 item's ➕). The one remaining automatic trigger is the indexer
+  // <select>: changing it re-runs the search (PR B's requirement).
 
   // Keep the cached state of this item truthful while the panel changes it,
   // so the next tab switch restores what the operator actually left behind.
@@ -694,8 +686,9 @@ export function ReleaseSearchModal({
    *    read, so its destination IS the claim (the same way a path inside
    *    `path_3d` is the library's);
    * 3. the routing folders on disk: an entry whose name starts with this
-   *    title's folder name is a copy of it — in `path_4k` it proves 4K, in
-   *    `path_3d` it proves 3D.
+   *    title's folder name AND that is a directory or a video file is a copy
+   *    of it — in `path_4k` it proves 4K, in `path_3d` it proves 3D (a
+   *    subtitle or `.nfo` there proves nothing at all).
    *
    * Never inferred from a missing value: an unknown/empty quality claims
    * NOTHING, an absent `path` finds NO copy (an empty prefix would match
@@ -709,8 +702,32 @@ export function ReleaseSearchModal({
   const grabs = grabsQuery.data ?? []
   const grabQualities = grabs.map((grab) => (grab.quality ?? '').toLowerCase())
   const copyPrefix = baseName(item.path ?? '')
+  /**
+   * An entry in a routing folder that IS a copy of this title.
+   *
+   * Counts only when it is a DIRECTORY (the nested layout:
+   * `path_4k/<folder>/<file>`) or a file the backend CLASSIFIED as video
+   * (the flat historical layout: `path_4k/<folder>….mkv`) — prefix match
+   * first, because the copy keeps this title's folder name at the FRONT of
+   * its name. A subtitle must never count: Dune's `path_4k` held only
+   * `…[ES+EN].srt` (and `.nfo` files) and the 4K tag lit anyway.
+   *
+   * Classification is the BACKEND's (`_file_entry.is_video`, from
+   * naming.MEDIA_EXTENSIONS — the repo's single definition of "video"):
+   * a file CLASSIFIED as not-a-video refuses; an entry the payload never
+   * classified (older build, test stub) is UNKNOWN and does not refuse —
+   * real backend payloads always carry the boolean, so day to day the rule
+   * is exact.
+   *
+   * Honest edge: a folder that exists but holds only junk still counts —
+   * knowing otherwise would mean descending into every entry, i.e. a request
+   * per copy per title.
+   */
   const holdsCopy = (listing: FileItem[] | undefined): boolean =>
-    copyPrefix !== '' && !!listing?.some((entry) => entry.name.startsWith(copyPrefix))
+    copyPrefix !== '' &&
+    !!listing?.some(
+      (entry) => entry.name.startsWith(copyPrefix) && (entry.is_dir || entry.is_video !== false),
+    )
 
   const hasFileTags = [
     {
@@ -765,8 +782,8 @@ export function ReleaseSearchModal({
    * Leaving the search. The overlay IS a dialog: it ends through the caller's
    * `onClose`. The panel is not — there is nothing to close — so its exit is
    * literally "Nueva búsqueda": the search runs again for the same selection
-   * instead of parking the operator on an initial step whose button no longer
-   * exists. The cached results go with it, so a later re-open searches fresh
+   * instead of parking the operator back on the initial step to press 🔍
+   * again. The cached results go with it, so a later re-open searches fresh
    * instead of restoring what this exit just discarded.
    */
   function dismiss() {
@@ -875,10 +892,11 @@ export function ReleaseSearchModal({
           )}
 
           {/* Indexer selector. Overlay: only on the initial step, as always.
-              Panel: persistent — it IS the search control now that the
-              button is gone, so the operator can re-route the search while
-              results are on screen. `disabled` never bites the overlay: its
-              select only exists when no search is processing. */}
+              Panel: persistent — changing it re-runs the search, the ONE
+              automatic trigger left (🔍 starts the first one), so the
+              operator can re-route while results are on screen. `disabled`
+              never bites the overlay: its select only exists when no search
+              is processing. */}
           {(inPanel || step === 'initial') && (
             <div className="calendar-indexer-select">
               <label className="calendar-indexer-label" htmlFor="release-indexer">Indexador:</label>
@@ -945,11 +963,15 @@ export function ReleaseSearchModal({
           )}
 
           {/* Step: Initial. The overlay keeps its 🔍 button and the body it
-              has always rendered. The panel has no button to render — its
-              search fires by itself — so the block appears there only when
-              something still has something to say: the downloaded file's own
-              facts (PR C), or the add-first button an id 0 item needs. */}
-          {step === 'initial' && (item.has_file || item.id === 0 || !inPanel) && (
+              has always rendered, byte for byte. The panel draws the SAME
+              button again — selection never searches, the operator presses
+              it — except where a different gate owns the next step: a title
+              that already has a file meets the has-file block (its own
+              "Buscar versiones") and an id 0 item needs ➕ first, so neither
+              gets a 🔍 of its own. `step === 'initial'` IS "no results yet
+              for this item": a re-open with cached results mounts on
+              'results' and never lands on this step. */}
+          {step === 'initial' && (
             item.has_file ? (
               /* What IS on disk (the real name, its languages), what you HAVE
                  vs what you are MISSING (the tags), and the way out of the
@@ -998,10 +1020,23 @@ export function ReleaseSearchModal({
               </div>
             ) : (
               <div className="calendar-modal-actions">
-                {!inPanel && (
+                {/* 🔍 for the overlay (always, as ever) and for the panel's
+                    autoSearchable population — the gate that leaves id 0 to
+                    ➕ and a has-file title to its own block. */}
+                {(!inPanel || autoSearchable) && (
                   <button
                     className="action-btn search-all"
-                    onClick={() => void handleSearch()}
+                    onClick={() => {
+                      if (inPanel) {
+                        // Once per mount: a same-tick double click must not
+                        // fire two 240-second searches. The panel never
+                        // returns to 'initial', so this can never swallow a
+                        // legitimate second press.
+                        if (autoSearched.current) return
+                        autoSearched.current = true
+                      }
+                      void handleSearch()
+                    }}
                     disabled={isProcessing}
                   >
                     🔍 Buscar Releases
