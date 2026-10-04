@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# See .githooks/rebuild-dist-if-stale — why a rebuilt bundle matters here.
+exec "$(git rev-parse --show-toplevel)/.githooks/rebuild-dist-if-stale"
