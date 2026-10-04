@@ -28,6 +28,28 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | **B-02** | "Buscar" a veces no muestra el listado de indexadores: el error se traga en **tres capas** y devuelve `[]`, indistinguible de "no hay indexadores". Además no hay caché ni clave por `source`. | Media | `clients.py:766,787` → `[]`; `routes/calendar.py:343-351` sin campo `error`; `ReleaseSearchModal.tsx:96-102` `.catch(() => {})` | ✅ |
 | **B-01** | Al pasar a naranja, la barra izquierda de la card se queda roja. **Dos causas distintas**: (a) `MissingContent.css:187-191` pinta `border-color: var(--warn)` y luego `border-left-color: var(--bad)` en la *misma* regla, con guarda solo para `.status-ok`; (b) `clients.py:1001,1049` comprueba `os.path.isdir` con la **ruta cruda del arr** sin pasar por `host_path()`, así que una película sana se clasifica `status-error`. | Media | Verificado en disco ambas | ✅ |
 | **B-06** | La página **Disco** etiquetaba un directorio del rootfs del propio contenedor como **"Storage (6TB)"**. `/api/disk` hardcodeaba dos rutas y usaba `shutil.disk_usage`, que devuelve el uso del *sistema de ficheros que contiene* un camino — así que un directorio corriente devuelve el rootfs. **Cero tests** previos. | Media | Reportado en runtime: 63 GB (`/dev/loop2`) servidos como volumen 6TB | ✅ PR #103 |
+| **B-07** | **Tres defectos en Biblioteca/panel**: (a) películas con archivo que ponen **«✗ Sin archivo»**, (b) **seleccionar una fila lanzaba la búsqueda** al indexador, (c) **un `.srt` encendía el tag `4K`**. | Media | Medido en la instancia real: 913 películas → 65 `has_file=false` → **solo 2 con carpeta no vacía** (Luca real · Enola solo `movie.nfo`); `path_4k/Dune (2021) … .srt` clasificado como no-vídeo | ✅ PR #128, #129 |
+
+**B-07 resuelto** — PRs **#128** (`8919868`) y **#129** (`078997f`). Tres fallos, una causa cada uno:
+
+- **«✗ Sin archivo»** → el dato de Radarr **no estaba mal**: `hasFile` significa *Radarr no lo ha
+  importado*. **La etiqueta mentía** al afirmar sobre bytes en disco **sin haberlos mirado**. Ahora,
+  solo para los **65** en ese estado (las 848 importadas **nunca tocan el FS** — `/mnt/storage` es
+  NFS), se comprueba si la carpeta contiene un vídeo → **«Carpetas con vídeo · sin importar»**
+  (tono *warn*, no error). Enola, con solo `movie.nfo`, **conserva su «✗» byte a byte**.
+- **Búsqueda automática** → el efecto de montaje **era una adición mía del PR B**, no el requisito
+  del usuario (que fue *«una vez seleccionado el Indexador buscará»* — **sigue intacto y fijado**).
+  Se quitó el montaje y **volvió el botón**: **él inicia, el indexador re-lanza, seleccionar no
+  toca la red**.
+- **Tags** → `holdsCopy` hacía `startsWith(nombre)` → **cualquier entrada** valía. Ahora
+  `_file_entry` **clasifica** con la única lista de extensiones del repo, y la regla cuenta
+  **directorio o vídeo** — rechazando **solo lo clasificado** como no-vídeo, para que un backend
+  viejo **no apague tags en silencio**. **`.iso` entró** en `MEDIA_EXTENSIONS` (un iso plano es un
+  vídeo que tenemos), con su *blast-radius* verificado antes.
+
+⚠️ **Cadena de tests migrada**: quitar la búsqueda de montaje **rompía 10 tests en 4 ficheros**
+escritos por nosotros. Se reescribieron con la regla ***migrar, no debilitar*** — **cada aserción
+sobrevive verbatim**; solo cambia la premisa *«los resultados aparecen porque seleccioné»*.
 
 **B-06 resuelto** — PR #103, `1cc1fcd`. Dos cambios, una causa raíz: **nadie comprobaba qué
   es la ruta**. Los volúmenes salen ahora de `paths.allowed_roots` (la autoridad que ya decide
