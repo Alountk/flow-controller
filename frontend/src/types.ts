@@ -353,6 +353,13 @@ export interface AllMovie {
   languages?: string[]
   path_exists: boolean
   monitored: boolean
+  /** Radarr has NOT imported a file for this title, but its folder holds a
+   *  video — read off disk by the backend, only when `has_file` is false.
+   *  True is direct evidence of bytes on disk; false means "checked, no
+   *  video found", "folder unreadable/missing", or "already imported" (the
+   *  backend never lists an imported title's folder). Optional because a
+   *  response written before this field existed has none. */
+  has_unimported_file?: boolean
   /** Unix seconds when this app asked to download the title, or null when it
    *  never did (or the grab is older than the backend's lookback window). */
   grabbed_at?: number | null

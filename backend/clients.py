@@ -19,6 +19,7 @@ from config import (
     QBIT_COMPLETED,
     QBIT_DOWNLOADING,
 )
+from naming import MEDIA_EXTENSIONS
 
 log = logging.getLogger("flow-controller")
 
@@ -1149,6 +1150,32 @@ def _movie_languages(movie: dict) -> list[str]:
     return names
 
 
+def _folder_has_video(path: str) -> bool:
+    """Whether this title's folder holds a video Radarr never imported.
+
+    Radarr's ``hasFile`` is an IMPORT state, not a disk fact: a file that
+    arrived outside Radarr (a manual copy, an aMule download) leaves
+    ``hasFile: false`` while the bytes sit in ``movie.path``, and the UI then
+    printed "✗ Sin archivo" over a folder full of video. This is the disk-side
+    answer to that one question, decided by the repo's single definition of
+    "video" (``naming.MEDIA_EXTENSIONS``).
+
+    Bounded on purpose: callers invoke it ONLY when ``hasFile`` is false —
+    65 of 913 titles on the real library, never the 848 that would turn one
+    Biblioteca request into a full directory walk of an NFS mount per page.
+    An unreadable or missing folder reads as ``False``, never as an
+    exception: a store of any kind must not fail the whole listing.
+    """
+    try:
+        with os.scandir(path) as entries:
+            for entry in entries:
+                if entry.is_file() and os.path.splitext(entry.name)[1].lower() in MEDIA_EXTENSIONS:
+                    return True
+    except OSError:
+        return False
+    return False
+
+
 async def fetch_all_movies_detailed(
     session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50
 ) -> dict:
@@ -1183,12 +1210,23 @@ async def fetch_all_movies_detailed(
                         path_exists = os.path.isdir(path)
                     except (OSError, ValueError):
                         path_exists = False
+                has_file = m.get("hasFile", False)
                 items.append({
                     "id": m.get("id"),
                     "title": m.get("title", ""),
                     "year": m.get("year"),
                     "remotePoster": _poster_url(m, service["key"]),
-                    "has_file": m.get("hasFile", False),
+                    "has_file": has_file,
+                    # Radarr's `hasFile: false` says "not imported", not "no
+                    # bytes on disk". Only for THOSE titles is the folder
+                    # listed (never for the imported 848 — see
+                    # `_folder_has_video`), so a video Radarr never picked up
+                    # stops being reported as "Sin archivo". False means
+                    # "checked and none found" or "imported already", and an
+                    # unreadable folder also lands here.
+                    "has_unimported_file": (
+                        not has_file and path_exists and _folder_has_video(path)
+                    ),
                     # The path is exposed, not only measured: the Calidad view
                     # reads the path_4k/path_3d membership off it.
                     "path": path,
