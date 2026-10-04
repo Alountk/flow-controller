@@ -44,9 +44,21 @@ def _tool_available(module: str) -> bool:
 
 
 def _python_sources() -> list[Path]:
-    """Backend sources for pyflakes."""
-    sources = sorted(BACKEND_DIR.glob("*.py")) + sorted((BACKEND_DIR / "routes").glob("*.py"))
-    return [p for p in sources if p.name != "conftest.py"]
+    """Backend sources for pyflakes, at every depth.
+
+    `glob("*.py")` plus `routes/` was the first version. It looked exactly
+    where the code used to be, so the day the first package appeared the gate
+    started linting a shrinking subset and reported clean while `domain/`,
+    `application/`, `infrastructure/` and `interfaces/` went unchecked. Third
+    time this same shape of blind spot has shown up in this file. A gate that
+    lists the code has to walk the tree, not remember it.
+    """
+    sources = sorted(
+        p
+        for p in BACKEND_DIR.rglob("*.py")
+        if "__pycache__" not in p.parts and p.name != "conftest.py"
+    )
+    return sources
 
 
 def test_backend_has_python_sources_to_check():
