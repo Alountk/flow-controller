@@ -28,6 +28,25 @@ history: ModuleType | None = None
 credentials: ModuleType | None = None  # noqa: E302 - bound by bind()
 
 
+def __getattr__(name: str):
+    """Resolve anything else the adapters hold, live.
+
+    Not everything on an adapter is a function. `settings_store.encryption_error`
+    is a module-level STRING, and the generated delegate below turned it into
+    one: the route then returned the callable, `jsonable_encoder` rendered it as
+    `{}`, and React error #31 — "objects are not valid as a React child" — tore
+    the dashboard down behind ErrorBoundary while every request stayed green.
+
+    Anything not explicitly defined above resolves here instead, so a constant
+    stays a constant. Raises AttributeError for names that exist nowhere, which
+    is what `from ... import x` needs to fail honestly.
+    """
+    for slot in (_arr, _settings, history, credentials):
+        if slot is not None and hasattr(slot, name):
+            return getattr(slot, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def bind(*, arr: ModuleType, settings: ModuleType, sqlite_history: ModuleType, credentials_module: ModuleType) -> None:
     """Hand delivery its adapters. Called once, by `app.py`, at startup."""
     global _arr, _settings, history, credentials
@@ -150,11 +169,6 @@ def auth_required(*args, **kwargs):
 def check_service(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return getattr(_arr, "check_service")(*args, **kwargs)
-
-
-def encryption_error(*args, **kwargs):
-    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
-    return getattr(_settings, "encryption_error")(*args, **kwargs)
 
 
 def fetch_all_movies_detailed(*args, **kwargs):
