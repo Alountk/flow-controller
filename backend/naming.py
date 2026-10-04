@@ -188,7 +188,12 @@ def _basename(path: str) -> str:
 #: names has to ignore it. Restricting this to media extensions matters — a
 #: bare `suffix` test would call `.PROPER` an extension and drop it from a
 #: name that has one.
-_MEDIA_EXTENSIONS = {
+#:
+#: Public (`MEDIA_EXTENSIONS`, promoted from `_MEDIA_EXTENSIONS`) because this
+#: is the repo's single definition of "this file is a video": clients.py reads
+#: it to tell a folder that holds a video from one holding only sidecars.
+#: Two lists would drift, and the second one would silently stop matching.
+MEDIA_EXTENSIONS = {
     ".mkv", ".mp4", ".avi", ".m2ts", ".ts", ".wmv", ".mov", ".m4v",
     ".mpg", ".mpeg", ".webm", ".flv", ".ogm", ".rmvb", ".divx",
 }
@@ -197,7 +202,7 @@ _MEDIA_EXTENSIONS = {
 def _without_media_extension(path: str) -> str:
     name = _basename(path)
     candidate = PurePosixPath(name)
-    if candidate.suffix.lower() in _MEDIA_EXTENSIONS:
+    if candidate.suffix.lower() in MEDIA_EXTENSIONS:
         return candidate.stem
     return name
 

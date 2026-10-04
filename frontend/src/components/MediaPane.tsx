@@ -475,9 +475,21 @@ function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
 }
 
 /** Estado of a "Todas" card: the exact badge the card itself shows. */
-function catalogState(hasFile: boolean, pathExists: boolean): string {
+function catalogState(
+  hasFile: boolean,
+  pathExists: boolean,
+  hasUnimportedFile = false,
+): string {
   if (hasFile && pathExists) return '✓ Configurada'
-  if (!hasFile) return '✗ Sin archivo'
+  if (!hasFile) {
+    // Both statuses below claim bytes on disk, and only ONE of them we have
+    // evidence for: `hasUnimportedFile` comes from the backend LISTING the
+    // folder and seeing a video. "✗ Sin archivo" is Radarr's `hasFile=false`
+    // (not imported) plus a check that found nothing — an unreadable NFS
+    // folder reads the same as an empty one, so it stays the weaker claim.
+    // The unimported one is a state, not a failure: no ✗, never an error tone.
+    return hasUnimportedFile ? 'Carpetas con vídeo · sin importar' : '✗ Sin archivo'
+  }
   return '✗ Ruta no encontrada'
 }
 
@@ -501,7 +513,10 @@ function wantedMovieDetail(movie: WantedMovie): MediaDetail {
 function catalogMovieDetail(movie: AllMovie): MediaDetail {
   const meta: { label: string; value: string }[] = []
   pushYear(meta, movie.year)
-  meta.push({ label: 'Estado', value: catalogState(movie.has_file, movie.path_exists) })
+  meta.push({
+    label: 'Estado',
+    value: catalogState(movie.has_file, movie.path_exists, movie.has_unimported_file),
+  })
   return { title: movie.title, poster: movie.remotePoster || undefined, meta, grab: grabOf(movie) }
 }
 
@@ -637,9 +652,19 @@ function faltaStatus(): { label: string; tone: PillTone } {
 }
 
 /** A row of the catalogue, from the same two facts the panel reports. */
-function catalogRowStatus(hasFile: boolean, pathExists: boolean): { label: string; tone: PillTone } {
+function catalogRowStatus(
+  hasFile: boolean,
+  pathExists: boolean,
+  hasUnimportedFile = false,
+): { label: string; tone: PillTone } {
   if (hasFile && pathExists) return { label: 'En biblioteca', tone: 'ok' }
-  if (!hasFile) return { label: 'Sin archivo', tone: 'bad' }
+  if (!hasFile) {
+    // Same two claims as `catalogState`: only the unimported label is backed
+    // by a folder listing that SAW a video. Files on disk are not a failure —
+    // `warn`, the stylesheet's own third tone, never `bad`.
+    if (hasUnimportedFile) return { label: 'Carpetas con vídeo · sin importar', tone: 'warn' }
+    return { label: 'Sin archivo', tone: 'bad' }
+  }
   return { label: 'Ruta no encontrada', tone: 'bad' }
 }
 
@@ -1186,6 +1211,16 @@ export function MediaPane({
                       </button>
                     </>
                   )
+                  // The card's bar reports the FILE state. A video sitting in
+                  // the folder that Radarr never imported is a STATE, not a
+                  // failure — the bytes are there — so it wears neither the
+                  // green "configured" bar nor the red error bar.
+                  const cardStatus =
+                    movie.has_file && movie.path_exists
+                      ? 'status-ok'
+                      : !movie.has_file && movie.has_unimported_file
+                        ? ''
+                        : 'status-error'
                   if (isSection) {
                     return (
                       <SectionRow
@@ -1198,7 +1233,11 @@ export function MediaPane({
                         )}
                         title={movie.title}
                         year={movie.year}
-                        status={catalogRowStatus(movie.has_file, movie.path_exists)}
+                        status={catalogRowStatus(
+                          movie.has_file,
+                          movie.path_exists,
+                          movie.has_unimported_file,
+                        )}
                         poster={movie.remotePoster || undefined}
                         // "" is unknown, never a guessed class: no chip at all.
                         chip={movie.quality || undefined}
@@ -1218,7 +1257,7 @@ export function MediaPane({
                         () => catalogMovieDetail(movie),
                         () => catalogMovieRelease(movie),
                       )}
-                      className={`wanted-card ${movie.has_file && movie.path_exists ? 'status-ok' : 'status-error'}${grabbed ? ' status-grabbed' : ''}${selectableClass}`}
+                      className={`wanted-card ${cardStatus}${grabbed ? ' status-grabbed' : ''}${selectableClass}`}
                     >
                       {movie.remotePoster && (
                         <img className="wanted-poster" src={movie.remotePoster} alt={movie.title} />
@@ -1231,7 +1270,20 @@ export function MediaPane({
                           {movie.has_file && movie.path_exists ? (
                             <span className="badge-ok">✓ Configurada</span>
                           ) : !movie.has_file ? (
-                            <span className="badge-error">✗ Sin archivo</span>
+                            movie.has_unimported_file ? (
+                              // Both statuses here claim bytes on disk, and
+                              // only THIS one is witnessed: the backend listed
+                              // the folder and SAW a video. Files being there
+                              // is not a failure — it is an unimported state —
+                              // so this badge stays neutral: never badge-error.
+                              <span>Carpetas con vídeo · sin importar</span>
+                            ) : (
+                              // The weaker claim: Radarr's hasFile=false (not
+                              // imported) plus a folder check that found no
+                              // video — an unreadable NFS folder reads the
+                              // same as an empty one. See `catalogState`.
+                              <span className="badge-error">✗ Sin archivo</span>
+                            )
                           ) : (
                             <span className="badge-error">✗ Ruta no encontrada</span>
                           )}
