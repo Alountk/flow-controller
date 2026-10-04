@@ -48,7 +48,7 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: only go DOWN as the migration moves code in. Lower it in the same PR that
 #: moves code. Raising it is taking on debt on purpose: allowed, but it is a
 #: decision that PR has to own and explain, not a constant to nudge past CI.
-MAX_LEGACY_LOC = 3049
+MAX_LEGACY_LOC = 3011
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:
