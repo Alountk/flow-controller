@@ -45,8 +45,10 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 }
 
 #: Ratchet — source lines still outside the four layers, tests excluded. It may
-#: only go DOWN. Lower it in the same PR that moves code, never to make room.
-MAX_LEGACY_LOC = 9630
+#: only go DOWN as the migration moves code in. Lower it in the same PR that
+#: moves code. Raising it is taking on debt on purpose: allowed, but it is a
+#: decision that PR has to own and explain, not a constant to nudge past CI.
+MAX_LEGACY_LOC = 9434
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:
@@ -195,7 +197,8 @@ def test_the_legacy_debt_only_shrinks():
     _, legacy_loc = _collect()
     if legacy_loc > MAX_LEGACY_LOC:
         raise AssertionError(
-            f"Legacy source went from at most {MAX_LEGACY_LOC} lines up to "
-            f"{legacy_loc} — code grew outside the layers. Lower this constant "
-            "in the same PR that moves code; never raise it to make room."
+            f"Legacy source went from {MAX_LEGACY_LOC} lines up to {legacy_loc}. "
+            "If this PR moved code, lower MAX_LEGACY_LOC to match. If it added "
+            "new legacy code, raising it is debt on purpose — own that in the PR "
+            "description rather than leaving the constant quietly behind."
         )

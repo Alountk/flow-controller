@@ -96,9 +96,11 @@ es refactor puro. Cualquier cambio observable es un bug de este trabajo.
 ## Progreso
 
 - [x] **T-1** — esqueleto + `tests_architecture.py` (3 tests) · ratchet `MAX_LEGACY_LOC = 9630`
-- [ ] T-2 … T-12 pendientes
-- [ ] T-2 … T-12 pendientes
+- [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
+- [ ] T-3 … T-12 pendientes
+- [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
+- [ ] T-3 … T-12 pendientes
 
 ## Próximo paso
 
-**T-2**: mover `naming.py` a `domain/naming.py` con shim (baja el ratchet ~224).
+**T-3**: mover `auto_copy.py` a `domain/policy.py` con shim (~317 líneas de política pura).
