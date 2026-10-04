@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Rebuild frontend/dist when the source it was built from has moved on.
+#
+# This exists because it happened: six frontend PRs merged in one session with
+# no rebuild, the preview served a bundle from seven hours earlier, and the
+# debugging that followed asked "is the fix in the bundle?" instead of looking
+# at the actual bug. The runbook said to rebuild after every merge. The runbook
+# was not enforced.
+#
+# It never fails a merge or a checkout — a stale build is a warning with a
+# command attached, not a reason to lose work. backend/tests_dist_fresh.py is
+# the backstop for when this does not run.
+#
+# One line per clone, because core.hooksPath lives in .git/config and is not
+# versioned:
+#
+#     git config core.hooksPath .githooks
+set -u
+
+REPO="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
+[ -n "$REPO" ] || exit 0
+cd "$REPO" || exit 0
+
+SRC="$REPO/frontend/src"
+DIST="$REPO/frontend/dist/index.html"
+[ -d "$SRC" ] || exit 0
+[ -f "$DIST" ] || exit 0
+
+# Newest source file older than the build? Then nothing to do.
+newest=$(find "$SRC" -type f -newer "$DIST" -print -quit 2>/dev/null)
+[ -n "$newest" ] || exit 0
+
+# `dist/` is gitignored: only a checkout that actually runs a preview has one.
+# An absent package.json means this is not that checkout.
+[ -f "$REPO/frontend/package.json" ] || exit 0
+
+echo "─────────────────────────────────────────────────────────────"
+echo "  frontend/dist is stale — $newest"
+echo "  rebuilding (the preview would otherwise serve an old bundle)"
+echo "─────────────────────────────────────────────────────────────"
+
+if command -v npm >/dev/null 2>&1 && (cd "$REPO/frontend" && npm run build); then
+  echo "  ✓ dist rebuilt"
+else
+  echo "  ✗ rebuild failed — run it by hand:"
+  echo "      cd frontend && npm run build"
+fi
+echo "─────────────────────────────────────────────────────────────"
+exit 0
