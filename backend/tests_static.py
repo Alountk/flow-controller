@@ -132,26 +132,65 @@ DOCKERIGNORE = BACKEND_DIR.parent / ".dockerignore"
 
 
 def _runtime_modules() -> list[str]:
-    """Top-level backend modules that ship, excluding tests and dev tooling."""
+    """Every backend module that ships, at any depth, excluding tests and dev tooling.
+
+    Walks the whole tree deliberately. `glob("*.py")` was the first version and
+    it shared the exact blind spot with the Dockerfile it was guarding: a bare
+    `COPY backend/*.py` and a bare `glob("*.py")` both stop at the first level,
+    so the day `naming` moved into `domain/` the guard approved a broken image.
+    A guard must look where the bug looks.
+    """
     dev_only = {"conftest.py", "vulture_whitelist.py", "pytest.ini", "pyproject.toml"}
     modules = []
-    for path in sorted(BACKEND_DIR.glob("*.py")):
+    for path in sorted(BACKEND_DIR.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
         name = path.name
         if name.startswith("tests") or name.startswith("test_") or name in dev_only:
             continue
-        modules.append(f"backend/{name}")
+        modules.append(path.relative_to(BACKEND_DIR.parent).as_posix())
     return modules
 
 
 def _copied_patterns() -> list[str]:
+    """Every COPY source in the Dockerfile — all but the last argument (the destination)."""
     import re
 
     patterns = []
     for line in DOCKERFILE.read_text().splitlines():
-        match = re.match(r"\s*COPY\s+(?:--\S+\s+)?(\S+)\s+", line)
+        match = re.match(r"\s*COPY\s+(?:--\S+\s+)*(.+?)\s*$", line)
         if match:
-            patterns.append(match.group(1))
+            tokens = match.group(1).split()
+            patterns.extend(tokens[:-1] or tokens)
     return patterns
+
+
+def _glob_matches(pattern: str, path: str) -> bool:
+    """Match the way Docker's COPY does, not the way `fnmatch` does.
+
+    `fnmatch` lets `*` cross `/`, so `fnmatch("backend/domain/x.py", "backend/*.py")`
+    is True — and it approved an image that did not contain the file. Docker
+    expands a COPY source with Go's `filepath.Match`, where `*` stops at the
+    separator. A guard that is more permissive than the thing it guards is a
+    guard that says yes to every bug.
+    """
+    import re
+
+    regex = "".join("[^/]*" if ch == "*" else "[^/]" if ch == "?" else re.escape(ch) for ch in pattern)
+    return re.fullmatch(regex, path) is not None
+
+
+def _shipped(module: str, patterns: list[str]) -> bool:
+    """Is `module` covered by a COPY source?
+
+    A pattern ending in `/` is a directory copy and covers its whole subtree.
+    """
+    for pattern in patterns:
+        if _glob_matches(pattern, module):
+            return True
+        if pattern.endswith("/") and module.startswith(pattern):
+            return True
+    return False
 
 
 def test_the_guard_actually_finds_modules_and_patterns():
@@ -161,14 +200,8 @@ def test_the_guard_actually_finds_modules_and_patterns():
 
 
 def test_every_runtime_module_is_copied_into_the_image():
-    import fnmatch
-
     patterns = _copied_patterns()
-    missing = [
-        module
-        for module in _runtime_modules()
-        if not any(fnmatch.fnmatch(module, pattern) for pattern in patterns)
-    ]
+    missing = [module for module in _runtime_modules() if not _shipped(module, patterns)]
 
     assert not missing, (
         "These modules are imported at runtime but never reach the Docker image, "
