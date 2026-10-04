@@ -21,6 +21,8 @@ import json
 import os
 import pathlib
 
+from tests import REPO_ROOT
+
 from interfaces.http.routes.settings import PROTOTYPES_DIR, _resolve_prototypes_dir
 
 
@@ -70,7 +72,7 @@ class TestTheResolverCopesWithBothLayouts:
         If the Dockerfile ever copies elsewhere this test — and the resolver —
         must be revisited rather than silently rotting.
         """
-        dockerfile = pathlib.Path(__file__).resolve().parent.parent / "Dockerfile"
+        dockerfile = REPO_ROOT / "Dockerfile"
         assert "COPY prototypes/ /app/prototypes/" in dockerfile.read_text()
 
         base = tmp_path / "app"

@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from infrastructure import sqlite_history as history
 from app import app
-from tests_routes import _StubSession
+from tests._stubs import _StubSession
 
 client = TestClient(app, raise_server_exceptions=False)
 

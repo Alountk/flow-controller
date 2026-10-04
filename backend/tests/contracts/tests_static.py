@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND_DIR = Path(__file__).resolve().parent
+from tests import BACKEND_ROOT as BACKEND_DIR  # noqa: E402
 WHITELIST = BACKEND_DIR / "vulture_whitelist.py"
 
 

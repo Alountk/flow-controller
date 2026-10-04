@@ -5,7 +5,6 @@ every rule and every key shape is pinned by constructing the exact trace that
 reaches it.
 """
 
-from pathlib import Path
 
 from domain.policy import (
     COPY,
@@ -24,7 +23,8 @@ from domain.policy import (
 #: The purity check below reads source, so it must read the IMPLEMENTATION.
 #: Pointed at the re-export instead it would scan a file made of `from
 #: domain.policy import ...` and pass while proving nothing at all.
-MODULE_PATH = Path(__file__).resolve().parent / "domain" / "policy.py"
+from tests import BACKEND_ROOT  # noqa: E402
+MODULE_PATH = BACKEND_ROOT / "domain" / "policy.py"
 
 
 def _trace(stage=None, queue=None):

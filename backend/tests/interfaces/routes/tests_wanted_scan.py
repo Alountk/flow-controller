@@ -18,7 +18,7 @@ from infrastructure.arr_client import arr_movie_metadata, arr_series_episodes, f
 from config import SERVICES
 from models import ActionRequest
 from interfaces.http.routes.wanted import _scan_for_movies_inner
-from tests_routes import _StubSession
+from tests._stubs import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
 

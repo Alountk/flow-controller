@@ -42,7 +42,7 @@ from infrastructure.arr_client import (
     fetch_sonarr_calendar,
     fetch_wanted_movies,
 )
-from tests_routes import _StubSession
+from tests._stubs import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
 SONARR_URL = "http://sonarr.test:8989"

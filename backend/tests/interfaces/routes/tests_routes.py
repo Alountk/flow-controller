@@ -1,5 +1,3 @@
-from interfaces.http.routes import settings as settings_route
-from interfaces.http.routes import status as status_module
 """Route-level tests.
 
 These tests fake ONLY the HTTP transport (``aiohttp.ClientSession``) and let the
@@ -14,118 +12,30 @@ did exist patched the route module's imported client functions, so the route
 body itself was never executed.
 """
 
+from interfaces.http.routes import settings as settings_route
+from interfaces.http.routes import status as status_module
 import asyncio
 import copy
 from infrastructure import credentials
 from infrastructure import sqlite_history as history
-import json
 import time
-from urllib.parse import urlencode
 from unittest.mock import patch
 
 import aiohttp
 import pytest
-from fastapi.testclient import TestClient
 
 from app import app
+from tests._stubs import CONFIGURED_RADARR_URL, _StubSession, client  # noqa: F401
 from config import SERVICES, ALLOWED_ROOTS
-
-client = TestClient(app, raise_server_exceptions=False)
 
 ARR_SERVICES = [s for s in SERVICES if s["kind"] == "arr"]
 ARR_BY_KEY = {s["key"]: s for s in ARR_SERVICES}
 ARR_KEYS = {s["key"] for s in ARR_SERVICES}
 
-# Routes resolve their service from the real config, so URL stubs must use the
-# configured Radarr URL rather than an invented one.
-CONFIGURED_RADARR_URL = ARR_BY_KEY["radarr"]["url"]
-
 
 # ── HTTP transport stubs ──────────────────────────────────────────────────────
 
 
-class _StubResponse:
-    """Minimal stand-in for an ``aiohttp.ClientResponse``."""
-
-    def __init__(self, status: int = 503, payload: dict | None = None):
-        self.status = status
-        self._payload = payload if payload is not None else {}
-
-    async def json(self, content_type=None):
-        return self._payload
-
-    async def text(self) -> str:
-        return json.dumps(self._payload)
-
-    async def read(self) -> bytes:
-        return json.dumps(self._payload).encode()
-
-    def raise_for_status(self) -> None:
-        return None
-
-    def release(self) -> None:
-        return None
-
-    async def __aenter__(self) -> "_StubResponse":
-        return self
-
-    async def __aexit__(self, *exc) -> bool:
-        return False
-
-
-class _StubSession:
-    """Fake ``aiohttp.ClientSession`` that matches responses by URL substring.
-
-    Anything not explicitly scripted answers ``503`` so callers take their
-    graceful-degradation path instead of touching the network.
-    """
-
-    def __init__(self, routes: dict | None = None, default_status: int = 503, default_payload=None):
-        self.routes = routes or {}
-        self.default_status = default_status
-        self.default_payload = default_payload
-        self.calls: list[tuple[str, dict]] = []
-
-    def _resolve(self, url: str) -> _StubResponse:
-        self.calls.append((url, {}))
-        for fragment, (status, payload) in self.routes.items():
-            if fragment in url:
-                return _StubResponse(status, payload)
-        return _StubResponse(self.default_status, self.default_payload)
-
-    def get(self, url, **kwargs):
-        # Query parameters take part in matching: routes like
-        # `?category=radarr` carry meaning in params, not in the path, and a
-        # URL-only match would silently serve the wrong payload.
-        target = str(url)
-        params = kwargs.get("params")
-        if params:
-            target += "?" + urlencode(params)
-        return self._resolve(target)
-
-    def post(self, url, **kwargs):
-        return self._resolve(str(url))
-
-    def put(self, url, **kwargs):
-        return self._resolve(str(url))
-
-    def delete(self, url, **kwargs):
-        return self._resolve(str(url))
-
-    def request(self, method, url, **kwargs):
-        return self._resolve(str(url))
-
-    def ws_connect(self, url, **kwargs):
-        raise aiohttp.ClientError("network disabled in tests")
-
-    async def close(self) -> None:
-        return None
-
-    async def __aenter__(self) -> "_StubSession":
-        return self
-
-    async def __aexit__(self, *exc) -> bool:
-        return False
 
 
 @pytest.fixture
