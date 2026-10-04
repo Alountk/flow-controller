@@ -212,6 +212,29 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=50
           exit 1
 
+      - name: "Phase 1 — auth contract (diagnostic)"
+        # Never fails the job: it is a diagnostic. It answers the one question
+        # the specs keep failing on — does the container accept the CI key and
+        # say it requires one? — before a browser is asked to guess.
+        # It also lists /app/config: a rename once made the app read
+        # `infrastructure.settings_store.json` instead of `settings.json`, and
+        # 848 tests stayed green because they patch SETTINGS_FILE. The listing
+        # would have said so in one line.
+        run: |
+          set +e
+          CFG="docker compose -f docker-compose.yml -f docker-compose.ci.yml"
+          echo "--- /app/config (does settings.json exist?) ---"
+          $CFG exec -T flow-controller ls -la /app/config 2>&1 | sed "s/^/    /"
+          echo "--- /api/config ---"
+          curl -s -H "X-Api-Key: test-key" http://localhost:8000/api/config | sed "s/^/    /"
+          echo "--- /api/auth/check ---"
+          for k in test-key wrong-key NONE; do
+            if [ "$k" = "NONE" ]; then H=""; L="(sin clave)"; else H="-H X-Api-Key:$k"; L="$k"; fi
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" $H http://localhost:8000/api/auth/check 2>/dev/null)
+            echo "    $L -> HTTP $CODE"
+          done
+          exit 0
+
       - name: "Phase 1 — run bare specs"
         run: |
           cd e2e
@@ -261,10 +284,49 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml logs --tail=50
           exit 1
 
+      - name: "Phase 2 — auth contract (diagnostic)"
+        # Never fails the job: it is a diagnostic. It answers the one question
+        # the specs keep failing on — does the container accept the CI key and
+        # say it requires one? — before a browser is asked to guess.
+        # It also lists /app/config: a rename once made the app read
+        # `infrastructure.settings_store.json` instead of `settings.json`, and
+        # 848 tests stayed green because they patch SETTINGS_FILE. The listing
+        # would have said so in one line.
+        run: |
+          set +e
+          CFG="docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml"
+          echo "--- /app/config (does settings.json exist?) ---"
+          $CFG exec -T flow-controller ls -la /app/config 2>&1 | sed "s/^/    /"
+          echo "--- /api/config ---"
+          curl -s -H "X-Api-Key: test-key" http://localhost:8000/api/config | sed "s/^/    /"
+          echo "--- /api/auth/check ---"
+          for k in test-key wrong-key NONE; do
+            if [ "$k" = "NONE" ]; then H=""; L="(sin clave)"; else H="-H X-Api-Key:$k"; L="$k"; fi
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" $H http://localhost:8000/api/auth/check 2>/dev/null)
+            echo "    $L -> HTTP $CODE"
+          done
+          exit 0
+
       - name: "Phase 2 — run stub specs"
         run: |
           cd e2e
           npx playwright test specs/flow-faltantes.spec.ts specs/flow-release-search.spec.ts
+
+      - name: Container logs and config state
+        if: failure()
+        # Dumped here rather than in Cleanup, which runs `down -v` and would
+        # take the evidence with it. The specs fail at a 5 s DOM timeout; the
+        # reason is usually in these lines and nowhere else.
+        run: |
+          set +e
+          C="docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml"
+          echo "===== flow-controller logs ====="
+          $C logs --tail=120 flow-controller
+          echo "===== /app/config ====="
+          $C exec -T flow-controller ls -la /app/config
+          echo "===== /api/config unauthenticated ====="
+          curl -s -i http://localhost:8000/api/config | head -20
+          exit 0
 
       - name: Upload Playwright report
         if: failure()
