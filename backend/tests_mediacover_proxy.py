@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 
 from app import app
 from config import find_service
-from routes.mediacover import _safe_mediacover_path
+from interfaces.http.routes.mediacover import _safe_mediacover_path
 
 client = TestClient(app, raise_server_exceptions=False)
 

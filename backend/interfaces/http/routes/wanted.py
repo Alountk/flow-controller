@@ -8,10 +8,10 @@ import unicodedata
 
 from fastapi import APIRouter, Depends, HTTPException
 
-import history
+from application.gateways import history
 from config import configured_services, find_service, service_unavailable_reason
 from traces import host_path
-from clients import (
+from application.gateways import (
     fetch_wanted_movies,
     fetch_wanted_episodes,
     arr_series_episodes,
@@ -25,7 +25,7 @@ from clients import (
     arr_series_metadata,
 )
 from models import ActionRequest
-from routes.status import verify_api_key
+from interfaces.http.routes.status import verify_api_key
 from state import http_session
 import config
 

@@ -21,7 +21,7 @@ from media_mixer import (
     cleanup_tasks,
 )
 from task_manager import mux_tasks
-from routes.status import verify_api_key
+from interfaces.http.routes.status import verify_api_key
 import config
 
 log = logging.getLogger("flow-controller")
@@ -137,7 +137,7 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
             raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
 
     # Determine output directory
-    from settings import get_setting
+    from application.gateways import get_setting
     output_dir = req.output_path or get_setting("paths", "output_mixed", default="/mnt/storage/mixed")
 
     # Build validated video source with absolute path

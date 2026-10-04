@@ -1,3 +1,5 @@
+from interfaces.http.routes import auto_copy as route_module
+from interfaces.http.routes import status as status_module
 """Route tests for the explicit auto-copy sweep endpoint.
 
 Only the HTTP transport and the driver are stubbed where noted; the route body
@@ -9,8 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-import history
-import routes.auto_copy as route_module
+from infrastructure import sqlite_history as history
 from app import app
 from tests_routes import _StubSession
 
@@ -51,9 +52,8 @@ def test_the_sweep_endpoint_forwards_the_configured_safe_mode():
 
 
 def test_the_sweep_endpoint_requires_auth():
-    import routes.status as status_module
 
-    with patch("settings.auth_required", return_value=True), patch.object(
+    with patch("infrastructure.settings_store.auth_required", return_value=True), patch.object(
         status_module, "credentials"
     ) as creds:
         creds.verify_api_key.return_value = False
@@ -123,9 +123,8 @@ def test_the_history_endpoint_passes_the_limit_through():
 
 
 def test_the_history_endpoint_requires_auth():
-    import routes.status as status_module
 
-    with patch("settings.auth_required", return_value=True), patch.object(
+    with patch("infrastructure.settings_store.auth_required", return_value=True), patch.object(
         status_module, "credentials"
     ) as creds:
         creds.verify_api_key.return_value = False

@@ -1,3 +1,4 @@
+from interfaces.http.routes import settings as settings_route
 """The prototypes folder is resolved to the wrong place inside the container.
 
 `config.BASE_DIR` is `os.path.dirname(config.py)`:
@@ -20,7 +21,7 @@ import json
 import os
 import pathlib
 
-from routes.settings import PROTOTYPES_DIR, _resolve_prototypes_dir
+from interfaces.http.routes.settings import PROTOTYPES_DIR, _resolve_prototypes_dir
 
 
 def _make(tmp_path, *parts, files=("a.html",)):
@@ -83,7 +84,6 @@ class TestTheEndpointUsesIt:
     def test_the_endpoint_lists_from_the_resolved_directory(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
         from app import app
-        import routes.settings as settings_route
 
         target = tmp_path / "here"
         target.mkdir()
@@ -109,7 +109,6 @@ class TestTheEndpointUsesIt:
     def test_a_missing_directory_is_an_empty_list_not_a_500(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
         from app import app
-        import routes.settings as settings_route
 
         monkeypatch.setattr(settings_route, "PROTOTYPES_DIR", str(tmp_path / "nowhere"))
         client = TestClient(app, raise_server_exceptions=False)
@@ -138,7 +137,6 @@ def _catalogued(target, *, files=("a.html",), manifest=None):
 
 
 def _listed(target, monkeypatch):
-    import routes.settings as settings_route
     from fastapi.testclient import TestClient
     from app import app
 

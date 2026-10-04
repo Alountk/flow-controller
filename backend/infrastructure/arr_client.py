@@ -19,7 +19,7 @@ from config import (
     QBIT_COMPLETED,
     QBIT_DOWNLOADING,
 )
-from naming import MEDIA_EXTENSIONS
+from domain.naming import MEDIA_EXTENSIONS
 
 log = logging.getLogger("flow-controller")
 

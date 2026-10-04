@@ -20,7 +20,7 @@ runs.
 import asyncio
 from unittest.mock import patch
 
-from clients import fetch_all_movies_detailed
+from infrastructure.arr_client import fetch_all_movies_detailed
 from tests_routes import CONFIGURED_RADARR_URL, _StubSession, client
 
 RADARR_URL = "http://radarr.test:7878"

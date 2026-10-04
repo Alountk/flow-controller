@@ -46,9 +46,9 @@ class TestTheGrabMarkReadIsOffTheEventLoop:
 
     def test_wanted_reads_the_mark_off_the_loop(self):
         seen: dict = {}
-        with patch("routes.wanted.fetch_wanted_movies", new_callable=AsyncMock,
+        with patch("interfaces.http.routes.wanted.fetch_wanted_movies", new_callable=AsyncMock,
                    return_value=dict(_EMPTY_PAGE)), \
-             patch("routes.wanted.history", new=self._spy_history(seen)):
+             patch("interfaces.http.routes.wanted.history", new=self._spy_history(seen)):
             resp = client.get("/api/wanted?source=radarr")
 
         assert resp.status_code == 200, resp.text
@@ -57,9 +57,9 @@ class TestTheGrabMarkReadIsOffTheEventLoop:
 
     def test_the_all_listing_reads_the_mark_off_the_loop(self):
         seen: dict = {}
-        with patch("routes.wanted.fetch_all_movies_detailed", new_callable=AsyncMock,
+        with patch("interfaces.http.routes.wanted.fetch_all_movies_detailed", new_callable=AsyncMock,
                    return_value=dict(_EMPTY_PAGE)), \
-             patch("routes.wanted.history", new=self._spy_history(seen)):
+             patch("interfaces.http.routes.wanted.history", new=self._spy_history(seen)):
             resp = client.get("/api/wanted/all")
 
         assert resp.status_code == 200, resp.text
@@ -75,8 +75,8 @@ class TestTheAutoCopyHistoryReadIsOffTheEventLoop:
             seen["log"] = _ran_on_the_event_loop()
             return []
 
-        with patch("routes.auto_copy.recent_auto_copy_log", side_effect=read), \
-             patch("routes.auto_copy.store_available", return_value=True):
+        with patch("interfaces.http.routes.auto_copy.recent_auto_copy_log", side_effect=read), \
+             patch("interfaces.http.routes.auto_copy.store_available", return_value=True):
             resp = client.get("/api/auto-copy/history")
 
         assert resp.status_code == 200, resp.text

@@ -1,3 +1,5 @@
+from interfaces.http.routes import settings as settings_route
+from interfaces.http.routes import status as status_module
 """Route-level tests.
 
 These tests fake ONLY the HTTP transport (``aiohttp.ClientSession``) and let the
@@ -14,8 +16,8 @@ body itself was never executed.
 
 import asyncio
 import copy
-import credentials
-import history
+from infrastructure import credentials
+from infrastructure import sqlite_history as history
 import json
 import time
 from urllib.parse import urlencode
@@ -350,7 +352,7 @@ class TestGrabBatchErrorReporting:
         async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
             return results[guid]
 
-        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
+        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
             return client.post(
                 "/api/calendar/grab-batch",
                 json={"source": "radarr", "guids": list(results), "indexerIds": [1] * len(results), "movieId": 1},
@@ -418,8 +420,8 @@ class TestGrabOwnRegistry:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "history.db")
-        self._db_path = tmp_path / "history.db"
+        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+        self._db_path = tmp_path / "infrastructure.sqlite_history.db"
         yield
         history.close()
 
@@ -437,7 +439,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -458,7 +460,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": False, "detail": "HTTP 404: not found"}),
         ):
             resp = client.post(
@@ -475,7 +477,7 @@ class TestGrabOwnRegistry:
         async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
             return {"ok": guid != "g2", "detail": "ok" if guid != "g2" else "rechazado"}
 
-        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
+        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
             resp = client.post(
                 "/api/calendar/grab-batch",
                 json={
@@ -497,7 +499,7 @@ class TestGrabOwnRegistry:
         async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
             return {"ok": guid != "g2", "detail": "ok" if guid != "g2" else "rechazado"}
 
-        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
+        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
             resp = client.post(
                 "/api/calendar/grab-batch",
                 json={
@@ -519,7 +521,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -542,7 +544,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -567,7 +569,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -595,7 +597,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -623,7 +625,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -648,7 +650,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -674,7 +676,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -711,7 +713,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -738,7 +740,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -762,7 +764,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -777,7 +779,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -799,7 +801,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -814,7 +816,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -838,7 +840,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -860,7 +862,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         mock_grab = AsyncMock(return_value={"ok": True, "detail": "Release encolado"})
-        with patch("routes.calendar.arr_grab_release", new=mock_grab):
+        with patch("interfaces.http.routes.calendar.arr_grab_release", new=mock_grab):
             resp = client.post(
                 "/api/calendar/grab",
                 json={
@@ -881,7 +883,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         mock_grab = AsyncMock(return_value={"ok": True, "detail": "ok"})
-        with patch("routes.calendar.arr_grab_release", new=mock_grab):
+        with patch("interfaces.http.routes.calendar.arr_grab_release", new=mock_grab):
             resp = client.post(
                 "/api/calendar/grab-batch",
                 json={
@@ -904,7 +906,7 @@ class TestGrabOwnRegistry:
         history.close()  # no database: the recording must be a silent no-op
 
         with patch(
-            "routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -938,8 +940,8 @@ class TestGrabWritesSeriesId:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "history.db")
-        self._db_path = tmp_path / "history.db"
+        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+        self._db_path = tmp_path / "infrastructure.sqlite_history.db"
         yield
         history.close()
 
@@ -964,8 +966,8 @@ class TestGrabWritesSeriesId:
                 raise metadata
             return metadata if metadata is not None else {}
 
-        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
-             patch("routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
+        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
+             patch("interfaces.http.routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
             return client.post("/api/calendar/grab", json=payload)
 
     def test_an_episode_grab_records_its_real_series_and_the_reader_emits_the_key(self):
@@ -1024,8 +1026,8 @@ class TestGrabWritesSeriesId:
         async def _fake_metadata(session, service, episode_id):
             return {"series_id": 99}
 
-        with patch("routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
-             patch("routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
+        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
+             patch("interfaces.http.routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
             resp = client.post(
                 "/api/calendar/grab-batch",
                 json={
@@ -1074,7 +1076,7 @@ class TestWantedTextFilter:
 
     @pytest.fixture(autouse=True)
     def _clear_cache(self):
-        from routes.wanted import _all_wanted_cache
+        from interfaces.http.routes.wanted import _all_wanted_cache
         _all_wanted_cache.clear()
         yield
         _all_wanted_cache.clear()
@@ -1144,7 +1146,7 @@ class TestWantedTextFilter:
 
     def test_repeated_filters_reuse_the_cache(self):
         """Typing must not re-download the full list on every keystroke."""
-        from routes.wanted import _all_wanted_cache
+        from interfaces.http.routes.wanted import _all_wanted_cache
 
         payload = {"records": self.RECORDS, "totalRecords": len(self.RECORDS)}
         routes = {f"{CONFIGURED_RADARR_URL}/api/v3/wanted/missing": (200, payload)}
@@ -1273,7 +1275,7 @@ class TestWantedFailuresAreVisible:
 
     @pytest.fixture(autouse=True)
     def _clear_cache(self):
-        from routes.wanted import _all_wanted_cache
+        from interfaces.http.routes.wanted import _all_wanted_cache
         _all_wanted_cache.clear()
         yield
         _all_wanted_cache.clear()
@@ -1324,7 +1326,7 @@ class TestWantedFailuresAreVisible:
 
     def test_a_failed_fetch_is_not_cached(self):
         """Caching a failure would keep the UI broken for the whole TTL."""
-        from routes.wanted import _all_wanted_cache
+        from interfaces.http.routes.wanted import _all_wanted_cache
 
         with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(
             {"/api/v3/wanted/missing": (401, {})}
@@ -1368,8 +1370,8 @@ class TestWantedGrabMarks:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "history.db")
-        from routes.wanted import _all_wanted_cache
+        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
+        from interfaces.http.routes.wanted import _all_wanted_cache
 
         _all_wanted_cache.clear()
         yield
@@ -1477,7 +1479,7 @@ class TestWantedGrabMarks:
         it. The second request hits the cache and must still see the new grab."""
         assert self._get(q="Wanted").json()["wanted"]["radarr"]["items"][0]["grabbed_at"] is None
 
-        from routes.wanted import _all_wanted_cache
+        from interfaces.http.routes.wanted import _all_wanted_cache
 
         assert "radarr" in _all_wanted_cache, "the first call should have cached the arr data"
 
@@ -1489,7 +1491,7 @@ class TestWantedGrabMarks:
         assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] == grabbed_at
 
     def test_a_grab_outside_the_lookback_window_is_not_marked(self):
-        from routes.wanted import WANTED_GRAB_LOOKBACK
+        from interfaces.http.routes.wanted import WANTED_GRAB_LOOKBACK
 
         old = time.time() - WANTED_GRAB_LOOKBACK - 60
         history.record_own_grab("radarr", movie_id=11, grabbed_at=old)
@@ -1521,7 +1523,7 @@ class TestGrabsForOneTitle:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        self._db_path = tmp_path / "history.db"
+        self._db_path = tmp_path / "infrastructure.sqlite_history.db"
         history.init_db(self._db_path)
         yield
         history.close()
@@ -1638,7 +1640,7 @@ class TestGrabsSeriesKeying:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "history.db")
+        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
         yield
         history.close()
 
@@ -1748,7 +1750,7 @@ class TestOwnGrabsForCoversItsThreeKinds:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "history.db")
+        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
         yield
         history.close()
 
@@ -1812,7 +1814,7 @@ class TestAllListingsGrabMarks:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "history.db")
+        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
         yield
         history.close()
 
@@ -2017,7 +2019,7 @@ class TestTheCalidadFoldersReachTheFrontend:
     keys are allowed and mean "not configured")."""
 
     def test_both_routing_folders_are_exposed(self):
-        import settings as settings_mod
+        from infrastructure import settings_store as settings_mod
 
         before = copy.deepcopy(settings_mod.get_settings())
         try:
@@ -2048,7 +2050,7 @@ class TestCalendarGrabMarks:
     @pytest.fixture(autouse=True)
     def _isolated_history(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "history.db")
+        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
         yield
         history.close()
 
@@ -2157,7 +2159,7 @@ class TestCalendarDestinations:
         assert "servicio desconocido" in body["detail"]
 
     def test_empty_and_duplicate_entries_are_dropped_in_arr_order(self):
-        from routes.calendar import _merge_destination_folders
+        from interfaces.http.routes.calendar import _merge_destination_folders
 
         assert _merge_destination_folders(
             ["/arr/a", "/arr/a", ""],
@@ -2266,7 +2268,7 @@ class TestServiceConnectionTester:
     """
 
     def _test(self, routes, service_key="radarr"):
-        from clients import test_service_connection
+        from infrastructure.arr_client import test_service_connection
 
         async def _run():
             async with _StubSession(routes) as session:
@@ -2299,7 +2301,7 @@ class TestServiceConnectionTester:
         assert result["error_kind"] == "http"
 
     def test_a_timeout_is_reported(self):
-        from clients import test_service_connection
+        from infrastructure.arr_client import test_service_connection
 
         async def _run():
             session = _RaisingSession(asyncio.TimeoutError())
@@ -2311,7 +2313,7 @@ class TestServiceConnectionTester:
         assert result["error_kind"] == "timeout"
 
     def test_an_unreachable_host_is_reported(self):
-        from clients import test_service_connection
+        from infrastructure.arr_client import test_service_connection
 
         async def _run():
             session = _RaisingSession(aiohttp.ClientError("no"))
@@ -2364,7 +2366,7 @@ class TestHealthCheckHonesty:
     """
 
     def _check(self, status: int):
-        from clients import check_arr
+        from infrastructure.arr_client import check_arr
 
         async def _run():
             session = _StubSession({"/api/v3/system/status": (status, {})})
@@ -2394,7 +2396,7 @@ class TestHealthCheckHonesty:
         """Retrying cannot fix a credential, and it delays the dashboard."""
         from unittest.mock import patch
 
-        from clients import check_arr
+        from infrastructure.arr_client import check_arr
 
         calls = []
 
@@ -2419,7 +2421,7 @@ class TestHealthCheckHonesty:
         assert state == "offline"
 
     def test_a_refused_connection_goes_offline(self):
-        from clients import check_arr
+        from infrastructure.arr_client import check_arr
 
         async def _run():
             session = _RaisingSession(aiohttp.ClientError("refused"))
@@ -2432,7 +2434,7 @@ class TestHealthCheckHonesty:
         assert "ClientError" in reason
 
     def test_the_download_client_reports_a_rejected_key_too(self):
-        from clients import check_qbit
+        from infrastructure.arr_client import check_qbit
 
         async def _run():
             session = _StubSession({"/api/v2/app/version": (403, {})})
@@ -2504,8 +2506,8 @@ class TestConfiguredServices:
             {"key": "amutorrent", "kind": "qbit", "url": "http://a:1", "api_key": "k", "configured": True},
         ]
         with patch.object(config, "SERVICES", mixed), patch(
-            "routes.settings.SERVICES", mixed
-        ), patch("routes.settings.configured_services", return_value=[s for s in mixed if s["configured"]]):
+            "interfaces.http.routes.settings.SERVICES", mixed
+        ), patch("interfaces.http.routes.settings.configured_services", return_value=[s for s in mixed if s["configured"]]):
             with patch("aiohttp.ClientSession") as session:
                 body = client.get("/api/services").json()
 
@@ -2519,9 +2521,8 @@ class TestConfiguredServices:
         from fastapi.testclient import TestClient
 
         from app import app as _app
-        import routes.status as status_module
 
-        with patch("settings.auth_required", return_value=True), patch.object(
+        with patch("infrastructure.settings_store.auth_required", return_value=True), patch.object(
             status_module, "credentials"
         ) as creds:
             creds.verify_api_key.return_value = False
@@ -2542,8 +2543,8 @@ class TestHealthCheckSkipsUnconfigured:
             {"key": "sonarr", "kind": "arr", "url": "", "api_key": "", "configured": False},
         ]
         with patch.object(config, "SERVICES", mixed), patch(
-            "routes.status.configured_services", return_value=[mixed[0]]
-        ), patch("routes.status.check_service", new=_AM(return_value=("online", "ok", {}))):
+            "interfaces.http.routes.status.configured_services", return_value=[mixed[0]]
+        ), patch("interfaces.http.routes.status.check_service", new=_AM(return_value=("online", "ok", {}))):
             body = client.get("/api/status/refresh").json()
 
         assert body["radarr"] == "online:ok"
@@ -2562,8 +2563,8 @@ class TestHealthCheckSkipsUnconfigured:
             {"key": "radarr", "kind": "arr", "url": "", "api_key": "", "configured": False},
         ]
         with patch.object(config, "SERVICES", nothing), patch(
-            "routes.status.configured_services", return_value=[]
-        ), patch("routes.status.check_service", new=_AM(return_value=("online", "ok", {}))):
+            "interfaces.http.routes.status.configured_services", return_value=[]
+        ), patch("interfaces.http.routes.status.check_service", new=_AM(return_value=("online", "ok", {}))):
             body = client.get("/api/status/refresh").json()
 
         assert body["flow"] == "unconfigured"
@@ -2580,8 +2581,8 @@ class TestHealthCheckSkipsUnconfigured:
         ]
         probe = _AM(return_value=("online", "ok", {}))
         with patch.object(config, "SERVICES", mixed), patch(
-            "routes.status.configured_services", return_value=[mixed[0]]
-        ), patch("routes.status.check_service", new=probe):
+            "interfaces.http.routes.status.configured_services", return_value=[mixed[0]]
+        ), patch("interfaces.http.routes.status.check_service", new=probe):
             client.get("/api/status/refresh")
 
         probed = [call.args[1]["key"] for call in probe.await_args_list]
@@ -2625,19 +2626,18 @@ class TestMaskedSecretsRoundTrip:
 
     @pytest.fixture
     def stored(self, tmp_path, monkeypatch):
-        import settings as settings_module
+        from infrastructure import settings_store as settings_module
 
         monkeypatch.setattr(settings_module, "_settings", copy.deepcopy(self.STORED))
         monkeypatch.setattr(
-            "routes.settings.get_settings", lambda: copy.deepcopy(self.STORED)
+            "interfaces.http.routes.settings.get_settings", lambda: copy.deepcopy(self.STORED)
         )
         monkeypatch.setattr(
-            "routes.settings.save_settings", lambda data: settings_module.__dict__.update(_last_saved=data)
+            "interfaces.http.routes.settings.save_settings", lambda data: settings_module.__dict__.update(_last_saved=data)
         )
         return self.STORED
 
     def _save(self, body: dict) -> dict:
-        import routes.settings as settings_route
 
         captured = {}
         with patch.object(settings_route, "save_settings", side_effect=lambda d: captured.update(d)):
@@ -2645,7 +2645,6 @@ class TestMaskedSecretsRoundTrip:
         return captured
 
     def _masked_form(self) -> dict:
-        import routes.settings as settings_route
 
         return settings_route._mask_secrets(copy.deepcopy(self.STORED))
 
@@ -2708,11 +2707,11 @@ class TestFirstRunSetup:
 
     @pytest.fixture
     def fresh(self, tmp_path, monkeypatch):
-        import settings as settings_module
+        from infrastructure import settings_store as settings_module
 
         monkeypatch.setattr(settings_module, "_settings", {}, raising=False)
         monkeypatch.setattr(
-            "routes.settings.get_settings",
+            "interfaces.http.routes.settings.get_settings",
             lambda: {
                 "services": {
                     "radarr": {"url": "", "api_key": ""},
@@ -2722,25 +2721,25 @@ class TestFirstRunSetup:
                 "security": {},
             },
         )
-        monkeypatch.setattr("routes.settings.save_settings", lambda data: saved.update(data))
+        monkeypatch.setattr("interfaces.http.routes.settings.save_settings", lambda data: saved.update(data))
         saved: dict = {}
         return saved
 
     def test_a_fresh_install_reports_that_it_needs_setup(self, fresh, monkeypatch):
-        monkeypatch.setattr("settings.auth_required", lambda: False)
-        with patch("routes.settings.configured_services", return_value=[]):
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
+        with patch("interfaces.http.routes.settings.configured_services", return_value=[]):
             body = client.get("/api/setup").json()
 
         assert body["needs_setup"] is True
 
     def test_a_configured_install_does_not(self, fresh, monkeypatch):
-        monkeypatch.setattr("settings.auth_required", lambda: True)
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: True)
         body = client.get("/api/setup").json()
 
         assert body["needs_setup"] is False
 
     def test_setup_saves_the_services(self, fresh, monkeypatch):
-        monkeypatch.setattr("settings.auth_required", lambda: False)
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
 
         resp = client.post(
             "/api/setup",
@@ -2757,7 +2756,7 @@ class TestFirstRunSetup:
         assert fresh["services"]["sonarr"]["api_key"] == "clave-s"
 
     def test_setup_stores_the_app_key_hashed(self, fresh, monkeypatch):
-        monkeypatch.setattr("settings.auth_required", lambda: False)
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
 
         client.post("/api/setup", json={"services": {}, "api_key": "mi-clave-nueva"})
 
@@ -2768,7 +2767,7 @@ class TestFirstRunSetup:
         )
 
     def test_setup_can_leave_the_app_unprotected(self, fresh, monkeypatch):
-        monkeypatch.setattr("settings.auth_required", lambda: False)
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
 
         client.post("/api/setup", json={"services": {"radarr": {"url": "http://r:1"}}})
 
@@ -2789,7 +2788,7 @@ class TestFirstRunSetup:
         config.rebuild()
 
     def test_setup_no_longer_reports_a_restart_for_services(self, fresh, monkeypatch):
-        monkeypatch.setattr("settings.auth_required", lambda: False)
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
 
         body = client.post("/api/setup", json={"services": {"radarr": {"url": "http://r:1"}}}).json()
 
@@ -2802,7 +2801,7 @@ class TestFirstRunSetup:
 
     def test_setup_is_refused_once_the_app_is_protected(self, fresh, monkeypatch):
         """Otherwise anyone could rewrite the deployment's credentials."""
-        monkeypatch.setattr("settings.auth_required", lambda: True)
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: True)
 
         resp = client.post("/api/setup", json={"services": {"radarr": {"url": "http://atacante:1"}}})
 
@@ -2810,7 +2809,7 @@ class TestFirstRunSetup:
         assert not fresh, "nothing may be written when setup is refused"
 
     def test_setup_ignores_unknown_service_keys(self, fresh, monkeypatch):
-        monkeypatch.setattr("settings.auth_required", lambda: False)
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
 
         client.post("/api/setup", json={"services": {"inventado": {"url": "http://x:1"}}})
 
@@ -2827,7 +2826,7 @@ class TestFirstRunSetup:
 
 class TestDiskVolumesComeFromConfiguration:
     def test_the_volumes_are_the_configured_roots_not_a_hardcoded_pair(self, monkeypatch):
-        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", ["/data/custom-storage"])
+        monkeypatch.setattr("interfaces.http.routes.calendar.ALLOWED_ROOTS", ["/data/custom-storage"])
 
         body = client.get("/api/disk").json()
 
@@ -2842,7 +2841,7 @@ class TestDiskVolumesComeFromConfiguration:
         # Exactly the reported shape: a plain directory on the container's own
         # disk, which `shutil.disk_usage` happily measures and the page then
         # presented as a whole storage volume.
-        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", [str(tmp_path)])
+        monkeypatch.setattr("interfaces.http.routes.calendar.ALLOWED_ROOTS", [str(tmp_path)])
 
         vol = client.get("/api/disk").json()["volumes"][0]
 
@@ -2852,7 +2851,7 @@ class TestDiskVolumesComeFromConfiguration:
         )
 
     def test_a_mount_point_still_reports_its_usage(self, monkeypatch):
-        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", ["/"])
+        monkeypatch.setattr("interfaces.http.routes.calendar.ALLOWED_ROOTS", ["/"])
 
         vol = client.get("/api/disk").json()["volumes"][0]
 
@@ -2861,14 +2860,14 @@ class TestDiskVolumesComeFromConfiguration:
         assert vol["percent"] >= 0
 
     def test_a_missing_path_still_reads_as_unavailable(self, monkeypatch):
-        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", ["/definitely/not/here"])
+        monkeypatch.setattr("interfaces.http.routes.calendar.ALLOWED_ROOTS", ["/definitely/not/here"])
 
         vol = client.get("/api/disk").json()["volumes"][0]
 
         assert vol["error"] == "no disponible"
 
     def test_an_empty_configuration_reports_no_volumes(self, monkeypatch):
-        monkeypatch.setattr("routes.calendar.ALLOWED_ROOTS", [])
+        monkeypatch.setattr("interfaces.http.routes.calendar.ALLOWED_ROOTS", [])
 
         assert client.get("/api/disk").json()["volumes"] == []
 
@@ -2881,18 +2880,18 @@ class TestWhatCountsAsItsOwnFilesystem:
     """
 
     def test_a_mount_point_is_not_flagged(self):
-        from routes.calendar import _is_foreign_filesystem
+        from interfaces.http.routes.calendar import _is_foreign_filesystem
 
         assert _is_foreign_filesystem("/") is False
 
     def test_a_plain_directory_is_flagged(self, tmp_path):
-        from routes.calendar import _is_foreign_filesystem
+        from interfaces.http.routes.calendar import _is_foreign_filesystem
 
         assert _is_foreign_filesystem(str(tmp_path)) is True
 
     def test_a_missing_path_is_not_flagged_as_foreign(self):
         """Absence is a different failure and already has its own message;
         conflating them would hide "no existe" behind "no es un montaje"."""
-        from routes.calendar import _is_foreign_filesystem
+        from interfaces.http.routes.calendar import _is_foreign_filesystem
 
         assert _is_foreign_filesystem("/definitely/not/here") is False

@@ -16,8 +16,8 @@ from datetime import datetime, timezone
 import pytest
 
 import auto_copy_driver as driver
-import history
-from auto_copy import COPY, DEFAULT_GRACE_SECONDS, SKIP, WAIT, auto_copy_key
+from infrastructure import sqlite_history as history
+from domain.policy import COPY, DEFAULT_GRACE_SECONDS, SKIP, WAIT, auto_copy_key
 
 GRAB_AT = 10_000.0
 
@@ -738,7 +738,7 @@ def test_one_failing_trace_does_not_abort_the_sweep(monkeypatch):
 @pytest.fixture
 def db(tmp_path):
     history.close()
-    history.init_db(tmp_path / "history.db")
+    history.init_db(tmp_path / "infrastructure.sqlite_history.db")
     yield
     history.close()
 

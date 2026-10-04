@@ -19,8 +19,8 @@ from unittest.mock import patch
 import pytest
 
 import config
-import history
-import settings as settings_mod
+from infrastructure import sqlite_history as history
+from infrastructure import settings_store as settings_mod
 from app import app
 from fastapi.testclient import TestClient
 
@@ -32,7 +32,7 @@ def _isolated(tmp_path, monkeypatch):
     """A private database and restored settings/constants per test."""
     before = copy.deepcopy(settings_mod.get_settings())
     history.close()
-    history.init_db(tmp_path / "history.db")
+    history.init_db(tmp_path / "infrastructure.sqlite_history.db")
     yield
     history.close()
     settings_mod._settings = before
@@ -53,7 +53,7 @@ def _get(directory):
     tests use `tmp_path` — the real guard is asserted separately, in the
     rejection test below.
     """
-    with patch("routes.files._validate_path", side_effect=lambda p: p):
+    with patch("interfaces.http.routes.files._validate_path", side_effect=lambda p: p):
         return client.get("/api/files/retention", params={"path": str(directory)})
 
 

@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-import credentials
-import settings
+from infrastructure import credentials as credentials
+from infrastructure import settings_store as settings
 
 
 SECRET = "un-secreto-de-despliegue"
@@ -25,7 +25,7 @@ def cfg(tmp_path, monkeypatch):
     directory = tmp_path / "config"
     directory.mkdir()
     monkeypatch.setattr(settings, "CONFIG_DIR", str(directory))
-    monkeypatch.setattr(settings, "SETTINGS_FILE", str(directory / "settings.json"))
+    monkeypatch.setattr(settings, "SETTINGS_FILE", str(directory / "infrastructure.settings_store.json"))
     monkeypatch.setattr(settings, "_settings", {}, raising=False)
     monkeypatch.setattr(settings, "encryption_error", "", raising=False)
     monkeypatch.setenv(credentials.SECRET_ENV_VAR, SECRET)
@@ -38,7 +38,7 @@ def _save(data: dict) -> None:
 
 
 def _raw(cfg) -> str:
-    return (cfg / "settings.json").read_text()
+    return (cfg / "infrastructure.settings_store.json").read_text()
 
 
 def _with_secrets() -> dict:
@@ -98,7 +98,7 @@ class TestRoundTrip:
         assert settings.get_setting("services", "amutorrent", "password") == "PASSWORD-SECRETO"
 
     def test_an_existing_plaintext_file_is_migrated(self, cfg):
-        (cfg / "settings.json").write_text(json.dumps(_with_secrets()))
+        (cfg / "infrastructure.settings_store.json").write_text(json.dumps(_with_secrets()))
 
         settings.load_settings()
 

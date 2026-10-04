@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 import config
-import settings as settings_mod
+from infrastructure import settings_store as settings_mod
 from app import app
 from fastapi.testclient import TestClient
 
@@ -85,7 +85,7 @@ class TestSetupCarriesEveryGroup:
 
 class TestPersistIsReported:
     def test_a_failed_persist_is_not_reported_as_saved(self):
-        with patch("routes.settings.save_settings", return_value=False):
+        with patch("interfaces.http.routes.settings.save_settings", return_value=False):
             data = _setup(services={"radarr": {"url": "http://r:1"}}).json()
 
         assert data["ok"] is True, "the settings are applied in memory either way"
@@ -94,7 +94,7 @@ class TestPersistIsReported:
         )
 
     def test_a_successful_persist_says_so(self):
-        with patch("routes.settings.save_settings", return_value=True):
+        with patch("interfaces.http.routes.settings.save_settings", return_value=True):
             data = _setup(services={"radarr": {"url": "http://r:1"}}).json()
 
         assert data.get("persisted") is True
@@ -108,7 +108,7 @@ class TestTheConnectionTestAcceptsCandidates:
             probed.update(service)
             return {"ok": False, "error_kind": "unreachable", "url": service["url"]}
 
-        with patch("routes.settings.test_service_connection", new=fake_test):
+        with patch("interfaces.http.routes.settings.test_service_connection", new=fake_test):
             resp = client.post(
                 "/api/services/test",
                 json={"service": "radarr", "url": "http://candidate:7878", "api_key": "typed"},
@@ -125,7 +125,7 @@ class TestTheConnectionTestAcceptsCandidates:
 
     def test_the_get_route_still_probes_the_saved_config(self):
         """The Settings page keeps working."""
-        with patch("routes.settings.test_service_connection", new_callable=AsyncMock) as t:
+        with patch("interfaces.http.routes.settings.test_service_connection", new_callable=AsyncMock) as t:
             t.return_value = {"ok": True, "url": "http://saved"}
             resp = client.get("/api/services/test?service=radarr")
 

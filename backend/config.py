@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from settings import load_settings, get_setting, migrate_env_vars
+from infrastructure.settings_store import load_settings, get_setting, migrate_env_vars
 from domain import quality as _quality_rules
 
 load_dotenv()

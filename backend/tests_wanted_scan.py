@@ -14,10 +14,10 @@ from unittest.mock import patch
 
 import pytest
 
-from clients import arr_movie_metadata, arr_series_episodes, fetch_wanted_movies
+from infrastructure.arr_client import arr_movie_metadata, arr_series_episodes, fetch_wanted_movies
 from config import SERVICES
 from models import ActionRequest
-from routes.wanted import _scan_for_movies_inner
+from interfaces.http.routes.wanted import _scan_for_movies_inner
 from tests_routes import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
@@ -133,7 +133,7 @@ def _scan(tmp_path: Path, filename: str, movie_id: int = 813) -> dict:
 
     with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
         # Path validation is not under test; it only allows the real volumes.
-        with patch("routes.wanted._validate_path", side_effect=lambda p: p):
+        with patch("interfaces.http.routes.wanted._validate_path", side_effect=lambda p: p):
             return asyncio.run(_scan_for_movies_inner(req))
 
 

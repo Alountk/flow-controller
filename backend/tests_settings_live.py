@@ -22,7 +22,7 @@ import copy
 import pytest
 
 import config
-import settings as settings_mod
+from infrastructure import settings_store as settings_mod
 
 
 @pytest.fixture(autouse=True)
@@ -64,7 +64,7 @@ class TestContainersAreMutatedInPlace:
 
         _set(**{"paths.allowed_roots": ["/mnt/somewhere-else"]})
 
-        from routes.files import _validate_path
+        from interfaces.http.routes.files import _validate_path
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc:
@@ -78,7 +78,7 @@ class TestContainersAreMutatedInPlace:
 
 class TestTheRestartListTellsTheTruth:
     def test_a_field_that_applies_immediately_is_not_asked_for_a_restart(self):
-        from routes.settings import RESTART_REQUIRED_FIELDS
+        from interfaces.http.routes.settings import RESTART_REQUIRED_FIELDS
 
         # Services are rebuilt in place and `security.api_key` is read live by
         # `settings.auth_required`; neither needs a restart any more.

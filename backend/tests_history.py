@@ -10,14 +10,14 @@ import time
 
 import pytest
 
-import history
+from infrastructure import sqlite_history as history
 
 
 @pytest.fixture
 def db(tmp_path):
     """A fresh database per test, isolated from the real config volume."""
     history.close()
-    history.init_db(tmp_path / "history.db")
+    history.init_db(tmp_path / "infrastructure.sqlite_history.db")
     yield
     history.close()
 
@@ -144,7 +144,7 @@ def test_interrupted_operations_are_marked_failed(db):
 
 def test_history_survives_a_closed_and_reopened_database(tmp_path):
     """The actual promise: data outlives the process."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
     history.init_db(path)
     history.record_operation(_op(id="survivor", status="done"))
@@ -177,7 +177,7 @@ def test_a_row_without_an_id_is_ignored(db):
 
 
 def test_the_schema_declares_a_version_for_future_migrations(db, tmp_path):
-    conn = sqlite3.connect(tmp_path / "history.db")
+    conn = sqlite3.connect(tmp_path / "infrastructure.sqlite_history.db")
     try:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     finally:
@@ -196,7 +196,7 @@ class TestQueueLifecycleIsPersisted:
     @pytest.fixture(autouse=True)
     def _isolated_db(self, tmp_path):
         history.close()
-        history.init_db(tmp_path / "history.db")
+        history.init_db(tmp_path / "infrastructure.sqlite_history.db")
         from state import file_queue
 
         file_queue.clear()
@@ -207,7 +207,7 @@ class TestQueueLifecycleIsPersisted:
     def _run(self, op: dict):
         import asyncio
         from state import file_queue
-        import routes.files
+        from interfaces.http import routes
 
         file_queue.append(op)
         asyncio.run(routes.files._consume_queue())
@@ -275,8 +275,8 @@ class TestQueueLifecycleIsPersisted:
 
         # Stop the consumer so the op stays pending, which is exactly the state
         # a restart would find it in.
-        with patch("routes.files._consume_queue", new=AsyncMock()), patch(
-            "routes.files._validate_path", side_effect=lambda p: p
+        with patch("interfaces.http.routes.files._consume_queue", new=AsyncMock()), patch(
+            "interfaces.http.routes.files._validate_path", side_effect=lambda p: p
         ):
             resp = client.post(
                 "/api/files/queue/add",
@@ -310,7 +310,7 @@ class TestUnavailableDatabase:
         blocked.mkdir()
         blocked.chmod(0o500)  # no write permission
         try:
-            history.init_db(blocked / "nested" / "history.db")
+            history.init_db(blocked / "nested" / "infrastructure.sqlite_history.db")
             # Must not raise, and must simply report itself as unavailable.
             history.record_operation(_op())
             assert history.recent_operations() == []
@@ -324,7 +324,7 @@ class TestUnavailableDatabase:
         a_file.write_text("x")
 
         # mkdir on a path whose parent is a file raises OSError.
-        history.init_db(a_file / "history.db")
+        history.init_db(a_file / "infrastructure.sqlite_history.db")
 
         assert history.recent_operations() == []
         history.close()
@@ -356,7 +356,7 @@ def test_re_marking_the_same_key_updates_instead_of_raising(db, tmp_path):
     history.mark_auto_copy("k", source="radarr", title="A", decision="copy", reason="r1")
     history.mark_auto_copy("k", source="radarr", title="B", decision="skip", reason="r2")
 
-    conn = sqlite3.connect(tmp_path / "history.db")
+    conn = sqlite3.connect(tmp_path / "infrastructure.sqlite_history.db")
     try:
         rows = conn.execute(
             "SELECT decision, title, reason FROM auto_copy_handled"
@@ -469,7 +469,7 @@ def test_init_db_migrates_a_v1_database_without_an_alter(tmp_path):
     """v2 adds `auto_copy_handled`. `executescript` runs the whole schema with
     CREATE TABLE IF NOT EXISTS on every start, so a real v1 file gains the table
     with no ALTER; user_version only records that the migration happened."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
 
     conn = sqlite3.connect(path)
@@ -529,7 +529,7 @@ def test_an_own_grab_round_trips(db, tmp_path):
         grabbed_at=1234.5,
     )
 
-    rows = _own_grab_rows(tmp_path / "history.db")
+    rows = _own_grab_rows(tmp_path / "infrastructure.sqlite_history.db")
 
     assert len(rows) == 1
     assert rows[0]["source"] == "radarr"
@@ -543,7 +543,7 @@ def test_an_own_grab_round_trips(db, tmp_path):
 def test_an_own_grab_defaults_to_now_when_no_instant_is_given(db, tmp_path):
     history.record_own_grab("sonarr", episode_id=2286, series_id=28)
 
-    rows = _own_grab_rows(tmp_path / "history.db")
+    rows = _own_grab_rows(tmp_path / "infrastructure.sqlite_history.db")
 
     assert len(rows) == 1
     assert rows[0]["episode_id"] == 2286
@@ -567,7 +567,7 @@ def test_an_own_grab_persists_its_destination(db, tmp_path):
         destination="/mnt/storage/movies/_manual",
     )
 
-    rows = _own_grab_rows(tmp_path / "history.db")
+    rows = _own_grab_rows(tmp_path / "infrastructure.sqlite_history.db")
 
     assert rows[0]["destination"] == "/mnt/storage/movies/_manual"
 
@@ -577,7 +577,7 @@ def test_an_own_grab_without_a_destination_stores_null(db, tmp_path):
     reader can treat a missing value as the default without decoding a word."""
     history.record_own_grab("radarr", movie_id=855, grabbed_at=1234.5)
 
-    rows = _own_grab_rows(tmp_path / "history.db")
+    rows = _own_grab_rows(tmp_path / "infrastructure.sqlite_history.db")
 
     assert rows[0]["destination"] is None
 
@@ -610,7 +610,7 @@ def test_init_db_migrates_a_v2_database_without_an_alter(tmp_path):
     """v3 adds `own_grabs`. As with v1->v2, `executescript` runs the whole
     schema with CREATE TABLE IF NOT EXISTS on every start, so a real v2 file
     gains the table with no ALTER; user_version only records the migration."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
 
     conn = sqlite3.connect(path)
@@ -671,7 +671,7 @@ def test_init_db_migrates_a_v5_database_by_adding_the_destination_column(tmp_pat
     """v6 adds a COLUMN, which is the one change `CREATE TABLE IF NOT EXISTS`
     cannot deliver: the table already exists, so the explicit ALTER has to run
     and the pre-existing rows have to survive it."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
 
     conn = sqlite3.connect(path)
@@ -717,7 +717,7 @@ def test_init_db_migrates_a_v5_database_by_adding_the_destination_column(tmp_pat
 def test_a_fresh_database_is_created_with_the_destination_column(tmp_path):
     """A fresh file lands on v6 directly: `SCHEMA` already creates the column,
     so the ALTER must be skipped instead of raising duplicate-column."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
     history.init_db(path)
     history.close()
@@ -738,7 +738,7 @@ def test_a_v6_database_gains_the_retention_table(tmp_path):
     """v7 adds `amule_downloads`. Same discipline as v2: `executescript` runs
     `CREATE TABLE IF NOT EXISTS` on every start, so a real v6 file gains the
     table with no ALTER and the version bump only records it."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
     history.init_db(path)
     conn = sqlite3.connect(path)
@@ -840,7 +840,7 @@ def test_a_new_key_stores_and_returns_the_reference(db, tmp_path):
     returned = history.note_auto_copy_seen("radarr:abc", "downloaded", seen_at=1234.5)
 
     assert returned == 1234.5
-    rows = _seen_rows(tmp_path / "history.db")
+    rows = _seen_rows(tmp_path / "infrastructure.sqlite_history.db")
     assert len(rows) == 1
     assert rows[0]["key"] == "radarr:abc"
     assert rows[0]["stage"] == "downloaded"
@@ -862,7 +862,7 @@ def test_the_same_key_and_stage_keeps_and_returns_the_original(db, tmp_path):
 
     assert first == 100.0
     assert second == 100.0, "a later sighting must NOT reset the window"
-    rows = _seen_rows(tmp_path / "history.db")
+    rows = _seen_rows(tmp_path / "infrastructure.sqlite_history.db")
     assert len(rows) == 1
     assert rows[0]["first_seen_at"] == 100.0
 
@@ -875,7 +875,7 @@ def test_a_stage_change_resets_the_window(db, tmp_path):
     returned = history.note_auto_copy_seen("radarr:abc", "downloaded", seen_at=500.0)
 
     assert returned == 500.0
-    rows = _seen_rows(tmp_path / "history.db")
+    rows = _seen_rows(tmp_path / "infrastructure.sqlite_history.db")
     assert len(rows) == 1, "the key is the identity; a stage change upserts"
     assert rows[0]["stage"] == "downloaded"
     assert rows[0]["first_seen_at"] == 500.0
@@ -915,7 +915,7 @@ def test_init_db_migrates_a_v3_database_without_an_alter(tmp_path):
     """v4 adds `auto_copy_seen`. As with v1->v2 and v2->v3, `executescript` runs
     the whole schema with CREATE TABLE IF NOT EXISTS on every start, so a real
     v3 file gains the table with no ALTER; user_version only records it."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
 
     conn = sqlite3.connect(path)
@@ -1222,7 +1222,7 @@ def test_init_db_migrates_a_v4_database_without_an_alter(tmp_path):
     `executescript` runs the whole schema with CREATE TABLE IF NOT EXISTS on
     every start, so a real v4 file gains the table with no ALTER; user_version
     only records that the migration happened."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
 
     conn = sqlite3.connect(path)
@@ -1302,7 +1302,7 @@ def test_init_db_migrates_a_v7_database_by_adding_the_quality_column(tmp_path):
     is thrown away after routing. `{Quality Full}` has nowhere to read from
     without it.
     """
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
 
     conn = sqlite3.connect(path)
@@ -1346,7 +1346,7 @@ def test_init_db_migrates_a_v7_database_by_adding_the_quality_column(tmp_path):
 def test_a_fresh_database_is_created_with_the_quality_column(tmp_path):
     """A fresh file lands on v8 directly: `SCHEMA` already creates the column,
     so the ALTER must be skipped instead of raising duplicate-column."""
-    path = tmp_path / "history.db"
+    path = tmp_path / "infrastructure.sqlite_history.db"
     history.close()
     history.init_db(path)
     history.close()

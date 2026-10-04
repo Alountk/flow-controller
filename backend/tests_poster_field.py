@@ -34,8 +34,8 @@ import inspect
 
 import pytest
 
-import clients
-from clients import (
+from infrastructure import arr_client as clients
+from infrastructure.arr_client import (
     fetch_all_movies_detailed,
     fetch_all_series_detailed,
     fetch_radarr_calendar,

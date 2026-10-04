@@ -5,7 +5,7 @@ is only ever compared, so it can be hashed — unlike the Radarr/Sonarr/aMuTorre
 credentials, which must be sent to those services and therefore cannot be.
 """
 
-import credentials
+from infrastructure import credentials as credentials
 
 
 def test_a_key_is_never_stored_in_the_clear():

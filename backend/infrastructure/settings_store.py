@@ -11,7 +11,7 @@ log = logging.getLogger("settings")
 encryption_error: str = ""
 
 CONFIG_DIR = os.getenv("CONFIG_DIR", "/app/config")
-SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
+SETTINGS_FILE = os.path.join(CONFIG_DIR, "infrastructure.settings_store.json")
 
 DEFAULTS: dict[str, Any] = {
     "services": {

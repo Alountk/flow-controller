@@ -7,7 +7,7 @@ import traceback
 import aiohttp
 from fastapi import APIRouter, Depends, Header, HTTPException
 
-import credentials
+from application.gateways import credentials as credentials
 from config import (
     AMUTORRENT_INDEXER,
     all_services,
@@ -15,7 +15,7 @@ from config import (
     find_service,
 )
 from traces import build_traces
-from clients import check_service, arr_headers
+from application.gateways import check_service, arr_headers
 from state import status_cache, http_session
 import config
 
@@ -30,7 +30,7 @@ async def verify_api_key(x_api_key: str | None = Header(default=None)):
     The key itself is not kept anywhere, so this compares hashes in constant
     time instead of the two strings.
     """
-    from settings import auth_required as _auth_required, get_settings
+    from application.gateways import auth_required as _auth_required, get_settings
 
     if not _auth_required():
         return ""
@@ -158,8 +158,8 @@ async def public_config():
     """
     # encryption_ok is an operational signal, not a secret: without it the user
     # sees every service as unconfigured and has no way to know why.
-    from settings import encryption_error
-    from settings import auth_required as _auth_required
+    from application.gateways import encryption_error
+    from application.gateways import auth_required as _auth_required
     return {
         "developer": config.DEVELOPER,
         "auth_required": _auth_required(),

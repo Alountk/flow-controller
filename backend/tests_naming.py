@@ -6,7 +6,7 @@ covered there; what is pinned here is the part that can silently write a wrong
 name.
 """
 
-from naming import build_values, clean_title, evaluate, reproduced_radarr
+from domain.naming import build_values, clean_title, evaluate, reproduced_radarr
 
 
 # ── What the tokens mean ──────────────────────────────────────────────────────

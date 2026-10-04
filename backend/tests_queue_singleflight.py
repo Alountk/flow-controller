@@ -15,7 +15,7 @@ import asyncio
 from unittest.mock import patch
 
 import state
-from routes import files
+from interfaces.http.routes import files
 from state import file_queue
 
 

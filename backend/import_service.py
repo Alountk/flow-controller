@@ -10,7 +10,7 @@ from pathlib import Path
 
 import aiohttp
 
-from clients import (
+from infrastructure.arr_client import (
     arr_manual_import,
     arr_rescan_movie,
     arr_refresh_movie,

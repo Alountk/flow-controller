@@ -16,9 +16,9 @@ client = TestClient(app, raise_server_exceptions=False)
 # ── Probe Endpoint ──────────────────────────────────────────────────────────
 
 class TestProbeEndpoint:
-    @patch("routes_mixer.os.path.isfile", return_value=True)
-    @patch("routes_mixer.check_compatibility")
-    @patch("routes_mixer.probe_file")
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.check_compatibility")
+    @patch("interfaces.http.routes_mixer.probe_file")
     def test_probe_valid_files(self, mock_probe, mock_compat, mock_isfile):
         mock_probe.return_value = {
             "filename": "video.mkv",
@@ -43,9 +43,9 @@ class TestProbeEndpoint:
         assert data["compatibility"]["ok"] is True
         assert mock_probe.call_count == 2
 
-    @patch("routes_mixer.os.path.isfile", return_value=True)
-    @patch("routes_mixer.check_compatibility")
-    @patch("routes_mixer.probe_file")
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.check_compatibility")
+    @patch("interfaces.http.routes_mixer.probe_file")
     def test_probe_with_warnings(self, mock_probe, mock_compat, mock_isfile):
         mock_probe.return_value = {
             "filename": "video.mkv",
@@ -96,8 +96,8 @@ class TestProbeEndpoint:
 # ── Mux Endpoint ────────────────────────────────────────────────────────────
 
 class TestMuxEndpoint:
-    @patch("routes_mixer.os.path.isfile", return_value=True)
-    @patch("routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
     def test_mux_starts_task(self, mock_start, mock_isfile):
         mock_start.return_value = "test-task-id-123"
 
@@ -125,7 +125,7 @@ class TestMuxEndpoint:
         assert resp.status_code == 400
         assert "video_source.path is required" in resp.json()["detail"]
 
-    @patch("routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
     def test_mux_missing_audio_path(self, mock_isfile):
         resp = client.post(
             "/api/mixer/mux",
@@ -148,8 +148,8 @@ class TestMuxEndpoint:
         assert resp.status_code == 403
         assert "not allowed" in resp.json()["detail"].lower()
 
-    @patch("routes_mixer.os.path.isfile", return_value=True)
-    @patch("routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
     def test_mux_empty_audio_sources(self, mock_start, mock_isfile):
         mock_start.return_value = "test-task-id-456"
 

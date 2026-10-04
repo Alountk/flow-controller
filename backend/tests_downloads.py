@@ -9,7 +9,7 @@ stubbed HTTP transport, since the bugs worth catching live in that logic.
 import asyncio
 from unittest.mock import patch
 
-from routes.downloads import _build_download, _progress_percent, collect_downloads
+from interfaces.http.routes.downloads import _build_download, _progress_percent, collect_downloads
 from tests_routes import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
@@ -82,8 +82,8 @@ def _collect(routes):
     # The collector opens its own session, so the patch must be a factory bound
     # to these routes — `_StubSession` bare would answer every call with 503.
     arr = [s for s in services if s["kind"] == "arr"]
-    with patch("routes.downloads.configured_services", return_value=arr), patch(
-        "clients.AMUTORRENT_URL", AMU_URL
+    with patch("interfaces.http.routes.downloads.configured_services", return_value=arr), patch(
+        "infrastructure.arr_client.AMUTORRENT_URL", AMU_URL
     ), patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
         return asyncio.run(_run())
 
@@ -175,7 +175,7 @@ def test_problems_sort_first():
 
 def test_queries_localized_category_variants():
     """The server has radarr-ru / tv-sonarr-ru: filtering only the base loses them."""
-    from clients import arr_categories_for
+    from infrastructure.arr_client import arr_categories_for
 
     available = ["radarr", "radarr-ru", "tv-sonarr", "tv-sonarr-ru", "juegos", "lidarr"]
 
@@ -184,7 +184,7 @@ def test_queries_localized_category_variants():
 
 
 def test_does_not_pick_unrelated_categories():
-    from clients import arr_categories_for
+    from infrastructure.arr_client import arr_categories_for
 
     available = ["juegos", "libros", "3d", "radarr"]
 

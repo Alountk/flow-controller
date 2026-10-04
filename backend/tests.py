@@ -15,7 +15,7 @@ os.environ.setdefault("AMUTORRENT_URL", "http://localhost:4000")
 
 from traces import host_path as _host_path, resolve_current_path as _resolve_current_path
 from config import _VOLUME_MAP
-from clients import arr_indexers
+from infrastructure.arr_client import arr_indexers
 from copy_engine import copy_files_to_root as _copy_files_to_root, copy_tasks
 
 
@@ -353,7 +353,7 @@ class TestCopyWithTargetName:
 from fastapi.testclient import TestClient
 from app import app
 from state import file_queue
-import routes.files
+from interfaces.http import routes
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -438,7 +438,7 @@ class TestRunActionValidation:
         ImportError before reaching `do_action`. The suite stayed green because
         the only action posted here was an unknown one, which returns earlier.
         """
-        with patch("routes.actions.do_action", new_callable=AsyncMock) as action:
+        with patch("interfaces.http.routes.actions.do_action", new_callable=AsyncMock) as action:
             action.return_value = {
                 "ok": True,
                 "steps": [{"target": "arr", "ok": True, "detail": "Comando encolado"}],
@@ -479,7 +479,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestCalendarSearch:
-    @patch("routes.calendar.arr_search_movie", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_search_movie", new_callable=AsyncMock)
     def test_movie_search_calls_arr(self, mock_search):
         mock_search.return_value = {"ok": True, "detail": "Command queued"}
         resp = client.post(
@@ -491,7 +491,7 @@ class TestCalendarSearch:
         assert data["ok"] is True
         mock_search.assert_called_once()
 
-    @patch("routes.calendar.arr_search_episode", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_search_episode", new_callable=AsyncMock)
     def test_episode_search_calls_arr(self, mock_search):
         mock_search.return_value = {"ok": True, "detail": "Command queued"}
         resp = client.post(
@@ -525,11 +525,11 @@ class TestCalendarSearch:
 
 
 class TestCalendarAdd:
-    @patch("routes.calendar.arr_search_movie", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_add_movie", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_movie_exists", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_search_movie", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_add_movie", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_movie_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_movie_uses_real_root_folder(self, mock_folders, mock_lookup, mock_exists, mock_add, mock_search):
         mock_folders.return_value = ["/mnt/storage/Movies"]
         mock_lookup.return_value = {"tmdbId": 550, "title": "Test Movie", "year": 2024, "qualityProfileId": 1}
@@ -553,8 +553,8 @@ class TestCalendarAdd:
         assert payload["title"] == "Test Movie"
         assert payload["tmdbId"] == 550
 
-    @patch("routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_movie_without_tmdb_returns_error(self, mock_folders, mock_lookup):
         mock_folders.return_value = ["/movies"]
         mock_lookup.return_value = {}  # Lookup failed
@@ -568,10 +568,10 @@ class TestCalendarAdd:
         assert data["ok"] is False
         assert "No se encontró" in data["detail"]
 
-    @patch("routes.calendar.arr_add_series", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_series_exists", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_series_lookup", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_add_series", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_series_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_series_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_series_uses_real_root_folder(self, mock_folders, mock_lookup, mock_exists, mock_add):
         mock_folders.return_value = ["/mnt/storage-6tb/Series"]
         mock_lookup.return_value = {"tvdbId": 12345, "title": "Test Show", "year": 2023, "seasonFolder": True, "qualityProfileId": 1}
@@ -590,8 +590,8 @@ class TestCalendarAdd:
         assert payload["rootFolderPath"] == "/mnt/storage-6tb/Series"
         assert payload["tvdbId"] == 12345
 
-    @patch("routes.calendar.arr_series_lookup", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_series_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_series_without_tvdb_returns_error(self, mock_folders, mock_lookup):
         mock_folders.return_value = ["/series"]
         mock_lookup.return_value = {}  # Lookup failed
@@ -605,10 +605,10 @@ class TestCalendarAdd:
         assert data["ok"] is False
         assert "No se encontró" in data["detail"]
 
-    @patch("routes.calendar.arr_search_movie", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_movie_exists", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_search_movie", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_movie_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_movie_already_exists_searches_directly(self, mock_folders, mock_lookup, mock_exists, mock_search):
         mock_folders.return_value = ["/movies"]
         mock_lookup.return_value = {"tmdbId": 550, "title": "Fight Club", "year": 1999, "qualityProfileId": 1}
@@ -626,9 +626,9 @@ class TestCalendarAdd:
         assert "ya está" in data["detail"]
         mock_search.assert_called_once()
 
-    @patch("routes.calendar.arr_series_exists", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_series_lookup", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_series_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_series_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_series_already_exists_returns_info(self, mock_folders, mock_lookup, mock_exists):
         mock_folders.return_value = ["/series"]
         mock_lookup.return_value = {"tvdbId": 12345, "title": "Breaking Bad", "year": 2008, "seasonFolder": True, "qualityProfileId": 1}
@@ -644,7 +644,7 @@ class TestCalendarAdd:
         assert data["id"] == 55
         assert "ya está" in data["detail"]
 
-    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_without_root_folders_returns_error(self, mock_folders):
         mock_folders.return_value = []
 
@@ -657,11 +657,11 @@ class TestCalendarAdd:
         assert data["ok"] is False
         assert "carpetas raíz" in data["detail"]
 
-    @patch("routes.calendar.arr_search_movie", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_add_movie", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_movie_exists", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
-    @patch("routes.calendar.arr_root_folders", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_search_movie", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_add_movie", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_movie_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock)
     def test_add_movie_radarr_error_propagates(self, mock_folders, mock_lookup, mock_exists, mock_add, mock_search):
         mock_folders.return_value = ["/movies"]
         mock_lookup.return_value = {"tmdbId": 550, "title": "Fail Movie", "year": 2024, "qualityProfileId": 1}
@@ -680,7 +680,7 @@ class TestCalendarAdd:
 
     def test_add_unknown_type_returns_error(self):
         # Root folders are fetched before type check, so mock it
-        with patch("routes.calendar.arr_root_folders", new_callable=AsyncMock, return_value=["/movies"]):
+        with patch("interfaces.http.routes.calendar.arr_root_folders", new_callable=AsyncMock, return_value=["/movies"]):
             resp = client.post(
                 "/api/calendar/add",
                 json={"source": "radarr", "type": "season", "title": "X"},
@@ -692,7 +692,7 @@ class TestCalendarAdd:
 
 
 class TestCalendarReleases:
-    @patch("routes.calendar.arr_fetch_releases", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_fetch_releases", new_callable=AsyncMock)
     def test_movie_releases(self, mock_fetch):
         mock_fetch.return_value = {
             "releases": [{"guid": "g1", "title": "Rel1", "quality": "1080p", "size": 1_000_000_000, "indexer": "Torznab", "seeders": 10, "leechers": 2, "languages": ["English"]}],
@@ -707,7 +707,7 @@ class TestCalendarReleases:
         assert len(data["releases"]) == 1
         assert data["releases"][0]["guid"] == "g1"
 
-    @patch("routes.calendar.arr_fetch_releases", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_fetch_releases", new_callable=AsyncMock)
     def test_episode_releases(self, mock_fetch):
         mock_fetch.return_value = {"releases": [], "detail": "0 releases"}
         resp = client.post(
@@ -730,7 +730,7 @@ class TestCalendarReleases:
 
 
 class TestCalendarGrab:
-    @patch("routes.calendar.arr_grab_release", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_grab_release", new_callable=AsyncMock)
     def test_grab_ok(self, mock_grab):
         mock_grab.return_value = {"ok": True, "detail": "Release encolado"}
         resp = client.post(
@@ -742,7 +742,7 @@ class TestCalendarGrab:
         assert data["ok"] is True
         mock_grab.assert_called_once()
 
-    @patch("routes.calendar.arr_grab_release", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_grab_release", new_callable=AsyncMock)
     def test_grab_error(self, mock_grab):
         mock_grab.return_value = {"ok": False, "detail": "HTTP 404: not found"}
         resp = client.post(
@@ -765,12 +765,12 @@ class TestCalendarIndexers:
     def _get(self, source: str = "radarr"):
         """Clears first so every test starts cold — but never after, so a test
         that wants to prove the cache works can still see it."""
-        from routes.calendar import _indexers_cache
+        from interfaces.http.routes.calendar import _indexers_cache
 
         _indexers_cache.clear()
         return client.get(f"/api/calendar/indexers?source={source}")
 
-    @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_indexers", new_callable=AsyncMock)
     def test_indexers_returned(self, mock_idx):
         mock_idx.return_value = {
             "indexers": [
@@ -789,7 +789,7 @@ class TestCalendarIndexers:
         assert data.get("error"), "an unknown source must explain itself"
         assert data.get("error_kind")
 
-    @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_indexers", new_callable=AsyncMock)
     def test_a_failure_is_surfaced_not_flattened(self, mock_idx):
         mock_idx.return_value = {
             "indexers": [],
@@ -801,7 +801,7 @@ class TestCalendarIndexers:
         assert data["error_kind"] == "timeout"
         assert data["error"]
 
-    @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_indexers", new_callable=AsyncMock)
     def test_the_list_is_cached_per_source_so_it_is_not_refetched(self, mock_idx):
         """The user's own words: asking once for Radarr must not ask again."""
         mock_idx.return_value = {"indexers": [{"id": 1, "name": "Torznab"}]}
@@ -811,14 +811,14 @@ class TestCalendarIndexers:
         assert first == 1
         assert mock_idx.call_count == first, "the second open hit the network again"
 
-        from routes.calendar import _indexers_cache
+        from interfaces.http.routes.calendar import _indexers_cache
 
         _indexers_cache.clear()
 
-    @patch("routes.calendar.arr_indexers", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.calendar.arr_indexers", new_callable=AsyncMock)
     def test_a_failure_is_never_cached(self, mock_idx):
         """Caching a failure would keep the modal broken for the whole TTL."""
-        from routes.calendar import _indexers_cache
+        from interfaces.http.routes.calendar import _indexers_cache
 
         _indexers_cache.clear()
         mock_idx.return_value = {"indexers": [], "error_kind": "unreachable", "error": "radarr: caido"}
@@ -863,8 +863,8 @@ class TestArrIndexersReportsWhyItFailed:
 class TestSonarrSeriesCommands:
     def test_arr_rescan_series(self):
         import asyncio
-        from clients import arr_rescan_series
-        with patch("clients.arr_command", new_callable=AsyncMock) as mock_cmd:
+        from infrastructure.arr_client import arr_rescan_series
+        with patch("infrastructure.arr_client.arr_command", new_callable=AsyncMock) as mock_cmd:
             mock_cmd.return_value = {"ok": True, "detail": "RescanSeries command queued"}
             res = asyncio.run(arr_rescan_series(None, {"url": "http://sonarr:8989", "api_key": "abc"}, 10))
             assert res["ok"] is True
@@ -872,8 +872,8 @@ class TestSonarrSeriesCommands:
 
     def test_arr_refresh_series(self):
         import asyncio
-        from clients import arr_refresh_series
-        with patch("clients.arr_command", new_callable=AsyncMock) as mock_cmd:
+        from infrastructure.arr_client import arr_refresh_series
+        with patch("infrastructure.arr_client.arr_command", new_callable=AsyncMock) as mock_cmd:
             mock_cmd.return_value = {"ok": True, "detail": "RefreshSeries command queued"}
             res = asyncio.run(arr_refresh_series(None, {"url": "http://sonarr:8989", "api_key": "abc"}, 10))
             assert res["ok"] is True
@@ -900,7 +900,7 @@ class TestQueueAddSeries:
 
 
 class TestPaginatedWantedEndpoints:
-    @patch("routes.wanted.fetch_all_movies_detailed", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.wanted.fetch_all_movies_detailed", new_callable=AsyncMock)
     def test_all_movies_pagination_params(self, mock_fetch):
         mock_fetch.return_value = {"items": [{"id": 1, "title": "M1"}], "total": 100, "page": 2, "page_size": 10}
         resp = client.get("/api/wanted/all?page=2&page_size=10")
@@ -910,7 +910,7 @@ class TestPaginatedWantedEndpoints:
         assert data["page"] == 2
         assert data["page_size"] == 10
 
-    @patch("routes.wanted.fetch_all_series_detailed", new_callable=AsyncMock)
+    @patch("interfaces.http.routes.wanted.fetch_all_series_detailed", new_callable=AsyncMock)
     def test_all_series_pagination_params(self, mock_fetch):
         mock_fetch.return_value = {"items": [{"id": 1, "title": "S1"}], "total": 50, "page": 1, "page_size": 25}
         resp = client.get("/api/wanted/series/all?page=1&page_size=25")
@@ -923,12 +923,12 @@ class TestPaginatedWantedEndpoints:
 
 class TestValidatePathContainerMapping:
     def test_validate_path_converts_data_to_mnt_storage(self):
-        from routes.files import _validate_path
+        from interfaces.http.routes.files import _validate_path
         path = _validate_path("/data/shared-media/movies/Test (2024)")
         assert path == "/mnt/storage/shared-media/movies/Test (2024)"
 
     def test_validate_path_converts_data_6tb_to_mnt_storage_6tb(self):
-        from routes.files import _validate_path
+        from interfaces.http.routes.files import _validate_path
         path = _validate_path("/data-6tb/shared-media/series/Test Show")
         assert path == "/mnt/storage-6tb/shared-media/series/Test Show"
 

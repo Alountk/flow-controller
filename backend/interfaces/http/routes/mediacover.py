@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
 import config
-from clients import arr_headers
+from application.gateways import arr_headers
 from config import find_service
 from state import http_session
 

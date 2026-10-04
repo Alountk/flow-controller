@@ -11,7 +11,7 @@ import asyncio
 import errno
 import os
 
-import clients
+from infrastructure import arr_client as clients
 import config
 import copy_engine
 from copy_engine import copy_files_to_root, copy_tasks, do_action, run_copy_background

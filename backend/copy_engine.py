@@ -10,8 +10,8 @@ from config import (
     IMPORT_POLL_INTERVAL,
     SERVICES,
 )
-import naming
-from clients import (
+from domain import naming as naming
+from infrastructure.arr_client import (
     arr_naming_config,
 
     arr_command,
@@ -291,7 +291,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         category = EXPECTED_CATEGORY.get(source)
         if not category:
             return {"ok": False, "steps": [{"target": "amutorrent", "ok": False, "detail": "categoría esperada desconocida"}]}
-        from clients import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
+        from infrastructure.arr_client import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
         client, inst = await amu_ws_find_instance(matched_hash)
         steps.append({
             "target": "amutorrent",
@@ -313,7 +313,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
     elif action in ("pause", "resume"):
         if not matched_hash:
             return {"ok": False, "steps": [{"target": "amutorrent", "ok": False, "detail": "sin hash correlacionado"}]}
-        from clients import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
+        from infrastructure.arr_client import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
         ws_action = "batchPause" if action == "pause" else "batchResume"
         client, inst = await amu_ws_find_instance(matched_hash)
         steps.append({
@@ -325,7 +325,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         if not service or not queue_id:
             return {"ok": False, "steps": [{"target": "arr", "ok": False, "detail": "sin queue_id"}]}
         blocklist = bool(payload.get("blocklist"))
-        from clients import arr_delete_queue
+        from infrastructure.arr_client import arr_delete_queue
         steps.append({
             "target": source,
             **await arr_delete_queue(session, service, int(queue_id), blocklist),
@@ -335,7 +335,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         if not matched_hash:
             return {"ok": False, "steps": [{"target": "amutorrent", "ok": False, "detail": "sin hash correlacionado"}]}
         delete_files = bool(payload.get("delete_files"))
-        from clients import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
+        from infrastructure.arr_client import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
         client, inst = await amu_ws_find_instance(matched_hash)
         steps.append({
             "target": "amutorrent",
@@ -389,7 +389,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                     }
                 ],
             }
-        from clients import arr_remote_paths, arr_add_remote_path
+        from infrastructure.arr_client import arr_remote_paths, arr_add_remote_path
         existing = await arr_remote_paths(session, service)
         rp = remote_path.rstrip("/")
         lp = local_path.rstrip("/")
@@ -451,7 +451,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                         }
                     ],
                 }
-            from clients import arr_delete_queue
+            from infrastructure.arr_client import arr_delete_queue
             removal = await arr_delete_queue(
                 session,
                 service,

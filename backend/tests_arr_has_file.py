@@ -17,7 +17,7 @@ import asyncio
 import aiohttp
 import pytest
 
-from clients import arr_delete_queue, arr_has_file
+from infrastructure.arr_client import arr_delete_queue, arr_has_file
 from tests_routes import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
