@@ -522,6 +522,62 @@ def own_grabs_latest_map(
     return {key: row["grabbed_at"] for key, row in rows.items()}
 
 
+def own_grabs_for(source: str, kind: str, item_id: int) -> list[dict]:
+    """Every own-grab row for ONE title, oldest first, as plain dicts.
+
+    The full history behind a single mark: a movie can have been grabbed at
+    1080p into the library and later at 2160p into `path_4k`, and a surface
+    answering "what do we already have?" must see BOTH — collapsing to the
+    newest row would hide the first grab, and a missing grab reads as "we
+    never downloaded this", which authorizes downloading it again. The reader
+    returns full rows rather than a projection because the caller renders
+    `quality`, `destination` and `grabbed_at` from the SAME row, for the reason
+    `own_grabs_latest_rows` gives: mixing a field from one grab with a field
+    from another is exactly the wrong answer that shape makes impossible.
+
+    Keyed identically to `own_grabs_latest_rows`: ``(source, kind, id)`` with
+    ``kind`` in ``{"movie", "episode", "series"}``. ``movie_id`` wins when a
+    row somehow carries both ids, and a series key matches every episode grab
+    of that series — so a row is findable under exactly the keys that reader
+    would assign it, and the two surfaces can never disagree about which rows
+    belong to a title. An unknown ``kind`` raises ValueError: returning ``[]``
+    would claim "never grabbed", and that is the wrong answer a typo must not
+    be able to produce.
+
+    There is deliberately NO ``LIMIT`` and NO time window: every other reader
+    bounds its read (`list_own_grabs` caps at 200 rows, the mark readers bound
+    themselves to a lookback), and any bound here would silently drop a grab
+    of THIS title. A dropped grab reads as "we never downloaded this" — the
+    wrong answer that lets someone download it twice. The result is bounded by
+    how many times this title was grabbed, which is small.
+
+    Degrades to ``[]`` when the store is unavailable or the read fails, like
+    every other reader here — never raises.
+    """
+    column = {
+        "movie": "movie_id = ?",
+        # `movie_id` wins when both are set, matching the keying above: a row
+        # keyed as a movie must not ALSO surface under an episode key.
+        "episode": "movie_id IS NULL AND episode_id = ?",
+        "series": "series_id = ?",
+    }.get(kind)
+    if column is None:
+        raise ValueError(f"unknown own-grab kind: {kind!r}")
+    with _lock:
+        if _conn is None:
+            return []
+        try:
+            rows = _conn.execute(
+                f"SELECT * FROM own_grabs WHERE source = ? AND {column} "
+                "ORDER BY grabbed_at ASC, id ASC",
+                (source, item_id),
+            ).fetchall()
+            return [dict(row) for row in rows]
+        except sqlite3.Error as exc:
+            log.warning("Could not read own grabs for %s/%s/%s: %s", source, kind, item_id, exc)
+            return []
+
+
 def record_own_grab(
     source: str,
     *,
