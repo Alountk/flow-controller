@@ -102,14 +102,16 @@ es refactor puro. Cualquier cambio observable es un bug de este trabajo.
 - [x] **T-6** — `infrastructure/arr_client.py` + **alias de módulo** · ratchet **9147 → 7395**
 - [x] **T-7** — `infrastructure/sqlite_history.py` + alias · ratchet **7395 → 6515**
 - [x] **T-8** — `infrastructure/settings_store.py` + `infrastructure/credentials.py` + alias · ratchet **6515 → 6005**
-- [ ] T-5, T-9 … T-12 pendientes
+- [x] **T-5 (primer puerto) + T-9** — `application/ports.py` (`FileStorage`, `CopyCancelled`) + `infrastructure/file_storage.py` · ratchet **6005 → 5989**
+- [ ] T-10 … T-12 pendientes
 - [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
 - [x] **T-3** — `domain/policy.py` + shim · ratchet **9434 → 9162**
 - [x] **T-4** — `domain/quality.py` (regla pura) + envoltorio en `config.py` · ratchet **9162 → 9147** · +9 tests
 - [x] **T-6** — `infrastructure/arr_client.py` + **alias de módulo** · ratchet **9147 → 7395**
 - [x] **T-7** — `infrastructure/sqlite_history.py` + alias · ratchet **7395 → 6515**
 - [x] **T-8** — `infrastructure/settings_store.py` + `infrastructure/credentials.py` + alias · ratchet **6515 → 6005**
-- [ ] T-5, T-9 … T-12 pendientes
+- [x] **T-5 (primer puerto) + T-9** — `application/ports.py` (`FileStorage`, `CopyCancelled`) + `infrastructure/file_storage.py` · ratchet **6005 → 5989**
+- [ ] T-10 … T-12 pendientes
 
 ## Próximo paso
 

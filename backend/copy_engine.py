@@ -1,8 +1,5 @@
 import asyncio
-import errno
 import logging
-import os
-import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -33,11 +30,18 @@ import config
 
 log = logging.getLogger("flow-controller")
 
-COPY_CHUNK_SIZE = 1024 * 1024  # 1 MB
+# The transfer itself lives behind the FileStorage port. This module knows HOW
+# the app tracks a copy; infrastructure knows HOW bytes move. Neither has any
+# business knowing the other, which is what `copy_file_chunked` below exists to
+# keep true at the seam.
+from application.ports import CopyCancelled, FileStorage  # noqa: F401  (CopyCancelled is caught here)
+from infrastructure.file_storage import storage as _local_storage
 
-
-class CopyCancelled(Exception):
-    """Excepción lanzada cuando el usuario cancela una copia."""
+#: Typed at the port, not at the adapter. This module's question is "something
+#: that copies files", never "the local filesystem" — the composition root is
+#: free to hand it a different one, and vulture is right that a type nobody
+#: names is a type nobody is relying on.
+file_storage: FileStorage = _local_storage
 
 
 def cleanup_tasks():
@@ -46,46 +50,26 @@ def cleanup_tasks():
 
 
 def copy_file_chunked(src: Path, dst: Path, task_id: str | None = None, total_bytes: int = 0, copied_bytes: int = 0) -> int:
-    # A hardlink is instant, costs no extra space and keeps the download seeding
-    # from the same inode, so try it before streaming any bytes. Only the
-    # filesystem decides: same device links, a different one raises EXDEV.
-    try:
-        os.link(src, dst)
-        return src.stat().st_size
-    except OSError as exc:
-        if exc.errno == errno.EXDEV:
-            # Expected: source and destination live on different filesystems.
-            log.debug("copy_file_chunked: %s and %s are on different filesystems, copying", src, dst)
-        else:
-            log.warning(
-                "copy_file_chunked: hardlink failed (errno %s %s) for %s, falling back to copy",
-                exc.errno,
-                errno.errorcode.get(exc.errno, "unknown"),
-                src,
-            )
-    written = 0
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(dir=dst.parent, delete=False, prefix=".copy_") as fdst:
-            tmp_path = fdst.name
-            with open(src, 'rb') as fsrc:
-                while True:
-                    if task_id and copy_tasks.is_cancelled(task_id):
-                        raise CopyCancelled(f"cancelado durante copia de {src.name}")
-                    chunk = fsrc.read(COPY_CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    fdst.write(chunk)
-                    written += len(chunk)
-                    if task_id:
-                        copy_tasks.update(task_id, copied_bytes=copied_bytes + written, total_bytes=total_bytes)
-        os.rename(tmp_path, str(dst))
-        tmp_path = None
-    except Exception:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-        raise
-    return written
+    """Copy one file, reporting through the app's task record.
+
+    A thin seam: the transfer only ever sees two callables and cannot know that
+    a task manager exists. `copy_tasks` and `task_id` are wired in here, where
+    the app's vocabulary is the caller's vocabulary.
+    """
+
+    def _is_cancelled() -> bool:
+        return bool(task_id) and copy_tasks.is_cancelled(task_id)
+
+    def _on_progress(written: int) -> None:
+        if task_id:
+            copy_tasks.update(task_id, copied_bytes=copied_bytes + written, total_bytes=total_bytes)
+
+    return file_storage.copy_file(
+        src,
+        dst,
+        is_cancelled=_is_cancelled if task_id else None,
+        on_progress=_on_progress if task_id else None,
+    )
 
 
 def copy_files_to_root(output_path: str, root_folder: str, *, is_host_path: bool = False, task_id: str | None = None, target_name: str | None = None) -> dict:
