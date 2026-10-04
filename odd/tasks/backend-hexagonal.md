@@ -99,12 +99,18 @@ es refactor puro. Cualquier cambio observable es un bug de este trabajo.
 - [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
 - [x] **T-3** — `domain/policy.py` + shim · ratchet **9434 → 9162**
 - [x] **T-4** — `domain/quality.py` (regla pura) + envoltorio en `config.py` · ratchet **9162 → 9147** · +9 tests
-- [ ] T-5 … T-12 pendientes
+- [x] **T-6** — `infrastructure/arr_client.py` + **alias de módulo** · ratchet **9147 → 7395**
+- [ ] T-5, T-7 … T-12 pendientes
 - [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
 - [x] **T-3** — `domain/policy.py` + shim · ratchet **9434 → 9162**
 - [x] **T-4** — `domain/quality.py` (regla pura) + envoltorio en `config.py` · ratchet **9162 → 9147** · +9 tests
-- [ ] T-5 … T-12 pendientes
+- [x] **T-6** — `infrastructure/arr_client.py` + **alias de módulo** · ratchet **9147 → 7395**
+- [ ] T-5, T-7 … T-12 pendientes
 
 ## Próximo paso
 
-**T-5**: `application/ports.py` — `Protocol` para `ArrPort`, `HistoryPort`, `SettingsPort`, `FilesystemPort` (solo aditivo).
+**T-5 (reordenado tras T-6…T-9)**: los puertos nacen de lo que el caso de uso necesita. `clients.*` son **57 funciones** de 4 sistemas: un `ArrPort` con 57 métodos **espejaría el módulo dios**, no modelaría un límite. Se diseña `application/ports.py` **al lado de** `application/use_cases/` (T-10), donde cada caso de uso nombra lo que pide. `HistoryStore`/`SettingsStore` sí son cohesivos ya y saldrán con su caso de uso.
+
+### ⚠️ Patron de shim: ALIAS, no re-export (aprendido en T-6)
+
+`sys.modules[__name__] = _impl` — hacer que `clients` **sea** `arr_client`. El re-export normal **desconecta los parches**: `patch("clients.arr_command")` cae en la copia y la implementación sigue llamando a la suya → el test queda en verde probando nada. Verificado A/B en `/tmp/opencode/aliastest`. **Usar alias en T-7 (history), T-8 y T-9.**
