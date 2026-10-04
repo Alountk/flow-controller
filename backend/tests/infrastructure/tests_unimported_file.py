@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 from infrastructure import arr_client as clients
 from infrastructure.arr_client import fetch_all_movies_detailed
-from tests_routes import CONFIGURED_RADARR_URL, _StubSession, client
+from tests._stubs import CONFIGURED_RADARR_URL, _StubSession, client
 
 RADARR_URL = CONFIGURED_RADARR_URL
 

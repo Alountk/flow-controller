@@ -18,7 +18,7 @@ import aiohttp
 import pytest
 
 from infrastructure.arr_client import arr_delete_queue, arr_has_file
-from tests_routes import _StubSession
+from tests._stubs import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
 SONARR_URL = "http://sonarr.test:8989"

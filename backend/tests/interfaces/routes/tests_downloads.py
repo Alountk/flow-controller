@@ -10,7 +10,7 @@ import asyncio
 from unittest.mock import patch
 
 from interfaces.http.routes.downloads import _build_download, _progress_percent, collect_downloads
-from tests_routes import _StubSession
+from tests._stubs import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
 SONARR_URL = "http://sonarr.test:8989"

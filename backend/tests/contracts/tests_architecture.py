@@ -30,7 +30,7 @@ from __future__ import annotations
 import ast
 import pathlib
 
-BACKEND = pathlib.Path(__file__).resolve().parent
+from tests import BACKEND_ROOT as BACKEND  # noqa: E402
 
 LAYERS = ("domain", "application", "infrastructure", "interfaces")
 

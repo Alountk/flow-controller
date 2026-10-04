@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pathlib
 
-REPO = pathlib.Path(__file__).resolve().parent.parent
+from tests import REPO_ROOT as REPO  # noqa: E402
 SRC = REPO / "frontend" / "src"
 DIST = REPO / "frontend" / "dist" / "index.html"
 
