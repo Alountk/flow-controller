@@ -1,6 +1,6 @@
 """Driver for one auto-copy sweep.
 
-The policy lives in ``auto_copy.py`` and stays pure; this module is where the
+The policy lives in ``domain.policy`` and stays pure; this module is where the
 I/O lives: the traces the app already computes, the own-grab registry, the arr
 probe, the durable idempotency marker and the copy engine.
 

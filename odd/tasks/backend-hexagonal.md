@@ -97,10 +97,12 @@ es refactor puro. Cualquier cambio observable es un bug de este trabajo.
 
 - [x] **T-1** — esqueleto + `tests_architecture.py` (3 tests) · ratchet `MAX_LEGACY_LOC = 9630`
 - [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
-- [ ] T-3 … T-12 pendientes
+- [x] **T-3** — `domain/policy.py` + shim · ratchet **9434 → 9162**
+- [ ] T-4 … T-12 pendientes
 - [x] **T-2** — `domain/naming.py` + shim · ratchet **9630 → 9434**
-- [ ] T-3 … T-12 pendientes
+- [x] **T-3** — `domain/policy.py` + shim · ratchet **9434 → 9162**
+- [ ] T-4 … T-12 pendientes
 
 ## Próximo paso
 
-**T-3**: mover `auto_copy.py` a `domain/policy.py` con shim (~317 líneas de política pura).
+**T-4**: extraer `domain/quality.py` desde los helpers puros de `config.py`.

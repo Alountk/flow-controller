@@ -21,7 +21,10 @@ from auto_copy import (
     matches_own_grab,
 )
 
-MODULE_PATH = Path(__file__).resolve().parent / "auto_copy.py"
+#: The purity check below reads source, so it must read the IMPLEMENTATION.
+#: Pointed at the re-export instead it would scan a file made of `from
+#: domain.policy import ...` and pass while proving nothing at all.
+MODULE_PATH = Path(__file__).resolve().parent / "domain" / "policy.py"
 
 
 def _trace(stage=None, queue=None):
