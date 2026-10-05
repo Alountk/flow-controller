@@ -1342,36 +1342,88 @@ async def fetch_wanted_episodes(session: aiohttp.ClientSession, service: dict, p
 
 
 async def arr_series_episodes(session: aiohttp.ClientSession, service: dict, series_id: int) -> dict:
-    """Episodios de una serie: la materia prima para resolver S##E## en el navegador.
+    """Episodios de una serie, con el archivo que Sonarr ya tiene.
 
-    Sonarr devuelve el mismo EpisodeResource que ya consume `fetch_wanted_episodes`,
-    así que los nombres de campo no son una suposición.
+    Two endpoints, because neither one alone is the row this draws. Sonarr's
+    ``/api/v3/episode`` answers WHETHER an episode has its file (``hasFile``)
+    and carries ``episodeFileId``; the path and the quality name live on
+    ``/api/v3/episodefile``, which is only reachable by that id. Joining them
+    gives what the prototype puts on a row: the pill, the quality tag and the
+    folder it sits in.
+
+    They are asked in parallel — neither depends on the other, and the panel is
+    the slowest page in the app to reach.
+
+    **A failed file lookup does not fail the list.** Episodes come back with
+    ``has_file`` intact and ``path``/``quality`` null. That combination is not a
+    gap in the data: ``has_file: true`` with no path reads as "it is there and
+    we could not read it", which is what happened, rather than "it is not
+    there", which would be a lie. Only a failure of the episode call itself
+    ends the request, as before.
+
+    The field names on both payloads are Sonarr's own, not a superset invented
+    here: ``EpisodeResource.hasFile``/``episodeFileId`` and
+    ``EpisodeFileResource.path``/``quality.quality.name`` were read from the
+    live instance before this was written.
     """
     headers = arr_headers(service["api_key"])
-    try:
+    url = service["url"]
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
+
+    async def _episodes() -> dict:
         async with session.get(
-            f"{service['url']}/api/v3/episode",
+            f"{url}/api/v3/episode",
             params={"seriesId": str(series_id)},
             headers=headers,
-            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
+            timeout=timeout,
         ) as resp:
             if resp.status != 200:
                 return {"episodes": [], **arr_failure(service, status=resp.status)}
+            return {"episodes": await resp.json(content_type=None)}
+
+    async def _files() -> dict:
+        async with session.get(
+            f"{url}/api/v3/episodefile",
+            params={"seriesId": str(series_id)},
+            headers=headers,
+            timeout=timeout,
+        ) as resp:
+            if resp.status != 200:
+                log.warning("arr_series_episodes episodefile status=%d", resp.status)
+                return {}
             data = await resp.json(content_type=None)
-            episodes = [
-                {
-                    "id": ep.get("id"),
-                    "season_number": ep.get("seasonNumber"),
-                    "episode_number": ep.get("episodeNumber"),
-                    "title": ep.get("title", ""),
-                    "air_date": ep.get("airDateUtc", ""),
-                }
-                for ep in data
-                if isinstance(ep, dict)
-            ]
-            return {"episodes": episodes}
-    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
-        return {"episodes": [], **arr_failure(service, exc=exc)}
+            return {
+                f["id"]: f
+                for f in data
+                if isinstance(f, dict) and f.get("id") is not None
+            }
+
+    payload, raw_files = await asyncio.gather(_episodes(), _files())
+
+    if "error" in payload:
+        return payload
+
+    episodes: list[dict] = []
+    for ep in payload["episodes"]:
+        if not isinstance(ep, dict):
+            continue
+        # A None file id is not "id 0": it means Sonarr has no file for this
+        # episode, and a dict lookup on it would raise KeyError on the next line.
+        file_id = ep.get("episodeFileId")
+        entry = raw_files.get(file_id) if file_id is not None else None
+        quality = (entry or {}).get("quality") or {}
+        quality = quality.get("quality") if isinstance(quality, dict) else {}
+        episodes.append({
+            "id": ep.get("id"),
+            "season_number": ep.get("seasonNumber"),
+            "episode_number": ep.get("episodeNumber"),
+            "title": ep.get("title", ""),
+            "air_date": ep.get("airDateUtc", ""),
+            "has_file": ep.get("hasFile", False),
+            "quality": (quality or {}).get("name") if isinstance(quality, dict) else None,
+            "path": (entry or {}).get("path"),
+        })
+    return {"episodes": episodes}
 
 
 async def arr_search_missing_movies(session: aiohttp.ClientSession, service: dict) -> dict:
