@@ -406,13 +406,21 @@ export interface WantedEpisode {
 }
 
 /** One episode of a series, as returned by /api/wanted/series/{id}/episodes.
- *  Used to resolve the `S##E##` in a file name to its title and air date. */
+ *  Used to resolve the `S##E##` in a file name to its title and air date, and
+ *  listed by the detail panel's Episodios tab. */
 export interface SeriesEpisode {
   id: number | null
   season_number: number | null
   episode_number: number | null
   title: string
   air_date: string
+  has_file: boolean
+  /** Quality of the episode's file, or null when it could not be read — a
+   *  null beside `has_file: true` means the file IS there and we could not
+   *  inspect it, never that there is no file. */
+  quality: string | null
+  /** Folder holding the episode's file, under the same null contract. */
+  path: string | null
 }
 
 export interface WantedService {

@@ -727,6 +727,71 @@
   overflow-wrap: anywhere;
 }
 
+/* ---- Episodes (Episodios tab) ----
+ * The season chips above the table: they grow DOWN to two rows and scroll
+ * after that. Chip height lives in --chip-h alone, so a future chip restyle
+ * moves the cap with it instead of leaving a hard-coded 58px behind. The
+ * buttons are `.sec-class-chip`, the same pill the Calidad filters use. */
+.eseasons {
+  --chip-h: 26px;
+  --gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  max-height: calc(2 * var(--chip-h) + var(--gap));
+  overflow-y: auto;
+  margin: 10px 12px 8px;
+}
+
+/* The header row each season group is preceded by: name, year, and only the
+   count clauses that are true. Scoped under the table to out-specify the
+   generic `.sec-ep-table td` cell voice below. */
+.sec-ep-table .sec-season-head td {
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 7px 14px;
+  color: var(--text);
+}
+
+.sec-ep-table .sec-season-head .sec-season-name {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.sec-ep-table .sec-season-head .sec-season-year {
+  margin-left: 8px;
+}
+
+.sec-ep-table .sec-season-head .sec-season-counts {
+  margin-left: 8px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+/* Episode rows are selectable: pointer, keyboard, and the marked one. */
+.sec-ep-table .sec-ep-row {
+  cursor: pointer;
+}
+
+.sec-ep-table .sec-ep-row:hover {
+  background: var(--bg-elev-2);
+}
+
+.sec-ep-table .sec-ep-row.is-marked {
+  background: var(--accent-soft);
+}
+
+.sec-ep-table .sec-ep-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.sec-ep-table .sec-ep-path {
+  overflow-wrap: anywhere;
+}
+
 /* The two listings keep the section's table voice; the path column may hold
    long names, so it wraps instead of clipping. */
 .sec-files-table,
