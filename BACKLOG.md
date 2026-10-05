@@ -480,7 +480,7 @@ limitarlo a `ALLOWED_ROOTS`.
 
 ---
 
-### F-06 — Estudio: motor propio de aMule · **Estudio (para más adelante)**
+### F-06 — Estudio: implementación local de aMule · ✅ **Estudio entregado**
 
 Pedida: *"explorar el cómo sería de viable implementar un motor de amule en nuestro proyecto
 para tener más control sobre los archivos y el flow del programa"* — **para un estudio más
@@ -531,7 +531,29 @@ es copiar código**, y eso es compatible; pero **reutilizar código de aMule den
 proyecto MIT lo convertiría en GPL**. Cualquier opción que contemple fork o vinculación debe
 resolver eso *antes* de estimar esfuerzo.
 
-**No empieza hasta que se diga.** Sin fecha, sin PR, sin hueco en el orden.
+#### Resultado del estudio (2026-10-05) → `odd/tasks/f06-amule-local.md`
+
+**Medido sobre el código actual**: las llamadas cruzadas son **`/api/downloads`**, que hace
+**4 upstream por petición cada 4 s** = **60/min por pestaña** abierta. `/api/trace` ya tiene
+caché de 10 s y `/api/status` la mantiene `background_checker` a 15 s con **0 llamadas por
+petición** — **el único de los tres sin caché es el que más golpea**.
+
+**Evidencia contra (a) y (c)**: comprobado en PyPI — `amule`, `ed2kpy`, `ed2k-python`,
+`aMuleWeb` y `mldonkey` **no existen**; `pymule` es *McMule*, un framework de **electrodinámica
+cuántica** (coincidencia de nombre); `ed2k` 0.0.2.2 solo **calcula hashes**. **Cero bibliotecas
+Python de transferencia ED2K/Kad.** Confirma lo que arriba se sospechaba.
+
+**Nueva opción (e) — espejo local**: un solo sondeo en segundo plano y todo lo demás se sirve de
+memoria. **Usa el patrón que ya existe y está testeado** (`background_checker` + `status_cache`,
+`_trace_cache` con su TTL y su test).
+
+> ⚠️ **Las dos metas del encargo no son la misma pregunta**: *ahorrar llamadas* lo resuelve **(e)**
+> con coste bajo; *controlar el emplazamiento* solo lo dan **(a)** o **(b)**.
+
+**Recomendación**: **(e) primero** → **(b) después si hace falta** (resolver antes la GPL) →
+**(a) y (c) descartados** por evidencia, no por impresión.
+
+Sin decidir: intervalo y TTL de (e) · licencia GPL exacta de (b).
 
 ---
 
@@ -774,4 +796,4 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 
 ## Orden propuesto
 
-`F-07` → `F-01` → `C-01/C-02` — **F-06 aparte, sin fecha**
+`F-07` → `F-01` → `C-01/C-02` — **F-06: estudio entregado** (→ `odd/tasks/f06-amule-local.md`); *la implementación* sigue sin fecha hasta que se elija (e) o (b)
