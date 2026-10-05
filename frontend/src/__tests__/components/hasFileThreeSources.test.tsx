@@ -577,6 +577,11 @@ describe('the ids · what each section card puts on the item', () => {
 
     fireEvent.click(rowOf('Some Show'))
 
+    // What this pins is WHICH id is asked (series_id, never episode_id), not
+    // when the modal happens to mount: skipping the tab click was incidental
+    // setup that only worked while Releases was the default tab.
+    fireEvent.click(screen.getByRole('button', { name: 'Releases' }))
+
     await waitFor(() => expect(grabUrls()).toHaveLength(1))
     expect(grabUrls()[0]).toContain('series_id=3')
     expect(grabUrls()[0]).not.toContain('episode_id')
@@ -589,6 +594,11 @@ describe('the ids · what each section card puts on the item', () => {
     await screen.findByRole('group', { name: 'Filtrar por clase' })
 
     fireEvent.click(rowOf('Some Show'))
+
+    // Same claim as above: WHICH id is asked (series_id, never episode_id),
+    // not when the modal happens to mount — the missing tab click was
+    // incidental setup that only worked while Releases was the default tab.
+    fireEvent.click(screen.getByRole('button', { name: 'Releases' }))
 
     await waitFor(() => expect(grabUrls()).toHaveLength(1))
     expect(grabUrls()[0]).toContain('series_id=3')

@@ -8,7 +8,7 @@ import { browsePath } from '../api/files'
 import { fetchSeriesEpisodes } from '../api/wanted'
 import { episodeTagKey } from '../utils/episodeTag'
 import { formatGrabMark } from '../utils/grabMark'
-import type { AllSeries, BrowseResponse, CalendarItem, PaginatedResponse } from '../types'
+import type { AllSeries, BrowseResponse, CalendarItem, PaginatedResponse, SeriesEpisode } from '../types'
 import './Sections.css'
 
 /**
@@ -211,6 +211,50 @@ function estrenoRelease(item: CalendarItem): ReleaseSearchItem {
     // A calendar item's id is its own kind — the card says which one, and
     // the grabs history must be asked under exactly that key.
     idKind: item.type,
+  }
+}
+
+/* ── An episode marked in the Episodios tab ──────────────────────────────────
+ * The twin of the two builders above, fed by ONE row of the episodes table
+ * instead of a calendar card. `seriesTitle` travels as an argument because a
+ * SeriesEpisode payload carries no series title of its own — it is read off
+ * the selected series' detail, the row the episodes belong to.
+ */
+
+function episodeDetail(ep: SeriesEpisode, seriesTitle: string): MediaDetail {
+  const meta: { label: string; value: string }[] = [
+    {
+      label: 'Episodio',
+      value: `${episodeTagKey(ep.season_number ?? 0, ep.episode_number ?? 0)} · ${ep.title}`,
+    },
+  ]
+  if (ep.air_date) meta.push({ label: 'Emitido', value: ep.air_date.slice(0, 10) })
+  // Only the flag states anything: an episode whose file exists but could not
+  // be read is still "Con archivo", and a payload that carries no flag at all
+  // renders unknown — never a "Sin archivo" nobody reported.
+  meta.push({
+    label: 'Estado',
+    value:
+      ep.has_file === true ? 'Con archivo' : ep.has_file === false ? 'Sin archivo' : '—',
+  })
+  return { title: seriesTitle, meta }
+}
+
+function episodeRelease(ep: SeriesEpisode, seriesTitle: string): ReleaseSearchItem {
+  return {
+    type: 'episode',
+    id: ep.id ?? 0,
+    title: ep.title,
+    series_title: seriesTitle,
+    season_number: ep.season_number,
+    episode_number: ep.episode_number,
+    date: ep.air_date ? ep.air_date.slice(0, 10) : undefined,
+    source: 'sonarr',
+    has_file: ep.has_file === true,
+    // The id IS this episode's: the grabs history must be asked under
+    // `episode_id=<ep.id>` — under the series id it would answer with some
+    // other show's episode carrying the same number.
+    idKind: 'episode',
   }
 }
 
@@ -559,19 +603,95 @@ function FilesList({ path }: { path: string }) {
 }
 
 /** The Episodios tab: every episode of the selected series, from the same
- *  endpoint the "En carpeta" navigator resolves S##E## names against. Only
- *  fields that payload carries: code, title and air date — no has_file,
- *  because the response has no such field. */
-function PanelEpisodes({ facts }: { facts: RowFacts }) {
+ *  endpoint the "En carpeta" navigator resolves S##E## names against, now
+ *  with the file facts PR #151 added to the payload. The list groups by
+ *  season behind one header row, filters through the season chips and marks
+ *  ONE episode — which never becomes the selection: see `selectRow`. */
+function PanelEpisodes({
+  facts,
+  marked,
+  onMark,
+}: {
+  facts: RowFacts
+  marked: SeriesEpisode | null
+  onMark: (ep: SeriesEpisode) => void
+}) {
   if (facts.state === 'empty') return null
   if (facts.state === 'missing') return <p className="sec-tab-note">{ROW_MISSING}</p>
   if (facts.seriesId == null) {
     return <p className="sec-tab-note">Esta entrada no tiene serie asociada</p>
   }
-  return <EpisodesList seriesId={facts.seriesId} />
+  return <EpisodesList seriesId={facts.seriesId} marked={marked} onMark={onMark} />
 }
 
-function EpisodesList({ seriesId }: { seriesId: number }) {
+const EPISODE_COLUMNS = ['Episodio', 'Título', 'Estado', 'Emitido', 'Calidad', 'Ruta']
+
+/** Identity of an episode row: its own id when the payload carries one, the
+ *  S##E## pair otherwise — never the array position, which shifts with the
+ *  season filter. */
+function episodeIdentity(ep: SeriesEpisode): string {
+  return ep.id != null ? `ep:${ep.id}` : `ep:${ep.season_number ?? 0}x${ep.episode_number ?? 0}`
+}
+
+function seasonLabel(season: number): string {
+  return `Season ${String(season).padStart(2, '0')}`
+}
+
+/** The row's own state, exactly as far as the payload states it: only an
+ *  explicit `has_file` says anything. A file that exists but could not be
+ *  read stays "En biblioteca"; a payload without the flag renders unknown —
+ *  never a state nobody reported. */
+function episodeState(ep: SeriesEpisode): string {
+  if (ep.has_file === true) return 'En biblioteca'
+  if (ep.has_file === false) return 'Falta'
+  return '—'
+}
+
+/** Seasons in ascending order, each with the episodes that belong to it. */
+function groupBySeason(
+  episodes: SeriesEpisode[],
+): { season: number; episodes: SeriesEpisode[] }[] {
+  const bySeason = new Map<number, SeriesEpisode[]>()
+  for (const ep of episodes) {
+    const season = ep.season_number ?? 0
+    const group = bySeason.get(season)
+    if (group) group.push(ep)
+    else bySeason.set(season, [ep])
+  }
+  return [...bySeason.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([season, list]) => ({ season, episodes: list }))
+}
+
+/** One season header: its name, the year its episodes aired in (omitted when
+ *  no episode of the season carries an air date) and only the clauses that
+ *  are true — a zero count is omitted, never shown as "0 en biblioteca". */
+function seasonHeader(episodes: SeriesEpisode[], season: number) {
+  const year = episodes.find((ep) => ep.air_date)?.air_date.slice(0, 4)
+  const clauses: string[] = []
+  const inLibrary = episodes.filter((ep) => ep.has_file === true).length
+  const missing = episodes.filter((ep) => ep.has_file === false).length
+  if (inLibrary > 0) clauses.push(`${inLibrary} en biblioteca`)
+  if (missing > 0) clauses.push(`${missing} falta`)
+  return (
+    <>
+      <span className="sec-season-name">{seasonLabel(season)}</span>
+      {year && <span className="sec-season-year">{year}</span>}
+      {clauses.length > 0 && <span className="sec-season-counts">· {clauses.join(' · ')}</span>}
+    </>
+  )
+}
+
+function EpisodesList({
+  seriesId,
+  marked,
+  onMark,
+}: {
+  seriesId: number
+  marked: SeriesEpisode | null
+  onMark: (ep: SeriesEpisode) => void
+}) {
+  const [season, setSeason] = useState<number | 'todas'>('todas')
   const query = useQuery({
     queryKey: ['panel-series-episodes', seriesId],
     queryFn: () => fetchSeriesEpisodes(seriesId),
@@ -598,25 +718,100 @@ function EpisodesList({ seriesId }: { seriesId: number }) {
   if (query.data.episodes.length === 0) {
     return <p className="sec-tab-note">Esta serie no tiene episodios</p>
   }
+
+  const episodes = query.data.episodes
+  const seasons = [...new Set(episodes.map((ep) => ep.season_number ?? 0))].sort((a, b) => a - b)
+  // The panel may have moved to another title while a season was on duty:
+  // a season this series does not own falls back to Todas instead of
+  // filtering the table down to nothing.
+  const activeSeason = season !== 'todas' && seasons.includes(season) ? season : 'todas'
+  const visible =
+    activeSeason === 'todas'
+      ? episodes
+      : episodes.filter((ep) => (ep.season_number ?? 0) === activeSeason)
+  const groups = groupBySeason(visible)
+  const markedKey = marked ? episodeIdentity(marked) : null
+  const seasonTotal = (value: number) =>
+    episodes.filter((ep) => (ep.season_number ?? 0) === value).length
+
   return (
-    <table className="sec-table sec-ep-table">
-      <thead>
-        <tr>
-          <th scope="col">Episodio</th>
-          <th scope="col">Título</th>
-          <th scope="col">Emitido</th>
-        </tr>
-      </thead>
-      <tbody>
-        {query.data.episodes.map((ep, index) => (
-          <tr key={ep.id ?? index}>
-            <td>{episodeTagKey(ep.season_number ?? 0, ep.episode_number ?? 0)}</td>
-            <td>{ep.title}</td>
-            <td>{ep.air_date ? ep.air_date.slice(0, 10) : '—'}</td>
-          </tr>
+    <>
+      <div className="eseasons" role="group" aria-label="Filtrar por temporada">
+        <button
+          type="button"
+          aria-pressed={activeSeason === 'todas'}
+          className={`sec-class-chip${activeSeason === 'todas' ? ' is-active' : ''}`}
+          onClick={() => setSeason('todas')}
+        >
+          Todas ({episodes.length})
+        </button>
+        {seasons.map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={activeSeason === value}
+            className={`sec-class-chip${activeSeason === value ? ' is-active' : ''}`}
+            onClick={() => setSeason(value)}
+          >
+            {seasonLabel(value)} ({seasonTotal(value)})
+          </button>
         ))}
-      </tbody>
-    </table>
+      </div>
+
+      <table className="sec-table sec-ep-table">
+        <thead>
+          <tr>
+            {EPISODE_COLUMNS.map((column) => (
+              <th key={column} scope="col">
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map(({ season: groupSeason, episodes: groupEpisodes }) => (
+            <Fragment key={groupSeason}>
+              <tr className="sec-season-head">
+                <td colSpan={EPISODE_COLUMNS.length}>
+                  {seasonHeader(groupEpisodes, groupSeason)}
+                </td>
+              </tr>
+              {groupEpisodes.map((ep) => {
+                const key = episodeIdentity(ep)
+                const isMarked = key === markedKey
+                return (
+                  <tr
+                    key={key}
+                    className={`sec-ep-row${isMarked ? ' is-marked' : ''}`}
+                    tabIndex={0}
+                    aria-selected={isMarked}
+                    onClick={() => onMark(ep)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onMark(ep)
+                      }
+                    }}
+                  >
+                    <td>{episodeTagKey(ep.season_number ?? 0, ep.episode_number ?? 0)}</td>
+                    <td>{ep.title}</td>
+                    <td>{episodeState(ep)}</td>
+                    <td>{ep.air_date ? ep.air_date.slice(0, 10) : '—'}</td>
+                    {/* Absent or unreadable quality/path render the dash the
+                        payload allows — never an invented value, and never a
+                        "no file" the has_file flag did not report. */}
+                    <td>{ep.quality || '—'}</td>
+                    <td className="sec-ep-path" title={ep.path || undefined}>
+                      {ep.path || '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </>
   )
 }
 
@@ -641,19 +836,49 @@ function PanelHistory({ facts }: { facts: RowFacts }) {
 export function Series() {
   const [view, setView] = useState<SubView>('biblioteca')
   const [selected, setSelected] = useState<MediaSelection | null>(null)
-  // Which detail tab is on screen. Releases first: it is the tab the panel
-  // has opened with since PR 5, and every other tab is live since PR 6.
-  const [detailTab, setDetailTab] = useState<string>('Releases')
+  // Which detail tab is on screen. A row selection lands on Episodios — the
+  // operator opens a series on its episodes — and every other tab is live.
+  const [detailTab, setDetailTab] = useState<string>('Episodios')
+  // The episode marked INSIDE the panel, never folded into `selected`: that
+  // selection is the SERIES, and PanelEpisodes renders from facts.seriesId
+  // derived from it — an episode's id would null that id and unmount the
+  // very list that marked it. Cleared wherever `selected` changes.
+  const [markedEpisode, setMarkedEpisode] = useState<SeriesEpisode | null>(null)
   const queryClient = useQueryClient()
   const uid = useId()
   const active = SUB_VIEWS.find((s) => s.id === view) ?? SUB_VIEWS[0]
   const facts = selectedRowFacts(queryClient, view, selected)
+  // The header speaks for the marked episode when there is one, and for the
+  // selection otherwise — `selected` itself is only read, never rewritten.
+  const detail = selected
+    ? markedEpisode
+      ? episodeDetail(markedEpisode, selected.detail.title)
+      : selected.detail
+    : null
 
   function changeView(next: SubView) {
     setView(next)
-    // The selection belongs to the list it came from: a switch resets it,
-    // and with it the tab that was showing the deselected row's data.
+    // The selection belongs to the list it came from: a switch resets it and
+    // the mark it carried, and with it the tab that was showing that row's
+    // data — back to Releases, where a fresh view waits for its own selection.
     setSelected(null)
+    setMarkedEpisode(null)
+    setDetailTab('Releases')
+  }
+
+  /** A row of the LIST becomes the selection. The tab follows it to
+   *  Episodios, and any episode mark dies with the row that carried it. */
+  function selectRow(selection: MediaSelection) {
+    setSelected(selection)
+    setMarkedEpisode(null)
+    setDetailTab('Episodios')
+  }
+
+  /** Marking an episode keeps the series selected and sends the panel to the
+   *  search that episode needs — the Releases block keys its item on the mark,
+   *  not on the series row. */
+  function markEpisode(ep: SeriesEpisode) {
+    setMarkedEpisode(ep)
     setDetailTab('Releases')
   }
 
@@ -700,17 +925,22 @@ export function Series() {
             // as a modal, which is what the other sub-views' rows do.
             <Calendar
               type="episode"
-              onSelect={(item) =>
+              onSelect={(item) => {
+                // A calendar card is not a row of the list: it is an episode
+                // with no series id to list (see selectedRowFacts), so it
+                // selects without landing on Episodios — Releases stays on
+                // duty, as it has since the view switch put it there.
+                setMarkedEpisode(null)
                 setSelected({
                   id: item.id,
                   detail: estrenoDetail(item),
                   release: estrenoRelease(item),
                 })
-              }
+              }}
             />
           ) : view === 'calidad' ? (
             // PR 4: the class list. Its rows are selectable like the pane's.
-            <CalidadSeries selectedId={selected?.id ?? null} onSelect={setSelected} />
+            <CalidadSeries selectedId={selected?.id ?? null} onSelect={selectRow} />
           ) : (
             // The pane styles its rows under a `.wanted` ancestor (its action
             // buttons are `.wanted .search-item`), so the column provides it.
@@ -727,7 +957,7 @@ export function Series() {
                 showFilterButtons
                 onFilterChange={(f) => setView(f === 'missing' ? 'faltantes' : 'biblioteca')}
                 selectedId={selected?.id ?? null}
-                onSelect={setSelected}
+                onSelect={selectRow}
                 variant="section"
               />
             </div>
@@ -736,30 +966,30 @@ export function Series() {
 
         <section className="sec-detail" aria-label="Panel de detalle">
           <div className="sec-detail-head">
-            {selected?.detail.poster ? (
+            {detail?.poster ? (
               <img
                 className="sec-poster sec-poster-img"
-                src={selected.detail.poster}
+                src={detail.poster}
                 alt=""
               />
             ) : (
               <span className="sec-poster" aria-hidden="true" />
             )}
             <div className="sec-detail-titles">
-              <h3>{selected ? selected.detail.title : 'Sin selección'}</h3>
+              <h3>{detail ? detail.title : 'Sin selección'}</h3>
               <dl className="sec-meta">
-                {selected ? (
+                {detail ? (
                   <>
-                    {selected.detail.meta.map((m) => (
+                    {detail.meta.map((m) => (
                       <Fragment key={m.label}>
                         <dt>{m.label}</dt>
                         <dd>{m.value}</dd>
                       </Fragment>
                     ))}
-                    {selected.detail.grab && (
+                    {detail.grab && (
                       <>
                         <dt>Descarga</dt>
-                        <dd className="sec-grabbed">{selected.detail.grab}</dd>
+                        <dd className="sec-grabbed">{detail.grab}</dd>
                       </>
                     )}
                   </>
@@ -800,14 +1030,19 @@ export function Series() {
             <p className="sec-empty sec-empty-detail">{PANEL_EMPTY}</p>
           )}
 
-          {/* The release search, inline in the panel, for the row the
-              operator selected — Releases tab since PR 5. A different row is
-              a different search: keyed so no state (results, filters, marks)
-              leaks from one title to the next. */}
+          {/* The release search, inline in the panel: for the row the
+              operator selected — or, once an episode is marked, for THAT
+              episode. A different key is a different search: no state
+              (results, filters, marks) may leak from one to the next, which
+              is why marking an episode changes the key as a row change does. */}
           {selected && detailTab === 'Releases' && (
             <ReleaseSearchModal
-              key={selected.id}
-              item={selected.release}
+              key={markedEpisode ? episodeIdentity(markedEpisode) : selected.id}
+              item={
+                markedEpisode
+                  ? episodeRelease(markedEpisode, selected.detail.title)
+                  : selected.release
+              }
               presentation="panel"
             />
           )}
@@ -815,7 +1050,9 @@ export function Series() {
           {/* PR 6: the three tabs that used to be markers. Each renders its
               own honest states; with no selection the panel shows PANEL_EMPTY
               above and no tab content at all. */}
-          {selected && detailTab === 'Episodios' && <PanelEpisodes facts={facts} />}
+          {selected && detailTab === 'Episodios' && (
+            <PanelEpisodes facts={facts} marked={markedEpisode} onMark={markEpisode} />
+          )}
           {selected && detailTab === 'Archivos' && <PanelFiles facts={facts} />}
           {selected && detailTab === 'Historial' && <PanelHistory facts={facts} />}
 
