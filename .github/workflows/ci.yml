@@ -372,6 +372,36 @@ jobs:
           docker push "$IMAGE:sha-$SHORT_SHA"
           echo "✅ Image pushed: $IMAGE:latest and $IMAGE:sha-$SHORT_SHA"
 
+      - name: Notify Portainer to redeploy
+        # The stack watches the image, so a successful push is the only thing
+        # that should move it. The URL lives in a secret — it is a bearer token
+        # in a path — and a webhook that is down must never fail the job: the
+        # image is already public by this point, and turning a green build red
+        # because Portainer blinked would hide the only thing the pipeline
+        # actually proved.
+        env:
+          PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          if [ -z "$PORTAINER_WEBHOOK_URL" ]; then
+            echo "PORTAINER_WEBHOOK_URL no definido — deploy automático omitido"
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/portainer-body -w '%{http_code}' \
+                 --connect-timeout 10 --max-time 60 \
+                 -X POST "$PORTAINER_WEBHOOK_URL" 2>/dev/null || echo 000)
+          case "$code" in
+            200|204)
+              echo "✅ Portainer aceptó el despliegue (HTTP $code)"
+              ;;
+            000)
+              echo "::warning::Portainer no respondió — la imagen se publicó de todos modos"
+              ;;
+            *)
+              echo "::warning::Webhook devolvió HTTP $code — la imagen se publicó de todos modos"
+              sed 's/^/    /' /tmp/portainer-body 2>/dev/null || true
+              ;;
+          esac
+
       - name: Keep only 5 latest versions
         uses: actions/delete-package-versions@v5
         with:
