@@ -698,8 +698,35 @@ cuenta:
 - `Trazabilidad` es la **única vista** de `Trace` / cola / etapas — retirarla sin sustituirla
   deja a la app sin observabilidad de las descargas.
 - Ambas están en `NAV_ITEMS`, `PAGE_PATHS`, `PAGE_TITLES` y en `hiddenPages` (leer de
-  Radarr/Sonarr): el retiro es el mismo patrón que ya se aplicó a `Faltantes`/`Calendario` en
-  el **PR `#116`**, incluida la **migración de sus tests**.
+  Radarr/Sonarr): el retiro es el mismo patrón que ya se aplicó a `Faltantes`/`Calendario` en el
+  **PR `#116`**, incluida la **migración de sus tests**.
+
+### F-10 — Raíces etiquetadas de destinos en el explorador (biblioteca · 4K · 3D) · **Pequeña** · 🟡 **Implementado — pendiente de PR**
+
+Pedida: que la pestaña *Archivos* muestre los tres tipos de destino como raíces
+etiquetadas, **solo si están configuradas y existen en disco**.
+
+| Raíz | Origen | Etiqueta (`label`) |
+|---|---|---|
+| Los montajes | `config.ALLOWED_ROOTS` | su propio nombre · `role: navigation` |
+| Bibliotecas de Radarr/Sonarr | `arr_root_folders`, en paralelo (`asyncio.gather`) | `Biblioteca (películas/series) · 1080 y por debajo` · `role: library` + `service` |
+| `PATH_4K` / `PATH_3D` | configuración | `4K · 2160p` / `3D` · `role: 4k` / `3d` |
+
+- **Aditivo**: `GET /api/files/roots` gana `role`, `label`, `service` y `detail`;
+  `path` y `name` quedan intactos (tres consumidores los leen).
+- **Orden = comportamiento**: navegación primero — los dos paneles siguen
+  empezando en `roots[0]`/`roots[1]`.
+- Un arr configurado sin carpetas raíz se **dice** en `detail` (misma regla que
+  `calendar_destinations`); sin arr configurado, `detail` vacío: no falló nada.
+- ⚠️ `config.rebuild()` mete `PATH_4K`/`PATH_3D` **dentro** de `ALLOWED_ROOTS`
+  (el motor de copia debe poder escribirlos), así que el paso de navegación los
+  excluye para no listarlos dos veces.
+- UI: cada opción pinta `label ?? name` y los destinos van en
+  `<optgroup label="Destinos">`, renderizado solo si hay algún destino.
+
+Tests: 8 casos nuevos en `backend/tests/interfaces/routes/tests_files_roots.py`
++ 1 en `FileManager.test.tsx`. Detalle y criterios en
+`odd/tasks/archivos-tres-destinos.md`.
 
 ## 🔵 Recomendaciones y reglas del ciclo
 
