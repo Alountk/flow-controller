@@ -142,7 +142,7 @@ function renderFaltantes(Component: typeof Peliculas | typeof Series) {
       <Component />
     </QueryClientProvider>,
   )
-  fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+  fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
 }
 
 /** Opens the modal and points the volume selector at /mnt/storage. */

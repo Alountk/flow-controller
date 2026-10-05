@@ -59,7 +59,7 @@ function renderFaltantes() {
       <Peliculas />
     </QueryClientProvider>,
   )
-  fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+  fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
 }
 
 describe('wanted failure is reported, not disguised', () => {

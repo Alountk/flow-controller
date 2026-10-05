@@ -743,21 +743,27 @@
   margin: 10px 12px 8px;
 }
 
-/* The header row each season group is preceded by: name, year, and only the
-   count clauses that are true. Scoped under the table to out-specify the
-   generic `.sec-ep-table td` cell voice below. */
-.sec-ep-table .sec-season-head td {
+/* The header each season group is preceded by: name, year, and only the count
+   clauses that are true. Sticky, the prototype's .eseason: a long season anchors
+   its own name while the rows scroll under it. */
+.sec-ep-table .sec-season-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 7px 14px;
   background: var(--bg-elev-2);
   border-bottom: 1px solid var(--border);
   font-size: 11.5px;
   font-weight: 700;
-  padding: 7px 14px;
-  color: var(--text);
 }
 
 .sec-ep-table .sec-season-head .sec-season-name {
-  color: var(--text-dim);
+  font-family: var(--mono);
   font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 600;
 }
 
 .sec-ep-table .sec-season-head .sec-season-year {
@@ -770,17 +776,26 @@
   color: var(--text-dim);
 }
 
-/* Episode rows are selectable: pointer, keyboard, and the marked one. */
+/* Episode rows are the prototype's `.etr`: two self-describing lines rather
+   than cells in a grid. The 3px left border is where the marked row reads. */
 .sec-ep-table .sec-ep-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 14px;
+  border-bottom: 1px solid rgba(39, 39, 42, 0.55);
+  border-left: 3px solid transparent;
   cursor: pointer;
 }
 
 .sec-ep-table .sec-ep-row:hover {
   background: var(--bg-elev-2);
+  border-left-color: var(--border);
 }
 
 .sec-ep-table .sec-ep-row.is-marked {
   background: var(--accent-soft);
+  border-left-color: var(--accent);
 }
 
 .sec-ep-table .sec-ep-row:focus-visible {
@@ -788,19 +803,113 @@
   outline-offset: -2px;
 }
 
-.sec-ep-table .sec-ep-path {
-  overflow-wrap: anywhere;
+.sec-ep-table .sec-ep-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
 }
 
-/* The two listings keep the section's table voice; the path column may hold
-   long names, so it wraps instead of clipping. */
-.sec-files-table,
-.sec-ep-table {
+.sec-ep-table .sec-ep-bot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.sec-ep-code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.sec-ep-name {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sec-ep-pill {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.sec-ep-pill.is-ok {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: rgba(108, 214, 143, 0.35);
+}
+
+.sec-ep-pill.is-missing {
+  color: var(--warn);
+  border-color: var(--border);
+}
+
+.sec-ep-date {
+  font-size: 11px;
+  color: var(--text-dim2);
+  flex-shrink: 0;
+}
+
+/* An absent quality reads as a dash with no badge. Its own class so it never
+   collides with the date — a selector matching both would let a test pass on
+   the wrong fact. */
+.sec-ep-qual {
+  font-size: 11px;
+  color: var(--text-dim2);
+  flex-shrink: 0;
+}
+
+.sec-q-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sec-q-tag.is-4k {
+  color: var(--accent);
+  border-color: rgba(74, 158, 255, 0.45);
+}
+
+.sec-ep-path {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+/* The Archivos listing keeps the section's table voice; the path column may
+   hold long names, so it wraps instead of clipping. */
+.sec-files-table {
   table-layout: auto;
 }
 
-.sec-files-table td,
-.sec-ep-table td {
+.sec-files-table td {
   font-size: 12px;
   padding: 7px 14px;
   border-bottom: 1px solid var(--border);

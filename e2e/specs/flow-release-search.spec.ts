@@ -44,7 +44,9 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // The wanted card lives in the Faltantes sub-view: the old page opened on
   // its missing tab, the section opens on Biblioteca — one click restores
   // the starting point this spec has always used.
-  await app.getByRole('tab', { name: 'Faltantes' }).click();
+  // Faltantes is a filter button now, not a tab (the tab duplicated it
+  // and the choice moved beside the name search).
+  await app.getByRole('button', { name: /Faltantes \(/ }).click();
 
   // The movie row keeps the page's own action — MediaPane.tsx,
   // button "🔍 Buscar" (sectionsPanel.test's routing test proves this exact

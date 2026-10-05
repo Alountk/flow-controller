@@ -222,7 +222,7 @@ describe('sections · the prototype rows', () => {
     renderSection(Peliculas)
     await screen.findByText('Your Name.')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     await screen.findByText('Todo a la vez en todas partes')
     const row = firstRow()
 
@@ -237,7 +237,7 @@ describe('sections · the prototype rows', () => {
     renderSection(Series)
     await screen.findByText('Some Show')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     await screen.findByText('Of Ice Men')
     const row = firstRow()
 
@@ -298,7 +298,7 @@ describe('sections · the release search in the panel', () => {
     // answers "ya tiene archivo" instead of offering a search — the row this
     // test picks is a wanted one, which lands the panel on its own 🔍
     // Buscar Releases button.
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     await screen.findByText('Todo a la vez en todas partes')
     fireEvent.click(firstRow())
 
@@ -342,7 +342,7 @@ describe('sections · the release search in the panel', () => {
     // Trigger 1: SELECTION. The Releases view mounts for a title with
     // nothing to show and sits on the initial step — the operator's press
     // is the only way the first search starts.
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     await screen.findByText('Otra Película Sin Archivo')
     fireEvent.click(screen.getByText('Otra Película Sin Archivo'))
     expect(await screen.findByRole('button', { name: /Buscar Releases/ })).toBeInTheDocument()
@@ -404,7 +404,7 @@ describe('sections · the release search in the panel', () => {
 
     // …and a sub-view switch resets the selection, which takes the search
     // back to the panel's honest empty state.
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
 
     await waitFor(() => expect(inlineSearch()).toBeNull())
     expect(

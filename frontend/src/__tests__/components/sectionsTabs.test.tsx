@@ -235,7 +235,7 @@ describe('sections · PR 6 — the detail tabs', () => {
     renderSection(Peliculas)
     await screen.findByText('Sin Pedido')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     await screen.findByText('Todo a la vez en todas partes')
     fireEvent.click(rowOf('Todo a la vez'))
     fireEvent.click(screen.getByRole('button', { name: 'Archivos' }))
@@ -326,7 +326,7 @@ describe('sections · PR 6 — the detail tabs', () => {
     renderSection(Series)
     await screen.findByText('Some Show')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     await screen.findByText('Some Show')
     fireEvent.click(rowOf('Some Show'))
     fireEvent.click(screen.getByRole('button', { name: 'Episodios' }))

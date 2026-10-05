@@ -89,7 +89,7 @@ function renderFaltantes(Component: ComponentType) {
       <Component />
     </QueryClientProvider>,
   )
-  fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+  fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
 }
 
 /** The exact label the component must render, computed the same local way. */
