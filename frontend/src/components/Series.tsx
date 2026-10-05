@@ -33,7 +33,9 @@ interface SubViewDef {
 
 const SUB_VIEWS: SubViewDef[] = [
   { id: 'biblioteca', label: 'Biblioteca' },
-  { id: 'faltantes', label: 'Faltantes' },
+  // 'Faltantes' is not a tab any more: it lives in the filter buttons beside
+  // the name search (PR #150). The view itself is unchanged — only the
+  // control that reaches it. `SUB_VIEWS[0]` stays biblioteca.
   { id: 'estrenos', label: 'Estrenos' },
   { id: 'calidad', label: 'Calidad' },
 ]
@@ -624,8 +626,6 @@ function PanelEpisodes({
   return <EpisodesList seriesId={facts.seriesId} marked={marked} onMark={onMark} />
 }
 
-const EPISODE_COLUMNS = ['Episodio', 'Título', 'Estado', 'Emitido', 'Calidad', 'Ruta']
-
 /** Identity of an episode row: its own id when the payload carries one, the
  *  S##E## pair otherwise — never the array position, which shifts with the
  *  season filter. */
@@ -645,6 +645,22 @@ function episodeState(ep: SeriesEpisode): string {
   if (ep.has_file === true) return 'En biblioteca'
   if (ep.has_file === false) return 'Falta'
   return '—'
+}
+
+/** The pill's tone: only an explicit `has_file` may colour it. Unknown stays
+ *  untinted — a dash is not a state and must not be painted like one. */
+function pillTone(ep: SeriesEpisode): string {
+  if (ep.has_file === true) return ' is-ok'
+  if (ep.has_file === false) return ' is-missing'
+  return ''
+}
+
+/** A quality badge, only when the payload states a quality. 4K is the one
+ *  class Sonarr's name carries that we can trust: an episode has no `is3d`, so
+ *  no 3D tag is ever invented here. */
+function qualityBadge(quality: string | null): { label: string; tone: string } | null {
+  if (!quality) return null
+  return { label: quality, tone: quality.toLowerCase().endsWith('2160p') ? ' is-4k' : '' }
 }
 
 /** Seasons in ascending order, each with the episodes that belong to it. */
@@ -758,59 +774,63 @@ function EpisodesList({
         ))}
       </div>
 
-      <table className="sec-table sec-ep-table">
-        <thead>
-          <tr>
-            {EPISODE_COLUMNS.map((column) => (
-              <th key={column} scope="col">
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map(({ season: groupSeason, episodes: groupEpisodes }) => (
-            <Fragment key={groupSeason}>
-              <tr className="sec-season-head">
-                <td colSpan={EPISODE_COLUMNS.length}>
-                  {seasonHeader(groupEpisodes, groupSeason)}
-                </td>
-              </tr>
-              {groupEpisodes.map((ep) => {
-                const key = episodeIdentity(ep)
-                const isMarked = key === markedKey
-                return (
-                  <tr
-                    key={key}
-                    className={`sec-ep-row${isMarked ? ' is-marked' : ''}`}
-                    tabIndex={0}
-                    aria-selected={isMarked}
-                    onClick={() => onMark(ep)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        onMark(ep)
-                      }
-                    }}
-                  >
-                    <td>{episodeTagKey(ep.season_number ?? 0, ep.episode_number ?? 0)}</td>
-                    <td>{ep.title}</td>
-                    <td>{episodeState(ep)}</td>
-                    <td>{ep.air_date ? ep.air_date.slice(0, 10) : '—'}</td>
-                    {/* Absent or unreadable quality/path render the dash the
-                        payload allows — never an invented value, and never a
-                        "no file" the has_file flag did not report. */}
-                    <td>{ep.quality || '—'}</td>
-                    <td className="sec-ep-path" title={ep.path || undefined}>
+      {/* The prototype's shape: two self-describing lines per episode, not a grid
+          with column heads. `role="listbox"`/`role="option"` are what make
+          `aria-selected` valid — without them a marked row is invalid ARIA
+          rather than merely unlabelled. */}
+      <div className="sec-table sec-ep-table" role="listbox" aria-label="Episodios">
+        {groups.map(({ season: groupSeason, episodes: groupEpisodes }) => (
+          <Fragment key={groupSeason}>
+            <div className="sec-season-head" role="group" aria-label={seasonLabel(groupSeason)}>
+              {seasonHeader(groupEpisodes, groupSeason)}
+            </div>
+            {groupEpisodes.map((ep) => {
+              const key = episodeIdentity(ep)
+              const isMarked = key === markedKey
+              const badge = qualityBadge(ep.quality)
+              return (
+                <div
+                  key={key}
+                  className={`sec-ep-row${isMarked ? ' is-marked' : ''}`}
+                  role="option"
+                  tabIndex={0}
+                  aria-selected={isMarked}
+                  onClick={() => onMark(ep)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onMark(ep)
+                    }
+                  }}
+                >
+                  <div className="sec-ep-top">
+                    <span className="sec-ep-code">
+                      {episodeTagKey(ep.season_number ?? 0, ep.episode_number ?? 0)}
+                    </span>
+                    <span className="sec-ep-name">{ep.title}</span>
+                    <span className={`sec-ep-pill${pillTone(ep)}`}>{episodeState(ep)}</span>
+                  </div>
+                  <div className="sec-ep-bot">
+                    <span className="sec-ep-date">
+                      {ep.air_date ? ep.air_date.slice(0, 10) : '—'}
+                    </span>
+                    {/* Absent quality is a dash, never a badge: the payload says
+                        nothing, so nothing is claimed. */}
+                    {badge ? (
+                      <span className={`sec-q-tag${badge.tone}`}>{badge.label}</span>
+                    ) : (
+                      <span className="sec-ep-qual">—</span>
+                    )}
+                    <span className="sec-ep-path" title={ep.path || undefined}>
                       {ep.path || '—'}
-                    </td>
-                  </tr>
-                )
-              })}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </Fragment>
+        ))}
+      </div>
     </>
   )
 }
@@ -955,7 +975,7 @@ export function Series() {
                 // wired to it rather than holding a second filter the tabs
                 // would contradict. The name search beside them is independent.
                 showFilterButtons
-                onFilterChange={(f) => setView(f === 'missing' ? 'faltantes' : 'biblioteca')}
+                onFilterChange={(f) => changeView(f === 'missing' ? 'faltantes' : 'biblioteca')}
                 selectedId={selected?.id ?? null}
                 onSelect={selectRow}
                 variant="section"

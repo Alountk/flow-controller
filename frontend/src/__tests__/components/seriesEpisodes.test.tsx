@@ -151,7 +151,7 @@ const rowOf = (title: string) =>
 
 /** The episode row holding `title`, straight from the table. */
 const episodeRow = (title: string) =>
-  screen.getByText(title).closest('tr') as HTMLElement
+  screen.getByText(title).closest('.sec-ep-row') as HTMLElement
 
 const releaseBodies = (fn: FetchMock) =>
   fn.mock.calls
@@ -263,20 +263,25 @@ describe('Series · the Episodios tab', () => {
 
     // has_file: true with null quality/path — the file IS there and could not
     // be read: "En biblioteca" with dashes, never "no file".
-    const unreadable = within(episodeRow('La señal')).getAllByRole('cell')
-    expect(unreadable[2]).toHaveTextContent('En biblioteca')
-    expect(unreadable[4]).toHaveTextContent('—')
-    expect(unreadable[5]).toHaveTextContent('—')
+    const unreadable = episodeRow('La señal')
+    expect(within(unreadable).getByText('En biblioteca')).toBeInTheDocument()
+    // No badge: the payload states no quality, so none is claimed — and each
+    // fact that IS unknown renders as its own named dash, never "no file".
+    expect(unreadable.querySelector('.sec-q-tag')).toBeNull()
+    expect(unreadable.querySelector('.sec-ep-qual')).toHaveTextContent('—')
+    expect(unreadable.querySelector('.sec-ep-path')).toHaveTextContent('—')
 
-    // A missing file says so, with the same dashes for its unreadable facts.
-    const missing = within(episodeRow('Eclipse')).getAllByRole('cell')
-    expect(missing[2]).toHaveTextContent('Falta')
+    // A missing file says so, with the same unknowns for its facts.
+    const missing = episodeRow('Eclipse')
+    expect(within(missing).getByText('Falta')).toBeInTheDocument()
 
     // An old payload without the file facts claims no state at all.
     fireEvent.click(rowOf('Other Show'))
     await screen.findByText('Of Ice Men')
-    const oldRow = within(episodeRow('Of Ice Men')).getAllByRole('cell')
-    expect(oldRow[2]).toHaveTextContent('—')
+    const oldRow = episodeRow('Of Ice Men')
+    // The PILL is what claims a state; on an unknown payload it says so with
+    // a dash rather than inventing one.
+    expect(within(oldRow).getByText('—', { selector: '.sec-ep-pill' })).toBeInTheDocument()
   })
 
   it('marks the episode it is activated on and sends the panel to Releases', async () => {

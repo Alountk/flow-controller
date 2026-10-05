@@ -146,7 +146,7 @@ describe('section rows · the mini-poster', () => {
     renderSection(Series)
     await screen.findByText('Some Show')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     await screen.findByText('Of Ice Men')
 
     const row = firstRow()

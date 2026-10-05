@@ -57,7 +57,7 @@ function renderSection() {
 
 /** The section's Faltantes sub-view: where the missing listing lives now. */
 function openFaltantes() {
-  fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+  fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
 }
 
 const filterInput = () => screen.getByLabelText('Filtrar películas')
@@ -117,7 +117,7 @@ describe('wanted listing text filter', () => {
     expect(await screen.findByLabelText('Filtrar películas')).toBeInTheDocument()
     // In the section the sub-view tabs are the filter: Biblioteca is the old
     // "Todas", Faltantes the old "Faltantes" button.
-    expect(screen.getByRole('tab', { name: 'Faltantes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Faltantes \(/ })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Biblioteca' })).toBeInTheDocument()
   })
 

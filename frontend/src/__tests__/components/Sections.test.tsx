@@ -108,13 +108,27 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       expect(screen.getByRole('heading', { level: 2, name: title })).toBeInTheDocument()
     })
 
-    it('offers the four sub-view tabs and switches the visible content', async () => {
+    /**
+ * 'Faltantes' is a filter button now, not a tab (PR #150): the choice moved
+ * next to the name search and the tab duplicated it. Everything else is still
+ * a tab, so one click helper keeps both honest instead of two call styles.
+ */
+function clickSubView(label: string) {
+  if (label === 'Faltantes') {
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
+    return
+  }
+  fireEvent.click(screen.getByRole('tab', { name: label }))
+}
+
+it('offers the sub-view tabs and switches the visible content', async () => {
       renderSection(Component)
 
       const tabs = screen.getAllByRole('tab')
+      // Three, not four: Faltantes is a filter button now (PR #150). The tabs
+      // and what each promises did not change — only the list got shorter.
       expect(tabs.map((t) => t.textContent)).toEqual([
         'Biblioteca',
-        'Faltantes',
         'Estrenos',
         'Calidad',
       ])
@@ -186,7 +200,7 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       renderSection(Component)
 
       for (const [label, message] of Object.entries(SUB_VIEW_MESSAGES)) {
-        fireEvent.click(screen.getByRole('tab', { name: label }))
+        clickSubView(label)
         expect(screen.getByText(message)).toBeInTheDocument()
         expect(message).toMatch(/PR [1-4]/)
       }
@@ -197,7 +211,7 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
 
       // PR 2 delivered Biblioteca and Faltantes: they no longer promise.
       for (const label of ['Biblioteca', 'Faltantes']) {
-        fireEvent.click(screen.getByRole('tab', { name: label }))
+        clickSubView(label)
         expect(screen.queryByText(DELIVERED_PROMISES)).not.toBeInTheDocument()
       }
 

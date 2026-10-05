@@ -30,7 +30,9 @@ interface SubViewDef {
 
 const SUB_VIEWS: SubViewDef[] = [
   { id: 'biblioteca', label: 'Biblioteca' },
-  { id: 'faltantes', label: 'Faltantes' },
+  // 'Faltantes' is not a tab any more: it lives in the filter buttons beside
+  // the name search (PR #150). The view itself is unchanged — only the
+  // control that reaches it. `SUB_VIEWS[0]` stays biblioteca.
   { id: 'estrenos', label: 'Estrenos' },
   { id: 'calidad', label: 'Calidad' },
 ]
@@ -635,7 +637,7 @@ export function Peliculas() {
                 // wired to it rather than holding a second filter the tabs
                 // would contradict. The name search beside them is independent.
                 showFilterButtons
-                onFilterChange={(f) => setView(f === 'missing' ? 'faltantes' : 'biblioteca')}
+                onFilterChange={(f) => changeView(f === 'missing' ? 'faltantes' : 'biblioteca')}
                 selectedId={selected?.id ?? null}
                 onSelect={setSelected}
                 variant="section"

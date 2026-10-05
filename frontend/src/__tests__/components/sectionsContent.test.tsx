@@ -159,7 +159,7 @@ describe('Películas · PR 2 wiring', () => {
     renderSection(Peliculas)
     await screen.findByText('Your Name.')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
 
     expect(await screen.findByText('Todo a la vez en todas partes')).toBeInTheDocument()
     // Every action the row had in Faltantes is still reachable here.
@@ -184,7 +184,7 @@ describe('Películas · PR 2 wiring', () => {
     expect(row).toHaveAttribute('aria-current', 'true')
 
     // A switch resets the selection: the panel belongs to the visible list.
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     expect(within(panel()).getByRole('heading', { name: 'Sin selección' })).toBeInTheDocument()
   })
 
@@ -224,7 +224,7 @@ describe('Series · PR 2 wiring', () => {
     renderSection(Series)
     await screen.findByText('Some Show')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Faltantes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
     await screen.findByText('Of Ice Men')
     const row = document.querySelector('.wanted-row') as HTMLElement
     fireEvent.click(row)
