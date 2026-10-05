@@ -34,17 +34,15 @@ test('the stub listing renders rows and the Biblioteca sub-view is reachable', a
 
   // The section opens on Biblioteca; the missing list is the Faltantes
   // sub-view — the old page's default tab, now one click away.
-  await app.getByRole('tab', { name: 'Faltantes' }).click();
+  // Faltantes is a filter button now, not a tab (the tab duplicated it
+  // and the choice moved beside the name search).
+  await app.getByRole('button', { name: /Faltantes \(/ }).click();
 
-  // The missing list is the one showing: aria-selected on its tab
-  // (Sections.test.tsx proves the attribute). The sub-view tabs carry no
-  // counts — the tab IS the filter — so this plus the rows below replace the
-  // page's button "Faltantes (1)".
-  await expect(app.getByRole('tab', { name: 'Faltantes' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-    { timeout: 15000 },
-  );
+  // The missing list is the one showing: the Faltantes button is the one on
+  // duty, which Sections.test.tsx proves alongside the row assertions here. The
+  // buttons carry the counts the sub-view tabs never had — this plus the rows
+  // below is the whole of what the old page's button said.
+  await expect(app.locator('.wanted-filter-btn.active')).toContainText('Faltantes')
 
   // Exactly the stub's missing total (wanted-missing.json → 1): one row,
   // each carrying the missing pill — MediaPane.tsx faltaStatus, span "Falta".
