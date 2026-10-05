@@ -211,6 +211,10 @@ def test_arr_series_episodes_maps_the_episode_resource(transport):
         session = _StubSession(routes)
         result = asyncio.run(arr_series_episodes(session, _sonarr_service(), 3))
 
+    # The row grew with the join: `hasFile` came from this payload, while path
+    # and quality can only come from the episodeFile call — and this fixture has
+    # no `episodeFileId`, so they are honestly null rather than invented. The
+    # join itself is proved in tests/infrastructure/tests_arr_series_episodes.py.
     assert result["episodes"] == [
         {
             "id": 70,
@@ -218,6 +222,9 @@ def test_arr_series_episodes_maps_the_episode_resource(transport):
             "episode_number": 7,
             "title": "Of Ice Men",
             "air_date": "2006-11-27T00:00:00Z",
+            "has_file": True,
+            "quality": None,
+            "path": None,
         }
     ]
     assert "error" not in result
