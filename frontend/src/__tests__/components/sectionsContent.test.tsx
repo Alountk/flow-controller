@@ -9,12 +9,34 @@ import { Series } from '../../components/Series'
  * PR 2 of F-08: the sections' sub-view tabs are the filter, and the pane's
  * rows live in the master column.
  *
+ * The Faltantes/Todas buttons were originally gated off entirely — "the pane
+ * draws no second filter controls" — and that assertion stood in three of these
+ * tests. The operator asked for those buttons beside the name search, so the
+ * premise changed and the assertion changed with it. It did NOT become weaker:
+ * it now pins that the two controls AGREE, which is the thing that could
+ * actually break (a button reading Faltantes while the tab reads Biblioteca
+ * would be a second source of truth contradicting the first).
+ *
  * These tests pin the wiring that is NOT covered elsewhere: the sections drive
- * MediaPane's controlled filter from the tabs (so no second filter controls
- * are drawn), a selected row fills the detail panel with that row's own data,
+ * MediaPane's controlled filter from the tabs, a selected row fills the detail
+ * panel with that row's own data,
  * every row action stays reachable, the search text is namespaced per section,
  * and a failed fetch reads as an error rather than an empty list.
  */
+
+/**
+ * The invariant the old assertion asserted the OPPOSITE of: two buttons, and
+ * exactly one of them active — the same choice the tab shows. The old line said
+ * "no second control"; this says "the second control agrees", which is the
+ * failure that would actually confuse an operator.
+ */
+function expectFilterButtonsAgreeWithTab(expectedActive: RegExp) {
+  const buttons = Array.from(document.querySelectorAll('.wanted-filter-btn'))
+  expect(buttons).toHaveLength(2)
+  const active = buttons.filter((b) => b.classList.contains('active'))
+  expect(active).toHaveLength(1)
+  expect(active[0].textContent ?? '').toMatch(expectedActive)
+}
 
 const catalogMovie = {
   id: 411,
@@ -123,12 +145,12 @@ describe('Películas · PR 2 wiring', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows the catalogue in Biblioteca with no second filter controls', async () => {
+  it('shows the catalogue in Biblioteca with the two buttons agreeing with the tab', async () => {
     renderSection(Peliculas)
 
     expect(await screen.findByText('Your Name.')).toBeInTheDocument()
-    // The sub-view tabs ARE the filter: the pane draws no Faltantes/Todas buttons.
-    expect(document.querySelector('.wanted-filter-btn')).toBeNull()
+    // The buttons exist AND agree with the tab: in Biblioteca, 'Todas' is lit.
+    expectFilterButtonsAgreeWithTab(/Todas/)
     // The search field still belongs to the pane.
     expect(screen.getByLabelText('Filtrar películas')).toBeInTheDocument()
   })
@@ -143,7 +165,8 @@ describe('Películas · PR 2 wiring', () => {
     // Every action the row had in Faltantes is still reachable here.
     expect(screen.getByRole('button', { name: '🔍 Buscar' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '📁 En carpeta' })).toBeInTheDocument()
-    expect(document.querySelector('.wanted-filter-btn')).toBeNull()
+      // Same two buttons, now agreeing with Faltantes: 'Faltantes' is lit.
+      expectFilterButtonsAgreeWithTab(/Faltantes/)
   })
 
   it('fills the detail panel with the selected row’s own data', async () => {
@@ -214,7 +237,8 @@ describe('Series · PR 2 wiring', () => {
     // Row actions survive the narrow column: titles included.
     expect(screen.getByTitle('Buscar releases')).toBeInTheDocument()
     expect(screen.getByTitle('Buscar en carpeta')).toBeInTheDocument()
-    expect(document.querySelector('.wanted-filter-btn')).toBeNull()
+      // Series carries the same two buttons, agreeing with its own tab.
+      expectFilterButtonsAgreeWithTab(/Todas|Faltantes/)
   })
 
   it('keeps the search text in the Series namespace', async () => {

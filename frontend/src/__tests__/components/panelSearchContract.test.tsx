@@ -289,3 +289,65 @@ describe('holdsCopy · a directory or a video file — never a subtitle', () => 
     expect(await fourK(fn)).toBe(true)
   })
 })
+
+// ── The faltantes/todas buttons live beside the name filter ───────────────────
+//
+// They have existed in MediaPane since the wanted panel but were gated behind
+// `showFilterButtons`, which nobody passed — so the name search appeared alone
+// and there was no way to reach Faltantes from inside Biblioteca without the
+// tab. They are wired to the sub-views rather than to a second filter, because
+// two independent filters would contradict each other: clicking "Faltantes"
+// and having the tab still read "Biblioteca" would be a bug dressed as a
+// feature.
+
+describe('the faltantes/todas buttons sit beside the name filter', () => {
+  let fn: FetchMock
+
+  beforeEach(() => {
+    window.location.hash = ''
+    fn = stubFetch()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('renders both buttons and the name search in the same row', async () => {
+    renderSection(Peliculas)
+    await screen.findByText('Your Name.')
+
+    expect(screen.getByRole('button', { name: /Faltantes/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Todas/ })).toBeTruthy()
+    // The search was always there; this pins it beside the buttons.
+    expect(screen.getByRole('searchbox', { name: 'Filtrar películas' })).toBeTruthy()
+    expect(searchCalls(fn)).toBe(0)
+  })
+
+  it('clicking Faltantes switches the SECTION, so the tab cannot contradict it', async () => {
+    renderSection(Peliculas)
+    await screen.findByText('Your Name.')
+
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes/ }))
+
+    await screen.findByText('Todo a la vez en todas partes')
+    // The tab follows the button — same choice, one control.
+    expect(
+      (screen.getByRole('tab', { name: 'Faltantes' }) as HTMLElement).getAttribute('aria-selected'),
+    ).toBe('true')
+  })
+
+  it('clicking Todas comes back to Biblioteca', async () => {
+    renderSection(Peliculas)
+    await screen.findByText('Your Name.')
+
+    fireEvent.click(screen.getByRole('button', { name: /Faltantes/ }))
+    await screen.findByText('Todo a la vez en todas partes')
+
+    fireEvent.click(screen.getByRole('button', { name: /^Todas/ }))
+    await screen.findByText('Your Name.')
+    expect(
+      (screen.getByRole('tab', { name: 'Biblioteca' }) as HTMLElement).getAttribute('aria-selected'),
+    ).toBe('true')
+  })
+})
+

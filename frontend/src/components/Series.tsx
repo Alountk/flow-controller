@@ -720,6 +720,12 @@ export function Series() {
                 kind="episodes"
                 namespace="series"
                 filter={view === 'biblioteca' ? 'all' : 'missing'}
+                // The two buttons ARE the two sub-views: "Faltantes" and
+                // "Todas" are the same choice as the tab above, so they are
+                // wired to it rather than holding a second filter the tabs
+                // would contradict. The name search beside them is independent.
+                showFilterButtons
+                onFilterChange={(f) => setView(f === 'missing' ? 'faltantes' : 'biblioteca')}
                 selectedId={selected?.id ?? null}
                 onSelect={setSelected}
                 variant="section"
