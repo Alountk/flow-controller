@@ -55,6 +55,9 @@ function formatDate(ts: number): string {
 interface RootsItem {
   path: string
   name: string
+  role?: 'navigation' | 'library' | '4k' | '3d'
+  label?: string
+  service?: string
 }
 
 interface PaneProps {
@@ -325,6 +328,12 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     void runBatch('delete')
   }
 
+  // Plain options first, then the configured destinations in their own group —
+  // the mounts are what the panes navigate, the labelled roots are places you
+  // jump to. The group only renders when there is something to group.
+  const plainRoots = roots.filter((r) => !r.role || r.role === 'navigation')
+  const destinationRoots = roots.filter((r) => r.role && r.role !== 'navigation')
+
   return (
     <div className="fm-pane">
       <div className="fm-toolbar">
@@ -333,9 +342,16 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
           value={selectedRoot}
           onChange={(e) => handleVolumeChange(e.target.value)}
         >
-          {roots.map((r) => (
-            <option key={r.path} value={r.path}>{r.name}</option>
+          {plainRoots.map((r) => (
+            <option key={r.path} value={r.path}>{r.label ?? r.name}</option>
           ))}
+          {destinationRoots.length > 0 && (
+            <optgroup label="Destinos">
+              {destinationRoots.map((r) => (
+                <option key={r.path} value={r.path}>{r.label ?? r.name}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <button
           className="fm-nav-btn"

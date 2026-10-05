@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import state
 from config import find_service
 from traces import host_path
-from application.gateways import history
+from application.gateways import arr_root_folders, history
 from import_service import post_move_import
 from models import ActionRequest
 from domain.naming import MEDIA_EXTENSIONS
@@ -97,14 +97,94 @@ def _file_entry(p: Path) -> dict:
 
 # ── File Manager ──────────────────────────────────────────────────────────────
 
+#: Why the library label is per-service: the picker offers Radarr's movies and
+#: Sonarr's series side by side, and "Biblioteca" alone would not say WHICH
+#: library an option points at.
+LIBRARY_LABELS = {
+    "radarr": "Biblioteca (películas) · 1080 y por debajo",
+    "sonarr": "Biblioteca (series) · 1080 y por debajo",
+}
+
+
 @router.get("/api/files/roots")
 async def file_roots(_key: str = Depends(verify_api_key)):
-    """Devuelve las raíces de navegación disponibles."""
-    roots = []
+    """Raíces del explorador: navegación, bibliotecas de los arrs y destinos.
+
+    Three kinds of root, each labelled: the allowed mounts to navigate, every
+    configured arr's library, and the quality folders (4K / 3D). A path is
+    offered only when it exists on disk, and no path is ever listed twice.
+
+    **Order is behaviour**: the dual pane defaults to `roots[0]`/`roots[1]`,
+    so the mounts have to stay first. The quality folders are skipped in the
+    navigation pass on purpose — `config.rebuild()` puts them INSIDE
+    `ALLOWED_ROOTS` (the copy engine must be allowed to write there), and
+    without the exclusion they would render as plain navigation and their
+    destination entry would be deduplicated away.
+
+    The configured arrs are asked in parallel: two dead arrs cost one
+    `REQUEST_TIMEOUT`, not two. `detail` names every configured arr that
+    answered with no root folders — `arr_root_folders` returns `[]` both when
+    the arr is unreachable and when it genuinely has none, and claiming success
+    with a short list would be the same lie `calendar_destinations` refuses to
+    tell. No arr configured at all means nothing failed: `detail` stays empty.
+    """
+    arrs = [s for s in config.SERVICES if s.get("kind") == "arr" and s.get("configured")]
+    libraries: list[tuple[str, str, list[str]]] = []  # (key, label, root folders)
+    failed: list[str] = []
+    if arrs:
+        async with http_session() as session:
+            results = await asyncio.gather(*(arr_root_folders(session, s) for s in arrs))
+        for service, paths in zip(arrs, results):
+            key = service["key"]
+            if not paths:
+                failed.append(key)
+                continue
+            label = LIBRARY_LABELS.get(key, f"Biblioteca ({key}) · 1080 y por debajo")
+            libraries.append((key, label, paths))
+
+    # Claimed by the destination passes below, so navigation never lists them.
+    destinations = {p for p in (config.PATH_4K, config.PATH_3D) if p}
+    for _, _, paths in libraries:
+        destinations.update(paths)
+
+    roots: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(path: str, entry: dict) -> None:
+        """Append `path` once, and only while it exists on disk."""
+        if not path or path in seen or not os.path.isdir(path):
+            return
+        seen.add(path)
+        roots.append({**entry, "path": path})
+
+    # Navigation first — the two mounts the panes start from.
     for root in config.ALLOWED_ROOTS:
-        if os.path.isdir(root):
-            roots.append({"path": root, "name": os.path.basename(root) or root})
-    return {"roots": roots}
+        if root in destinations:
+            continue
+        name = os.path.basename(root) or root
+        _add(root, {"name": name, "label": name, "role": "navigation"})
+
+    for key, label, paths in libraries:
+        for path in paths:
+            _add(path, {
+                "name": os.path.basename(path.rstrip("/")) or path,
+                "role": "library",
+                "service": key,
+                "label": label,
+            })
+
+    for path, entry in (
+        (config.PATH_4K, {"role": "4k", "label": "4K · 2160p"}),
+        (config.PATH_3D, {"role": "3d", "label": "3D"}),
+    ):
+        _add(path, {"name": os.path.basename(path.rstrip("/")) or path, **entry})
+
+    detail = ""
+    if failed:
+        detail = "; ".join(f"{key} no devolvió carpetas raíz" for key in failed)
+        detail += "; se muestran solo los destinos disponibles."
+
+    return {"roots": roots, "detail": detail}
 
 
 @router.get("/api/files/browse")

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FileManager } from '../../components/FileManager'
-import type { RetentionFile } from '../../types'
+import type { RetentionFile, RootsResponse } from '../../types'
 
 /**
  * Wiring-level tests for the file explorer's multi-file selection.
@@ -58,6 +58,8 @@ interface MockOptions {
   listings?: Record<string, BrowseItem[]>
   /** Retention rows keyed by directory path; anything else comes back empty. */
   retention?: Record<string, RetentionFile[]>
+  /** Roots for /api/files/roots; defaults to the navigation mount alone. */
+  roots?: RootsResponse['roots']
   /** Backend answer for one queue/add call, decided per file. */
   onQueueAdd?: (body: Record<string, unknown>) => { ok: boolean; detail: string }
   /** Backend answer for one delete call, decided per path. */
@@ -87,7 +89,12 @@ function mockFetch(options: MockOptions = {}): MockedFetch {
     const url = String(input)
 
     if (url.includes('/api/files/roots')) {
-      return ok({ roots: [{ path: '/mnt/storage', name: 'storage' }] })
+      return ok({
+        roots: options.roots ?? [
+          { path: '/mnt/storage', name: 'storage', role: 'navigation', label: 'storage' },
+        ],
+        detail: '',
+      })
     }
 
     if (url.includes('/api/files/browse')) {
@@ -428,5 +435,54 @@ describe('FileManager multi-file selection', () => {
     expect(deleteBodies(mocked.fn)).toHaveLength(3)
     expect(retentionCalls().length).toBeGreaterThanOrEqual(2)
     expect(order.some((u, i) => u.includes('/api/files/retention') && i > lastDelete)).toBe(true)
+  })
+
+  it('labels the roots, groups destinations under Destinos, and keeps navigation first', async () => {
+    mockFetch({
+      listings: { '/mnt/storage': [file('A.mkv')] },
+      roots: [
+        { path: '/mnt/storage', name: 'storage', role: 'navigation', label: 'storage' },
+        { path: '/mnt/storage-6tb', name: 'storage-6tb', role: 'navigation', label: 'storage-6tb' },
+        {
+          path: '/mnt/storage/movies/es',
+          name: 'es',
+          role: 'library',
+          service: 'radarr',
+          label: 'Biblioteca (películas) · 1080 y por debajo',
+        },
+        { path: '/mnt/storage/movies/4k', name: '4k', role: '4k', label: '4K · 2160p' },
+      ],
+    })
+    renderFileManager()
+    await screen.findByText('A.mkv')
+
+    const selects = document.querySelectorAll<HTMLSelectElement>('.fm-volume-select')
+    expect(selects.length).toBeGreaterThan(0)
+
+    for (const select of selects) {
+      const options = Array.from(select.querySelectorAll('option'))
+      const texts = options.map((o) => o.textContent)
+
+      // The label renders, not the raw name: the library option shows its
+      // words and never the bare folder name `es`...
+      expect(texts).toContain('Biblioteca (películas) · 1080 y por debajo')
+      expect(texts).toContain('4K · 2160p')
+      expect(texts).not.toContain('es')
+
+      // ...the destinations live in their own optgroup...
+      const group = select.querySelector('optgroup')
+      expect(group?.getAttribute('label')).toBe('Destinos')
+      const groupOptions = options.filter((o) => o.parentElement === group)
+
+      // ...and navigation still comes first, before any destination: the two
+      // mounts stay the options roots[0]/roots[1] the panes default to.
+      const plain = options.filter((o) => o.parentElement === select)
+      expect(plain.map((o) => o.value)).toEqual(['/mnt/storage', '/mnt/storage-6tb'])
+      expect(groupOptions.map((o) => o.value)).toEqual([
+        '/mnt/storage/movies/es',
+        '/mnt/storage/movies/4k',
+      ])
+      expect(options.indexOf(plain[0])).toBeLessThan(options.indexOf(groupOptions[0]))
+    }
   })
 })

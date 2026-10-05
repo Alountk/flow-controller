@@ -505,7 +505,21 @@ export interface RetentionResponse {
 }
 
 export interface RootsResponse {
-  roots: { path: string; name: string }[]
+  roots: {
+    path: string
+    name: string
+    /** Where the root sits: the mounts the panes navigate, an arr's library,
+     *  or a quality folder. Absent on an older backend — consumers must treat
+     *  its absence as plain navigation. */
+    role?: 'navigation' | 'library' | '4k' | '3d'
+    /** The words the picker shows when they say more than the name. */
+    label?: string
+    /** Which arr owns this library root (`radarr` / `sonarr`). */
+    service?: string
+  }[]
+  /** Non-empty when a configured arr reported no root folders: the Spanish
+   *  reason the libraries are missing, never a silent short list. */
+  detail?: string
 }
 
 export interface CalendarItem {
