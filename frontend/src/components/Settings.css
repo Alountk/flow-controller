@@ -276,3 +276,56 @@
 .service-test.fail .service-test-detail {
   color: var(--bad);
 }
+
+.shared-dirs-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.shared-dirs-hint code {
+  word-break: break-all;
+}
+
+.shared-dirs-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.shared-dirs-add .settings-input {
+  flex: 1;
+  min-width: 220px;
+}
+
+.shared-dirs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shared-dirs-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.18));
+}
+
+.shared-dirs-row code {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.shared-dirs-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.shared-dirs-notice {
+  font-size: 12px;
+  color: var(--text-dim);
+}

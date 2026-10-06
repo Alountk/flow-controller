@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Settings, SaveSettingsResponse } from '../types'
 import { apiFetch } from '../api/auth'
 import { testServiceConnections, type ServiceTestResult } from '../api/services'
+import { SharedDirsSection } from './SharedDirsSection'
 import './Settings.css'
 
 interface LogEntry {
@@ -327,6 +328,11 @@ export function Settings() {
           placeholder="/mnt/storage/peliculas-3d"
         />
       </Section>
+
+      {/* Not inside the form above: it writes aMule's own files and takes
+          effect on its own button, where "Guardar configuración" would
+          otherwise claim to have saved something it never saw. */}
+      <SharedDirsSection />
 
       <Section title="Intervalos">
         <Field label="Check interval (segundos)" value={form.intervals.check} onChange={(v) => update('intervals.check', v)} type="number" />
