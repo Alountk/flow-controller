@@ -137,6 +137,7 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/wanted/scan` | POST | Escanea carpeta buscando contenido desubicado |
 | `/api/disk` | GET | Uso de disco en volúmenes |
 | `/api/settings` | GET/POST | Configuración persistente |
+| `/api/amule/shared-dirs` | GET/PUT | Carpetas que aMule comparte (lee/escribe `shareddir*.dat` y recarga) |
 | `/api/mixer/probe` | POST | Analiza dos archivos de video (pistas, compatibilidad) |
 | `/api/mixer/mux` | POST | Mezcla pistas de audio seleccionadas |
 | `/api/mixer/tasks` | GET | Lista todas las tareas de mixer |

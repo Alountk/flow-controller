@@ -723,7 +723,7 @@ cuenta:
   Radarr/Sonarr): el retiro es el mismo patrón que ya se aplicó a `Faltantes`/`Calendario` en el
   **PR `#116`**, incluida la **migración de sus tests**.
 
-### F-10 — Raíces etiquetadas de destinos en el explorador (biblioteca · 4K · 3D) · **Pequeña** · 🟡 **Implementado — pendiente de PR**
+### F-10 — Raíces etiquetadas de destinos en el explorador (biblioteca · 4K · 3D) · **Pequeña** · ✅ **Entregado** (PR #148)
 
 Pedida: que la pestaña *Archivos* muestre los tres tipos de destino como raíces
 etiquetadas, **solo si están configuradas y existen en disco**.
@@ -749,6 +749,40 @@ etiquetadas, **solo si están configuradas y existen en disco**.
 Tests: 8 casos nuevos en `backend/tests/interfaces/routes/tests_files_roots.py`
 + 1 en `FileManager.test.tsx`. Detalle y criterios en
 `odd/tasks/archivos-tres-destinos.md`.
+
+### F-11 — Carpetas compartidas de aMule desde Configuración · **Mediana** · ✅ **Entregado** (PRs #155 backend, #156 UI)
+
+Pedida: gestionar desde Configuración qué carpetas expone aMule, sin entrar en
+su UI, y **solo** las que el usuario elija.
+
+**Evidencia medida antes de escribir código:**
+
+| Vía | Resultado |
+|---|---|
+| EC — `EC_TAG_CAN_SHAREDDIRS_CONFIG` | ❌ **no soportado**: lo dice aMuTorrent (`supported:false`) y el tag **no existe** en `ECCodes.h` de aMule |
+| `shareddir*.dat` + recarga | ✅ **soportado a propósito** — `CPreferences::ReloadSharedFolders` reconcilia escrituras externas (su comentario nombra *"Docker entrypoints, manual sysadmin edits"*) |
+| `POST /api/amule/shared-dirs/reload` | ✅ probado en vivo — reescribe los 3 ficheros |
+| aMuTorrent como puente EC | ✅ ya mantiene la sesión con aMule ⇒ **una llamada HTTP**, sin implementar EC |
+
+- **Formato**: texto plano, **una ruta por línea**. `shareddir-recursive.dat` = recursivo ·
+  `shareddir-explicit.dat` = un solo nivel · `shareddir.dat` = unión que aMule regenera.
+- **La recursión es obligatoria** en bibliotecas: `/mnt/storage/movies` y
+  `/mnt/storage-6tb/shared-media` tienen **0 ficheros directos** ⇒ sin `recursive` no se
+  comparte nada.
+- **Escritura in-place** (nunca temp-then-rename): el directorio es `drwxr-xr-x` de aMule y
+  no podemos crear ficheros ahí. Es seguro porque la recarga va detrás y aMule **lee en
+  recarga** — una escritura parcial nunca se observa.
+- **Guardia de `allowed_roots`** en cliente **y** servidor: publicar en ED2K no se deshace
+  desde aquí; sin esto la API key podría exponer el directorio con las credenciales dentro.
+- **UI con botón propio** (no «Guardar configuración»): son ficheros de aMule que toman
+  efecto al guardar. **Recarga fallida ⇒ «pendiente», nunca «guardado».**
+
+Tests: 10 en `backend/tests/interfaces/routes/tests_amule_shares.py` + 6 en
+`frontend/src/__tests__/components/sharedDirs.test.tsx`.
+
+> ⚠️ `MAX_LEGACY_LOC` 2433 → 2435: las 2 líneas que registran el router en `app.py`
+> (composition root) — cableado, no deuda de migración.
+> `size:exception` en #156 (431 líneas autor / presupuesto 400).
 
 ## 🔵 Recomendaciones y reglas del ciclo
 
