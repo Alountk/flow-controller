@@ -48,7 +48,10 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: only go DOWN as the migration moves code in. Lower it in the same PR that
 #: moves code. Raising it is taking on debt on purpose: allowed, but it is a
 #: decision that PR has to own and explain, not a constant to nudge past CI.
-MAX_LEGACY_LOC = 2433
+#: Current debt: `app.py` (the composition root) grows two lines whenever a
+#: router is registered — that pair is wiring, not migration debt, and it is
+#: why this sits above what the migration itself left behind.
+MAX_LEGACY_LOC = 2435
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

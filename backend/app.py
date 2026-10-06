@@ -52,6 +52,7 @@ from interfaces.http.routes.auto_copy import router as auto_copy_router
 from interfaces.http.routes.downloads import router as downloads_router
 from interfaces.http.routes.mediacover import router as mediacover_router
 from interfaces.http.routes.settings import router as settings_router, PROTOTYPES_DIR
+from interfaces.http.routes.amule_shares import router as amule_shares_router
 from interfaces.http.routes_mixer import router as mixer_router
 
 logging.basicConfig(
@@ -110,6 +111,7 @@ app.include_router(auto_copy_router)
 app.include_router(downloads_router)
 app.include_router(mediacover_router)
 app.include_router(settings_router)
+app.include_router(amule_shares_router)
 app.include_router(mixer_router)
 
 

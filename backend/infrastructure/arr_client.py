@@ -880,6 +880,58 @@ async def amu_torrent_categories(session: aiohttp.ClientSession) -> list[str]:
         return []
 
 
+async def amutorrent_reload_shared_dirs(session: aiohttp.ClientSession) -> dict:
+    """Ask aMuTorrent to tell aMule to re-read its shared-folder files.
+
+    aMuTorrent already holds the External Connections session with aMule, so
+    this is one HTTP call instead of implementing EC here — which matters,
+    because aMule does not advertise `EC_TAG_CAN_SHAREDDIRS_CONFIG` and the
+    file-plus-reload path is the one that actually works.
+
+    The instance id comes from aMuTorrent's own config, an endpoint that also
+    carries every password it holds. Only `id` of the client whose `type` is
+    `amule` is read out; nothing else from that response leaves this function
+    and nothing from it is logged.
+    """
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 3)
+    try:
+        async with session.get(
+            f"{AMUTORRENT_URL}/api/config/current",
+            headers=qbit_headers(AMUTORRENT_API_KEY),
+            timeout=timeout,
+        ) as resp:
+            if resp.status != 200:
+                return {"ok": False, "detail": f"config de aMuTorrent: HTTP {resp.status}"}
+            data = await resp.json(content_type=None)
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"ok": False, "detail": f"config de aMuTorrent: {type(exc).__name__}"}
+
+    instance_id = next(
+        (
+            str(client.get("id") or "")
+            for client in (data.get("clients") or [])
+            if isinstance(client, dict) and client.get("type") == "amule"
+        ),
+        "",
+    )
+    if not instance_id:
+        return {"ok": False, "detail": "aMuTorrent no tiene ningún cliente de tipo aMule"}
+
+    try:
+        async with session.post(
+            f"{AMUTORRENT_URL}/api/amule/shared-dirs/reload",
+            json={"instanceId": instance_id},
+            headers=qbit_headers(AMUTORRENT_API_KEY),
+            timeout=timeout,
+        ) as resp:
+            if resp.status == 200:
+                return {"ok": True, "detail": "recarga pedida a aMule"}
+            text = await resp.text()
+            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"ok": False, "detail": f"recarga: {type(exc).__name__}"}
+
+
 def arr_categories_for(service_key: str, available: list[str]) -> list[str]:
     """aMuTorrent categories that belong to an arr service.
 
