@@ -26,6 +26,11 @@ DEFAULTS: dict[str, Any] = {
         "download_torrent": "/mnt/storage/downloads/qbittorrent/completed",
         "output_mixed": "/mnt/storage/mixed",
         "allowed_roots": ["/mnt/storage", "/mnt/storage-6tb"],
+        # aMule's own config directory — a separate mount from the download
+        # folders, so it cannot be derived from `download_amule`. Holds
+        # `shareddir*.dat`, which is where the shared-folder feature reads and
+        # writes.
+        "amule_config": "/mnt/storage/amule/config",
     },
     "intervals": {
         "check": 15,
