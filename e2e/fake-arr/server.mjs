@@ -24,16 +24,19 @@
  *   GET  /api/v3/release         200 bare array           clients.py:1342 (iterated)
  *   POST /api/v3/release         201, body discarded      clients.py:1394-1395 (200/201 = ok)
  *   GET  /api/v3/rootfolder      200 [{path}, ...]        clients.py:799
- *   GET  /api/v3/queue           200 {records: []}        clients.py:738 (reads .records)
- *   GET  /api/v3/history         200 {records: []}        clients.py:724 (reads .records)
+ *   GET  /api/v3/queue           200 {records: [...]}     clients.py:738 (reads .records)
+ *   GET  /api/v3/history         200 {records: [...]}     clients.py:724 (reads .records)
  *   GET  /api/v3/downloadclient  200 []                   clients.py:750 returns the body as-is;
  *                                                          traces.py:60 iterates it as list[dict]
  *   GET  /api/v3/series          200 []                   clients.py:691 (iterated; not {records})
  *   GET  /__health               200 ok                   compose healthcheck
  *
  * queue/history/downloadclient/series exist so the app's 15 s /api/trace poll
- * (traces.py:109 build_traces) finds valid empties instead of erroring. The
- * empty payloads live in fixtures too, so every answer has one provenance file.
+ * (traces.py:109 build_traces) finds valid answers instead of erroring. Queue
+ * and history carry ONE import-blocked grab — joined by downloadId they are
+ * what gives /api/trace a row, and the long outputPath is the field the
+ * kanban-fit spec measures card overflow against. Every answer has one
+ * provenance file in fixtures/.
  *
  * Every request is logged to stdout as "METHOD path?query" — a CI failure is
  * diagnosable from the job log alone. Anything unmatched → 404 + JSON body.
@@ -94,9 +97,9 @@ const server = createServer((req, res) => {
       case '/api/v3/rootfolder':
         return json(res, 200, fixtures.rootfolders)
       case '/api/v3/queue':
-        return json(res, 200, fixtures['queue-empty'])
+        return json(res, 200, fixtures['queue-one-import-blocked'])
       case '/api/v3/history':
-        return json(res, 200, fixtures['history-empty'])
+        return json(res, 200, fixtures['history-one-grab'])
       case '/api/v3/downloadclient':
         return json(res, 200, fixtures['downloadclients-empty'])
       case '/api/v3/series':

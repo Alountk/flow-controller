@@ -123,6 +123,9 @@
 .sg-col-body {
   padding: 10px;
   display: grid;
+  /* The track must not be pushed by a card's min-content: a nowrap path
+     inside a card used to widen the whole column past its box. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-height: 90px;
 }
@@ -141,6 +144,10 @@
   border: 1px solid var(--border);
   border-radius: 9px;
   padding: 11px 12px;
+  /* Grid item: disable the automatic minimum so the card fits the track,
+     not the longest line inside it — the ellipsis on .sg-path finishes the
+     job inside the card. */
+  min-width: 0;
 }
 
 .sg-card.sg-blocked {

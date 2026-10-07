@@ -1,0 +1,18 @@
+{
+  "records": [
+    {
+      "id": 4117,
+      "downloadId": "FAKE000000000000000000000000000000000001",
+      "title": "Transformers: Age of Extinction (2014) 2160p",
+      "status": "warning",
+      "trackedDownloadState": "importPending",
+      "trackedDownloadStatus": "warning",
+      "downloadClient": "aMuTorrent",
+      "indexer": "AMULE",
+      "outputPath": "/data/TransformersAgeOfExtinction2014/Transformers.Age.of.Extinction.2014.2160p.UHD.BluRay.x265.DV.HDR.TrueHD.Atmos-EXTREMEONE.mkv",
+      "statusMessages": [
+        { "messages": ["Sin ruta de importación: la carpeta queda fuera de las raíces de Radarr"] }
+      ]
+    }
+  ]
+}

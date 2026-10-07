@@ -58,10 +58,10 @@
     .col-blocked .dot { background: var(--warn); }
     .col-blocked .name { color: var(--warn); }
     .col-done .dot { background: var(--ok); }
-    .col-body { padding: 10px; display: grid; gap: 10px; min-height: 120px; }
+    .col-body { padding: 10px; display: grid; /* minmax(0, 1fr): the track must not be pushed by a card's min-content */ grid-template-columns: minmax(0, 1fr); gap: 10px; min-height: 120px; }
     .col-empty { font-size: 11px; color: var(--text-dim2); text-align: center; padding: 18px 8px; }
 
-    .k-card { background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; }
+    .k-card { background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; min-width: 0; }
     .k-card.warn { border-color: rgba(255,196,74,.45); }
     .k-card.bad { border-color: rgba(255,92,92,.45); }
     .k-title { font-size: 12.5px; font-weight: 650; line-height: 1.35; }
@@ -71,11 +71,11 @@
     .svc.sonarr { color: var(--ok); }
     .k-bar { height: 4px; border-radius: 999px; background: var(--bg); overflow: hidden; margin-top: 9px; }
     .k-bar > i { display: block; height: 100%; background: var(--accent); }
-    .k-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 10.5px; font-family: var(--mono); color: var(--text-dim); }
+    .k-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 10.5px; font-family: var(--mono); color: var(--text-dim); flex-wrap: wrap; }
     .k-meta .hi { color: var(--text); }
     .k-why { margin-top: 8px; font-size: 11px; line-height: 1.45; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 7px 8px; }
     .k-why.bad { color: var(--bad); background: var(--bad-soft); }
-    .k-actions { display: flex; gap: 6px; margin-top: 9px; }
+    .k-actions { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
     .btn { font-size: 11px; font-weight: 600; border-radius: 6px; padding: 5px 9px; cursor: pointer; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text-dim); }
     .btn:hover { border-color: var(--accent); color: var(--text); }
     .btn.fase2 { border-style: dashed; }
@@ -93,6 +93,9 @@
 
     @media (max-width: 1100px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 900px) {
+      /* The sidebar takes the full width here: without wrap the shell keeps
+         laying it beside the content and pushes the content off-screen. */
+      .shell { flex-wrap: wrap; }
       .sidebar { position: static; max-height: none; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
       .board { grid-template-columns: 1fr; }
       .content { padding: 16px; }
