@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Seguimiento · Prototipo 1: Cronología</title>
+  <style>
+    :root {
+      --bg: #0f0f11; --bg-elev: #17171a; --bg-elev-2: #1f1f23;
+      --border: #27272a; --text: #fafafa; --text-dim: #a1a1aa; --text-dim2: #71717a;
+      --accent: #4a9eff; --accent-soft: rgba(74,158,255,0.12);
+      --ok: #6cd68f; --ok-soft: rgba(108,214,143,0.12);
+      --warn: #ffc44a; --warn-soft: rgba(255,196,74,0.12);
+      --bad: #ff5c5c; --bad-soft: rgba(255,92,92,0.12);
+      --sidebar-w: 208px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; line-height: 1.5; min-height: 100vh; }
+    button { font: inherit; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .shell { display: flex; align-items: flex-start; min-height: 100vh; }
+    .sidebar { width: var(--sidebar-w); flex-shrink: 0; align-self: stretch; position: sticky; top: 0; max-height: 100vh; overflow-y: auto; background: var(--bg-elev); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; gap: 14px; }
+    .sb-brand { font-size: 15px; font-weight: 700; padding: 0 8px; }
+    .sb-brand span { color: var(--accent); }
+    .sb-version { font-size: 11px; color: var(--text-dim2); padding: 0 8px; margin-top: 2px; }
+    .sb-flag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; margin: 0 8px; text-align: center; }
+    .sb-nav { display: flex; flex-direction: column; gap: 2px; }
+    .sb-link { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-dim); text-decoration: none; padding: 7px 8px; border-radius: 7px; }
+    .sb-link .ico { width: 16px; text-align: center; }
+    .sb-link.is-active { background: var(--accent-soft); color: var(--text); }
+    .content { flex: 1; min-width: 0; padding: 24px 28px 56px; }
+
+    /* ── Cabecera de concepto ── */
+    .concept { border: 1px dashed var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 24px; background: var(--bg-elev); }
+    .proto-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim2); margin-bottom: 12px; }
+    .concept h1 { font-size: 20px; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .concept p { font-size: 13px; color: var(--text-dim); max-width: 78ch; }
+    .concept p + p { margin-top: 8px; }
+    .concept b { color: var(--text); }
+
+    /* ── Resumen ── */
+    .sum { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+    .sum-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; min-width: 120px; }
+    .sum-card .v { font-size: 22px; font-weight: 700; }
+    .sum-card .l { font-size: 11px; color: var(--text-dim); }
+    .sum-card.warn .v { color: var(--warn); }
+    .sum-card.bad .v { color: var(--bad); }
+    .sum-card.ok .v { color: var(--ok); }
+
+    /* ── Filtros ── */
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .chip { font-size: 12px; font-weight: 600; color: var(--text-dim); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+    .chip.on { color: var(--text); background: var(--accent-soft); border-color: var(--accent); }
+    .chip .n { color: var(--text-dim2); margin-left: 5px; }
+
+    /* ── Tarjetas con cronología ── */
+    .cards { display: grid; gap: 14px; }
+    .card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .card.rail-warn { border-left: 3px solid var(--warn); }
+    .card.rail-bad { border-left: 3px solid var(--bad); }
+    .card.rail-ok { border-left: 3px solid var(--ok); }
+    .card.rail-accent { border-left: 3px solid var(--accent); }
+    .c-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .c-title { font-size: 14px; font-weight: 650; }
+    .c-sub { font-size: 11px; color: var(--text-dim2); }
+    .pill { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 999px; padding: 3px 9px; border: 1px solid var(--border); color: var(--text-dim); }
+    .pill.svc-radarr { background: var(--accent-soft); color: var(--accent); }
+    .pill.svc-sonarr { background: var(--ok-soft); color: var(--ok); }
+    .pill.st-download { background: var(--accent-soft); color: var(--accent); }
+    .pill.st-blocked { background: var(--warn-soft); color: var(--warn); }
+    .pill.st-failed { background: var(--bad-soft); color: var(--bad); }
+    .pill.st-import { background: var(--accent-soft); color: var(--accent); }
+    .pill.st-sent { background: var(--ok-soft); color: var(--ok); }
+    .c-spacer { flex: 1; }
+    .btn { font-size: 12px; font-weight: 600; border-radius: 7px; padding: 6px 12px; cursor: pointer; border: 1px solid var(--border); background: var(--bg-elev-2); color: var(--text-dim); }
+    .btn:hover { border-color: var(--accent); color: var(--text); }
+    .btn.fase2 { border-style: dashed; }
+
+    /* La cinta: 4 pasos del viaje */
+    .journey { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 16px; }
+    .step { position: relative; padding: 18px 12px 4px 0; }
+    .step::before { content: ""; position: absolute; top: 6px; left: 6px; right: -6px; height: 2px; background: var(--border); }
+    .step:last-child::before { right: auto; width: 6px; }
+    .step .dot { position: relative; z-index: 1; width: 13px; height: 13px; border-radius: 50%; background: var(--bg-elev); border: 2px solid var(--border); }
+    .step.done .dot { background: var(--ok); border-color: var(--ok); }
+    .step.now .dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .step.warn .dot { background: var(--warn); border-color: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
+    .step.bad .dot { background: var(--bad); border-color: var(--bad); box-shadow: 0 0 0 4px var(--bad-soft); }
+    .step.done::before { background: var(--ok); }
+    .step .name { font-size: 12px; font-weight: 650; margin-top: 8px; }
+    .step .meta { font-size: 11px; color: var(--text-dim2); font-family: var(--mono); }
+    .step .fail { font-size: 11px; color: var(--bad); margin-top: 3px; max-width: 24ch; }
+    .step .pending .name, .step.pending .name { color: var(--text-dim2); }
+
+    /* progreso dentro del paso actual */
+    .bar { height: 5px; border-radius: 999px; background: var(--bg-elev-2); overflow: hidden; margin-top: 8px; }
+    .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+    .row-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-dim); margin-top: 12px; font-family: var(--mono); }
+    .row-meta .hi { color: var(--text); }
+
+    @media (max-width: 900px) {
+      .sidebar { position: static; max-height: none; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
+      .journey { grid-template-columns: repeat(2, 1fr); }
+      .content { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div>
+        <div class="sb-brand">Flow<span>Controller</span></div>
+        <div class="sb-version">v0.1.0 · autoalojado</div>
+      </div>
+      <span class="sb-flag">Orientativa</span>
+      <nav class="sb-nav" aria-label="Navegación principal (maqueta)">
+        <a class="sb-link" href="#"><span class="ico">📊</span>Dashboard</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Películas</a>
+        <a class="sb-link" href="#"><span class="ico">📺</span>Series</a>
+        <a class="sb-link is-active" href="#" aria-current="page"><span class="ico">📡</span>Seguimiento</a>
+        <a class="sb-link" href="#"><span class="ico">💾</span>Disco</a>
+        <a class="sb-link" href="#"><span class="ico">📂</span>Archivos</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Media Mixer</a>
+        <a class="sb-link" href="#"><span class="ico">⚙️</span>Configuración</a>
+        <a class="sb-link" href="#"><span class="ico">🎨</span>Prototipos</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="concept">
+        <p class="proto-tag">Prototipo 1 de 4 · Seguimiento — Cronología</p>
+        <h1>Cada tarjeta cuenta el viaje de la descarga</h1>
+        <p>
+          Cuatro pasos fijos — <b>Grab → Descarga → Import → Destino</b> — con su marca de tiempo y su
+          desenlace. Lo que se ve de un vistazo no es solo el estado actual: <b>dónde se cortó el
+          viaje</b> y qué pasos ya están hechos. El paso fallido se queda marcado en rojo con su
+          motivo, sin tener que abrir nada.
+        </p>
+        <p>
+          Los botones <b>Cancelar</b> y <b>Detalles</b> aparecen en punto y coma: son la fase 2 de
+          F-09, todavía sin construir. Los datos son los que hoy entrega <code>/api/trace</code>.
+        </p>
+      </header>
+
+      <div class="sum" role="group" aria-label="Resumen">
+        <div class="sum-card"><div class="v">4</div><div class="l">Descargando</div></div>
+        <div class="sum-card warn"><div class="v">2</div><div class="l">Import bloqueado</div></div>
+        <div class="sum-card bad"><div class="v">1</div><div class="l">Fallidas</div></div>
+        <div class="sum-card ok"><div class="v">12</div><div class="l">Completadas</div></div>
+      </div>
+
+      <div class="filters" role="tablist" aria-label="Filtrar por fase">
+        <button class="chip on" role="tab" aria-selected="true">Todas <span class="n">19</span></button>
+        <button class="chip" role="tab" aria-selected="false">Descargando <span class="n">4</span></button>
+        <button class="chip" role="tab" aria-selected="false">Importando <span class="n">3</span></button>
+        <button class="chip" role="tab" aria-selected="false">Import bloqueado <span class="n">2</span></button>
+        <button class="chip" role="tab" aria-selected="false">Fallidas <span class="n">1</span></button>
+        <button class="chip" role="tab" aria-selected="false">Enviadas <span class="n">9</span></button>
+      </div>
+
+      <div class="cards">
+
+        <!-- 1 · Descargando -->
+        <article class="card rail-accent" aria-label="Dune 2021, descargando">
+          <div class="c-top">
+            <span class="pill svc-radarr">Radarr</span>
+            <span class="c-title">Dune (2021)</span>
+            <span class="pill st-download">Descargando</span>
+            <span class="c-sub">AMULE · cat radarr</span>
+            <span class="c-spacer"></span>
+            <button class="btn fase2" title="Fase 2">; Cancelar</button>
+            <button class="btn fase2" title="Fase 2">; Detalles</button>
+          </div>
+          <div class="journey">
+            <div class="step done"><div class="dot"></div><div class="name">Grab</div><div class="meta">hoy 11:42</div></div>
+            <div class="step now"><div class="dot"></div><div class="name">Descarga</div><div class="meta">67% · 12,4 MB/s</div><div class="bar"><i style="width:67%"></i></div></div>
+            <div class="step pending"><div class="dot"></div><div class="name">Import</div><div class="meta">—</div></div>
+            <div class="step pending"><div class="dot"></div><div class="name">Destino</div><div class="meta">/mnt/storage/movies</div></div>
+          </div>
+          <div class="row-meta">
+            <span>ETA <span class="hi">8 min</span></span>
+            <span>4,2 / 6,3 GB</span>
+            <span>llegada <span class="hi">hace 21 min</span></span>
+          </div>
+        </article>
+
+        <!-- 2 · Import bloqueado (el caso Transformers) -->
+        <article class="card rail-warn" aria-label="Transformers 2160p, import bloqueado">
+          <div class="c-top">
+            <span class="pill svc-radarr">Radarr</span>
+            <span class="c-title">Transformers: Age of Extinction (2014) 2160p</span>
+            <span class="pill st-blocked">Import bloqueado</span>
+            <span class="c-sub">3 h atascado</span>
+            <span class="c-spacer"></span>
+            <button class="btn fase2" title="Fase 2">; Cancelar</button>
+            <button class="btn fase2" title="Fase 2">; Detalles</button>
+          </div>
+          <div class="journey">
+            <div class="step done"><div class="dot"></div><div class="name">Grab</div><div class="meta">hoy 08:31</div></div>
+            <div class="step done"><div class="dot"></div><div class="name">Descarga</div><div class="meta">100% · 42,1 GB</div></div>
+            <div class="step warn"><div class="dot"></div><div class="name">Import</div><div class="fail">Sin ruta de importación: la carpeta queda fuera de las raíces de Radarr</div></div>
+            <div class="step pending"><div class="dot"></div><div class="name">Destino</div><div class="meta">—</div></div>
+          </div>
+          <div class="row-meta">
+            <span>stuck <span class="hi">trackedDownloadState: importBlocked</span></span>
+            <span>/mnt/storage-6tb/shared-downloads/amule/…</span>
+          </div>
+        </article>
+
+        <!-- 3 · Importando -->
+        <article class="card rail-accent" aria-label="Shogun S01E03, importando">
+          <div class="c-top">
+            <span class="pill svc-sonarr">Sonarr</span>
+            <span class="c-title">Shōgun · S01E03</span>
+            <span class="pill st-import">Importando</span>
+            <span class="c-sub">tv-sonarr</span>
+            <span class="c-spacer"></span>
+            <button class="btn fase2" title="Fase 2">; Cancelar</button>
+            <button class="btn fase2" title="Fase 2">; Detalles</button>
+          </div>
+          <div class="journey">
+            <div class="step done"><div class="dot"></div><div class="name">Grab</div><div class="meta">hoy 10:05</div></div>
+            <div class="step done"><div class="dot"></div><div class="name">Descarga</div><div class="meta">100% · 1,8 GB</div></div>
+            <div class="step now"><div class="dot"></div><div class="name">Import</div><div class="meta">renombrando…</div><div class="bar"><i style="width:45%"></i></div></div>
+            <div class="step pending"><div class="dot"></div><div class="name">Destino</div><div class="meta">/mnt/storage/tv</div></div>
+          </div>
+          <div class="row-meta">
+            <span>output <span class="hi">/data/TV/Shogun (2024)/Season 01/</span></span>
+          </div>
+        </article>
+
+        <!-- 4 · Fallida -->
+        <article class="card rail-bad" aria-label="Luca 2021, fallida">
+          <div class="c-top">
+            <span class="pill svc-radarr">Radarr</span>
+            <span class="c-title">Luca (2021)</span>
+            <span class="pill st-failed">Fallida</span>
+            <span class="c-sub">radarr · reintento 2/3</span>
+            <span class="c-spacer"></span>
+            <button class="btn fase2" title="Fase 2">; Cancelar</button>
+            <button class="btn fase2" title="Fase 2">; Detalles</button>
+          </div>
+          <div class="journey">
+            <div class="step done"><div class="dot"></div><div class="name">Grab</div><div class="meta">ayer 22:14</div></div>
+            <div class="step done"><div class="dot"></div><div class="name">Descarga</div><div class="meta">100% · 2,4 GB</div></div>
+            <div class="step bad"><div class="dot"></div><div class="name">Import</div><div class="fail">El archivo ya existe en la biblioteca (título duplicado)</div></div>
+            <div class="step pending"><div class="dot"></div><div class="name">Destino</div><div class="meta">—</div></div>
+          </div>
+          <div class="row-meta">
+            <span>history <span class="hi">failed · hace 9 h</span></span>
+            <span>/mnt/storage-6tb/shared-downloads/amule/Luca (2021)/</span>
+          </div>
+        </article>
+
+        <!-- 5 · Enviada (viaje completo) -->
+        <article class="card rail-ok" aria-label="The Bear S02E05, enviada">
+          <div class="c-top">
+            <span class="pill svc-sonarr">Sonarr</span>
+            <span class="c-title">The Bear · S02E05</span>
+            <span class="pill st-sent">Enviada</span>
+            <span class="c-sub">completada hace 40 min</span>
+            <span class="c-spacer"></span>
+            <button class="btn fase2" title="Fase 2">; Detalles</button>
+          </div>
+          <div class="journey">
+            <div class="step done"><div class="dot"></div><div class="name">Grab</div><div class="meta">hoy 12:01</div></div>
+            <div class="step done"><div class="dot"></div><div class="name">Descarga</div><div class="meta">100% · 2,1 GB</div></div>
+            <div class="step done"><div class="dot"></div><div class="name">Import</div><div class="meta">12:39 · ok</div></div>
+            <div class="step done"><div class="dot"></div><div class="name">Destino</div><div class="meta">/mnt/storage/tv/The Bear/Season 02</div></div>
+          </div>
+          <div class="row-meta">
+            <span>movido desde <span class="hi">/mnt/storage-6tb/shared-downloads/amule/…</span></span>
+            <span>hardlink preservado</span>
+          </div>
+        </article>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

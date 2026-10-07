@@ -704,7 +704,7 @@ de mostrar dos envolturas muertas.
 **`Page` estaba duplicado** (hook + Sidebar) y nada impedía que se desincronizara; el hook es
 ahora el **único dueño** y el Sidebar re-exporta el tipo.
 
-### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · 🔁 *Decidido — pendiente de prototipos*
+### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · ✅ *Elección tomada: kanban — siguiente la fase 1*
 
 Pedida en voz alta al revisar el diseño nuevo. La retirada sigue en pie, pero **el final ya está
 decidido**: no se retira para dejar un hueco — Trazabilidad se convierte en una vista nueva que
@@ -719,7 +719,7 @@ descarga y de cada operación, y en una fase posterior acciones sobre ellas:
 
 | Fase | Contenido |
 |---|---|
-| **0 · Prototipos** | **4 diseños diferentes** en la galería de prototipos → decisión del usuario. Mismo flujo que F-08: prototipos → elección → implementación (con el trade-off registrado en el manifiesto) |
+| **0 · Prototipos** | ✅ **Entregados y elegidos** — los 4 (`01-cronologia` · `02-kanban` · `03-consola-densa` · `04-alertas`) el 2026-10-07; **el usuario eligió `seguimiento-02-kanban`** («el estado ES la columna»). Los otros 3 quedan `discarded` con su trade-off en `prototypes/manifest.json` |
 | **1 · La vista** | Las cards: descargas y operaciones con su estado — los datos ya existen (`GET /api/trace`, `GET /api/downloads`, cola de operaciones) |
 | **2 · Acciones** | **Cancelar descarga** · **Ver detalles**: destino del fichero, dónde se movió después y en qué estado se quedó (a medias, bloqueado, importado…) |
 
@@ -854,10 +854,9 @@ Act. **2026-10-07** (el anterior decía `F-07` → `F-01` → `C-01/C-02` y **F-
 
 1. **Rápidos** ✅ *hechos 2026-10-07*: `B-08` (host_path en el listado) → `C-09` (guardia de
    búsqueda masiva — cierra la clase del incidente del 07-10).
-2. **`F-09` completo** — *siguiente gran bloque por decisión del usuario*:
-   fase 0 (los **4 prototipos** de la nueva vista de **Seguimiento**) → decisión → fase 1 (la
-   vista con cards) → fase 2 (cancelar / detalles). `C-11` (card «Stuck» clicable) entra aquí y
-   puede adelantarse apuntando mientras a `Trazabilidad`.
+2. **`F-09`** — *en curso*: fase 0 ✅ **kanban elegido** (`seguimiento-02-kanban`) →
+   **fase 1: construir la vista** (las cards) → fase 2 (cancelar / detalles). `C-11` (card
+   «Stuck» clicable) entra aquí apuntando a la vista nueva.
 3. Después: `C-01` (avisos Telegram) → `F-07` (procedencia de aMule) → `C-10` (búsqueda
    asíncrona) → `C-05` → `C-06` → `C-04`.
 4. **F-06: estudio entregado** (→ `odd/tasks/f06-amule-local.md`); *la implementación* sigue sin

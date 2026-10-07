@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Seguimiento · Prototipo 4: Lo que necesita atención</title>
+  <style>
+    :root {
+      --bg: #0f0f11; --bg-elev: #17171a; --bg-elev-2: #1f1f23;
+      --border: #27272a; --text: #fafafa; --text-dim: #a1a1aa; --text-dim2: #71717a;
+      --accent: #4a9eff; --accent-soft: rgba(74,158,255,0.12);
+      --ok: #6cd68f; --ok-soft: rgba(108,214,143,0.12);
+      --warn: #ffc44a; --warn-soft: rgba(255,196,74,0.12);
+      --bad: #ff5c5c; --bad-soft: rgba(255,92,92,0.12);
+      --sidebar-w: 208px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; line-height: 1.5; min-height: 100vh; }
+    button { font: inherit; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .shell { display: flex; align-items: flex-start; min-height: 100vh; }
+    .sidebar { width: var(--sidebar-w); flex-shrink: 0; align-self: stretch; position: sticky; top: 0; max-height: 100vh; overflow-y: auto; background: var(--bg-elev); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; gap: 14px; }
+    .sb-brand { font-size: 15px; font-weight: 700; padding: 0 8px; }
+    .sb-brand span { color: var(--accent); }
+    .sb-version { font-size: 11px; color: var(--text-dim2); padding: 0 8px; margin-top: 2px; }
+    .sb-flag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; margin: 0 8px; text-align: center; }
+    .sb-nav { display: flex; flex-direction: column; gap: 2px; }
+    .sb-link { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-dim); text-decoration: none; padding: 7px 8px; border-radius: 7px; }
+    .sb-link .ico { width: 16px; text-align: center; }
+    .sb-link.is-active { background: var(--accent-soft); color: var(--text); }
+    .content { flex: 1; min-width: 0; padding: 24px 28px 56px; }
+
+    .concept { border: 1px dashed var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 24px; background: var(--bg-elev); }
+    .proto-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim2); margin-bottom: 12px; }
+    .concept h1 { font-size: 20px; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .concept p { font-size: 13px; color: var(--text-dim); max-width: 78ch; }
+    .concept p + p { margin-top: 8px; }
+    .concept b { color: var(--text); }
+
+    /* ── Sección 1: lo rojo primero ── */
+    .band { margin-bottom: 26px; }
+    .band-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .band-head h2 { font-size: 13px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+    .band-head .badge { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 9px; }
+    .band-head .badge.warn { color: var(--warn); background: var(--warn-soft); }
+    .band-head .badge.bad { color: var(--bad); background: var(--bad-soft); }
+    .band-head .badge.dim { color: var(--text-dim2); background: var(--bg-elev-2); }
+    .band-head .hint { font-size: 11.5px; color: var(--text-dim2); }
+
+    .attention { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+    .alert-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; position: relative; overflow: hidden; }
+    .alert-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; }
+    .alert-card.warn::before { background: var(--warn); }
+    .alert-card.bad::before { background: var(--bad); }
+    .a-top { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+    .a-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+    .svc { font-weight: 700; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+    .svc.radarr { color: var(--accent); }
+    .svc.sonarr { color: var(--ok); }
+    .a-age { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-dim2); }
+    .a-why { margin-top: 10px; font-size: 13px; line-height: 1.55; }
+    .a-why.warn { color: var(--warn); }
+    .a-why.bad { color: var(--bad); }
+    .a-facts { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+    .a-facts .hi { color: var(--text); }
+    .a-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .btn { font-size: 12.5px; font-weight: 650; border-radius: 7px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--border); background: var(--bg-elev-2); color: var(--text); }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); }
+    .btn.warn { background: var(--warn-soft); border-color: rgba(255,196,74,.5); color: var(--warn); }
+    .btn.fase2 { border-style: dashed; color: var(--text-dim); }
+    .btn.quiet { background: none; color: var(--text-dim2); }
+    .btn.quiet:hover { color: var(--text); }
+
+    /* ── Sección 2: en curso, compacto ── */
+    .grid-active { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+    .mini { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; }
+    .mini-top { display: flex; align-items: center; gap: 8px; }
+    .mini-title { font-size: 12.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mini-state { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+    .mini-bar { height: 4px; border-radius: 999px; background: var(--bg-elev-2); overflow: hidden; margin-top: 9px; }
+    .mini-bar > i { display: block; height: 100%; background: var(--accent); }
+    .mini-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
+
+    /* ── Sección 3: resueltas, fantasma ── */
+    details.done { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+    details.done summary { cursor: pointer; font-size: 12px; font-weight: 650; color: var(--text-dim); }
+    details.done summary:hover { color: var(--text); }
+    .done-row { display: flex; align-items: center; gap: 10px; padding: 8px 0 2px; font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 8px; }
+    .done-row:first-of-type { border-top: 0; margin-top: 10px; }
+    .done-row .ok-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex-shrink: 0; }
+    .done-row .t { color: var(--text); font-weight: 600; }
+    .done-row .d { font-family: var(--mono); font-size: 11px; margin-left: auto; text-align: right; }
+
+    /* cola de operaciones */
+    .ops { margin-top: 26px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .ops h2 { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; }
+    .op { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 12px; }
+    .op:first-of-type { border-top: 0; }
+    .op .kind { font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); min-width: 58px; }
+    .op .path { font-family: var(--mono); font-size: 11px; color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .op .pct { font-family: var(--mono); font-size: 11px; color: var(--text); }
+    .op .st { font-size: 10.5px; font-weight: 700; color: var(--text-dim2); }
+    .op .st.run { color: var(--accent); }
+
+    @media (max-width: 900px) {
+      .sidebar { position: static; max-height: none; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
+      .content { padding: 16px; }
+      .attention { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div>
+        <div class="sb-brand">Flow<span>Controller</span></div>
+        <div class="sb-version">v0.1.0 · autoalojado</div>
+      </div>
+      <span class="sb-flag">Orientativa</span>
+      <nav class="sb-nav" aria-label="Navegación principal (maqueta)">
+        <a class="sb-link" href="#"><span class="ico">📊</span>Dashboard</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Películas</a>
+        <a class="sb-link" href="#"><span class="ico">📺</span>Series</a>
+        <a class="sb-link is-active" href="#" aria-current="page"><span class="ico">📡</span>Seguimiento</a>
+        <a class="sb-link" href="#"><span class="ico">💾</span>Disco</a>
+        <a class="sb-link" href="#"><span class="ico">📂</span>Archivos</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Media Mixer</a>
+        <a class="sb-link" href="#"><span class="ico">⚙️</span>Configuración</a>
+        <a class="sb-link" href="#"><span class="ico">🎨</span>Prototipos</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="concept">
+        <p class="proto-tag">Prototipo 4 de 4 · Seguimiento — Lo que necesita atención (★ recomendado)</p>
+        <h1>Primero lo que está roto; lo demás, si hay tiempo</h1>
+        <p>
+          La app <b>existe</b> para detectar dónde se corta el flujo, así que esta vista ordena su
+          contenido por <b>urgencia</b>, no por recencia: arriba, en tarjetas grandes con su
+          motivo y sus acciones, lo <b>bloqueado y lo fallido</b>; debajo, una rejilla compacta de
+          lo que <b>va bien</b> (que solo necesita ser mirado); al final, lo ya resuelto, plegado.
+        </p>
+        <p>
+          Con el flujo sano la página está casi vacía — <b>ese es el diseño</b>: silencio cuando no
+          hay nada que hacer, y ruido exactamente donde hay que actuar. Incluye la cola de
+          operaciones y los botones fantasma de la fase 2.
+        </p>
+      </header>
+
+      <!-- ═══ Atención ═══ -->
+      <section class="band" aria-label="Necesita tu atención">
+        <div class="band-head">
+          <h2>Necesita tu atención</h2>
+          <span class="badge warn">2 bloqueados</span>
+          <span class="badge bad">1 fallida</span>
+          <span class="hint">un clic actúa — reintentar, corregir, quitar</span>
+        </div>
+        <div class="attention">
+          <article class="alert-card warn">
+            <div class="a-top">
+              <span class="svc radarr">Radarr</span>
+              <span class="a-title">Transformers: Age of Extinction (2014) 2160p</span>
+              <span class="a-age">3 h 12 m</span>
+            </div>
+            <p class="a-why warn">Sin ruta de importación: la carpeta queda fuera de las raíces de Radarr.</p>
+            <div class="a-facts">
+              <span>42,1 GB · <span class="hi">100%</span></span>
+              <span>amule · cat radarr</span>
+              <span class="hi">/mnt/storage-6tb/shared-downloads/amule/…</span>
+            </div>
+            <div class="a-actions">
+              <button class="btn warn">Reintentar import</button>
+              <button class="btn fase2">; Cancelar</button>
+              <button class="btn fase2">; Detalles</button>
+              <button class="btn quiet">Ignorar</button>
+            </div>
+          </article>
+
+          <article class="alert-card warn">
+            <div class="a-top">
+              <span class="svc sonarr">Sonarr</span>
+              <span class="a-title">Fallout · S01E02</span>
+              <span class="a-age">5 h 47 m</span>
+            </div>
+            <p class="a-why warn">Categoría «amule» en aMuTorrent; Sonarr esperaba «tv-sonarr». El import no empieza.</p>
+            <div class="a-facts">
+              <span>2,1 GB · <span class="hi">100%</span></span>
+              <span>cola del arr: id 4119</span>
+            </div>
+            <div class="a-actions">
+              <button class="btn warn">Corregir categoría</button>
+              <button class="btn fase2">; Cancelar</button>
+              <button class="btn fase2">; Detalles</button>
+            </div>
+          </article>
+
+          <article class="alert-card bad">
+            <div class="a-top">
+              <span class="svc radarr">Radarr</span>
+              <span class="a-title">Luca (2021)</span>
+              <span class="a-age">9 h</span>
+            </div>
+            <p class="a-why bad">El archivo ya existe en la biblioteca (título duplicado). Reintento 2 de 3 agotado.</p>
+            <div class="a-facts">
+              <span>2,4 GB · <span class="hi">100%</span></span>
+              <span class="hi">/mnt/storage-6tb/shared-downloads/amule/Luca (2021)/</span>
+            </div>
+            <div class="a-actions">
+              <button class="btn">Re-buscar</button>
+              <button class="btn fase2">; Quitar de la cola</button>
+              <button class="btn fase2">; Detalles</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ═══ En curso ═══ -->
+      <section class="band" aria-label="En curso">
+        <div class="band-head">
+          <h2>En curso</h2>
+          <span class="badge dim">7 activas</span>
+          <span class="hint">solo lectura: van bien</span>
+        </div>
+        <div class="grid-active">
+          <article class="mini">
+            <div class="mini-top"><span class="mini-title">Dune (2021)</span><span class="mini-state" style="margin-left:auto">Descargando</span></div>
+            <div class="mini-bar"><i style="width:67%"></i></div>
+            <div class="mini-meta"><span>67% · 12,4 MB/s</span><span>ETA 8 min</span></div>
+          </article>
+          <article class="mini">
+            <div class="mini-top"><span class="mini-title">Oppenheimer (2023)</span><span class="mini-state" style="margin-left:auto">Descargando</span></div>
+            <div class="mini-bar"><i style="width:23%"></i></div>
+            <div class="mini-meta"><span>23% · sembrando 1,4</span><span>ETA 41 min</span></div>
+          </article>
+          <article class="mini">
+            <div class="mini-top"><span class="mini-title">Shōgun · S01E04</span><span class="mini-state" style="margin-left:auto">Descargando</span></div>
+            <div class="mini-bar"><i style="width:12%"></i></div>
+            <div class="mini-meta"><span>12% · 2,8 MB/s</span><span>ETA 9 min</span></div>
+          </article>
+          <article class="mini">
+            <div class="mini-top"><span class="mini-title">Blade Runner 2049</span><span class="mini-state" style="margin-left:auto">En pausa</span></div>
+            <div class="mini-bar"><i style="width:54%;background:var(--text-dim2)"></i></div>
+            <div class="mini-meta"><span>54% · pausada</span><span>—</span></div>
+          </article>
+          <article class="mini">
+            <div class="mini-top"><span class="mini-title">Shōgun · S01E03</span><span class="mini-state" style="margin-left:auto">Importando</span></div>
+            <div class="mini-bar"><i style="width:100%"></i></div>
+            <div class="mini-meta"><span>renombrando…</span><span>1 h 04 m</span></div>
+          </article>
+          <article class="mini">
+            <div class="mini-top"><span class="mini-title">Wonka (2023)</span><span class="mini-state" style="margin-left:auto">Importando</span></div>
+            <div class="mini-bar"><i style="width:49%"></i></div>
+            <div class="mini-meta"><span>3,1 / 6,3 GB</span><span>12 min</span></div>
+          </article>
+          <article class="mini">
+            <div class="mini-top"><span class="mini-title">Fallout · S01E06</span><span class="mini-state" style="margin-left:auto">Importando</span></div>
+            <div class="mini-bar"><i style="width:100%"></i></div>
+            <div class="mini-meta"><span>en cola del arr</span><span>6 min</span></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ═══ Resueltas ═══ -->
+      <section class="band" aria-label="Resueltas">
+        <div class="band-head">
+          <h2>Resueltas</h2>
+          <span class="badge dim">12 · últimas 24 h</span>
+        </div>
+        <details class="done">
+          <summary>Ver las 12 descargas completadas (plegado a propósito)</summary>
+          <div class="done-row"><span class="ok-dot"></span><span class="t">The Bear · S02E05</span><span>→ /mnt/storage/tv/The Bear/Season 02</span><span class="d">hace 40 min</span></div>
+          <div class="done-row"><span class="ok-dot"></span><span class="t">Dune: Part Two (2024)</span><span>→ /mnt/storage/movies-4k/Dune Part Two (2024)</span><span class="d">hace 3 h</span></div>
+          <div class="done-row"><span class="ok-dot"></span><span class="t">Godzilla Minus One (2023)</span><span>→ /mnt/storage/movies/Godzilla Minus One (2023)</span><span class="d">ayer</span></div>
+        </details>
+      </section>
+
+      <!-- ═══ Cola ═══ -->
+      <section class="ops" aria-label="Cola de operaciones">
+        <h2>Operaciones de la app · cola</h2>
+        <div class="op">
+          <span class="kind">Copiar</span>
+          <span class="path">/mnt/storage-6tb/shared-downloads/amule/Oppenheimer (2023)/ → /mnt/storage/movies/Oppenheimer (2023)/</span>
+          <span class="pct">3,1 / 6,3 GB</span>
+          <span class="st run">en curso</span>
+        </div>
+        <div class="op">
+          <span class="kind">Eliminar</span>
+          <span class="path">/mnt/storage-6tb/shared-downloads/amule/Godzilla Minus One (2023)/</span>
+          <span class="pct">—</span>
+          <span class="st" style="color:var(--ok)">hecho · hace 1 h</span>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

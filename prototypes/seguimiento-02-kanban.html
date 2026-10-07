@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Seguimiento · Prototipo 2: Kanban</title>
+  <style>
+    :root {
+      --bg: #0f0f11; --bg-elev: #17171a; --bg-elev-2: #1f1f23;
+      --border: #27272a; --text: #fafafa; --text-dim: #a1a1aa; --text-dim2: #71717a;
+      --accent: #4a9eff; --accent-soft: rgba(74,158,255,0.12);
+      --ok: #6cd68f; --ok-soft: rgba(108,214,143,0.12);
+      --warn: #ffc44a; --warn-soft: rgba(255,196,74,0.12);
+      --bad: #ff5c5c; --bad-soft: rgba(255,92,92,0.12);
+      --sidebar-w: 208px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; line-height: 1.5; min-height: 100vh; }
+    button { font: inherit; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .shell { display: flex; align-items: flex-start; min-height: 100vh; }
+    .sidebar { width: var(--sidebar-w); flex-shrink: 0; align-self: stretch; position: sticky; top: 0; max-height: 100vh; overflow-y: auto; background: var(--bg-elev); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; gap: 14px; }
+    .sb-brand { font-size: 15px; font-weight: 700; padding: 0 8px; }
+    .sb-brand span { color: var(--accent); }
+    .sb-version { font-size: 11px; color: var(--text-dim2); padding: 0 8px; margin-top: 2px; }
+    .sb-flag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; margin: 0 8px; text-align: center; }
+    .sb-nav { display: flex; flex-direction: column; gap: 2px; }
+    .sb-link { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-dim); text-decoration: none; padding: 7px 8px; border-radius: 7px; }
+    .sb-link .ico { width: 16px; text-align: center; }
+    .sb-link.is-active { background: var(--accent-soft); color: var(--text); }
+    .content { flex: 1; min-width: 0; padding: 24px 28px 56px; }
+
+    .concept { border: 1px dashed var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 24px; background: var(--bg-elev); }
+    .proto-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim2); margin-bottom: 12px; }
+    .concept h1 { font-size: 20px; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .concept p { font-size: 13px; color: var(--text-dim); max-width: 78ch; }
+    .concept p + p { margin-top: 8px; }
+    .concept b { color: var(--text); }
+
+    .sum { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+    .sum-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; min-width: 120px; }
+    .sum-card .v { font-size: 22px; font-weight: 700; }
+    .sum-card .l { font-size: 11px; color: var(--text-dim); }
+    .sum-card.warn .v { color: var(--warn); }
+    .sum-card.bad .v { color: var(--bad); }
+    .sum-card.ok .v { color: var(--ok); }
+
+    /* ── El tablero: el estado ES la columna ── */
+    .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: start; }
+    .col { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .col-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+    .col-head .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .col-head .name { font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+    .col-head .count { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--text-dim2); background: var(--bg-elev-2); border-radius: 999px; padding: 2px 8px; }
+    .col-download .dot { background: var(--accent); }
+    .col-import .dot { background: var(--accent); }
+    .col-blocked .dot { background: var(--warn); }
+    .col-blocked .name { color: var(--warn); }
+    .col-done .dot { background: var(--ok); }
+    .col-body { padding: 10px; display: grid; gap: 10px; min-height: 120px; }
+    .col-empty { font-size: 11px; color: var(--text-dim2); text-align: center; padding: 18px 8px; }
+
+    .k-card { background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; }
+    .k-card.warn { border-color: rgba(255,196,74,.45); }
+    .k-card.bad { border-color: rgba(255,92,92,.45); }
+    .k-title { font-size: 12.5px; font-weight: 650; line-height: 1.35; }
+    .k-sub { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 10.5px; color: var(--text-dim2); flex-wrap: wrap; }
+    .svc { font-weight: 700; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+    .svc.radarr { color: var(--accent); }
+    .svc.sonarr { color: var(--ok); }
+    .k-bar { height: 4px; border-radius: 999px; background: var(--bg); overflow: hidden; margin-top: 9px; }
+    .k-bar > i { display: block; height: 100%; background: var(--accent); }
+    .k-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 10.5px; font-family: var(--mono); color: var(--text-dim); }
+    .k-meta .hi { color: var(--text); }
+    .k-why { margin-top: 8px; font-size: 11px; line-height: 1.45; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 7px 8px; }
+    .k-why.bad { color: var(--bad); background: var(--bad-soft); }
+    .k-actions { display: flex; gap: 6px; margin-top: 9px; }
+    .btn { font-size: 11px; font-weight: 600; border-radius: 6px; padding: 5px 9px; cursor: pointer; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text-dim); }
+    .btn:hover { border-color: var(--accent); color: var(--text); }
+    .btn.fase2 { border-style: dashed; }
+
+    /* cola de operaciones como banda inferior */
+    .ops { margin-top: 22px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .ops h2 { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; }
+    .op { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 12px; }
+    .op:first-of-type { border-top: 0; }
+    .op .kind { font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); min-width: 58px; }
+    .op .path { font-family: var(--mono); font-size: 11px; color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .op .pct { font-family: var(--mono); font-size: 11px; color: var(--text); }
+    .op .st { font-size: 10.5px; font-weight: 700; color: var(--text-dim2); }
+    .op .st.run { color: var(--accent); }
+
+    @media (max-width: 1100px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 900px) {
+      .sidebar { position: static; max-height: none; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
+      .board { grid-template-columns: 1fr; }
+      .content { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div>
+        <div class="sb-brand">Flow<span>Controller</span></div>
+        <div class="sb-version">v0.1.0 · autoalojado</div>
+      </div>
+      <span class="sb-flag">Orientativa</span>
+      <nav class="sb-nav" aria-label="Navegación principal (maqueta)">
+        <a class="sb-link" href="#"><span class="ico">📊</span>Dashboard</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Películas</a>
+        <a class="sb-link" href="#"><span class="ico">📺</span>Series</a>
+        <a class="sb-link is-active" href="#" aria-current="page"><span class="ico">📡</span>Seguimiento</a>
+        <a class="sb-link" href="#"><span class="ico">💾</span>Disco</a>
+        <a class="sb-link" href="#"><span class="ico">📂</span>Archivos</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Media Mixer</a>
+        <a class="sb-link" href="#"><span class="ico">⚙️</span>Configuración</a>
+        <a class="sb-link" href="#"><span class="ico">🎨</span>Prototipos</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="concept">
+        <p class="proto-tag">Prototipo 2 de 4 · Seguimiento — Kanban por estado</p>
+        <h1>El estado es la columna</h1>
+        <p>
+          Cuatro columnas — <b>Descargando · Importando · Bloqueado · Resuelto</b> — responden la
+          pregunta que trae a esta página sin leer una sola tarjeta: <b>¿dónde se corta el flujo?</b>
+          Si la columna Bloqueado tiene dos tarjetas, ahí está el trabajo del día. Las tarjetas
+          llevan su progreso, su motivo de bloqueo y la ruta de la que vienen.
+        </p>
+        <p>
+          La <b>cola de operaciones</b> (copiar/mover de la app) va como banda inferior: son
+          trabajos NUESTROS en curso, no descargas del arr. Botones en punto y coma = fase 2.
+        </p>
+      </header>
+
+      <div class="sum" role="group" aria-label="Resumen">
+        <div class="sum-card"><div class="v">4</div><div class="l">Descargando</div></div>
+        <div class="sum-card warn"><div class="v">2</div><div class="l">Import bloqueado</div></div>
+        <div class="sum-card bad"><div class="v">1</div><div class="l">Fallidas</div></div>
+        <div class="sum-card ok"><div class="v">12</div><div class="l">Completadas</div></div>
+      </div>
+
+      <div class="board">
+        <section class="col col-download" aria-label="Columna Descargando">
+          <header class="col-head"><span class="dot"></span><span class="name">Descargando</span><span class="count">4</span></header>
+          <div class="col-body">
+            <article class="k-card">
+              <div class="k-title">Dune (2021)</div>
+              <div class="k-sub"><span class="svc radarr">Radarr</span> · AMULE · cat radarr</div>
+              <div class="k-bar"><i style="width:67%"></i></div>
+              <div class="k-meta"><span class="hi">67%</span><span>12,4 MB/s · ETA 8 min</span></div>
+              <div class="k-meta"><span>4,2 / 6,3 GB</span><span>hace 21 min</span></div>
+            </article>
+            <article class="k-card">
+              <div class="k-title">Oppenheimer (2023)</div>
+              <div class="k-sub"><span class="svc radarr">Radarr</span> · Torrent · cat radarr</div>
+              <div class="k-bar"><i style="width:23%"></i></div>
+              <div class="k-meta"><span class="hi">23%</span><span>4,1 MB/s · ETA 41 min</span></div>
+              <div class="k-meta"><span>3,9 / 17,2 GB</span><span>sembrando 1,4</span></div>
+            </article>
+            <article class="k-card">
+              <div class="k-title">Shōgun · S01E04</div>
+              <div class="k-sub"><span class="svc sonarr">Sonarr</span> · AMULE · tv-sonarr</div>
+              <div class="k-bar"><i style="width:12%"></i></div>
+              <div class="k-meta"><span class="hi">12%</span><span>2,8 MB/s · ETA 9 min</span></div>
+              <div class="k-meta"><span>0,2 / 1,8 GB</span><span>hace 3 min</span></div>
+            </article>
+            <article class="k-card">
+              <div class="k-title">Blade Runner 2049 (2017)</div>
+              <div class="k-sub"><span class="svc radarr">Radarr</span> · pausada por el usuario</div>
+              <div class="k-bar"><i style="width:54%"></i></div>
+              <div class="k-meta"><span class="hi">54%</span><span style="color:var(--text-dim2)">en pausa</span></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="col col-import" aria-label="Columna Importando">
+          <header class="col-head"><span class="dot"></span><span class="name">Importando</span><span class="count">3</span></header>
+          <div class="col-body">
+            <article class="k-card">
+              <div class="k-title">Shōgun · S01E03</div>
+              <div class="k-sub"><span class="svc sonarr">Sonarr</span> · tv-sonarr</div>
+              <div class="k-meta"><span class="hi">renombrando…</span></div>
+              <div class="k-meta"><span>/data/TV/Shogun (2024)/Season 01/</span></div>
+            </article>
+            <article class="k-card">
+              <div class="k-title">Wonka (2023)</div>
+              <div class="k-sub"><span class="svc radarr">Radarr</span> · radarr</div>
+              <div class="k-meta"><span class="hi">copiando a la biblioteca</span></div>
+              <div class="k-meta"><span>3,1 / 6,3 GB</span></div>
+            </article>
+            <article class="k-card">
+              <div class="k-title">Fallout · S01E06</div>
+              <div class="k-sub"><span class="svc sonarr">Sonarr</span> · tv-sonarr</div>
+              <div class="k-meta"><span class="hi">en cola del arr</span></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="col col-blocked" aria-label="Columna Bloqueado">
+          <header class="col-head"><span class="dot"></span><span class="name">Bloqueado</span><span class="count">3</span></header>
+          <div class="col-body">
+            <article class="k-card warn">
+              <div class="k-title">Transformers: Age of Extinction (2014) 2160p</div>
+              <div class="k-sub"><span class="svc radarr">Radarr</span> · 3 h atascado</div>
+              <div class="k-why">Sin ruta de importación: la carpeta queda fuera de las raíces de Radarr</div>
+              <div class="k-actions">
+                <button class="btn fase2">; Reintentar</button>
+                <button class="btn fase2">; Detalles</button>
+              </div>
+            </article>
+            <article class="k-card warn">
+              <div class="k-title">Fallout · S01E02</div>
+              <div class="k-sub"><span class="svc sonarr">Sonarr</span> · categoría inesperada</div>
+              <div class="k-why">Categoría «amule» en aMuTorrent; Sonarr esperaba «tv-sonarr»</div>
+              <div class="k-actions">
+                <button class="btn fase2">; Corregir categoría</button>
+                <button class="btn fase2">; Detalles</button>
+              </div>
+            </article>
+            <article class="k-card bad">
+              <div class="k-title">Luca (2021)</div>
+              <div class="k-sub"><span class="svc radarr">Radarr</span> · fallida · reintento 2/3</div>
+              <div class="k-why bad">El archivo ya existe en la biblioteca (título duplicado)</div>
+              <div class="k-actions">
+                <button class="btn fase2">; Quitar de la cola</button>
+                <button class="btn fase2">; Detalles</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="col col-done" aria-label="Columna Resuelto">
+          <header class="col-head"><span class="dot"></span><span class="name">Resuelto</span><span class="count">12</span></header>
+          <div class="col-body">
+            <article class="k-card">
+              <div class="k-title">The Bear · S02E05</div>
+              <div class="k-sub"><span class="svc sonarr">Sonarr</span> · hace 40 min</div>
+              <div class="k-meta"><span>→ /mnt/storage/tv/The Bear/Season 02</span></div>
+            </article>
+            <article class="k-card">
+              <div class="k-title">Dune: Part Two (2024)</div>
+              <div class="k-sub"><span class="svc radarr">Radarr</span> · hace 3 h</div>
+              <div class="k-meta"><span>→ /mnt/storage/movies-4k/Dune Part Two (2024)</span></div>
+            </article>
+            <article class="k-card">
+              <div class="k-title">Godzilla Minus One (2023)</div>
+              <div class="k-sub"><span class="svc radarr">Radarr</span> · ayer</div>
+              <div class="k-meta"><span>→ /mnt/storage/movies/Godzilla Minus One (2023)</span></div>
+            </article>
+            <div class="col-empty">+ 9 resueltas en las últimas 24 h</div>
+          </div>
+        </section>
+      </div>
+
+      <section class="ops" aria-label="Cola de operaciones">
+        <h2>Operaciones de la app · cola</h2>
+        <div class="op">
+          <span class="kind">Copiar</span>
+          <span class="path">/mnt/storage-6tb/shared-downloads/amule/Oppenheimer (2023)/ → /mnt/storage/movies/Oppenheimer (2023)/</span>
+          <span class="pct">3,1 / 6,3 GB</span>
+          <span class="st run">en curso</span>
+        </div>
+        <div class="op">
+          <span class="kind">Mover</span>
+          <span class="path">/mnt/storage/movies/Descargas sueltas/ → /mnt/storage/movies/Arrivals (2024)/</span>
+          <span class="pct">—</span>
+          <span class="st">en cola</span>
+        </div>
+        <div class="op">
+          <span class="kind">Eliminar</span>
+          <span class="path">/mnt/storage-6tb/shared-downloads/amule/Godzilla Minus One (2023)/</span>
+          <span class="pct">—</span>
+          <span class="st" style="color:var(--ok)">hecho · hace 1 h</span>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
