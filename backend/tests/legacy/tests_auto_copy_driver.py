@@ -54,7 +54,7 @@ def _trace(
     }
 
 
-def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT, destination=None, quality=None):
+def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT, destination=None, quality=None, direct=False):
     return {
         "id": 1,
         "source": source,
@@ -66,6 +66,7 @@ def _own_grab(movie_id=855, *, source="radarr", grabbed_at=GRAB_AT, destination=
         "grabbed_at": grabbed_at,
         "destination": destination,
         "quality": quality,
+        "direct": 1 if direct else 0,
     }
 
 
@@ -286,6 +287,36 @@ def test_a_foreign_destination_travels_into_the_copy_payload(monkeypatch):
     payload = calls.dispatch[0]["payload"]
     assert payload["dest_root"] == "/mnt/storage-6tb/other"
     assert summary["entries"][0]["action"] == "copied"
+
+
+def test_a_direct_grab_marks_the_payload_untracked(monkeypatch):
+    """A B-10 direct add never entered an arr queue: the copy must not demand
+    a queue id that can never exist (the precondition that would fail it)."""
+    calls = _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab(destination="/mnt/storage-6tb/other", direct=True)],
+    )
+
+    summary = _sweep(safe_mode=False)
+
+    payload = calls.dispatch[0]["payload"]
+    assert payload["arr_untracked"] is True
+    assert payload["dest_root"] == "/mnt/storage-6tb/other"
+    assert summary["entries"][0]["action"] == "copied"
+
+
+def test_an_arr_tracked_grab_never_claims_untracked(monkeypatch):
+    calls = _install(
+        monkeypatch,
+        traces=[_trace()],
+        own_grabs=[_own_grab(destination="/mnt/storage-6tb/other")],
+    )
+
+    _sweep(safe_mode=False)
+
+    payload = calls.dispatch[0]["payload"]
+    assert "arr_untracked" not in payload, "the arr DID track it — the removal guard stays"
 
 
 def test_a_null_destination_keeps_the_payload_unchanged(monkeypatch):

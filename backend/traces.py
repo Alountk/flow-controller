@@ -1,8 +1,12 @@
 import config
 import asyncio
 import logging
+import time
 
 import aiohttp
+
+from application.use_cases.sweep_downloads import OWN_GRAB_LOOKBACK_SECONDS
+from infrastructure.sqlite_history import list_own_grabs
 
 from config import (
     EXPECTED_CATEGORY,
@@ -91,6 +95,89 @@ def derive_stage(torrent: dict | None, queue_item: dict | None) -> str:
     return "downloading"
 
 
+def _torrent_view(torrent: dict, download_client: str | None = None) -> dict:
+    """The trace's `torrent` view of one client torrent.
+
+    One mapping, two callers: the arr-joined trace (the client name comes from
+    its queue item) and the direct-add trace (B-10 — no queue, no name). The
+    paths resolve the same way in both: `resolve_current_path` owns the
+    container→host mapping either way.
+    """
+    save_path = torrent.get("save_path")
+    name = torrent.get("name")
+    resolved = resolve_current_path(save_path, download_client) if save_path else None
+    return {
+        "state": torrent.get("state"),
+        "progress": round(torrent.get("progress", 0) * 100, 1),
+        "category": torrent.get("category"),
+        "save_path": save_path,
+        "current_path": resolved,
+        "content_path": (resolved + "/" + name) if resolved and name else None,
+        "size": torrent.get("size"),
+    }
+
+
+def _direct_traces(own_grabs: list[dict], torrents: list[dict]) -> list[dict]:
+    """Trace rows for downloads this app added straight to the client (B-10).
+
+    The arr was never told about them, so its history will never carry them —
+    without this the download would be invisible HERE and to the sweep: no
+    trace, no decision, no copy to the destination the operator chose.
+
+    The join is the exact identity recorded at add time (the client's name;
+    the hash when the link carried one) — never fuzzy: an unmatched grab
+    produces NO row rather than a wrong one, and the operator sees an absent
+    download, not a mislabelled one.
+    """
+    if not own_grabs or not torrents:
+        return []
+    by_hash = {(t.get("hash") or "").lower(): t for t in torrents if t.get("hash")}
+    by_name = {t.get("name"): t for t in torrents if t.get("name")}
+    rows: list[dict] = []
+    for grab in own_grabs:
+        if not grab.get("direct"):
+            continue
+        torrent = None
+        if grab.get("client_hash"):
+            torrent = by_hash.get(str(grab["client_hash"]).lower())
+        if torrent is None and grab.get("client_name"):
+            torrent = by_name.get(grab["client_name"])
+        if torrent is None:
+            # The client does not know this download (never started, already
+            # removed): no row and no guess.
+            continue
+        grabbed_at = grab.get("grabbed_at") or time.time()
+        rows.append({
+            "source": grab.get("source") or "",
+            "title": torrent.get("name") or grab.get("client_name") or "",
+            "date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(grabbed_at)),
+            "indexer": None,
+            "download_client": None,
+            "download_client_host": None,
+            "download_id": torrent.get("hash") or "",
+            "matched_hash": torrent.get("hash") or "",
+            "stage": derive_stage(torrent, None),
+            "torrent": _torrent_view(torrent),
+            # OUR category, not an arr expectation: an unknown answer — the
+            # "Cat. incorrecta" chip would be a lie on a download the arr
+            # has never seen.
+            "expected_category": None,
+            "category_ok": None,
+            "paused": torrent.get("state") in PAUSED_STATES,
+            "ids": {
+                "queue_id": None,
+                "episode_id": grab.get("episode_id"),
+                "movie_id": grab.get("movie_id"),
+                "series_id": grab.get("series_id"),
+            },
+            # OUR destination, the whole point of the direct grab — never the
+            # arr-derived library path.
+            "destination": grab.get("destination"),
+            "queue": None,
+        })
+    return rows
+
+
 async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
     arr_services = configured_services("arr")
 
@@ -165,23 +252,10 @@ async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
                     "download_id": download_id,
                     "matched_hash": matched,
                     "stage": derive_stage(torrent, queue_item),
-                    "torrent": {
-                        "state": torrent.get("state"),
-                        "progress": round(torrent.get("progress", 0) * 100, 1),
-                        "category": actual_cat,
-                        "save_path": torrent.get("save_path"),
-                        "current_path": resolve_current_path(
-                            torrent.get("save_path", ""),
-                            queue_item.get("downloadClient") if queue_item else None,
-                        ) if torrent.get("save_path") else None,
-                        "content_path": (
-                            resolve_current_path(
-                                torrent.get("save_path", ""),
-                                queue_item.get("downloadClient") if queue_item else None,
-                            ) + "/" + torrent.get("name", "")
-                        ) if torrent.get("save_path") and torrent.get("name") else None,
-                        "size": torrent.get("size"),
-                    } if torrent else None,
+                    "torrent": _torrent_view(
+                        torrent,
+                        queue_item.get("downloadClient") if queue_item else None,
+                    ) if torrent else None,
                     "expected_category": expected_cat,
                     "category_ok": category_ok,
                     "paused": bool(
@@ -208,6 +282,20 @@ async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
                     } if queue_item else None,
                 }
             )
+
+    # Direct adds (B-10): the arr was never told, so its history will never
+    # carry them — without these rows the operator's chosen destination would
+    # never be reached (no trace, no sweep decision, no copy). Best-effort:
+    # an unreadable registry degrades to "nothing provably ours", the same
+    # answer the sweep treats as "act on nothing".
+    try:
+        own_grabs = await asyncio.to_thread(
+            list_own_grabs, time.time() - OWN_GRAB_LOOKBACK_SECONDS
+        )
+    except Exception as exc:  # noqa: BLE001 — one bad read, not a dead poll
+        log.warning("direct traces: own_grabs no disponibles: %s", exc)
+        own_grabs = []
+    traces.extend(_direct_traces(own_grabs, torrents))
 
     traces.sort(key=lambda t: t.get("date") or "", reverse=True)
     return traces
