@@ -52,27 +52,6 @@
   color: var(--bad);
 }
 
-.calendar-error-list {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  list-style: disc;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.calendar-error-list li {
-  margin-top: 2px;
-  word-break: break-word;
-}
-
-.calendar-error-detail {
-  color: var(--text);
-}
-
-.calendar-error-more {
-  font-style: italic;
-}
-
 .calendar-modal-status.status-ok {
   color: var(--ok);
 }
@@ -352,11 +331,6 @@
   background: var(--accent-bg);
 }
 
-.calendar-release.selected {
-  border-color: var(--ok);
-  background: var(--accent-bg);
-}
-
 .release-title {
   font-size: 12px;
   font-weight: 600;
@@ -520,44 +494,57 @@
   align-items: center;
 }
 
-.release-checkbox-all {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
+.release-count {
   font-size: 12px;
-}
-
-.release-checkbox-all input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
-}
-
-.release-checkbox {
-  display: flex;
-  align-items: center;
-  padding: 4px;
-  cursor: pointer;
-}
-
-.release-checkbox input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
+  color: var(--text-secondary);
 }
 
 .release-content {
   flex: 1;
+}
+
+/* The three per-row destinations (F-12): the suggested one is highlighted,
+   an unconfigured folder disables its button instead of lying. */
+.release-dest {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.release-dest-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.18));
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
-.grab-selected {
-  background: var(--accent) !important;
-  color: white !important;
-  font-weight: 500;
+.release-dest-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
+.release-dest-btn.suggest {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--text);
+}
+
+.release-dest-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.release-dest-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 
 /* The 3D mark: a suggestion from the title until the operator clicks it, at
    which point it stops being one. Always rendered — offering the control only
@@ -584,63 +571,4 @@
 .release-3d:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-}
-
-/* ── Acción principal ──────────────────────────────────────────────────
- * The routing readout below the file list: where the selection resolves to,
- * the three rules behind it, and the destination combo — labelled an
- * OVERRIDE, because a folder chosen by hand beats the derived routing. The
- * readout comes first and the control last: the eye reads the answer, then
- * sees the way to overrule it.
- */
-.release-action {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elev);
-}
-
-.release-action-title {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.release-action-sub {
-  margin: 0;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.release-action-selected,
-.release-action-rules {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 11.5px;
-  line-height: 1.7;
-  color: var(--text-secondary);
-}
-
-.release-action-selected li strong {
-  color: var(--accent);
-}
-
-.release-action-rules {
-  color: var(--text-dim);
-}
-
-.release-action-note {
-  color: var(--text-dim);
-  font-style: italic;
-}
-
-/* The combo rides at the block's foot with the block's own spacing: the
-   .calendar-indexer-select default margin would open a dead gap before the
-   list ends. */
-.release-action .calendar-indexer-select {
-  margin-bottom: 0;
 }

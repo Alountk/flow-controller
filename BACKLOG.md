@@ -806,7 +806,7 @@ Tests: 10 en `backend/tests/interfaces/routes/tests_amule_shares.py` + 6 en
 > `size:exception` en #156 (431 líneas autor / presupuesto 400).
 
 
-### F-12 — Botones de destino por card en la búsqueda de releases · **Mediana** · ⬜ *Pendiente*
+### F-12 — Botones de destino por card en la búsqueda de releases · **Mediana** · ✅ *Entregada*
 
 Pedida con B-10: en cada fila seleccionada, **3 botones — `→ Biblioteca` · `→ 4K` · `→ 3D`** —
 y fuera el combo «Destino (anulación manual)» y el botón batch «⬇️ Descargar (N)».
@@ -818,7 +818,9 @@ y fuera el combo «Destino (anulación manual)» y el botón batch «⬇️ Desc
 | Carpeta no configurada | botón deshabilitado con su etiqueta honesta (misma regla que `ruleFolder`) |
 | `→ 3D` fuerza `is3d` | igual que el chip manual de la fila |
 | Se va el lote | `splitByRouting`/`handleGrabBatch` desaparecen — coste asumido al pedirlo |
-| Tras ella | el backend ya decide solo: destino extranjero → alta directa (B-10) — los botones solo envían `destination` + `title` |
+| Tras ella | el backend ya decide solo: destino extranjero → alta directa (B-10) — los botones envían `destination` + `title` + `library` (flag explícito: sin él, la derivación reenviaría una fila 2160p a `path_4k` aunque se pulsara → Biblioteca) |
+
+**Entregado 2026-10-07**: los 3 botones por fila (el sugerido resaltado, carpeta no configurada deshabilitada), fuera el combo, fuera el botón y la selección de lote, fuera «Acción principal»; el aviso tras el grab muestra el `detail` del backend (distingue «directa» de «encolada»). Tests migrados (4 ficheros) + e2e `flow-release-search` migrado. El backend gana el flag `library` (ruta y 10 tests del portón).
 
 ## 🔵 Recomendaciones y reglas del ciclo
 

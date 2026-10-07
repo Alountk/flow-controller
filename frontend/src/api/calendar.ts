@@ -139,6 +139,7 @@ export async function grabCalendarRelease(
   quality?: string,
   is3d?: boolean,
   title?: string,
+  library?: boolean,
 ): Promise<{ ok: boolean; detail: string }> {
   // A rejected fetch (offline, aborted, DNS) must surface as a failed result,
   // not as an unhandled rejection that leaves the modal stuck on "Descargando".
@@ -153,6 +154,9 @@ export async function grabCalendarRelease(
   // A foreign-destination grab goes DIRECT to the client (never through the
   // arr), and the backend resolves the download link from this title.
   if (title) body.title = title
+  // Explicit "the arr's own path": without the flag the server would still
+  // DERIVE a 2160p release to path_4k and quietly override this choice.
+  if (library) body.library = true
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab', {

@@ -162,11 +162,15 @@ describe('the downloaded-file block', () => {
 
     await screen.findByText('ParaNorman.2012.1080p.BluRay.x264.mkv')
 
-    expect(tags()).toEqual([
-      { label: '1080', on: true },
-      { label: '4K', on: false },
-      { label: '3D', on: true },
-    ])
+    // The 3D rule needs `path_3d` from the settings read, which lands one
+    // tick after the block renders — wait for the light, not for the DOM.
+    await waitFor(() =>
+      expect(tags()).toEqual([
+        { label: '1080', on: true },
+        { label: '4K', on: false },
+        { label: '3D', on: true },
+      ]),
+    )
   })
 
   it('leaves every tag grey when the quality is unknown', async () => {

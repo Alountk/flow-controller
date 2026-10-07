@@ -311,13 +311,13 @@ describe('sections · the release search in the panel', () => {
     expect(screen.queryByRole('button', { name: /Buscar Releases/ })).toBeNull()
     expect(screen.getByText('1 releases encontrados')).toBeInTheDocument()
 
-    // The routing readout is on duty under the file list, rules and all.
-    expect(
-      within(panel()).getByRole('heading', { name: 'Acción principal' }),
-    ).toBeInTheDocument()
-    expect(within(panel()).getByText('1080 o menor → biblioteca (la del arr)')).toBeInTheDocument()
+    // The three destination buttons are what the row offers now (F-12):
+    // there is no separate "Acción principal" readout to check — the row
+    // itself shows where the press would go.
+    expect(within(panel()).getByRole('button', { name: /Biblioteca/ })).toBeInTheDocument()
+    expect(within(panel()).getByRole('button', { name: /4K/ })).toBeInTheDocument()
 
-    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+    fireEvent.click(within(panel()).getByRole('button', { name: /Biblioteca/ }))
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     expect(grabBodies(fn)[0]).toMatchObject({
@@ -376,22 +376,11 @@ describe('sections · the release search in the panel', () => {
     expect(searchCalls()).toBe(2)
     expect(screen.getByText('1 releases encontrados')).toBeInTheDocument()
 
-    // Acción principal with NOTHING selected shows the rules only — no fake
-    // "selected" row…
-    expect(within(panel()).queryByText('Destino de la selección:')).toBeNull()
-
-    // …and the moment a row is marked it answers the real question: class
-    // AND exact destination. path_4k is "" under this stub, and an
-    // unconfigured folder resolves to the library — which is exactly where
-    // backend destination_for_quality would send this 4K row. The row is
-    // read from its own element: a text query would match the list too (a
-    // single-child list carries exactly its child's text), and an `li` has
-    // no content-derived accessible name to query by.
-    fireEvent.click(document.querySelector('.release-checkbox input') as HTMLInputElement)
-    expect(within(panel()).getByText('Destino de la selección:')).toBeInTheDocument()
-    expect(panel().querySelector('.release-action-selected li')?.textContent).toBe(
-      '4K → Biblioteca (la del arr)',
-    )
+    // Selection as a concept is gone (F-12): the rows carry their own
+    // destination buttons, and — the contract this test always guarded —
+    // neither searching nor rendering them has fired a single grab.
+    expect(within(panel()).getByRole('button', { name: /Biblioteca/ })).toBeInTheDocument()
+    expect(grabBodies(fn)).toHaveLength(0)
   })
 
   it('keeps the panel honest when nothing is selected', async () => {

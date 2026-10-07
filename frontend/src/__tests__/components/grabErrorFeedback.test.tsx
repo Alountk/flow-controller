@@ -5,12 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Release } from '../../api/calendar'
 
 /**
- * Regression tests for grab error feedback.
+ * Regression tests for grab error feedback — the per-row grab (F-12).
  *
- * The batch endpoint used to collapse every per-release failure into a count
- * ("0 OK, 1 errores"), so the UI hid the actual reason. The real reason lives in
- * `errors[]` and must reach the user: without it "no funciona" is all anyone can
- * say.
+ * A failed grab must surface the backend's REAL reason (`detail`), never a
+ * count or a shrug: "no funciona" is not an answer. The batch endpoint used
+ * to collapse per-release failures into "0 OK, N errores"; the batch and its
+ * per-release error list are gone — one button presses one grab, and one grab
+ * carries one reason.
  */
 
 const release: Release = {
@@ -35,7 +36,7 @@ const indexers = {
 /** The real Radarr message that surfaces when its release cache expires. */
 const CACHE_ERROR = "Couldn't find requested release in cache, try searching again"
 
-function mockFetch(grabBatch: () => Response | Promise<Response>) {
+function mockFetch(grab: () => Response | Promise<Response>) {
   const fn = vi.fn((input: RequestInfo | URL) => {
     const url = String(input)
     if (url.includes('/api/calendar/indexers')) {
@@ -47,8 +48,15 @@ function mockFetch(grabBatch: () => Response | Promise<Response>) {
         json: async () => ({ releases: [release], detail: '1 releases encontrados' }),
       } as Response)
     }
-    if (url.includes('/api/calendar/grab-batch')) {
-      return Promise.resolve(grabBatch())
+    if (url.includes('/api/settings')) {
+      // No configured folders: only the library button is offered.
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ paths: { path_4k: '', path_3d: '' } }),
+      } as Response)
+    }
+    if (url.includes('/api/calendar/grab')) {
+      return Promise.resolve(grab())
     }
     return Promise.resolve({ ok: true, json: async () => ({}) } as Response)
   })
@@ -69,76 +77,36 @@ function renderModal() {
   )
 }
 
-async function openAndSelect() {
+async function openAndPress() {
   renderModal()
 
   fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
-  const selectAll = await screen.findByRole('checkbox', { name: /1 releases encontrados/ })
-  fireEvent.click(selectAll)
-  fireEvent.click(screen.getByRole('button', { name: /Descargar \(1\)/ }))
+  await screen.findByPlaceholderText('Filtrar por título...')
+  fireEvent.click(screen.getByRole('button', { name: /Biblioteca/ }))
 }
 
-describe('grab batch error feedback', () => {
+describe('grab error feedback', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('shows the real per-release reason, not just a count', async () => {
+  it('shows the real failure reason, not a shrug', async () => {
     mockFetch(() => ({
       ok: true,
-      json: async () => ({
-        ok: false,
-        detail: `0 OK, 1 errores: ${CACHE_ERROR}`,
-        downloaded: [],
-        errors: [{ guid: 'guid-1', detail: CACHE_ERROR }],
-      }),
-    }) as Response)
+      json: async () => ({ ok: false, detail: CACHE_ERROR }),
+    } as Response))
 
-    await openAndSelect()
+    await openAndPress()
 
     await waitFor(() => expect(screen.getByText(CACHE_ERROR)).toBeInTheDocument())
-  })
-
-  it('lists every failed release when several fail', async () => {
-    mockFetch(() => ({
-      ok: true,
-      json: async () => ({
-        ok: false,
-        detail: '0 OK, 2 errores',
-        downloaded: [],
-        errors: [
-          { guid: 'a', detail: 'Primer motivo' },
-          { guid: 'b', detail: 'Segundo motivo' },
-        ],
-      }),
-    }) as Response)
-
-    await openAndSelect()
-
-    await waitFor(() => expect(screen.getByText('Primer motivo')).toBeInTheDocument())
-    expect(screen.getByText('Segundo motivo')).toBeInTheDocument()
-  })
-
-  it('caps a long error list and reports the remainder', async () => {
-    const errors = Array.from({ length: 8 }, (_, i) => ({ guid: `g${i}`, detail: `motivo ${i}` }))
-    mockFetch(() => ({
-      ok: true,
-      json: async () => ({ ok: false, detail: '0 OK, 8 errores', downloaded: [], errors }),
-    }) as Response)
-
-    await openAndSelect()
-
-    await waitFor(() => expect(screen.getByText('motivo 0')).toBeInTheDocument())
-    expect(screen.queryByText('motivo 7')).not.toBeInTheDocument()
-    expect(screen.getByText('…y 3 más')).toBeInTheDocument()
   })
 
   it('tells the user to re-enter the key when it is rejected', async () => {
     // apiFetch handles the 401 centrally (it clears the key and prompts for it),
     // so the client reports what to do instead of the raw response body.
-    mockFetch(() => ({ ok: false, status: 401, json: async () => ({}) }) as Response)
+    mockFetch(() => ({ ok: false, status: 401, json: async () => ({}) } as Response))
 
-    await openAndSelect()
+    await openAndPress()
 
     await waitFor(() =>
       expect(screen.getByText(/API key rechazada/)).toBeInTheDocument(),
@@ -159,11 +127,17 @@ describe('grab batch error feedback', () => {
             json: async () => ({ releases: [release], detail: 'ok' }),
           } as Response)
         }
+        if (url.includes('/api/settings')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ paths: { path_4k: '', path_3d: '' } }),
+          } as Response)
+        }
         return Promise.reject(new TypeError('Failed to fetch'))
       }),
     )
 
-    await openAndSelect()
+    await openAndPress()
 
     await waitFor(() =>
       expect(screen.getByText(/No se pudo contactar con el servidor/)).toBeInTheDocument(),
@@ -176,20 +150,15 @@ describe('grab batch error feedback', () => {
       failing
         ? ({
             ok: true,
-            json: async () => ({
-              ok: false,
-              detail: '0 OK, 1 errores',
-              downloaded: [],
-              errors: [{ guid: 'guid-1', detail: CACHE_ERROR }],
-            }),
+            json: async () => ({ ok: false, detail: CACHE_ERROR }),
           } as Response)
         : ({
             ok: true,
-            json: async () => ({ ok: true, detail: '1 descargados', downloaded: ['guid-1'], errors: [] }),
+            json: async () => ({ ok: true, detail: 'Release encolado para descarga' }),
           } as Response),
     )
 
-    await openAndSelect()
+    await openAndPress()
     await waitFor(() => expect(screen.getByText(CACHE_ERROR)).toBeInTheDocument())
 
     // A failed grab must not leave the user stuck on the error screen.
@@ -197,7 +166,9 @@ describe('grab batch error feedback', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('Filtrar por título...')).toBeInTheDocument())
 
     failing = false
-    fireEvent.click(screen.getByRole('button', { name: /Refrescar/ }))
-    await waitFor(() => expect(screen.queryByText(CACHE_ERROR)).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Biblioteca/ }))
+    await waitFor(() =>
+      expect(screen.getByText('Release encolado para descarga')).toBeInTheDocument(),
+    )
   })
 })

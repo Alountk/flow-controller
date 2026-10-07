@@ -168,3 +168,35 @@ def test_the_batch_refuses_a_foreign_destination_upfront():
     assert body["ok"] is False
     assert "fila a fila" in body["detail"]
     assert body["downloaded"] == [] and body["errors"] == []
+
+
+def test_the_library_button_skips_the_quality_derivation():
+    # → Biblioteca on a 4K row must mean the ARR's path: without the flag the
+    # quality derivation would silently reroute the "library" grab to path_4k.
+    with patch(GRAB, new=AsyncMock(return_value={"ok": True, "detail": "encolado"})) as grab, \
+            patch(RECORD, new=MagicMock()) as record, \
+            patch("interfaces.http.routes.calendar.arr_root_folders", new=AsyncMock(return_value=["/mnt/storage/movies"])) as roots:
+        body = _post(quality="Bluray-2160p", title="Some.Movie.2024.2160p", library=True)
+
+    grab.assert_awaited_once()
+    roots.assert_not_awaited(), "no destination is resolved, so there is no foreign question"
+    assert body["ok"] is True
+    kwargs = record.call_args.kwargs
+    assert kwargs["destination"] is None, "library is explicit, never derived"
+    assert kwargs["quality"] == "Bluray-2160p", "the registry still learns what was grabbed"
+
+
+def test_a_quality_derived_4k_destination_also_goes_direct(monkeypatch):
+    # Nobody pressed a button: the RULE routes 2160p to path_4k, and that is a
+    # foreign destination — it must take the same direct path as a chosen one.
+    import config as config_module
+
+    monkeypatch.setattr(config_module, "PATH_4K", "/mnt/storage-6tb/Movies4K")
+    roots_p, search_p, add_p, grab_p, record_p = _foreign_patches()
+    with roots_p, search_p as search, add_p, grab_p as grab, record_p as record:
+        body = _post(quality="Bluray-2160p", title="Some.Movie.2024.2160p")
+
+    grab.assert_not_awaited()
+    search.assert_awaited_once()
+    assert body["ok"] is True and body["direct"] is True
+    assert record.call_args.kwargs["destination"] == "/mnt/storage-6tb/Movies4K"

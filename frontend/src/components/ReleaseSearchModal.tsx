@@ -3,14 +3,11 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   addCalendarItem,
   fetchCalendarReleases,
-  fetchCalendarDestinations,
   grabCalendarRelease,
-  grabCalendarReleaseBatch,
   type Release,
 } from '../api/calendar'
 import { apiFetch } from '../api/auth'
 import type { BrowseResponse, FileItem } from '../types'
-import { areAllVisibleSelected, toggleVisibleSelection } from '../utils/selection'
 import { looksThreeD } from '../utils/threeD'
 import {
   NO_RELEASE_FILTERS,
@@ -18,7 +15,6 @@ import {
   collectQualities,
   filterReleases,
   hasActiveFilters,
-  releaseKey,
   toggleInSet,
   type ReleaseFilters,
 } from '../utils/releaseFilters'
@@ -239,13 +235,6 @@ export type ReleaseSearchModalProps = { item: ReleaseSearchItem } & (
   | { presentation: 'panel'; onClose?: undefined }
 )
 
-/** Rows that would all land in the same folder, and must travel as one call. */
-interface RoutingGroup {
-  quality: string
-  is3d: boolean
-  guids: string[]
-}
-
 export function ReleaseSearchModal({
   item,
   onClose,
@@ -276,11 +265,7 @@ export function ReleaseSearchModal({
   const [notice, setNotice] = useState('')
   const [selectedIndexer, setSelectedIndexer] = useState<string>(restored?.indexer ?? 'all')
   const [releases, setReleases] = useState<Release[]>(restored?.releases ?? [])
-  const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
-  const [destinations, setDestinations] = useState<string[]>([])
-  const [destination, setDestination] = useState('')
   const [filters, setFilters] = useState<ReleaseFilters>(NO_RELEASE_FILTERS)
-  const [grabErrors, setGrabErrors] = useState<{ guid: string; detail: string }[]>([])
   // Per-row corrections to the 3D suggestion. An absent guid means "no human
   // has spoken, trust the title"; present means "this is what I said".
   const [threeDOverrides, setThreeDOverrides] = useState<Record<string, boolean>>(
@@ -334,13 +319,6 @@ export function ReleaseSearchModal({
   })
   const indexers = indexersQuery.data ?? []
 
-  // Fetch destination folders on mount. A failed load is not fatal: the combo
-  // keeps its built-in library default, so searching and grabbing still work.
-  useEffect(() => {
-    fetchCalendarDestinations(item.source)
-      .then((data) => setDestinations(data.folders))
-      .catch(() => {})
-  }, [item.source])
 
   // The routing folders behind the readout: only the results step shows it, so
   // only the results step asks. A failed read must never read as "not
@@ -407,6 +385,12 @@ export function ReleaseSearchModal({
     staleTime: 5 * 60_000,
   })
 
+  // An unconfigured folder ("" while the settings read is pending, failed, or
+  // reporting it unconfigured) never enables its query: a folder that does not
+  // exist cannot hold a copy, and the request would be refused anyway.
+
+
+
   // NO MOUNT TRIGGER — selecting a row never searches: the operator presses
   // 🔍 Buscar Releases below (or the has-file block's "Buscar versiones", or
   // an id 0 item's ➕). The one remaining automatic trigger is the indexer
@@ -448,7 +432,6 @@ export function ReleaseSearchModal({
    */
   async function handleSearch(choice: string = selectedIndexer) {
     setStep('searching')
-    setGrabErrors([])
     // A new search is a new list: the previous grab's ack belongs to the old
     // one and must not ride above results that have not been fetched yet.
     setNotice('')
@@ -518,14 +501,28 @@ export function ReleaseSearchModal({
     setThreeDOverrides((prev) => ({ ...prev, [guid]: !isThreeD(release) }))
   }
 
-  async function handleGrab(guid: string) {
+  /**
+   * One row, one destination, one call — the three per-card buttons ARE the
+   * choice (F-12): `library` is an explicit flag (a derived 2160p route would
+   * otherwise override "→ Biblioteca"), the folders are the row's own
+   * configured routing folders, and 3D forces the flag the chip suggests.
+   */
+  /** Where this row lands when nobody pressed a button: the same three rules
+   *  the backend routes with, resolved here only to SUGGEST a button. */
+  function destinationFor(r: Release): string {
+    if (foldersUnreadable) return 'la que decida el backend (configuración ilegible)'
+    if (isThreeD(r) && path3d) return path3d
+    if (r.quality.trim().toLowerCase().endsWith('2160p') && path4k) return path4k
+    return LIBRARY
+  }
+
+  async function handleGrab(guid: string, target: 'library' | '4k' | '3d') {
     setStep('grabbing')
-    setGrabErrors([])
     setNotice('')
     setMessage('Descargando...')
     const release = releases.find(r => r.guid === guid)
-    // An empty `destination` means the arr's library and must stay absent from
-    // the request, exactly as it was before the combo existed.
+    const destination = target === '4k' ? path4k : target === '3d' ? path3d : undefined
+    const is3d = target === '3d' ? true : release ? isThreeD(release) : undefined
     const result = await grabCalendarRelease(
       item.source,
       guid,
@@ -534,130 +531,29 @@ export function ReleaseSearchModal({
       item.type === 'episode' ? item.id : 0,
       destination || undefined,
       release?.quality || undefined,
-      release ? isThreeD(release) : undefined,
+      is3d,
       release?.title,
+      target === 'library' || undefined,
     )
     if (result.ok) {
+      // The backend's own detail distinguishes the paths — "directa: el arr no
+      // la verá" vs "Release encolado" — so the ack shows it instead of a
+      // fixed phrase that would hide which one happened.
+      const ack = result.detail || 'Descarga iniciada. Revisa la cola de descargas.'
       if (inPanel) {
-        // PANEL: the list is the product. This is the COMMON path (a row
-        // click), and leaving it for a 'done' step is exactly the complaint —
-        // "puse uno a descargar y no me deja coger otro". The list stays, the
-        // ack rides above it, the selection starts clean, and nothing cached
+        // PANEL: the list is the product. The results the operator still
+        // needs stay on screen, the ack rides above them, and nothing cached
         // is thrown away.
-        setNotice('Descarga iniciada. Revisa la cola de descargas.')
-        setSelectedGuids(new Set())
+        setNotice(ack)
         setStep('results')
       } else {
         // The overlay IS a dialog: it ends on 'done' with its exit, as ever.
         setStep('done')
-        setMessage('Descarga iniciada. Revisa la cola de descargas.')
+        setMessage(ack)
       }
     } else {
       setStep('error')
       setMessage(result.detail)
-    }
-  }
-
-  function toggleGuid(guid: string) {
-    setSelectedGuids(prev => {
-      const next = new Set(prev)
-      if (next.has(guid)) {
-        next.delete(guid)
-      } else {
-        next.add(guid)
-      }
-      return next
-    })
-  }
-
-  function toggleAll() {
-    // Only touches what the filter is showing: acting on hidden rows would
-    // download releases the user never looked at.
-    setSelectedGuids((prev) => toggleVisibleSelection(prev, visibleReleases, releaseKey))
-  }
-
-  /**
-   * One call per *routing class*, not one call per batch.
-   *
-   * `grab-batch` carries a single `quality` and a single `is3d`, so a selection
-   * holding two classes has no truthful value for one call — and naming either
-   * would send the other to the wrong folder. Sending neither would send a 3D
-   * release down the same route as any other: the arr may import it and replace
-   * what should have been kept, which is precisely the coexistence failure this
-   * feature exists to avoid.
-   *
-   * When a destination was chosen by hand it already wins server-side, so the
-   * split buys nothing and one call is enough.
-   */
-  function splitByRouting(guids: string[]): RoutingGroup[] {
-    if (destination) return [{ quality: '', is3d: false, guids }]
-    const groups = new Map<string, RoutingGroup>()
-    for (const guid of guids) {
-      const release = releases.find((r) => r.guid === guid)
-      const is3d = release ? isThreeD(release) : false
-      const quality = release?.quality ?? ''
-      const key = `${is3d ? '3d' : ''}|${quality}`
-      const bucket = groups.get(key)
-      if (bucket) bucket.guids.push(guid)
-      else groups.set(key, { quality, is3d, guids: [guid] })
-    }
-    return [...groups.values()]
-  }
-
-  async function handleGrabBatch() {
-    if (selectedGuids.size === 0) return
-    setStep('grabbing')
-    setGrabErrors([])
-    setNotice('')
-    setMessage(`Descargando ${selectedGuids.size} releases...`)
-
-    let ok = true
-    let firstDetail = ''
-    let downloaded = 0
-    const errors: { guid: string; detail: string }[] = []
-    const details: string[] = []
-
-    for (const group of splitByRouting(Array.from(selectedGuids))) {
-      const indexerIds = group.guids.map(g => releases.find(r => r.guid === g)?.indexerId || 0)
-      const result = await grabCalendarReleaseBatch(
-        item.source,
-        group.guids,
-        indexerIds,
-        item.type === 'movie' ? item.id : 0,
-        item.type === 'episode' ? item.id : 0,
-        destination || undefined,
-        group.quality || undefined,
-        group.is3d || undefined,
-      )
-      errors.push(...(result.errors ?? []))
-      downloaded += result.downloaded?.length ?? 0
-      details.push(result.detail)
-      if (!result.ok) {
-        ok = false
-        if (!firstDetail) firstDetail = result.detail
-      }
-    }
-
-    setGrabErrors(errors)
-    if (ok) {
-      // One group means one call, so its own wording still reaches the user
-      // unchanged; only a split batch needs a summary of its own.
-      const landed = details.length === 1 ? details[0] : `${downloaded} descargados`
-      setSelectedGuids(new Set())
-      if (inPanel) {
-        // PANEL: same treatment as the row-click grab — the results the
-        // operator still needs stay on screen, the ack rides above them, and
-        // the cached list (the indexer answered seconds ago) is kept.
-        setNotice(landed)
-        setStep('results')
-      } else {
-        // The overlay IS a dialog: it ends on 'done' with its exit, as ever.
-        setStep('done')
-        setMessage(landed)
-      }
-    } else {
-      setStep('error')
-      setMessage(firstDetail)
     }
   }
 
@@ -668,7 +564,6 @@ export function ReleaseSearchModal({
   const languageOptions = collectLanguages(releases)
   const visibleReleases = filterReleases(releases, filters)
   const filtersActive = hasActiveFilters(filters)
-  const allVisibleSelected = areAllVisibleSelected(selectedGuids, visibleReleases, releaseKey)
   const isSearching = step === 'searching'
 
   /**
@@ -790,9 +685,7 @@ export function ReleaseSearchModal({
   function dismiss() {
     if (inPanel) {
       panelResults.delete(`${item.source}:${item.type}:${item.id}`)
-      setSelectedGuids(new Set())
-      setGrabErrors([])
-      void handleSearch()
+        void handleSearch()
       return
     }
     onClose?.()
@@ -800,53 +693,6 @@ export function ReleaseSearchModal({
 
   /** What the exit button reads in each presentation. */
   const dismissLabel = inPanel ? 'Nueva búsqueda' : 'Cerrar'
-
-  /**
-   * The readout of `Acción principal` — a READOUT, never a second control.
-   *
-   * Every rule below mirrors backend/config.py `destination_for_quality`,
-   * which is the code that actually routes the grab: 3D outranks the
-   * resolution, only a `2160p` suffix is 4K, an unconfigured folder falls
-   * through (to the library), and a folder chosen by hand would beat all of
-   * it — which is why the combo is labelled an override.
-   */
-  function routingClass(r: Release): string {
-    if (isThreeD(r)) return '3D'
-    const quality = r.quality.trim().toLowerCase()
-    if (quality.endsWith('2160p')) return '4K'
-    // Empty quality is unknown, never "1080": the class of a fact the arr
-    // could not tell us is not a fact.
-    return quality ? '1080 o menor' : 'calidad desconocida'
-  }
-
-  /** Where this row lands when nobody picked a folder by hand. */
-  function destinationFor(r: Release): string {
-    if (foldersUnreadable) return 'la que decida el backend (configuración ilegible)'
-    if (isThreeD(r) && path3d) return path3d
-    if (r.quality.trim().toLowerCase().endsWith('2160p') && path4k) return path4k
-    return LIBRARY
-  }
-
-  /** One rule line: the folder when it exists, the key's own honest state
-   *  when it does not — "not configured" and "could not be read" are
-   *  different facts and must not read the same. */
-  function ruleFolder(key: 'path_4k' | 'path_3d', value: string): string {
-    if (foldersUnreadable) return `${key} — no se pudo leer la configuración`
-    return value || `${key} sin configurar`
-  }
-
-  // The selection, grouped by the destination it resolves to: that grouping
-  // is the answer to "where does what I picked go". A manual destination
-  // replaces every row's own routing — one group, one folder, as the grab
-  // itself will behave.
-  const selectedRows = releases.filter((r) => selectedGuids.has(r.guid))
-  const selectedRouting = new Map<string, Set<string>>()
-  for (const r of selectedRows) {
-    const dest = destination || destinationFor(r)
-    const classes = selectedRouting.get(dest) ?? new Set<string>()
-    classes.add(routingClass(r))
-    selectedRouting.set(dest, classes)
-  }
 
   // What the status block has to say, if anything. On the panel a successful
   // grab does NOT leave the results: its ack rides above the list that stayed
@@ -946,20 +792,6 @@ export function ReleaseSearchModal({
           {showStatus && (
             <div className={`calendar-modal-status ${statusClass}`}>
               <div>{resultsNotice || message}</div>
-              {grabErrors.length > 0 && (
-                <ul className="calendar-error-list">
-                  {grabErrors.slice(0, 5).map((err) => (
-                    <li key={err.guid}>
-                      <span className="calendar-error-detail">{err.detail}</span>
-                    </li>
-                  ))}
-                  {grabErrors.length > 5 && (
-                    <li className="calendar-error-more">
-                      …y {grabErrors.length - 5} más
-                    </li>
-                  )}
-                </ul>
-              )}
             </div>
           )}
 
@@ -1086,25 +918,12 @@ export function ReleaseSearchModal({
           {step === 'results' && (
             <div className="calendar-releases">
               <div className="calendar-releases-header">
-                <label className="release-checkbox-all">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={toggleAll}
-                    disabled={visibleReleases.length === 0}
-                  />
-                  <span>
-                    {filtersActive
-                      ? `${visibleReleases.length} de ${releases.length} releases`
-                      : `${releases.length} releases encontrados`}
-                  </span>
-                </label>
+                <span className="release-count">
+                  {filtersActive
+                    ? `${visibleReleases.length} de ${releases.length} releases`
+                    : `${releases.length} releases encontrados`}
+                </span>
                 <div className="calendar-releases-actions">
-                  {selectedGuids.size > 0 && (
-                    <button className="action-btn grab-selected" onClick={handleGrabBatch} disabled={isProcessing}>
-                      ⬇️ Descargar ({selectedGuids.size})
-                    </button>
-                  )}
                   <button className="action-btn" onClick={() => void handleSearch()} disabled={isProcessing}>
                     🔄 Refrescar
                   </button>
@@ -1197,16 +1016,9 @@ export function ReleaseSearchModal({
                     {items.map((r) => (
                       <div
                         key={r.guid}
-                        className={`calendar-release ${selectedGuids.has(r.guid) ? 'selected' : ''}`}
+                        className="calendar-release"
                       >
-                        <label className="release-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={selectedGuids.has(r.guid)}
-                            onChange={() => toggleGuid(r.guid)}
-                          />
-                        </label>
-                        <div className="release-content" onClick={() => handleGrab(r.guid)}>
+                        <div className="release-content">
                           {/* The file selector's row: the file's name alone on
                               its line, the four facts that pick a file beneath
                               it. The 3D mark rides the facts line — it changes
@@ -1231,14 +1043,38 @@ export function ReleaseSearchModal({
                                   ? `Quitar la marca 3D de ${r.title}`
                                   : `Marcar ${r.title} como 3D`
                               }
-                              onClick={(e) => {
-                                // The row's own click grabs the release; this
-                                // button only changes where it would go.
-                                e.stopPropagation()
-                                toggleThreeD(r.guid)
-                              }}
+                              onClick={() => toggleThreeD(r.guid)}
                             >
                               3D
+                            </button>
+                          </div>
+                          <div className="release-dest">
+                            <button
+                              type="button"
+                              className={`release-dest-btn ${destinationFor(r) === LIBRARY ? 'suggest' : ''}`}
+                              onClick={() => void handleGrab(r.guid, 'library')}
+                              disabled={isProcessing}
+                              title={LIBRARY}
+                            >
+                              → Biblioteca
+                            </button>
+                            <button
+                              type="button"
+                              className={`release-dest-btn ${path4k && destinationFor(r) === path4k ? 'suggest' : ''}`}
+                              onClick={() => void handleGrab(r.guid, '4k')}
+                              disabled={isProcessing || !path4k}
+                              title={path4k || '4K sin configurar'}
+                            >
+                              → 4K
+                            </button>
+                            <button
+                              type="button"
+                              className={`release-dest-btn ${path3d && destinationFor(r) === path3d ? 'suggest' : ''}`}
+                              onClick={() => void handleGrab(r.guid, '3d')}
+                              disabled={isProcessing || !path3d}
+                              title={path3d || '3D sin configurar'}
+                            >
+                              → 3D
                             </button>
                           </div>
                         </div>
@@ -1248,61 +1084,6 @@ export function ReleaseSearchModal({
                 </div>
                 ))
               )}
-
-              {/* Acción principal — the routing, visible. A readout of what
-                  the selection resolves to, the three rules behind it, and
-                  the destination combo inside the block it overrides: a
-                  folder chosen by hand beats the derived routing, and the
-                  label says so instead of hiding it. */}
-              <div className="release-action">
-                <h4 className="release-action-title">Acción principal</h4>
-
-                {selectedRows.length > 0 && (
-                  <>
-                    <p className="release-action-sub">Destino de la selección:</p>
-                    <ul className="release-action-selected">
-                      {[...selectedRouting].map(([dest, classes]) => (
-                        <li key={dest}>
-                          <strong>{[...classes].join(' · ')}</strong> → {dest}
-                          {destination && (
-                            <span className="release-action-note">
-                              {' '}
-                              — elegido a mano: manda sobre el enrutado
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-
-                <p className="release-action-sub">Reglas de enrutado (si no eliges carpeta a mano):</p>
-                <ul className="release-action-rules">
-                  <li>1080 o menor → biblioteca (la del arr)</li>
-                  <li>4K → {ruleFolder('path_4k', path4k)}</li>
-                  <li>3D → {ruleFolder('path_3d', path3d)}</li>
-                </ul>
-
-                {/* The chosen folder applies to the marked rows (per-row and
-                    batch grabs). The library default sends no destination at
-                    all — absent is what "library" means end to end. */}
-                <div className="calendar-indexer-select">
-                  <label className="calendar-indexer-label" htmlFor="release-destination">
-                    Destino (anulación manual):
-                  </label>
-                  <select
-                    id="release-destination"
-                    className="calendar-indexer-dropdown"
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                  >
-                    <option value="">{LIBRARY}</option>
-                    {destinations.map((folder) => (
-                      <option key={folder} value={folder}>{folder}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
             </div>
           )}
 
