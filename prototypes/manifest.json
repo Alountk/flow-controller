@@ -76,6 +76,34 @@
       "status": "selected",
       "recommend": true,
       "note": "✅ Elegido. Mismo paradigma que Películas: las dos secciones se aprenden una sola vez y todo se opera igual. Es el gemelo del elegido de Películas."
+    },
+    {
+      "file": "seguimiento-01-cronologia.html",
+      "section": "seguimiento",
+      "status": "discarded",
+      "recommend": false,
+      "note": "Descartada el 2026-10-07 — el usuario eligió el kanban (02) tras ver los cuatro. Cada tarjeta cuenta el viaje — Grab → Descarga → Import → Destino — con la marca de tiempo y el desenlace de cada paso; el fallo se ve sin abrir nada. Coste: cada tarjeta es ancha, y con la lista creciendo caben pocas en pantalla."
+    },
+    {
+      "file": "seguimiento-02-kanban.html",
+      "section": "seguimiento",
+      "status": "selected",
+      "recommend": true,
+      "note": "✅ Elegido por el usuario. El estado ES la columna: «¿dónde se corta?» se responde sin leer ninguna tarjeta, y la cola de operaciones va como banda inferior. Coste asumido: con cada sondeo las tarjetas migran de columna (reflow), y el detalle de un ítem vivirá en un panel o en una vista aparte."
+    },
+    {
+      "file": "seguimiento-03-consola-densa.html",
+      "section": "seguimiento",
+      "status": "discarded",
+      "recommend": false,
+      "note": "Descartada el 2026-10-07 — el usuario eligió el kanban (02) tras ver los cuatro. Filas densas + panel de detalle a la derecha: reutiliza el maestro-detalle que Películas y Series ya eligieron. Coste: era el más parecido a lo que hay hoy — cambia menos, aporta menos."
+    },
+    {
+      "file": "seguimiento-04-alertas.html",
+      "section": "seguimiento",
+      "status": "discarded",
+      "recommend": false,
+      "note": "Descartada el 2026-10-07 — el usuario eligió el kanban (02) tras ver los cuatro. ★ Recomendado en la galería, pero perdió ante el kanban. Lo rojo primero; con el flujo sano la página queda casi vacía. Coste: las tarjetas migran de banda al resolverse."
     }
   ]
 }

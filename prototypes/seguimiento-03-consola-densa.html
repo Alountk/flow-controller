@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Controller — Seguimiento · Prototipo 3: Consola densa</title>
+  <style>
+    :root {
+      --bg: #0f0f11; --bg-elev: #17171a; --bg-elev-2: #1f1f23;
+      --border: #27272a; --text: #fafafa; --text-dim: #a1a1aa; --text-dim2: #71717a;
+      --accent: #4a9eff; --accent-soft: rgba(74,158,255,0.12);
+      --ok: #6cd68f; --ok-soft: rgba(108,214,143,0.12);
+      --warn: #ffc44a; --warn-soft: rgba(255,196,74,0.12);
+      --bad: #ff5c5c; --bad-soft: rgba(255,92,92,0.12);
+      --sidebar-w: 208px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; line-height: 1.5; min-height: 100vh; }
+    button { font: inherit; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .shell { display: flex; align-items: flex-start; min-height: 100vh; }
+    .sidebar { width: var(--sidebar-w); flex-shrink: 0; align-self: stretch; position: sticky; top: 0; max-height: 100vh; overflow-y: auto; background: var(--bg-elev); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; gap: 14px; }
+    .sb-brand { font-size: 15px; font-weight: 700; padding: 0 8px; }
+    .sb-brand span { color: var(--accent); }
+    .sb-version { font-size: 11px; color: var(--text-dim2); padding: 0 8px; margin-top: 2px; }
+    .sb-flag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; margin: 0 8px; text-align: center; }
+    .sb-nav { display: flex; flex-direction: column; gap: 2px; }
+    .sb-link { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-dim); text-decoration: none; padding: 7px 8px; border-radius: 7px; }
+    .sb-link .ico { width: 16px; text-align: center; }
+    .sb-link.is-active { background: var(--accent-soft); color: var(--text); }
+    .content { flex: 1; min-width: 0; padding: 24px 28px 56px; }
+
+    .concept { border: 1px dashed var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 24px; background: var(--bg-elev); }
+    .proto-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim2); margin-bottom: 12px; }
+    .concept h1 { font-size: 20px; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .concept p { font-size: 13px; color: var(--text-dim); max-width: 78ch; }
+    .concept p + p { margin-top: 8px; }
+    .concept b { color: var(--text); }
+
+    .sum { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+    .sum-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; padding: 9px 14px; min-width: 108px; }
+    .sum-card .v { font-size: 20px; font-weight: 700; }
+    .sum-card .l { font-size: 11px; color: var(--text-dim); }
+    .sum-card.warn .v { color: var(--warn); }
+    .sum-card.bad .v { color: var(--bad); }
+    .sum-card.ok .v { color: var(--ok); }
+
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .chip { font-size: 12px; font-weight: 600; color: var(--text-dim); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+    .chip.on { color: var(--text); background: var(--accent-soft); border-color: var(--accent); }
+    .chip .n { color: var(--text-dim2); margin-left: 5px; }
+
+    /* ── Maestro–detalle: filas densas + panel ── */
+    .split { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+    .list { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .list-head, .row { display: grid; grid-template-columns: 1fr 92px 150px 130px; gap: 10px; align-items: center; padding: 9px 14px; }
+    .list-head { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim2); border-bottom: 1px solid var(--border); background: var(--bg-elev-2); }
+    .row { border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12px; }
+    .row:last-child { border-bottom: 0; }
+    .row:hover { background: var(--bg-elev-2); }
+    .row.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+    .r-main { min-width: 0; }
+    .r-title { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .r-sub { font-size: 10.5px; color: var(--text-dim2); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .r-svc { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .r-svc.radarr { color: var(--accent); }
+    .r-svc.sonarr { color: var(--ok); }
+    .r-state { font-size: 11px; font-weight: 650; display: flex; align-items: center; gap: 6px; }
+    .r-state .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .r-state.s-download { color: var(--accent); } .r-state.s-download .dot { background: var(--accent); }
+    .r-state.s-import { color: var(--accent); } .r-state.s-import .dot { background: var(--accent); }
+    .r-state.s-blocked { color: var(--warn); } .r-state.s-blocked .dot { background: var(--warn); }
+    .r-state.s-failed { color: var(--bad); } .r-state.s-failed .dot { background: var(--bad); }
+    .r-state.s-sent { color: var(--ok); } .r-state.s-sent .dot { background: var(--ok); }
+    .r-prog { display: flex; align-items: center; gap: 8px; }
+    .r-bar { flex: 1; height: 5px; border-radius: 999px; background: var(--bg-elev-2); overflow: hidden; }
+    .r-bar > i { display: block; height: 100%; background: var(--accent); }
+    .r-pct { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); min-width: 30px; text-align: right; }
+    .r-time { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim2); text-align: right; }
+
+    .panel { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 16px; position: sticky; top: 24px; }
+    .p-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim2); }
+    .p-title { font-size: 15px; font-weight: 700; margin-top: 6px; letter-spacing: -0.01em; }
+    .p-state { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; font-weight: 700; color: var(--warn); background: var(--warn-soft); border: 1px solid rgba(255,196,74,.4); border-radius: 999px; padding: 4px 10px; }
+    .p-block { margin-top: 14px; }
+    .p-label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim2); margin-bottom: 5px; }
+    .p-value { font-family: var(--mono); font-size: 11.5px; line-height: 1.55; color: var(--text); word-break: break-all; }
+    .p-value.dim { color: var(--text-dim); }
+    .p-route { display: grid; gap: 6px; }
+    .p-hop { display: flex; gap: 8px; align-items: baseline; font-family: var(--mono); font-size: 11px; }
+    .p-hop .k { color: var(--text-dim2); min-width: 58px; font-family: system-ui, sans-serif; font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+    .p-hop .v { color: var(--text-dim); word-break: break-all; }
+    .p-hop .v.hi { color: var(--text); }
+    .p-fail { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 9px 10px; }
+    .p-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .btn { font-size: 12px; font-weight: 600; border-radius: 7px; padding: 7px 13px; cursor: pointer; border: 1px solid var(--border); background: var(--bg-elev-2); color: var(--text); }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); }
+    .btn.fase2 { border-style: dashed; color: var(--text-dim); }
+    .p-note { margin-top: 10px; font-size: 10.5px; color: var(--text-dim2); }
+
+    @media (max-width: 1200px) { .split { grid-template-columns: 1fr; } .panel { position: static; } }
+    @media (max-width: 900px) {
+      .sidebar { position: static; max-height: none; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
+      .content { padding: 16px; }
+      .list-head, .row { grid-template-columns: 1fr 90px; }
+      .list-head span:nth-child(n+3), .row > *:nth-child(n+3) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div>
+        <div class="sb-brand">Flow<span>Controller</span></div>
+        <div class="sb-version">v0.1.0 · autoalojado</div>
+      </div>
+      <span class="sb-flag">Orientativa</span>
+      <nav class="sb-nav" aria-label="Navegación principal (maqueta)">
+        <a class="sb-link" href="#"><span class="ico">📊</span>Dashboard</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Películas</a>
+        <a class="sb-link" href="#"><span class="ico">📺</span>Series</a>
+        <a class="sb-link is-active" href="#" aria-current="page"><span class="ico">📡</span>Seguimiento</a>
+        <a class="sb-link" href="#"><span class="ico">💾</span>Disco</a>
+        <a class="sb-link" href="#"><span class="ico">📂</span>Archivos</a>
+        <a class="sb-link" href="#"><span class="ico">🎬</span>Media Mixer</a>
+        <a class="sb-link" href="#"><span class="ico">⚙️</span>Configuración</a>
+        <a class="sb-link" href="#"><span class="ico">🎨</span>Prototipos</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="concept">
+        <p class="proto-tag">Prototipo 3 de 4 · Seguimiento — Consola densa (maestro–detalle)</p>
+        <h1>Muchas descargas en pantalla, una en detalle</h1>
+        <p>
+          Filas-tarjeta compactas —estado, progreso y edad en cuatro columnas— y un
+          <b>panel de detalle pegado a la derecha</b> con el viaje completo de la seleccionada:
+          dónde está ahora, desde dónde vino, hacia dónde va y por qué se ha quedado. Es el mismo
+          lenguaje <b>maestro–detalle</b> que ya aprendieron Películas y Series: la app se sigue
+          aprendiendo una sola vez.
+        </p>
+        <p>
+          Es el diseño <b>más conservador</b>: solo reemplaza la tabla de Trazabilidad por algo más
+          denso y con panel. Botones en punto y coma = fase 2.
+        </p>
+      </header>
+
+      <div class="sum" role="group" aria-label="Resumen">
+        <div class="sum-card"><div class="v">4</div><div class="l">Descargando</div></div>
+        <div class="sum-card warn"><div class="v">2</div><div class="l">Import bloqueado</div></div>
+        <div class="sum-card bad"><div class="v">1</div><div class="l">Fallidas</div></div>
+        <div class="sum-card ok"><div class="v">12</div><div class="l">Completadas</div></div>
+      </div>
+
+      <div class="filters" role="tablist" aria-label="Filtrar por fase">
+        <button class="chip on" role="tab" aria-selected="true">Todas <span class="n">19</span></button>
+        <button class="chip" role="tab" aria-selected="false">Descargando <span class="n">4</span></button>
+        <button class="chip" role="tab" aria-selected="false">Importando <span class="n">3</span></button>
+        <button class="chip" role="tab" aria-selected="false">Import bloqueado <span class="n">2</span></button>
+        <button class="chip" role="tab" aria-selected="false">Fallidas <span class="n">1</span></button>
+        <button class="chip" role="tab" aria-selected="false">Enviadas <span class="n">9</span></button>
+      </div>
+
+      <div class="split">
+        <div class="list" role="table" aria-label="Descargas en seguimiento">
+          <div class="list-head" role="row">
+            <span>Título</span><span>Estado</span><span>Progreso</span><span style="text-align:right">Edad</span>
+          </div>
+
+          <div class="row" role="row">
+            <div class="r-main"><div class="r-title">Dune (2021)</div><div class="r-sub">Radarr · AMULE · → /mnt/storage/movies</div></div>
+            <div class="r-state s-download"><span class="dot"></span>Descargando</div>
+            <div class="r-prog"><div class="r-bar"><i style="width:67%"></i></div><span class="r-pct">67%</span></div>
+            <div class="r-time">21 min</div>
+          </div>
+
+          <div class="row sel" role="row" aria-selected="true">
+            <div class="r-main"><div class="r-title">Transformers: Age of Extinction (2014) 2160p</div><div class="r-sub">Radarr · AMULE · sin ruta de importación</div></div>
+            <div class="r-state s-blocked"><span class="dot"></span>Bloqueado</div>
+            <div class="r-prog"><div class="r-bar"><i style="width:100%;background:var(--warn)"></i></div><span class="r-pct">100%</span></div>
+            <div class="r-time">3 h 12 m</div>
+          </div>
+
+          <div class="row" role="row">
+            <div class="r-main"><div class="r-title">Oppenheimer (2023)</div><div class="r-sub">Radarr · Torrent · sembrando 1,4</div></div>
+            <div class="r-state s-download"><span class="dot"></span>Descargando</div>
+            <div class="r-prog"><div class="r-bar"><i style="width:23%"></i></div><span class="r-pct">23%</span></div>
+            <div class="r-time">38 min</div>
+          </div>
+
+          <div class="row" role="row">
+            <div class="r-main"><div class="r-title">Shōgun · S01E03</div><div class="r-sub">Sonarr · tv-sonarr · renombrando</div></div>
+            <div class="r-state s-import"><span class="dot"></span>Importando</div>
+            <div class="r-prog"><div class="r-bar"><i style="width:100%"></i></div><span class="r-pct">—</span></div>
+            <div class="r-time">1 h 04 m</div>
+          </div>
+
+          <div class="row" role="row">
+            <div class="r-main"><div class="r-title">Fallout · S01E02</div><div class="r-sub">Sonarr · categoría «amule» ≠ «tv-sonarr»</div></div>
+            <div class="r-state s-blocked"><span class="dot"></span>Bloqueado</div>
+            <div class="r-prog"><div class="r-bar"><i style="width:100%;background:var(--warn)"></i></div><span class="r-pct">100%</span></div>
+            <div class="r-time">5 h 47 m</div>
+          </div>
+
+          <div class="row" role="row">
+            <div class="r-main"><div class="r-title">Luca (2021)</div><div class="r-sub">Radarr · duplicado en biblioteca</div></div>
+            <div class="r-state s-failed"><span class="dot"></span>Fallida</div>
+            <div class="r-prog"><div class="r-bar"><i style="width:100%;background:var(--bad)"></i></div><span class="r-pct">100%</span></div>
+            <div class="r-time">9 h</div>
+          </div>
+
+          <div class="row" role="row">
+            <div class="r-main"><div class="r-title">The Bear · S02E05</div><div class="r-sub">Sonarr · → /mnt/storage/tv/The Bear/Season 02</div></div>
+            <div class="r-state s-sent"><span class="dot"></span>Enviada</div>
+            <div class="r-prog"><div class="r-bar"><i style="width:100%;background:var(--ok)"></i></div><span class="r-pct">100%</span></div>
+            <div class="r-time">40 min</div>
+          </div>
+
+          <div class="row" role="row">
+            <div class="r-main"><div class="r-title">Wonka (2023)</div><div class="r-sub">Radarr · copiando a biblioteca</div></div>
+            <div class="r-state s-import"><span class="dot"></span>Importando</div>
+            <div class="r-prog"><div class="r-bar"><i style="width:49%"></i></div><span class="r-pct">49%</span></div>
+            <div class="r-time">12 min</div>
+          </div>
+        </div>
+
+        <aside class="panel" aria-label="Detalle de la descarga seleccionada">
+          <div class="p-tag">Detalle · fase 2: acciones</div>
+          <div class="p-title">Transformers: Age of Extinction (2014) 2160p</div>
+          <span class="p-state">● Import bloqueado · 3 h 12 m</span>
+
+          <div class="p-block">
+            <div class="p-label">Por qué está así</div>
+            <div class="p-fail">Sin ruta de importación: Radarr no encuentra la carpeta dentro de sus raíces.</div>
+          </div>
+
+          <div class="p-block">
+            <div class="p-label">El viaje del fichero</div>
+            <div class="p-route">
+              <div class="p-hop"><span class="k">Grab</span><span class="v">hoy 08:31 · indexador AMULE</span></div>
+              <div class="p-hop"><span class="k">Descarga</span><span class="v hi">100% · 42,1 GB · aMuTorrent</span></div>
+              <div class="p-hop"><span class="k">Ahora en</span><span class="v hi">/mnt/storage-6tb/shared-downloads/amule/Transformers Age of Extinction (2014)/</span></div>
+              <div class="p-hop"><span class="k">Destino</span><span class="v">/mnt/storage/movies/… (sin alcanzar)</span></div>
+            </div>
+          </div>
+
+          <div class="p-block">
+            <div class="p-label">Señales</div>
+            <div class="p-value dim">categoría: radarr ✓ · trackedDownloadState: importBlocked · cola del arr: id 4117</div>
+          </div>
+
+          <div class="p-actions">
+            <button class="btn primary">Reintentar import</button>
+            <button class="btn fase2">; Cancelar descarga</button>
+            <button class="btn fase2">; Quitar de la cola</button>
+          </div>
+          <div class="p-note">Los botones en punto y coma existen en la vista, pero se construyen en la fase 2 de F-09.</div>
+        </aside>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
