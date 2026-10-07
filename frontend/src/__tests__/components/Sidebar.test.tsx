@@ -8,7 +8,6 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Seguimiento')).toBeInTheDocument()
-    expect(screen.getByText('Trazabilidad')).toBeInTheDocument()
     expect(screen.getByText('Películas')).toBeInTheDocument()
     expect(screen.getByText('Media Mixer')).toBeInTheDocument()
   })
@@ -77,7 +76,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Series').closest('a')).toHaveAttribute('href', '/series')
   })
 
-  it('places Películas and Series before Trazabilidad', () => {
+  it('places Películas and Series before Disco', () => {
     const { container } = render(
       <Sidebar active="dashboard" onNavigate={() => {}} developer={false} />,
     )
@@ -89,14 +88,14 @@ describe('Sidebar', () => {
 
     expect(index('Películas')).toBeGreaterThan(-1)
     expect(index('Series')).toBeGreaterThan(-1)
-    expect(index('Películas')).toBeLessThan(index('Trazabilidad'))
-    expect(index('Series')).toBeLessThan(index('Trazabilidad'))
+    expect(index('Películas')).toBeLessThan(index('Disco'))
+    expect(index('Series')).toBeLessThan(index('Disco'))
     expect(index('Películas')).toBeLessThan(index('Series'))
   })
 
-  it('seats Seguimiento between Series and Trazabilidad', () => {
-    // The new view arrives next to its siblings; Trazabilidad stays where it
-    // is until phase 1 has fully replaced it (F-09).
+  it('seats Seguimiento between Series and Disco', () => {
+    // The retired Trazabilidad used to sit here; Seguimiento took its seat in
+    // the content group, before the local pages that need no service.
     const { container } = render(
       <Sidebar active="dashboard" onNavigate={() => {}} developer={false} />,
     )
@@ -107,6 +106,6 @@ describe('Sidebar', () => {
     const index = (label: string) => labels.findIndex((text) => text.includes(label))
 
     expect(index('Series')).toBeLessThan(index('Seguimiento'))
-    expect(index('Seguimiento')).toBeLessThan(index('Trazabilidad'))
+    expect(index('Seguimiento')).toBeLessThan(index('Disco'))
   })
 })

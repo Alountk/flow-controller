@@ -48,7 +48,7 @@ export function parseStatus(raw: unknown): { state: ServiceState; reason: string
   return { state: 'unknown', reason: raw }
 }
 
-/* ---- Trazabilidad ---- */
+/* ---- Trazas · el dato de Seguimiento (antes: Trazabilidad) ---- */
 
 export type TraceStage =
   | 'downloading'

@@ -17,7 +17,6 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'peliculas', label: 'Películas', icon: '🎬' },
   { key: 'series', label: 'Series', icon: '📺' },
   { key: 'seguimiento', label: 'Seguimiento', icon: '📡' },
-  { key: 'trace', label: 'Trazabilidad', icon: '🔍' },
   { key: 'disk', label: 'Disco', icon: '💾' },
   { key: 'files', label: 'Archivos', icon: '📂' },
   { key: 'mixer', label: 'Media Mixer', icon: '🎬' },

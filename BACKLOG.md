@@ -704,7 +704,7 @@ de mostrar dos envolturas muertas.
 **`Page` estaba duplicado** (hook + Sidebar) y nada impedía que se desincronizara; el hook es
 ahora el **único dueño** y el Sidebar re-exporta el tipo.
 
-### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · 🔁 *Fase 1 entregada — quedan el retiro y la fase 2*
+### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · ✅ *Retirada — pendiente la fase 2*
 
 Pedida en voz alta al revisar el diseño nuevo. La retirada sigue en pie, pero **el final ya está
 decidido**: no se retira para dejar un hueco — Trazabilidad se convierte en una vista nueva que
@@ -720,25 +720,27 @@ descarga y de cada operación, y en una fase posterior acciones sobre ellas:
 | Fase | Contenido |
 |---|---|
 | **0 · Prototipos** | ✅ **Entregados y elegidos** — los 4 (`01-cronologia` · `02-kanban` · `03-consola-densa` · `04-alertas`) el 2026-10-07; **el usuario eligió `seguimiento-02-kanban`** («el estado ES la columna»). Los otros 3 quedan `discarded` con su trade-off en `prototypes/manifest.json` |
-| **1 · La vista** | ✅ **Entregada 2026-10-07** — `Seguimiento.tsx`: kanban de 4 columnas (`downloading` · `downloaded`+`importing` · `import_blocked`+`failed` · `sent`), tarjetas con píldora de fase, progreso, motivo de bloqueo, ruta y chip de categoría incorrecta, franja de resumen y banda de la cola de operaciones. Página nueva `/seguimiento` (nav entre Series y Trazabilidad, oculta sin arr). **Prerrequisito del retiro cumplido**: el barrido de auto-copia vive ahora en `AutoCopyPanel` (montado en las dos vistas) y las acciones por traza (`TraceActions`) van en cada tarjeta — retirar Trazabilidad no pierde nada. **C-11** ✅ entregado. **Sigue**: el retiro de `Trazabilidad` (tests migrados al estilo PR #116) |
+| **1 · La vista** | ✅ **Entregada 2026-10-07** — `Seguimiento.tsx`: kanban de 4 columnas (`downloading` · `downloaded`+`importing` · `import_blocked`+`failed` · `sent`), tarjetas con píldora de fase, progreso, motivo de bloqueo, ruta y chip de categoría incorrecta, franja de resumen y banda de la cola de operaciones. Página nueva `/seguimiento` (nav entre Series y Trazabilidad, oculta sin arr). **Prerrequisito del retiro cumplido**: el barrido de auto-copia vive ahora en `AutoCopyPanel` (montado en las dos vistas) y las acciones por traza (`TraceActions`) van en cada tarjeta — retirar Trazabilidad no pierde nada. **C-11** ✅ entregado. **Sigue**: ~~el retiro~~ ✅ **hecho**: `TraceView` (página, ruta `/trazabilidad`, nav, tests) **fuera**; el barrido y las acciones ya estaban mudados. |
 | **2 · Acciones** | **Cancelar descarga** · **Ver detalles**: destino del fichero, dónde se movió después y en qué estado se quedó (a medias, bloqueado, importado…) |
 
 **Disco queda fuera de este ciclo** — sigue ⏸ como hasta aquí; este apartado solo toca Trazabilidad.
 
-**Al sustituirla, hay que tener en cuenta** (sigue vigente):
+**Cómo se hizo el retiro** (rastro para la fase 2):
 
-- `Trazabilidad` es la **única vista** de `Trace` / cola / etapas: la vista nueva **nace de ella**
-  (fase 1), no la tapa — **hasta que la fase 1 esté, no se retira nada**.
-- `GET /api/disk` **se arregló** en B-06 (PR `#103`): deriva de `paths.allowed_roots` y ya no
-  miente sobre el rootfs. Su valor no depende de la página (y de hecho Disco ni se toca aquí).
-- Está en `NAV_ITEMS`, `PAGE_PATHS`, `PAGE_TITLES` y en `hiddenPages` (leer de Radarr/Sonarr): el
-  cambio es el mismo patrón que ya se aplicó a `Faltantes`/`Calendario` en el **PR `#116`**,
-  incluida la **migración de sus tests**.
-- **Nombre confirmado: «Seguimiento»** ✅ (label de sidebar; confirmado por el usuario el
-  2026-10-07). `TraceView` / `TraceActions`
-  son la base de datos y de acciones de la fase 2 — se rehacen, no se tiran.
-- **C-11** (card «Stuck» clicable) apunta aquí: el enlace del Dashboard debe seguir funcionando
-  cuando la vista cambie.
+- La vista nueva **nació de la vieja**: fase 1 primero, retiro después — la regla «hasta que
+  la fase 1 esté, no se retira nada» se cumplió.
+- El **barrido de auto-copia** («Revisar descargas») y las **acciones por traza** vivían solo
+  en `TraceView`: se mudaron a `AutoCopyPanel` (montado en ambas vistas durante la transición)
+  y a las tarjetas de `Seguimiento` **antes** del retiro, con sus tests migrados — *migrar,
+  no debilitar*.
+- `TraceView` **fuera**: página, ruta `/trazabilidad`, entrada de nav, `PAGE_TITLES`,
+  `hiddenPages` y sus tests. `TraceActions`, los tipos de traza y el query `['trace']` **se
+  quedan** — son el dato y las acciones de `Seguimiento`. Patrón de migración: el de
+  `Faltantes`/`Calendario` (PR `#116`).
+- `GET /api/disk` se arregló en B-06 (PR `#103`): deriva de `paths.allowed_roots` — Disco no
+  se tocó en este ciclo.
+- **Nombre confirmado: «Seguimiento»** ✅ (2026-10-07). **C-11** ✅: la card «Stuck» del
+  Dashboard abre `/seguimiento`.
 
 ### F-10 — Raíces etiquetadas de destinos en el explorador (biblioteca · 4K · 3D) · **Pequeña** · ✅ **Entregado** (PR #148)
 
@@ -854,9 +856,9 @@ Act. **2026-10-07** (el anterior decía `F-07` → `F-01` → `C-01/C-02` y **F-
 
 1. **Rápidos** ✅ *hechos 2026-10-07*: `B-08` (host_path en el listado) → `C-09` (guardia de
    búsqueda masiva — cierra la clase del incidente del 07-10).
-2. **`F-09`** — *en curso*: fase 0 ✅ **kanban elegido** · fase 1 ✅ **la vista en `/seguimiento`**
-   (+ barrido y acciones mudados, **C-11** ✅) → **sigue**: retiro de `Trazabilidad` (tests
-   migrados al estilo PR #116) → fase 2 (cancelar / detalles).
+2. **`F-09`** — fase 0 ✅ **kanban elegido** · fase 1 ✅ **la vista en `/seguimiento`** ·
+   barrido y acciones mudados · **C-11** ✅ · **retiro de `Trazabilidad`** ✅ →
+   **sigue**: fase 2 (cancelar / detalles).
 3. Después: `C-01` (avisos Telegram) → `F-07` (procedencia de aMule) → `C-10` (búsqueda
    asíncrona) → `C-05` → `C-06` → `C-04`.
 4. **F-06: estudio entregado** (→ `odd/tasks/f06-amule-local.md`); *la implementación* sigue sin

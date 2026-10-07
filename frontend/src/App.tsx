@@ -5,7 +5,6 @@ import { SetupPage } from './components/SetupPage'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
-import { TraceView } from './components/TraceView'
 import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
 import { QueueSidebar } from './components/QueueSidebar'
@@ -64,7 +63,6 @@ const PAGE_TITLES: Record<Page, string> = {
   peliculas: 'Películas',
   series: 'Series',
   seguimiento: 'Seguimiento',
-  trace: 'Trazabilidad',
   disk: 'Espacio en Disco',
   files: 'Archivos',
   mixer: 'Media Mixer',
@@ -177,7 +175,7 @@ function App() {
   // Sonarr. The local pages (disk, files, mixer, config) always work.
   const hiddenPages = useMemo<Page[]>(() => {
     if (!servicesReady || hasAnyArr) return []
-    return ['trace', 'peliculas', 'series', 'seguimiento'] as Page[]
+    return ['peliculas', 'series', 'seguimiento'] as Page[]
   }, [servicesReady, hasAnyArr])
 
   useEffect(() => {
@@ -340,15 +338,6 @@ function App() {
 
           {page === 'seguimiento' && (
             <Seguimiento
-              data={traceData ?? null}
-              loading={traceLoading}
-              actions={actionsData ?? null}
-              onActionDone={handleActionDone}
-            />
-          )}
-
-          {page === 'trace' && (
-            <TraceView
               data={traceData ?? null}
               loading={traceLoading}
               actions={actionsData ?? null}
