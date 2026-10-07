@@ -214,6 +214,12 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
     ? Math.round((copyTask.copied_bytes / copyTask.total_bytes) * 100)
     : 0
 
+  // Nothing this card can offer (no key survived the catalogue, and no
+  // leftover result to show): an empty bar inside a kanban card would be
+  // padding that explains itself to nobody.
+  const anyButton = keys.some((k) => Boolean(meta[k]))
+  if (!anyButton && !result && !copyTask && !pending) return null
+
   return (
     <div className="trace-actions" onClick={(e) => e.stopPropagation()}>
       {keys.map((key) => {

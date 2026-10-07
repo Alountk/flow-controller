@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import type { ActionsResponse, AutoCopyLogEntry, AutoCopySweepResult } from '../../types'
-import { TraceView } from '../../components/TraceView'
+import { AutoCopyPanel } from '../../components/AutoCopyPanel'
 
 /**
- * Tests for the auto-copy decision history in Trazabilidad.
+ * Tests for the auto-copy decision history — the block that moved out of
+ * Trazabilidad into AutoCopyPanel before the page was retired.
  *
  * The history is a timeline of TRANSITIONS, not a sweep-by-sweep dump. Each row
  * carries the outcome's Spanish label and the reason the sweep already wrote,
@@ -58,10 +59,8 @@ function stubFetch(historyBody: unknown) {
   })
 }
 
-function renderTraceView() {
-  return render(
-    <TraceView data={null} loading={false} actions={OPEN_ACTIONS} onActionDone={() => {}} />,
-  )
+function renderPanel() {
+  return render(<AutoCopyPanel safeMode={OPEN_ACTIONS.safe_mode} />)
 }
 
 describe('auto-copy decision history', () => {
@@ -80,7 +79,7 @@ describe('auto-copy decision history', () => {
         ],
       }),
     )
-    renderTraceView()
+    renderPanel()
 
     expect(await screen.findByText('Copiada')).toBeInTheDocument()
     expect(screen.getByText('Esperando')).toBeInTheDocument()
@@ -92,7 +91,7 @@ describe('auto-copy decision history', () => {
 
   it('shows an honest empty state when there is no history', async () => {
     vi.stubGlobal('fetch', stubFetch({ items: [] }))
-    renderTraceView()
+    renderPanel()
 
     expect(await screen.findByText(/Todavía no hay movimientos/)).toBeInTheDocument()
   })
@@ -113,7 +112,7 @@ describe('auto-copy decision history', () => {
       return Promise.resolve(jsonResponse(sweepResult()))
     })
     vi.stubGlobal('fetch', fetchMock)
-    renderTraceView()
+    renderPanel()
 
     // Loaded with the page: nothing yet.
     expect(await screen.findByText(/Todavía no hay movimientos/)).toBeInTheDocument()
@@ -129,7 +128,7 @@ describe('auto-copy decision history', () => {
       'fetch',
       stubFetch({ items: [], error: 'el historial no está disponible' }),
     )
-    renderTraceView()
+    renderPanel()
 
     expect(await screen.findByText('el historial no está disponible')).toBeInTheDocument()
     expect(screen.queryByText(/Todavía no hay movimientos/)).not.toBeInTheDocument()

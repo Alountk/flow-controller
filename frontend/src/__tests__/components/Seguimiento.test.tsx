@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Seguimiento } from '../../components/Seguimiento'
 import { queueStatus } from '../../api/files'
-import type { Trace, TraceResponse } from '../../types'
+import type { ActionsResponse, Trace, TraceResponse } from '../../types'
 
 /**
  * The kanban chosen in F-09 phase 0: the state IS the column.
@@ -12,13 +12,30 @@ import type { Trace, TraceResponse } from '../../types'
  * where a regression would be silent (a trace sitting in the wrong column
  * still renders, still looks fine, and answers the operator's question with
  * the wrong answer). Everything else here guards the honesty rules: only
- * fields `/api/trace` actually carries get drawn, and a blockage shows its
- * reason instead of a bare pill.
+ * fields `/api/trace` actually carries get drawn, a blockage shows its
+ * reason instead of a bare pill, and the per-trace actions Trazabilidad
+ * carried live on the card — retiring the old page loses none of them.
  */
 
 vi.mock('../../api/files', () => ({ queueStatus: vi.fn() }))
 
 const queueStatusMock = vi.mocked(queueStatus)
+
+const OPEN_ACTIONS: ActionsResponse = { actions: [], safe_mode: false, available: [] }
+
+const RETRY_ACTIONS: ActionsResponse = {
+  actions: [
+    {
+      key: 'retry_import',
+      label: 'Reintentar import',
+      description: 'Vuelve a lanzar el import en el arr',
+      destructive: false,
+      scope: 'import',
+    },
+  ],
+  safe_mode: false,
+  available: ['retry_import'],
+}
 
 function trace(over: Partial<Trace> = {}): Trace {
   return {
@@ -66,11 +83,20 @@ function resp(traces: Trace[]): TraceResponse {
   return { traces, summary: summaryOf(traces), indexer: '', updated_at: 1 }
 }
 
-function renderView(data: TraceResponse | null, loading = false) {
+function renderView(
+  data: TraceResponse | null,
+  loading = false,
+  actions: ActionsResponse = OPEN_ACTIONS,
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <Seguimiento data={data} loading={loading} />
+      <Seguimiento
+        data={data}
+        loading={loading}
+        actions={actions}
+        onActionDone={() => {}}
+      />
     </QueryClientProvider>,
   )
 }
@@ -82,13 +108,21 @@ function column(container: HTMLElement, key: string): Element {
 }
 
 beforeEach(() => {
-  // Every render mounts the operations band; tests that do not care about it
-  // still need an answer, or react-query warns about an undefined payload.
+  // Every render mounts the operations band and the sweep panel's history
+  // read; tests that do not care still need an answer, or react-query warns
+  // about an undefined payload and the history errors out loudly.
   queueStatusMock.mockResolvedValue({ queue: [], completed: [], running: false })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() =>
+      Promise.resolve({ ok: true, json: async () => ({ items: [] }) } as Response),
+    ),
+  )
 })
 
 afterEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('the four columns', () => {
@@ -195,6 +229,8 @@ describe('what each card draws', () => {
         <Seguimiento
           data={resp([trace({ stage: 'sent', title: 'Sin progreso' })])}
           loading={false}
+          actions={OPEN_ACTIONS}
+          onActionDone={() => {}}
         />
       </QueryClientProvider>,
     )
@@ -255,6 +291,33 @@ describe('the page states', () => {
     expect(sum!.textContent).toContain('Import bloqueado')
     expect(sum!.textContent).toContain('Fallidas')
     expect(sum!.textContent).toContain('Completadas')
+  })
+})
+
+describe('the actions Trazabilidad used to own', () => {
+  it('offers a blocked trace its retry button on the card', () => {
+    // The whole point of carrying TraceActions here: retiring the old page
+    // must not take the only door to "Reintentar import" with it.
+    renderView(
+      resp([trace({ stage: 'import_blocked', title: 'Transformers (2014)' })]),
+      false,
+      RETRY_ACTIONS,
+    )
+
+    expect(screen.getByRole('button', { name: 'Reintentar import' })).toBeInTheDocument()
+  })
+
+  it('renders no action bar when the catalogue offers nothing', () => {
+    const { container } = renderView(resp([trace({ stage: 'import_blocked' })]))
+
+    expect(container.querySelector('.trace-actions')).toBeNull()
+  })
+
+  it('carries the sweep panel that used to live in Trazabilidad', () => {
+    // "Revisar descargas" was reachable ONLY through the page being retired.
+    renderView(resp([trace()]))
+
+    expect(screen.getByRole('button', { name: 'Revisar descargas' })).toBeInTheDocument()
   })
 })
 

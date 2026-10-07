@@ -300,16 +300,21 @@ function App() {
                 )}
 
                 <div className="dashboard-grid">
-                  <div className="dash-card">
-                    <span className="dash-label">Descargando</span>
-                    <span className="dash-value accent">{downloading}</span>
-                    <span className="dash-sub">activas</span>
-                  </div>
                 <div className="dash-card">
+                  <span className="dash-label">Descargando</span>
+                  <span className="dash-value accent">{downloading}</span>
+                  <span className="dash-sub">activas</span>
+                </div>
+                <button
+                  type="button"
+                  className="dash-card"
+                  onClick={() => setPage('seguimiento')}
+                  title="Ver el seguimiento de las descargas"
+                >
                   <span className="dash-label">Stuck</span>
                   <span className="dash-value warn">{importBlocked}</span>
                   <span className="dash-sub">atención</span>
-                </div>
+                </button>
                 <div className="dash-card">
                   <span className="dash-label">Fallidas</span>
                   <span className="dash-value bad">{failed}</span>
@@ -334,7 +339,12 @@ function App() {
           {page === 'series' && <Series />}
 
           {page === 'seguimiento' && (
-            <Seguimiento data={traceData ?? null} loading={traceLoading} />
+            <Seguimiento
+              data={traceData ?? null}
+              loading={traceLoading}
+              actions={actionsData ?? null}
+              onActionDone={handleActionDone}
+            />
           )}
 
           {page === 'trace' && (

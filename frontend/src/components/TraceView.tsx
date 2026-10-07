@@ -1,20 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type {
   ActionKey,
   ActionMeta,
   ActionsResponse,
-  AutoCopyAction,
-  AutoCopyLogDecision,
-  AutoCopyLogEntry,
-  AutoCopySweepEntry,
-  AutoCopySweepResult,
   Trace,
   TraceResponse,
   TraceStage,
 } from '../types'
 import { STAGE_LABELS } from '../types'
 import { relativeTime } from '../utils/time'
-import { fetchAutoCopyHistory, runAutoCopySweep } from '../api/autoCopy'
+import { AutoCopyPanel } from './AutoCopyPanel'
 import { TraceActions } from './TraceActions'
 import './TraceView.css'
 
@@ -168,211 +163,9 @@ function TraceRow({
   )
 }
 
-const AUTO_COPY_ACTION_LABELS: Record<AutoCopyAction, string> = {
-  copied: 'Copiada',
-  proposed: 'Propuesta',
-  failed: 'Falló',
-}
-
-/** Readable Spanish label for a logged decision. The log stores the sweep's
- *  outcome, so `wait` and `skip` need a label too — they are the "why not". */
-const AUTO_COPY_LOG_LABELS: Record<AutoCopyLogDecision, string> = {
-  copied: 'Copiada',
-  proposed: 'Propuesta',
-  wait: 'Esperando',
-  skip: 'Omitida',
-  failed: 'Falló',
-}
-
-function formatLogTime(epoch: number): string {
-  const then = new Date(epoch * 1000)
-  if (Number.isNaN(then.getTime())) return '—'
-  return then.toLocaleString()
-}
-
-/**
- * The append-only decision log, newest first.
- *
- * Every row is a transition — the outcome changed since the previous sweep — so
- * the list reads as a timeline, not a sweep-by-sweep dump. `reason` is the same
- * Spanish text the sweep panel shows, written for a human.
- */
-function AutoCopyHistory({
-  entries,
-  error,
-}: {
-  entries: AutoCopyLogEntry[]
-  error: string | null
-}) {
-  return (
-    <div className="auto-copy-history">
-      <h3 className="auto-copy-history-title">Historial de auto-copia</h3>
-      {error ? (
-        <p className="auto-copy-history-error">{error}</p>
-      ) : entries.length === 0 ? (
-        <p className="auto-copy-history-empty">
-          Todavía no hay movimientos. Cuando un barrido cambie el estado de una
-          descarga, aparecerá aquí.
-        </p>
-      ) : (
-        <ul className="auto-copy-history-list">
-          {entries.map((row) => (
-            <li key={row.id} className="auto-copy-history-row">
-              <span className="auto-copy-history-date">{formatLogTime(row.at)}</span>
-              <span className={`auto-copy-badge ${row.decision}`}>
-                {AUTO_COPY_LOG_LABELS[row.decision]}
-              </span>
-              <span className="auto-copy-history-row-title" title={row.title ?? ''}>
-                {row.title ?? '—'}
-              </span>
-              <span className="auto-copy-history-reason">{row.reason ?? ''}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function AutoCopyErrors({ errors }: { errors: string[] }) {
-  if (errors.length === 0) return null
-  return (
-    <div className="auto-copy-errors">
-      <span className="auto-copy-errors-label">Errores</span>
-      {errors.map((e, i) => (
-        <div key={i} className="auto-copy-error">{e}</div>
-      ))}
-    </div>
-  )
-}
-
-/**
- * Result of the last sweep, as returned by POST /api/auto-copy/sweep.
- *
- * `safeMode` is the page's `actions.safe_mode` — the same signal the rest of
- * the UI trusts — not a second source read from this response.
- */
-function AutoCopyResult({
-  result,
-  safeMode,
-}: {
-  result: AutoCopySweepResult
-  safeMode: boolean
-}) {
-  // `counts` can be `{}` in the route's last-resort error body, so read every
-  // field defensively instead of trusting the type at runtime.
-  const counts = result.counts ?? {}
-  const actionable = result.entries.filter(
-    (e): e is AutoCopySweepEntry & { action: AutoCopyAction } => e.action !== null,
-  )
-
-  if (result.running) {
-    // A sweep was already in flight. Showing the zero counts of that refusal
-    // would look like "nothing needed doing", which is not what happened.
-    return (
-      <div className="auto-copy-result">
-        <p className="auto-copy-running">
-          Ya hay un barrido en curso. Espera a que termine y vuelve a intentarlo.
-        </p>
-        <AutoCopyErrors errors={result.errors} />
-      </div>
-    )
-  }
-
-  return (
-    <div className="auto-copy-result">
-      {safeMode && (
-        <p className="auto-copy-safe-banner">
-          Modo seguro activo: no se ha copiado nada. Lo que sigue es lo que el
-          barrido haría.
-        </p>
-      )}
-      <AutoCopyErrors errors={result.errors} />
-
-      {!result.ok ? (
-        !result.errors.length && result.detail && (
-          <p className="auto-copy-running">{result.detail}</p>
-        )
-      ) : (
-        <>
-          <div className="auto-copy-counts">
-            <div className="auto-copy-count">
-              <span className="auto-copy-count-value">{counts.traces ?? 0}</span>
-              <span className="auto-copy-count-label">Trazas revisadas</span>
-            </div>
-            <div className="auto-copy-count">
-              <span className="auto-copy-count-value">{counts.copied ?? 0}</span>
-              <span className="auto-copy-count-label">Copiadas</span>
-            </div>
-            <div className="auto-copy-count">
-              <span className="auto-copy-count-value">{counts.proposed ?? 0}</span>
-              <span className="auto-copy-count-label">Propuestas</span>
-            </div>
-            <div className="auto-copy-count">
-              <span className="auto-copy-count-value">{counts.wait ?? 0}</span>
-              <span className="auto-copy-count-label">En espera</span>
-            </div>
-          </div>
-
-          {actionable.length === 0 ? (
-            <p className="auto-copy-empty">
-              No hay nada que copiar: ninguna descarga necesita intervención.
-            </p>
-          ) : (
-            <ul className="auto-copy-entries">
-              {actionable.map((e, i) => (
-                <li key={`${e.source}-${e.key}-${i}`} className="auto-copy-entry">
-                  <div className="auto-copy-entry-head">
-                    <span className={`auto-copy-badge ${e.action}`}>
-                      {AUTO_COPY_ACTION_LABELS[e.action]}
-                    </span>
-                    <span className="auto-copy-entry-title" title={e.title}>
-                      {e.title}
-                    </span>
-                  </div>
-                  <p className="auto-copy-entry-reason">{e.reason}</p>
-                  {e.detail && <p className="auto-copy-entry-detail">{e.detail}</p>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
 export function TraceView({ data, loading, actions, onActionDone }: Props) {
   const [filter, setFilter] = useState<'all' | TraceStage>('all')
   const [search, setSearch] = useState('')
-  const [sweepResult, setSweepResult] = useState<AutoCopySweepResult | null>(null)
-  const [sweeping, setSweeping] = useState(false)
-  const [history, setHistory] = useState<AutoCopyLogEntry[]>([])
-  const [historyError, setHistoryError] = useState<string | null>(null)
-
-  // Loads with the page and again after every sweep: the trigger is the only
-  // thing that can add rows, so the list would otherwise be stale until reload.
-  const loadHistory = useCallback(async () => {
-    const { items, error } = await fetchAutoCopyHistory()
-    setHistory(items)
-    setHistoryError(error ?? null)
-  }, [])
-
-  useEffect(() => {
-    void loadHistory()
-  }, [loadHistory])
-
-  async function runSweep() {
-    setSweeping(true)
-    try {
-      // The api module turns a rejected fetch into a failed summary, so this
-      // never throws and the button can never get stuck on "Revisando…".
-      setSweepResult(await runAutoCopySweep())
-      await loadHistory()
-    } finally {
-      setSweeping(false)
-    }
-  }
 
   const traces = data?.traces ?? []
   const summary = data?.summary
@@ -419,25 +212,7 @@ export function TraceView({ data, loading, actions, onActionDone }: Props) {
         )}
       </div>
 
-      <div className="auto-copy">
-        <div className="auto-copy-bar">
-          <button
-            className="auto-copy-btn"
-            onClick={() => void runSweep()}
-            disabled={sweeping}
-          >
-            {sweeping ? 'Revisando…' : 'Revisar descargas'}
-          </button>
-          <span className="auto-copy-hint">
-            Revisa las descargas completadas que Sonarr/Radarr no hayan importado.
-          </span>
-        </div>
-        {sweepResult && (
-          <AutoCopyResult result={sweepResult} safeMode={Boolean(actions?.safe_mode)} />
-        )}
-      </div>
-
-      <AutoCopyHistory entries={history} error={historyError} />
+      <AutoCopyPanel safeMode={Boolean(actions?.safe_mode)} />
 
       {summary && (
         <div className="trace-summary">
