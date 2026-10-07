@@ -1,0 +1,424 @@
+/* Seguimiento — the kanban chosen in F-09 phase 0 (seguimiento-02-kanban). */
+
+.sg {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sg-head h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.sg-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.sg-sub b {
+  color: var(--text);
+}
+
+/* ── Resumen ── */
+
+.sg-sum {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sg-sum-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  min-width: 120px;
+}
+
+.sg-sum-value {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.sg-sum-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.sg-sum-card.warn .sg-sum-value {
+  color: var(--warn);
+}
+
+.sg-sum-card.bad .sg-sum-value {
+  color: var(--bad);
+}
+
+/* ── El tablero ── */
+
+.sg-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.sg-col {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.sg-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.sg-dot-accent {
+  background: var(--accent);
+}
+
+.sg-dot-warn {
+  background: var(--warn);
+}
+
+.sg-dot-ok {
+  background: var(--ok);
+}
+
+.sg-col-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.sg-col[data-col='blocked'] .sg-col-name {
+  color: var(--warn);
+}
+
+.sg-col-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.sg-col-body {
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+  min-height: 90px;
+}
+
+.sg-col-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 16px 8px;
+}
+
+/* ── Tarjeta ── */
+
+.sg-card {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 11px 12px;
+}
+
+.sg-card.sg-blocked {
+  border-color: rgba(255, 196, 74, 0.45);
+}
+
+.sg-card.sg-done {
+  border-color: rgba(108, 214, 143, 0.3);
+}
+
+.sg-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sg-svc {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.sg-svc.radarr {
+  color: var(--accent);
+}
+
+.sg-svc.sonarr {
+  color: var(--ok);
+}
+
+.sg-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.35;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-age {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.sg-card-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+}
+
+.sg-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.sg-pill-import_blocked {
+  background: rgba(255, 196, 74, 0.12);
+  color: var(--warn);
+}
+
+.sg-pill-failed {
+  background: rgba(255, 92, 92, 0.12);
+  color: var(--bad);
+}
+
+.sg-pill-sent {
+  background: rgba(108, 214, 143, 0.12);
+  color: var(--ok);
+}
+
+.sg-chip {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.sg-chip-warn {
+  color: var(--warn);
+  background: rgba(255, 196, 74, 0.12);
+  border-color: rgba(255, 196, 74, 0.4);
+}
+
+.sg-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+  margin-top: 9px;
+}
+
+.sg-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.sg-pct {
+  margin-top: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.sg-why {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--warn);
+  background: rgba(255, 196, 74, 0.1);
+  border-radius: 6px;
+  padding: 7px 8px;
+}
+
+.sg-card.sg-blocked:has(.sg-pill-failed) .sg-why {
+  color: var(--bad);
+  background: rgba(255, 92, 92, 0.1);
+}
+
+.sg-path {
+  margin-top: 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Banda de operaciones ── */
+
+.sg-ops {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.sg-ops-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sg-ops-count {
+  font-size: 11px;
+  background: var(--bg-elev-2);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.sg-op {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.sg-op:first-of-type {
+  border-top: 0;
+}
+
+.sg-op-done {
+  opacity: 0.7;
+}
+
+.sg-op-kind {
+  font-weight: 700;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  min-width: 58px;
+  flex-shrink: 0;
+}
+
+.sg-op-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-op-progress {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text);
+  min-width: 110px;
+  text-align: right;
+}
+
+.sg-op-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  min-width: 70px;
+  text-align: right;
+}
+
+.sg-op-status.running {
+  color: var(--accent);
+}
+
+.sg-op-status.failed {
+  color: var(--bad);
+}
+
+.sg-op-status.done {
+  color: var(--ok);
+}
+
+/* ── Estados ── */
+
+.sg-empty {
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* ── Responsive: 4 → 2 → 1 ── */
+
+@media (max-width: 1280px) {
+  .sg-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .sg-board {
+    grid-template-columns: 1fr;
+  }
+
+  .sg-sum-card {
+    flex: 1 1 40%;
+    min-width: 0;
+    padding: 10px;
+  }
+
+  .sg-op {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .sg-op-name {
+    flex-basis: 100%;
+    order: 3;
+  }
+}

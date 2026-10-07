@@ -7,9 +7,16 @@ describe('Sidebar', () => {
     render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Seguimiento')).toBeInTheDocument()
     expect(screen.getByText('Trazabilidad')).toBeInTheDocument()
     expect(screen.getByText('Películas')).toBeInTheDocument()
     expect(screen.getByText('Media Mixer')).toBeInTheDocument()
+  })
+
+  it('points Seguimiento at its path', () => {
+    render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
+
+    expect(screen.getByText('Seguimiento').closest('a')).toHaveAttribute('href', '/seguimiento')
   })
 
   it('marks the active page link', () => {
@@ -85,5 +92,21 @@ describe('Sidebar', () => {
     expect(index('Películas')).toBeLessThan(index('Trazabilidad'))
     expect(index('Series')).toBeLessThan(index('Trazabilidad'))
     expect(index('Películas')).toBeLessThan(index('Series'))
+  })
+
+  it('seats Seguimiento between Series and Trazabilidad', () => {
+    // The new view arrives next to its siblings; Trazabilidad stays where it
+    // is until phase 1 has fully replaced it (F-09).
+    const { container } = render(
+      <Sidebar active="dashboard" onNavigate={() => {}} developer={false} />,
+    )
+
+    const labels = Array.from(container.querySelectorAll('.sb-link')).map(
+      (el) => el.textContent ?? '',
+    )
+    const index = (label: string) => labels.findIndex((text) => text.includes(label))
+
+    expect(index('Series')).toBeLessThan(index('Seguimiento'))
+    expect(index('Seguimiento')).toBeLessThan(index('Trazabilidad'))
   })
 })

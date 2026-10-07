@@ -13,6 +13,7 @@ import type {
   TraceStage,
 } from '../types'
 import { STAGE_LABELS } from '../types'
+import { relativeTime } from '../utils/time'
 import { fetchAutoCopyHistory, runAutoCopySweep } from '../api/autoCopy'
 import { TraceActions } from './TraceActions'
 import './TraceView.css'
@@ -32,19 +33,6 @@ const STAGE_ORDER: TraceStage[] = [
   'downloaded',
   'sent',
 ]
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return '—'
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return '—'
-  const diff = Date.now() - then
-  const mins = Math.round(diff / 60000)
-  if (mins < 1) return 'ahora'
-  if (mins < 60) return `hace ${mins} min`
-  const hours = Math.round(mins / 60)
-  if (hours < 48) return `hace ${hours} h`
-  return `hace ${Math.round(hours / 24)} d`
-}
 
 function formatSize(bytes: number | null): string {
   if (!bytes) return '—'
