@@ -275,23 +275,6 @@ describe('the page states', () => {
     expect(screen.getByText('Cargando seguimiento…')).toBeInTheDocument()
   })
 
-  it('renders the summary strip from the payload', () => {
-    const { container } = renderView(
-      resp([
-        trace({ stage: 'import_blocked' }),
-        trace({ stage: 'failed' }),
-        trace({ stage: 'sent' }),
-      ]),
-    )
-
-    // Scoped to the strip: the same words appear again as stage pills on the
-    // cards, and both being present is exactly the point of the page.
-    const sum = container.querySelector('.sg-sum')
-    expect(sum).not.toBeNull()
-    expect(sum!.textContent).toContain('Import bloqueado')
-    expect(sum!.textContent).toContain('Fallidas')
-    expect(sum!.textContent).toContain('Completadas')
-  })
 })
 
 describe('the actions Trazabilidad used to own', () => {
@@ -313,11 +296,17 @@ describe('the actions Trazabilidad used to own', () => {
     expect(container.querySelector('.trace-actions')).toBeNull()
   })
 
-  it('carries the sweep panel that used to live in Trazabilidad', () => {
+  it('carries the sweep panel that used to live in Trazabilidad — in the tail', () => {
     // "Revisar descargas" was reachable ONLY through the page being retired.
-    renderView(resp([trace()]))
+    // It must exist, and it must NOT sit on top of the board: the top of this
+    // page is the kanban and nothing else (the old section's header block must
+    // not resurface here).
+    const { container } = renderView(resp([trace()]))
 
     expect(screen.getByRole('button', { name: 'Revisar descargas' })).toBeInTheDocument()
+    expect(container.querySelector('.sg-ops .auto-copy')).not.toBeNull()
+    expect(container.querySelector('.sg > .auto-copy')).toBeNull()
+    expect(container.querySelector('.sg-sum')).toBeNull()
   })
 })
 

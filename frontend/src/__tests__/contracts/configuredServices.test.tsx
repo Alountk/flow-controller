@@ -130,7 +130,7 @@ describe('the app reflects what is configured', () => {
     fireEvent.click(screen.getByRole('button', { name: /Stuck/ }))
 
     await waitFor(() =>
-      expect(screen.getByText('Seguimiento de descargas')).toBeInTheDocument(),
+      expect(screen.getByText('Sin descargas registradas.')).toBeInTheDocument(),
     )
   })
 

@@ -79,7 +79,10 @@ test('the Seguimiento cards fit their columns', async ({ app }) => {
 
   await app.goto('/seguimiento');
 
-  await expect(app.getByRole('heading', { name: 'Seguimiento de descargas' })).toBeVisible();
+  // The page has no in-page header (the topbar carries the title): the tail
+  // always renders, the columns only when there is something to track — and
+  // the stub's queue/history fixtures guarantee there is.
+  await expect(app.locator('.sg-ops')).toBeVisible();
   await expect(app.locator('.sg-col')).toHaveCount(4);
 
   const { checked, bad, boardOverflow } = await measureIn(app, '.sg-card', '.sg-col-body', '.sg-board');
@@ -95,4 +98,42 @@ test('the Seguimiento cards fit their columns', async ({ app }) => {
       description: 'no trace rows in this environment — card fit not measurable',
     });
   }
+});
+
+test('the view is the board and the tail — and the board alone scrolls', async ({ app }) => {
+  await login(app, 'test-key');
+  await expect(app.getByRole('heading', { name: 'Resumen del sistema' })).toBeVisible();
+
+  await app.goto('/seguimiento');
+  await expect(app.locator('.sg-ops')).toBeVisible();
+
+  // The layout contract after B-09's follow-up: the top of the page is the
+  // kanban and nothing else — no in-page header, no summary strip, no sweep
+  // block (the old section must not resurface); the page never scrolls, the
+  // board does, and the operations queue rides below as the tail.
+  const layout = await app.evaluate(() => {
+    const sg = document.querySelector('.sg');
+    const content = document.querySelector('.content');
+    const board = document.querySelector('.sg-board');
+    if (!sg || !content) return null;
+    return {
+      children: [...sg.children].map((el) => el.className),
+      directSweep: Boolean(document.querySelector('.sg > .auto-copy')),
+      hasSummary: Boolean(document.querySelector('.sg-sum')),
+      hasHeader: Boolean(document.querySelector('.sg-head')),
+      pageScrolls: content.scrollHeight - content.clientHeight,
+      boardOverflowY: board ? getComputedStyle(board).overflowY : null,
+    };
+  });
+
+  expect(layout).not.toBeNull();
+  expect(layout!.children).toHaveLength(2);
+  expect(layout!.children[1]).toBe('sg-ops');
+  expect(['sg-board', 'sg-empty']).toContain(layout!.children[0]);
+  expect(layout!.directSweep).toBe(false);
+  expect(layout!.hasSummary).toBe(false);
+  expect(layout!.hasHeader).toBe(false);
+  // The page itself must not scroll: the board owns the overflow.
+  expect(layout!.pageScrolls).toBeLessThanOrEqual(1);
+  expect(layout!.boardOverflowY).toBe('auto');
 });
