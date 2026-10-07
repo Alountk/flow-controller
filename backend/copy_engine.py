@@ -439,7 +439,15 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
             # cannot import it into the library behind our back. A failure here
             # fails the whole action: the hard constraint is that a folder
             # outside the arr's roots is never catalogued by the arr.
-            if not queue_id:
+            #
+            # The one shape that needs no removal is a DIRECT add (B-10): it
+            # never entered an arr queue, so there is nothing to detach and the
+            # guarantee holds by construction — demanding an id that cannot
+            # exist would fail the one download the rule exists to protect.
+            # The flag is trusted input: the sweep builds this payload itself.
+            if payload.get("arr_untracked"):
+                log.info("copy_files: destino ajeno sin cola del arr (descarga directa)")
+            elif not queue_id:
                 log.warning("copy_files: destino ajeno sin queue_id")
                 return {
                     "ok": False,
@@ -451,25 +459,27 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                         }
                     ],
                 }
-            from infrastructure.arr_client import arr_delete_queue
-            removal = await arr_delete_queue(
-                session,
-                service,
-                int(queue_id),
-                blocklist=False,
-                remove_from_client=False,
-            )
-            # A 404 means the arr is not tracking it: there is nothing left to
-            # prevent, so the copy may proceed. Any other failure is real.
-            if not (removal.get("ok") or removal.get("not_found")):
-                detail = removal.get("detail") or "error desconocido"
-                log.error("copy_files: no se pudo quitar la cola del arr: %s", detail)
-                return {
-                    "ok": False,
-                    "steps": [
-                        {"target": source, "ok": False, "detail": f"no se pudo quitar de la cola del arr: {detail}"}
-                    ],
-                }
+            else:
+                from infrastructure.arr_client import arr_delete_queue
+                removal = await arr_delete_queue(
+                    session,
+                    service,
+                    int(queue_id),
+                    blocklist=False,
+                    remove_from_client=False,
+                )
+                # A 404 means the arr is not tracking it: there is nothing
+                # left to prevent, so the copy may proceed. Any other failure
+                # is real.
+                if not (removal.get("ok") or removal.get("not_found")):
+                    detail = removal.get("detail") or "error desconocido"
+                    log.error("copy_files: no se pudo quitar la cola del arr: %s", detail)
+                    return {
+                        "ok": False,
+                        "steps": [
+                            {"target": source, "ok": False, "detail": f"no se pudo quitar de la cola del arr: {detail}"}
+                        ],
+                    }
             # The foreign destination is used exactly as given: no arr root and
             # no `Season XX` subfolder, which only belongs to the library layout.
             root = dest_root

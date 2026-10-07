@@ -487,7 +487,13 @@ class SweepDownloads:
             return _entry(key, source, title, result, reason, action="proposed")
 
         return await self._do_dispatch(
-            session, trace, key, source, title, reason, destination=destination, quality=quality
+            session, trace, key, source, title, reason,
+            destination=destination, quality=quality,
+            # A direct add (v9) has no arr queue to detach: it was never in
+            # one. The guarantee that this folder never gets catalogued holds
+            # by construction, and copy_files must not demand an id that will
+            # never exist.
+            arr_untracked=bool(own_grab.get("direct")) if own_grab else False,
         )
 
     async def _do_dispatch(
@@ -501,6 +507,7 @@ class SweepDownloads:
         *,
         destination: str | None = None,
         quality: str | None = None,
+        arr_untracked: bool = False,
     ) -> dict:
         torrent = trace.get("torrent") or {}
         output_path = torrent.get("content_path")
@@ -522,6 +529,12 @@ class SweepDownloads:
         # arr's library, and the engine resolves that root itself.
         if destination:
             payload["dest_root"] = destination
+        # The arr has never seen this download (it was added directly under
+        # our own category): there is nothing in any queue to detach, and the
+        # copy must not fail asking for an id that does not exist. Trusted
+        # input: the sweep builds this payload itself.
+        if arr_untracked:
+            payload["arr_untracked"] = True
         # The quality of what was actually grabbed. Present only when the
         # registry knows it: a copy dispatched without one must not invent a
         # value a filename will be built from.

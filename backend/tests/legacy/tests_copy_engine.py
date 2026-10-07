@@ -406,6 +406,32 @@ class TestCopyFilesForeignDestination:
 # owns the translation and refuses a mapping that would be a no-op.
 
 
+
+    def test_a_direct_add_skips_the_queue_removal_entirely(self, tmp_path, monkeypatch):
+        """A B-10 direct add has no arr queue — the missing id is the expected
+        state, not a failure: the arr never tracked it, so this folder can
+        never be catalogued by it either way."""
+        payload = _foreign_payload(tmp_path, queue_id=None)
+        payload["arr_untracked"] = True
+        removals: list[dict] = []
+        dispatches: list[dict] = []
+
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(config, "path_is_allowed", lambda path: True)
+        monkeypatch.setattr(
+            clients,
+            "arr_delete_queue",
+            _delete_recorder(removals, {"ok": True, "detail": "no debería llamarse"}),
+        )
+        monkeypatch.setattr(copy_engine, "run_copy_background", _run_recorder(dispatches))
+
+        result = asyncio.run(do_action(None, "copy_files", payload))
+
+        assert result["ok"] is True
+        assert removals == [], "there is no queue item to remove — nothing to ask"
+        assert dispatches[0]["kwargs"]["import_after_copy"] is False
+        del copy_tasks._tasks[result["task_id"]]
+
 class TestFixPathMappingResolution:
     def _run(self, monkeypatch, payload):
         added: list[dict] = []
