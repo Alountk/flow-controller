@@ -9,7 +9,7 @@ from config import (
     PAUSED_STATES,
     configured_services,
     _DOWNLOAD_CLIENT_PATHS,
-    _VOLUME_MAP,
+    host_path,  # lives in config now (next to _VOLUME_MAP); re-exported here
 )
 from infrastructure.arr_client import (
     arr_download_clients,
@@ -21,21 +21,6 @@ from infrastructure.arr_client import (
 )
 
 log = logging.getLogger("flow-controller")
-
-
-def host_path(container_path: str) -> str:
-    for prefix, replacement in _VOLUME_MAP:
-        # Every entry in _VOLUME_MAP ends with "/", so an exact match of the
-        # container root (the prefix without its trailing slash) would not
-        # match its own entry and fell through to a shorter prefix:
-        # "/downloads/incoming" became ".../shared-downloads/incoming" instead
-        # of ".../amule". Handle that boundary for every entry: the bare root
-        # maps to the bare replacement.
-        if container_path == prefix.rstrip("/"):
-            return replacement.rstrip("/")
-        if container_path.startswith(prefix):
-            return replacement + container_path[len(prefix):]
-    return container_path
 
 
 def resolve_current_path(save_path: str, download_client: str | None) -> str:
