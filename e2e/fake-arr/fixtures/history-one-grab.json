@@ -1,0 +1,13 @@
+{
+  "records": [
+    {
+      "id": 9001,
+      "eventType": 1,
+      "date": "2026-10-07T12:00:00Z",
+      "downloadId": "FAKE000000000000000000000000000000000001",
+      "sourceTitle": "Transformers: Age of Extinction (2014) 2160p",
+      "movieId": 813,
+      "data": { "indexer": "AMULE" }
+    }
+  ]
+}

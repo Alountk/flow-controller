@@ -105,6 +105,9 @@
     .op .st.run { color: var(--accent); }
 
     @media (max-width: 900px) {
+      /* The sidebar takes the full width here: without wrap the shell keeps
+         laying it beside the content and pushes the content off-screen. */
+      .shell { flex-wrap: wrap; }
       .sidebar { position: static; max-height: none; width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; }
       .content { padding: 16px; }
       .attention { grid-template-columns: 1fr; }

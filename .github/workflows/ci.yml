@@ -133,7 +133,8 @@ jobs:
   #   2. stub — + docker-compose.e2e.yml (the fake-arr Radarr stub on the
   #      same compose network): specs/flow-faltantes.spec.ts +
   #      specs/flow-release-search.spec.ts pin the headline flow
-  #      (Faltantes → buscar release → encolar).
+  #      (Faltantes → buscar release → encolar), and specs/kanban-fit.spec.ts
+  #      measures that the kanban cards fit their columns (F-09 bug).
   # Phase 2 runs only if phase 1 is green (default fail-fast); the job log is
   # the record of which variant broke.
   #
@@ -310,7 +311,7 @@ jobs:
       - name: "Phase 2 — run stub specs"
         run: |
           cd e2e
-          npx playwright test specs/flow-faltantes.spec.ts specs/flow-release-search.spec.ts
+          npx playwright test specs/flow-faltantes.spec.ts specs/flow-release-search.spec.ts specs/kanban-fit.spec.ts
 
       - name: Container logs and config state
         if: failure()
