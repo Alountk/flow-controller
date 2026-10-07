@@ -1,8 +1,18 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { STAGE_LABELS, type Trace, type TraceResponse, type TraceStage } from '../types'
+import {
+  STAGE_LABELS,
+  type ActionKey,
+  type ActionMeta,
+  type ActionsResponse,
+  type Trace,
+  type TraceResponse,
+  type TraceStage,
+} from '../types'
 import { queueStatus, type QueueOp } from '../api/files'
 import { relativeTime } from '../utils/time'
+import { AutoCopyPanel } from './AutoCopyPanel'
+import { TraceActions } from './TraceActions'
 import './Seguimiento.css'
 
 /**
@@ -11,15 +21,22 @@ import './Seguimiento.css'
  * card, and the operations queue rides below as a band — those are OUR copy /
  * move jobs, not the arr's downloads, so they never mix into the columns.
  *
- * Phase 1 reads and shows; every action belongs to phase 2. The cards draw
- * only fields `/api/trace` actually carries: no speed, no ETA — the torrent
- * payload does not carry them and a guessed number would be the first lie the
- * screen tells.
+ * The cards carry the same per-trace actions Trazabilidad offered (that page
+ * was their only door until now) and the auto-copy sweep moved in with the
+ * panel — retiring the old view must lose nothing. Phase 2 owns the NEW
+ * actions: cancel a download, and the full item detail. The cards draw only
+ * fields `/api/trace` actually carries: no speed, no ETA — the torrent payload
+ * does not carry them and a guessed number would be the first lie the screen
+ * tells.
  */
 
 interface Props {
   data: TraceResponse | null
   loading: boolean
+  /** The app's action catalogue + safe mode — what each card's buttons need. */
+  actions: ActionsResponse | null
+  /** Called after an action or sweep changed server state; refreshes the data. */
+  onActionDone: () => void
 }
 
 type ColumnKey = 'downloading' | 'importing' | 'blocked' | 'done'
@@ -66,7 +83,17 @@ function cardPath(trace: Trace): string {
   return ''
 }
 
-function KanbanCard({ trace }: { trace: Trace }) {
+function KanbanCard({
+  trace,
+  meta,
+  safeMode,
+  onDone,
+}: {
+  trace: Trace
+  meta: Record<ActionKey, ActionMeta>
+  safeMode: boolean
+  onDone: () => void
+}) {
   const showBar =
     trace.torrent !== null &&
     (trace.stage === 'downloading' || trace.stage === 'downloaded' || trace.stage === 'importing')
@@ -114,6 +141,7 @@ function KanbanCard({ trace }: { trace: Trace }) {
           → {path}
         </div>
       )}
+      <TraceActions trace={trace} meta={meta} safeMode={safeMode} onDone={onDone} />
     </article>
   )
 }
@@ -179,9 +207,15 @@ function OpsBand() {
   )
 }
 
-export function Seguimiento({ data, loading }: Props) {
+export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
   const traces = data?.traces ?? []
   const summary = data?.summary
+
+  const actionMeta = useMemo(() => {
+    const map = {} as Record<ActionKey, ActionMeta>
+    for (const a of actions?.actions ?? []) map[a.key] = a
+    return map
+  }, [actions])
 
   const grouped = useMemo(() => {
     const map = new Map<ColumnKey, Trace[]>()
@@ -200,9 +234,15 @@ export function Seguimiento({ data, loading }: Props) {
         <h2>Seguimiento de descargas</h2>
         <p className="sg-sub">
           Grabs de Radarr/Sonarr en columnas por estado — el estado <b>es</b> la columna — más la
-          cola de operaciones de la app debajo. Las acciones llegan en la fase 2.
+          cola de operaciones de la app debajo. Cada tarjeta lleva las acciones que ya vivían en
+          Trazabilidad; cancelar descargas y el detalle completo llegan en la fase 2.
         </p>
       </div>
+
+      <AutoCopyPanel
+        safeMode={Boolean(actions?.safe_mode)}
+        onDone={onActionDone}
+      />
 
       {summary && (
         <div className="sg-sum">
@@ -246,7 +286,15 @@ export function Seguimiento({ data, loading }: Props) {
                   {items.length === 0 ? (
                     <div className="sg-col-empty">—</div>
                   ) : (
-                    items.map((t, i) => <KanbanCard key={`${t.download_id}-${i}`} trace={t} />)
+                    items.map((t, i) => (
+                      <KanbanCard
+                        key={`${t.download_id}-${i}`}
+                        trace={t}
+                        meta={actionMeta}
+                        safeMode={Boolean(actions?.safe_mode)}
+                        onDone={onActionDone}
+                      />
+                    ))
                   )}
                 </div>
               </section>

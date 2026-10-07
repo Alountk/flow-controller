@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../../App'
 import { Sidebar } from '../../components/Sidebar'
@@ -30,7 +30,7 @@ function mockFetch(configured: ServiceKey[]) {
       return json({ radarr: 'online:ok', sonarr: 'online:ok', amutorrent: 'online:ok', flow: 'running' })
     }
     if (url.includes('/api/trace')) return json({ items: [], summary: {} })
-    if (url.includes('/api/actions')) return json({ actions: {} })
+    if (url.includes('/api/actions')) return json({ actions: [], safe_mode: false, available: [] })
     if (url.includes('/api/downloads')) return json({ downloads: [], errors: [] })
     return json({})
   })
@@ -124,6 +124,20 @@ describe('the app reflects what is configured', () => {
     expect(screen.getByText('Seguimiento')).toBeInTheDocument()
   })
 
+  it('opens the Seguimiento board from the Stuck card (C-11)', async () => {
+    // The dashboard counted import-blocked downloads and led nowhere; the
+    // count is the app's whole reason to exist, so it is now a door.
+    mockFetch(['radarr'])
+    renderApp()
+
+    await waitFor(() => expect(screen.getByText('Archivos')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Stuck/ }))
+
+    await waitFor(() =>
+      expect(screen.getByText('Seguimiento de descargas')).toBeInTheDocument(),
+    )
+  })
+
   it('does not report an empty pipeline as healthy', async () => {
     // `every` on an empty list is true, which would have shown "flujo operativo"
     // with nothing configured at all.
@@ -196,7 +210,7 @@ describe('unreadable credentials are announced', () => {
         if (url.includes('/api/services')) return json({ services: [], configured: [] })
         if (url.includes('/api/status')) return json({ flow: 'unconfigured', checking: false, updated_at: 0 })
         if (url.includes('/api/trace')) return json({ items: [], summary: {} })
-        if (url.includes('/api/actions')) return json({ actions: {} })
+        if (url.includes('/api/actions')) return json({ actions: [], safe_mode: false, available: [] })
         if (url.includes('/api/downloads')) return json({ downloads: [], errors: [] })
         return json({})
       }),

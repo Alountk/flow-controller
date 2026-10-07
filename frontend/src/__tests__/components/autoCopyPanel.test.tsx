@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import type { ActionsResponse, AutoCopySweepResult } from '../../types'
-import { TraceView } from '../../components/TraceView'
+import { AutoCopyPanel } from '../../components/AutoCopyPanel'
 
 /**
- * Tests for the "Revisar descargas" trigger in Trazabilidad.
+ * Tests for the "Revisar descargas" trigger — now AutoCopyPanel, the block
+ * Trazabilidad used to own and Seguimiento renders today.
  *
  * The sweep is an explicit POST — the button is the feature's only user-facing
  * half, since the endpoint should never be a side effect of the polled GET. The
@@ -42,15 +43,8 @@ function ok(body: unknown) {
   return Promise.resolve(okResponse(body))
 }
 
-function renderTraceView(actions: ActionsResponse = OPEN_ACTIONS) {
-  return render(
-    <TraceView
-      data={null}
-      loading={false}
-      actions={actions}
-      onActionDone={() => {}}
-    />,
-  )
+function renderPanel(actions: ActionsResponse = OPEN_ACTIONS) {
+  return render(<AutoCopyPanel safeMode={actions.safe_mode} />)
 }
 
 /** Clicks the trigger and waits for the sweep request to have been made. */
@@ -69,7 +63,7 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       ok(baseResult()),
     )
     vi.stubGlobal('fetch', fetchMock)
-    renderTraceView()
+    renderPanel()
 
     await clickSweep(fetchMock)
 
@@ -90,7 +84,7 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       ),
     )
     vi.stubGlobal('fetch', fetchMock)
-    renderTraceView()
+    renderPanel()
 
     await clickSweep(fetchMock)
 
@@ -121,7 +115,7 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       ),
     )
     vi.stubGlobal('fetch', fetchMock)
-    renderTraceView(SAFE_ACTIONS)
+    renderPanel(SAFE_ACTIONS)
 
     await clickSweep(fetchMock)
 
@@ -152,7 +146,7 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       ),
     )
     vi.stubGlobal('fetch', fetchMock)
-    renderTraceView()
+    renderPanel()
 
     await clickSweep(fetchMock)
 
@@ -172,7 +166,7 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       ),
     )
     vi.stubGlobal('fetch', fetchMock)
-    renderTraceView(SAFE_ACTIONS)
+    renderPanel(SAFE_ACTIONS)
 
     await clickSweep(fetchMock)
 
@@ -190,7 +184,7 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       ),
     )
     vi.stubGlobal('fetch', fetchMock)
-    renderTraceView()
+    renderPanel()
 
     await clickSweep(fetchMock)
 
@@ -207,7 +201,7 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       ),
     )
     vi.stubGlobal('fetch', fetchMock)
-    renderTraceView()
+    renderPanel()
 
     await clickSweep(fetchMock)
 
@@ -222,7 +216,7 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       resolveSweep = resolve
     })
     vi.stubGlobal('fetch', vi.fn(() => pending))
-    renderTraceView()
+    renderPanel()
 
     fireEvent.click(screen.getByRole('button', { name: 'Revisar descargas' }))
 
