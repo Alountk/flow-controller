@@ -535,6 +535,7 @@ export function ReleaseSearchModal({
       destination || undefined,
       release?.quality || undefined,
       release ? isThreeD(release) : undefined,
+      release?.title,
     )
     if (result.ok) {
       if (inPanel) {

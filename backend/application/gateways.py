@@ -61,9 +61,24 @@ def amu_torrent_categories(*args, **kwargs):
     return getattr(_arr, "amu_torrent_categories")(*args, **kwargs)
 
 
+def amutorrent_add_download(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return getattr(_arr, "amutorrent_add_download")(*args, **kwargs)
+
+
 def amutorrent_reload_shared_dirs(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return getattr(_arr, "amutorrent_reload_shared_dirs")(*args, **kwargs)
+
+
+def amutorrent_search_link(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return getattr(_arr, "amutorrent_search_link")(*args, **kwargs)
+
+
+def direct_link_identity(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return getattr(_arr, "direct_link_identity")(*args, **kwargs)
 
 
 def arr_add_movie(*args, **kwargs):

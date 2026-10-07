@@ -788,6 +788,7 @@ def test_own_grabs_are_read_newest_first_as_plain_dicts(db):
     assert set(rows[0]) == {
         "id", "source", "movie_id", "episode_id", "series_id", "guid",
         "indexer_id", "grabbed_at", "destination", "quality",
+        "direct", "client_name", "client_hash",
     }
     assert rows[0]["source"] == "sonarr"
     assert rows[0]["episode_id"] == 2
@@ -1359,3 +1360,74 @@ def test_a_fresh_database_is_created_with_the_quality_column(tmp_path):
         conn.close()
     assert version == history.SCHEMA_VERSION
     assert "quality" in columns
+
+
+def test_v9_marks_direct_grabs_and_keeps_old_rows(tmp_path):
+    """v8 → v9: `direct`/`client_name`/`client_hash` arrive by ALTER, old rows
+    keep their values and default to "not a direct add"."""
+    path = tmp_path / "history.db"
+    history.close()
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(
+            "CREATE TABLE own_grabs ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " source TEXT NOT NULL,"
+            " movie_id INTEGER, episode_id INTEGER, series_id INTEGER,"
+            " guid TEXT, indexer_id INTEGER, grabbed_at REAL NOT NULL,"
+            " destination TEXT, quality TEXT);"
+        )
+        conn.execute(
+            "INSERT INTO own_grabs (source, movie_id, guid, indexer_id, grabbed_at) "
+            "VALUES ('radarr', 855, 'legacy-guid', 7, 1000.0)"
+        )
+        conn.execute("PRAGMA user_version=8")
+        conn.commit()
+    finally:
+        conn.close()
+
+    history.init_db(path)
+    try:
+        history.record_own_grab(
+            "radarr", movie_id=1, grabbed_at=2000.0, destination="/mnt/storage-6tb/x",
+            direct=True, client_name="Movie.2024.2160p.mkv",
+        )
+        rows = _own_grab_rows(path)
+        old = next(r for r in rows if r["guid"] == "legacy-guid")
+        assert old["direct"] == 0, "a pre-v9 grab was never a direct add"
+        assert old["client_name"] is None and old["client_hash"] is None
+        new = next(r for r in rows if r["grabbed_at"] == 2000.0)
+        assert new["direct"] == 1
+        assert new["client_name"] == "Movie.2024.2160p.mkv"
+        assert new["client_hash"] is None, "no hash was known — NULL, never a guess"
+    finally:
+        history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(own_grabs)")]
+    finally:
+        conn.close()
+    assert version == history.SCHEMA_VERSION
+    for column in ("direct", "client_name", "client_hash"):
+        assert column in columns
+
+
+def test_a_fresh_database_is_created_with_the_direct_columns(tmp_path):
+    """A fresh file lands on v9 directly: `SCHEMA` already creates the columns,
+    so the ALTER must be skipped instead of raising duplicate-column."""
+    path = tmp_path / "history.db"
+    history.close()
+    history.init_db(path)
+    history.close()
+
+    conn = sqlite3.connect(path)
+    try:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(own_grabs)")]
+    finally:
+        conn.close()
+    assert version == history.SCHEMA_VERSION
+    for column in ("direct", "client_name", "client_hash"):
+        assert column in columns

@@ -41,6 +41,10 @@ class _StubResponse:
         return self._payload
 
     async def text(self) -> str:
+        # A raw string payload is served as-is: non-JSON answers (Torznab's
+        # RSS, for one) would be corrupted by json.dumps.
+        if isinstance(self._payload, str):
+            return self._payload
         return json.dumps(self._payload)
 
     async def read(self) -> bytes:

@@ -138,6 +138,7 @@ export async function grabCalendarRelease(
   destination?: string,
   quality?: string,
   is3d?: boolean,
+  title?: string,
 ): Promise<{ ok: boolean; detail: string }> {
   // A rejected fetch (offline, aborted, DNS) must surface as a failed result,
   // not as an unhandled rejection that leaves the modal stuck on "Descargando".
@@ -149,6 +150,9 @@ export async function grabCalendarRelease(
   if (destination) body.destination = destination
   if (quality) body.quality = quality
   if (is3d) body.is3d = true
+  // A foreign-destination grab goes DIRECT to the client (never through the
+  // arr), and the backend resolves the download link from this title.
+  if (title) body.title = title
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab', {

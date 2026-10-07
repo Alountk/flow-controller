@@ -24,7 +24,7 @@ from pathlib import Path
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -94,7 +94,17 @@ CREATE TABLE IF NOT EXISTS own_grabs (
     -- v8: what was grabbed. Nothing else carries it — the trace has none and
     -- the request drops it after routing — so a name built from Radarr's
     -- pattern would have no `{Quality Full}` to read from.
-    quality     TEXT
+    quality     TEXT,
+    -- v9: the download was added DIRECTLY to the client (category `flow`),
+    -- outside any arr: the arr never tracked it, so there is no queue item,
+    -- no history record and no import to race. `client_name`/`client_hash`
+    -- are the identity the CLIENT will know the download by — the trace
+    -- builder matches the client's torrent against them to synthesise the
+    -- row the arr's history will never carry. A NULL hash is honest: for an
+    -- ed2k link the client's infohash is a translation we cannot predict.
+    direct      INTEGER NOT NULL DEFAULT 0,
+    client_name TEXT,
+    client_hash TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_own_grabs_title ON own_grabs (source, movie_id, episode_id);
 -- v4: the "first time we saw this candidate in this condition" reference. Same
@@ -206,6 +216,12 @@ def _apply_migrations(conn: sqlite3.Connection, from_version: int) -> None:
         conn.execute("ALTER TABLE own_grabs ADD COLUMN destination TEXT")
     if from_version < 8 and not _has_column(conn, "own_grabs", "quality"):
         conn.execute("ALTER TABLE own_grabs ADD COLUMN quality TEXT")
+    if from_version < 9 and not _has_column(conn, "own_grabs", "direct"):
+        conn.execute("ALTER TABLE own_grabs ADD COLUMN direct INTEGER NOT NULL DEFAULT 0")
+    if from_version < 9 and not _has_column(conn, "own_grabs", "client_name"):
+        conn.execute("ALTER TABLE own_grabs ADD COLUMN client_name TEXT")
+    if from_version < 9 and not _has_column(conn, "own_grabs", "client_hash"):
+        conn.execute("ALTER TABLE own_grabs ADD COLUMN client_hash TEXT")
 
 
 def init_db(path: Path | None = None) -> None:
@@ -589,6 +605,9 @@ def record_own_grab(
     grabbed_at: float | None = None,
     destination: str | None = None,
     quality: str | None = None,
+    direct: bool = False,
+    client_name: str = "",
+    client_hash: str = "",
 ) -> None:
     """Record one grab this app launched. Best-effort: never raises.
 
@@ -604,6 +623,11 @@ def record_own_grab(
     `quality` is Radarr's quality name for the grabbed release. ``None`` means
     unknown and MUST stay unknown: substituting a guess would put it in a
     filename later, which is far harder to notice than an empty cell.
+
+    ``direct`` marks a download added straight to the client under this app's
+    own category: the arr never saw it. ``client_name``/``client_hash`` are how
+    the client will know it — the trace builder joins the client's torrent on
+    them, because no arr history row will ever exist for it.
     """
     with _lock:
         if _conn is None:
@@ -612,8 +636,8 @@ def record_own_grab(
             _conn.execute(
                 "INSERT INTO own_grabs "
                 "(source, movie_id, episode_id, series_id, guid, indexer_id, "
-                " grabbed_at, destination, quality) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " grabbed_at, destination, quality, direct, client_name, client_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     source,
                     movie_id,
@@ -624,6 +648,9 @@ def record_own_grab(
                     time.time() if grabbed_at is None else grabbed_at,
                     destination or None,
                     quality or None,
+                    1 if direct else 0,
+                    client_name or None,
+                    client_hash or None,
                 ),
             )
             _conn.commit()
