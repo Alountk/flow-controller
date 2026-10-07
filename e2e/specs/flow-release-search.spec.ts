@@ -5,8 +5,8 @@ import { test, expect, login } from '../fixtures/app';
  * against the STUB-backed install (phase 2: + docker-compose.e2e.yml).
  *
  * Row → search inside the detail panel's Releases tab (PR 5 of F-08) →
- * results from fake-arr → select one → Descargar → the grab-batch
- * confirmation. The stub answers POST /api/v3/release with 201, so this
+ * results from fake-arr → press the row's "→ Biblioteca" destination button →
+ * the single grab. The stub answers POST /api/v3/release with 201, so this
  * proves the UI flow end to end; it does NOT download anything (see
  * e2e/README.md).
  *
@@ -22,10 +22,10 @@ import { test, expect, login } from '../fixtures/app';
  * The operator initiates every search: selecting a row NEVER searches. The
  * panel lands on its own 🔍 Buscar Releases button, THAT press starts the
  * request (and changing the indexer re-runs it), the rows read as the file
- * selector (name · idioma · calidad · size · semillas), and "Acción
- * principal" below the list spells the routing out. The overlay modal keeps
- * its button and its initial step; this spec never leaves the panel to prove
- * the split.
+ * selector (name · idioma · calidad · size · semillas) and carry their three
+ * destination buttons (→ Biblioteca / → 4K / → 3D) — the press on one of them
+ * is what grabs. The overlay modal keeps its button and its initial step; this
+ * spec never leaves the panel to prove the split.
  *
  * Same rules as flow-faltantes: role/accessible-name selectors, text only
  * where markup has no role (justified inline), web-first assertions with
@@ -80,42 +80,27 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // checkbox's accessible name comes from its wrapping label's count text,
   // "3 releases encontrados" (releases.json has 3).
   await app.getByRole('button', { name: /Buscar Releases/ }).click();
-  await expect(app.getByRole('checkbox', { name: '3 releases encontrados' })).toHaveCount(1, { timeout: 15000 });
+  await expect(app.getByText('3 releases encontrados')).toBeVisible({ timeout: 15000 });
 
   // The file selector's first row: the file's name alone on its line —
   // div.release-title (no role → text selector, justified as above).
   await expect(app.getByText('Your.Name.2016.1080p.BluRay.x264-GRP')).toBeVisible({ timeout: 15000 });
 
-  // Acción principal, below the file list: the readout that spells the
-  // routing out — its heading, then the first rule. `exact` so only the `li`
-  // matches: the rule list's own text is all three rules concatenated, and an
-  // `li` has no reliable content-derived accessible name across engines.
-  await expect(app.getByRole('heading', { name: 'Acción principal' })).toBeVisible({ timeout: 15000 });
-  await expect(
-    app.getByText('1080 o menor → biblioteca (la del arr)', { exact: true }),
-  ).toBeVisible({ timeout: 15000 });
+  // The three destination buttons are the row's action now (F-12): library
+  // always offered, the folders the deployment has NOT configured disable
+  // their buttons instead of lying (CI sets no PATH_4K/PATH_3D).
+  const libraryBtn = app.locator('.release-dest-btn', { hasText: 'Biblioteca' }).first();
+  await expect(libraryBtn).toBeEnabled({ timeout: 15000 });
+  await expect(app.locator('.release-dest-btn', { hasText: '4K' }).first()).toBeDisabled();
+  await expect(app.locator('.release-dest-btn', { hasText: '3D' }).first()).toBeDisabled();
 
-  // The destination combo offers the stub's root folder (rootfolders.json)
-  // — ReleaseSearchModal renders each folder as an <option>.
-  await expect(app.getByRole('option', { name: '/mnt/storage/movies' })).toHaveCount(1, { timeout: 15000 });
+  // One press = one grab, straight through fake-arr's POST /api/v3/release.
+  await libraryBtn.click();
 
-  // Select ONE release. The row checkbox sits in a label with no text
-  // (its label holds no text), so it has no accessible name to query
-  // by: within role=checkbox, index 0 is the named select-all asserted above
-  // and index 1 is the first release row.
-  await app.getByRole('checkbox').nth(1).check();
-
-  // The batch grab button only appears with a selection — button
-  // "⬇️ Descargar (1)".
-  const grabButton = app.getByRole('button', { name: /Descargar \(1\)/ });
-  await expect(grabButton).toBeVisible({ timeout: 15000 });
-  await grabButton.click();
-
-  // Success feedback. grab-batch answers detail "1 descargados"
-  // (backend/routes/calendar.py:370) and the panel now surfaces it as a
-  // notice ABOVE the list — plain div, no role → text — instead of trading
-  // that list for a done step.
-  await expect(app.getByText('1 descargados')).toBeVisible({ timeout: 15000 });
+  // Success feedback: the backend's own detail ("Release encolado para
+  // descarga") rides above the list as the panel's notice — plain div, no
+  // role → text — instead of trading that list for a done step.
+  await expect(app.getByText('Release encolado para descarga')).toBeVisible({ timeout: 15000 });
   // The list SURVIVED the grab: the row that could be grabbed NEXT is still
   // on screen, because a successful grab in the panel stays on the results
   // step — that is the complaint this changed ("puse uno a descargar y no me

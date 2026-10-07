@@ -43,9 +43,9 @@ function ok(body: unknown) {
   return Promise.resolve({ ok: true, json: async () => body } as Response)
 }
 
-/** Every endpoint the inline search can reach. `batchOk` flips only the grab
+/** Every endpoint the inline search can reach. `grabOk` flips only the grab
  *  answer, so the failure path is one argument away. */
-function stubFetch(batchOk = true) {
+function stubFetch(grabOk = true) {
   const fn = vi.fn((input: RequestInfo | URL) => {
     const url = String(input)
     if (url.includes('/api/calendar/indexers')) {
@@ -56,22 +56,10 @@ function stubFetch(batchOk = true) {
     if (url.includes('/api/calendar/releases')) {
       return ok({ releases: [release], detail: '1 releases encontrados' })
     }
-    // grab-batch BEFORE grab: the single path's URL is a substring of it.
-    if (url.includes('/api/calendar/grab-batch')) {
-      return batchOk
-        ? ok({ ok: true, detail: '1 descargados', downloaded: [release.guid], errors: [] })
-        : ok({
-            ok: false,
-            detail: '0 OK, 1 errores: boom',
-            downloaded: [],
-            errors: [{ guid: release.guid, detail: 'boom' }],
-          })
-    }
     if (url.includes('/api/calendar/grab')) {
-      return ok({ ok: true, detail: 'Descarga iniciada' })
-    }
-    if (url.includes('/api/calendar/destinations')) {
-      return ok({ folders: [], arr_available: true, detail: '' })
+      return grabOk
+        ? ok({ ok: true, detail: 'Descarga iniciada' })
+        : ok({ ok: false, detail: 'boom' })
     }
     if (url.includes('/api/settings')) {
       return ok({ paths: { path_4k: '', path_3d: '' } })
@@ -115,15 +103,13 @@ function renderOverlay(id: number) {
 
 const resultsReady = () => screen.findByPlaceholderText('Filtrar por título...')
 
-const selectAll = () => screen.findByRole('checkbox', { name: /1 releases encontrados/ })
-
-async function openResultsAndGrabBatch(fn: FetchMock) {
-  // Selection started nothing: this press is how the results are reached.
+async function openResultsAndGrab(fn: FetchMock) {
+  // Selecting never searched and never grabbed: this press reaches the
+  // results, and the row's own destination button is the only way to grab.
   fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
   await resultsReady()
   expect(searchCalls(fn)).toBe(1)
-  fireEvent.click(await selectAll())
-  fireEvent.click(screen.getByRole('button', { name: /Descargar \(1\)/ }))
+  fireEvent.click(document.querySelector('.release-dest-btn') as HTMLElement)
 }
 
 describe('panel · a grab leaves the results alone', () => {
@@ -131,13 +117,13 @@ describe('panel · a grab leaves the results alone', () => {
     vi.unstubAllGlobals()
   })
 
-  it('stays on the results after a batch grab, ack above the list, exit gone', async () => {
+  it('stays on the results after a grab, ack above the list, exit gone', async () => {
     const fn = stubFetch()
     renderPanel(7101)
-    await openResultsAndGrabBatch(fn)
+    await openResultsAndGrab(fn)
 
     // The ack lands ABOVE a list that never left — in that order.
-    await screen.findByText('1 descargados')
+    await screen.findByText('Descarga iniciada')
     expect(screen.getByText(release.title)).toBeInTheDocument()
     const status = document.querySelector('.calendar-modal-status')
     const list = document.querySelector('.calendar-releases')
@@ -150,21 +136,19 @@ describe('panel · a grab leaves the results alone', () => {
 
     // The exit that used to trade this list for a re-search is gone…
     expect(screen.queryByRole('button', { name: 'Nueva búsqueda' })).toBeNull()
-    // …and so is the selection it used to reset: the next tick starts clean.
-    expect(screen.queryByRole('button', { name: /Descargar \(/ })).toBeNull()
 
     // The grab returned: nothing is processing any more.
     expect(screen.getByRole('button', { name: /Refrescar/ })).toBeEnabled()
     expect(screen.getByRole('combobox', { name: /Indexador/ })).toBeEnabled()
   })
 
-  it('does the same on the row-click grab — the common path', async () => {
+  it('does the same on the per-row button grab — the common path', async () => {
     stubFetch()
     renderPanel(7102)
     fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
     await resultsReady()
 
-    fireEvent.click(document.querySelector('.release-content') as HTMLElement)
+    fireEvent.click(document.querySelector('.release-dest-btn') as HTMLElement)
 
     await screen.findByText(/Descarga iniciada/)
     expect(screen.getByText(release.title)).toBeInTheDocument()
@@ -175,8 +159,8 @@ describe('panel · a grab leaves the results alone', () => {
   it('restores the results on a re-open WITHOUT asking the indexer again', async () => {
     const fn = stubFetch()
     const first = renderPanel(7103)
-    await openResultsAndGrabBatch(fn)
-    await screen.findByText('1 descargados')
+    await openResultsAndGrab(fn)
+    await screen.findByText('Descarga iniciada')
 
     // The view unmounts (a tab switch) and comes back around the SAME item.
     first.unmount()
@@ -204,8 +188,8 @@ describe('panel · a grab leaves the results alone', () => {
   it('takes the ack away again when a refresh replaces the list it described', async () => {
     const fn = stubFetch()
     renderPanel(7107)
-    await openResultsAndGrabBatch(fn)
-    await screen.findByText('1 descargados')
+    await openResultsAndGrab(fn)
+    await screen.findByText('Descarga iniciada')
 
     fireEvent.click(screen.getByRole('button', { name: /Refrescar/ }))
     await waitFor(() => expect(searchCalls(fn)).toBe(2))
@@ -225,7 +209,7 @@ describe('panel · the error path still offers the list, without a search', () =
   it('returns to the same list after a failed grab, zero network calls', async () => {
     const fn = stubFetch(false)
     renderPanel(7105)
-    await openResultsAndGrabBatch(fn)
+    await openResultsAndGrab(fn)
 
     // The failure reaches the user on the error step…
     fireEvent.click(await screen.findByRole('button', { name: /Volver a los resultados/ }))
@@ -248,10 +232,10 @@ describe('overlay · the dialog keeps its own ending, byte for byte', () => {
     renderOverlay(7106)
 
     fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
-    fireEvent.click(await selectAll())
-    fireEvent.click(screen.getByRole('button', { name: /Descargar \(1\)/ }))
+    await resultsReady()
+    fireEvent.click(document.querySelector('.release-dest-btn') as HTMLElement)
 
-    await screen.findByText('1 descargados')
+    await screen.findByText('Descarga iniciada')
     expect(screen.getByRole('button', { name: 'Cerrar' })).toBeInTheDocument()
     // The dialog traded the list for the done step, as it always has.
     expect(screen.queryByText(release.title)).toBeNull()

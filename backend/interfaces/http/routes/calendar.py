@@ -275,8 +275,15 @@ class GrabBody(CalendarGrabRequest):
     for the link, because the arr's release payload carries only its guid. On
     the arr path it rides along unused; a foreign-destination grab without it
     fails loudly instead of guessing a query.
+
+    `library` is the explicit "the arr's own path" choice of the per-card
+    buttons: without it, an absent destination still means *derived* routing
+    (a 2160p release would be sent to `path_4k` even though the operator
+    pressed → Biblioteca). Library wins over any folder; quality and is3d
+    still ride for the registry.
     """
     title: str = ""
+    library: bool = False
 
 
 def _inside(path: str, root: str) -> bool:
@@ -296,15 +303,18 @@ async def calendar_grab(req: GrabBody, _key: str = Depends(verify_api_key)):
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
     # Resolve the destination BEFORE the grab, so nothing is sent to the arr
-    # and no own-grab row is written. A folder chosen by hand wins; otherwise
-    # the release's own quality class picks one (`quality` is only a hint —
-    # it must never override a decision the operator already made). The
-    # effective path is then checked against the app's configured allowed
-    # roots (`path_is_allowed`); it is never trusted to be safe. Absent (None)
-    # is the library default and skips the check entirely.
-    destination = req.destination or destination_for_quality(
-        req.quality, is3d=req.is3d
-    )
+    # and no own-grab row is written. The explicit library choice of the
+    # per-card buttons wins over everything (it IS the decision); then a folder
+    # chosen by hand; then the release's own quality class picks one (`quality`
+    # is only a hint — it must never override a decision the operator already
+    # made). The effective path is then checked against the app's configured
+    # allowed roots (`path_is_allowed`); it is never trusted to be safe. Absent
+    # (None) is the library default and skips the check entirely.
+    destination = None
+    if not req.library:
+        destination = req.destination or destination_for_quality(
+            req.quality, is3d=req.is3d
+        )
     if destination is not None and not path_is_allowed(destination):
         return {"ok": False, "detail": f"Destino no permitido: {destination}"}
 
