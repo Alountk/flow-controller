@@ -7,6 +7,7 @@ import time
 import unicodedata
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from application.gateways import history
 from config import configured_services, find_service, service_unavailable_reason
@@ -17,6 +18,7 @@ from application.gateways import (
     arr_series_episodes,
     fetch_all_movies_detailed,
     fetch_all_series_detailed,
+    arr_cancel_command,
     arr_search_missing_movies,
     arr_search_missing_episodes,
     arr_search_movie,
@@ -402,23 +404,73 @@ async def get_grabs(
     }
 
 
+class BulkSearchRequest(BaseModel):
+    """Body of the mass search. `confirm` is the whole contract.
+
+    ``MissingMoviesSearch`` can fire grabs for every missing title at once,
+    and until this route existed nothing could stop it (C-09, incident
+    2026-10-07). An explicit ``confirm: true`` is the guard; the count shown
+    before confirming belongs to whoever holds the list — the UI.
+    """
+    source: str = ""
+    confirm: bool = False
+
+
+class CommandCancelRequest(BaseModel):
+    """The handle ``arr_command`` returned, handed back to be cancelled."""
+    source: str
+    command_id: int
+
+
 @router.post("/api/wanted/search")
-async def search_wanted(req: ActionRequest, _key: str = Depends(verify_api_key)):
-    """Busca contenido faltante en los indexadores."""
-    source = req.source
-    service = find_service(source, "arr")
+async def search_wanted(req: BulkSearchRequest, _key: str = Depends(verify_api_key)):
+    """Busca TODO lo faltante en los indexadores — y solo si se confirma.
+
+    Sin ``confirm: true`` no se lanza nada: la respuesta lleva
+    ``needs_confirm`` (un aviso, no un error — algo pedía permiso) y el nombre
+    del comando que SE LANZARÍA. Lanzada, devuelve el ``command_id`` de Radarr,
+    el asidero para cancelarla en ``/api/wanted/search/cancel``.
+    """
+    service = find_service(req.source, "arr")
     if not service:
-        return {"ok": False, "error": service_unavailable_reason(source)}
+        return {"ok": False, "error": service_unavailable_reason(req.source)}
+    command = "MissingMoviesSearch" if req.source == "radarr" else "MissingEpisodeSearch"
+    if not req.confirm:
+        return {
+            "ok": False,
+            "needs_confirm": True,
+            "command": command,
+            "detail": (
+                "Búsqueda masiva no lanzada: reenvía con confirm=true "
+                "(puede disparar muchos grabs de golpe)"
+            ),
+        }
 
     async with http_session() as session:
-        if source == "radarr":
+        if req.source == "radarr":
             result = await arr_search_missing_movies(session, service)
-        elif source == "sonarr":
+        elif req.source == "sonarr":
             result = await arr_search_missing_episodes(session, service)
         else:
-            return {"ok": False, "error": f"servicio no soportado: {source}"}
+            return {"ok": False, "error": f"servicio no soportado: {req.source}"}
 
-    return {"ok": result.get("ok", False), "detail": result.get("detail", ""), "source": source}
+    return {**result, "source": req.source, "command_id": result.get("command_id")}
+
+
+@router.post("/api/wanted/search/cancel")
+async def cancel_search(req: CommandCancelRequest, _key: str = Depends(verify_api_key)):
+    """Cancela un comando en curso en el arr por su id.
+
+    El uso previsto es el de arriba: el ``command_id`` que devolvió la búsqueda
+    masiva. Si el comando ya terminó, el arr responde 404 y eso se devuelve tal
+    cual — un comando que ya no existe no es un error nuestro.
+    """
+    service = find_service(req.source, "arr")
+    if not service:
+        return {"ok": False, "error": service_unavailable_reason(req.source)}
+    async with http_session() as session:
+        result = await arr_cancel_command(session, service, req.command_id)
+    return {**result, "source": req.source, "command_id": req.command_id}
 
 
 @router.post("/api/wanted/search/item")
