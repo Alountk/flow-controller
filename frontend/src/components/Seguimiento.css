@@ -3,58 +3,14 @@
 .sg {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-
-.sg-head h2 {
-  margin: 0;
-  font-size: 20px;
-  letter-spacing: -0.02em;
-}
-
-.sg-sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-.sg-sub b {
-  color: var(--text);
-}
-
-/* ── Resumen ── */
-
-.sg-sum {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.sg-sum-card {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 16px;
-  min-width: 120px;
-}
-
-.sg-sum-value {
-  display: block;
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.sg-sum-label {
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.sg-sum-card.warn .sg-sum-value {
-  color: var(--warn);
-}
-
-.sg-sum-card.bad .sg-sum-value {
-  color: var(--bad);
+  gap: 14px;
+  /* Fill the visible content area EXACTLY: a floor (min-height) would let
+     the board's content grow the page — the tail would push the board out
+     and the page would scroll again. With a fixed height the board flexes
+     into whatever is left above the tail, and the board alone scrolls.
+     100% resolves against the content box, so the page padding stays
+     outside the layout. */
+  height: 100%;
 }
 
 /* ── El tablero ── */
@@ -64,6 +20,14 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   align-items: start;
+  /* The kanban owns the scroll: it grows into the space above the tail and
+     no further — columns taller than the viewport scroll inside it instead
+     of stretching the page. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
 }
 
 .sg-col {
@@ -301,6 +265,28 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 16px;
+  /* The tail stays put: the board flexes around it, never the other way. */
+  flex: 0 0 auto;
+}
+
+/* The sweep rides inside the tail — separated from the queue rows, and its
+   history is capped so a long log cannot swallow the board's space. */
+.sg-ops-rule {
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+}
+
+.sg-ops .auto-copy {
+  margin-top: 12px;
+}
+
+.sg-ops .auto-copy-history {
+  margin-top: 12px;
+}
+
+.sg-ops .auto-copy-history-list {
+  max-height: 150px;
+  overflow-y: auto;
 }
 
 .sg-ops-title {
@@ -391,6 +377,8 @@
 /* ── Estados ── */
 
 .sg-empty {
+  /* In-page empty states stretch so the tail still sits at the bottom. */
+  flex: 1 0 auto;
   font-size: 13px;
   color: var(--text-dim);
   background: var(--bg-elev);
@@ -411,12 +399,6 @@
 @media (max-width: 768px) {
   .sg-board {
     grid-template-columns: 1fr;
-  }
-
-  .sg-sum-card {
-    flex: 1 1 40%;
-    min-width: 0;
-    padding: 10px;
   }
 
   .sg-op {

@@ -156,7 +156,7 @@ function opStatusLabel(op: QueueOp): string {
   return op.status
 }
 
-function OpsBand() {
+function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }) {
   const { data } = useQuery({
     queryKey: ['queue'],
     queryFn: queueStatus,
@@ -203,13 +203,17 @@ function OpsBand() {
           ))}
         </>
       )}
+
+      <div className="sg-ops-rule" />
+      {/* The sweep belongs with the app's operations, not on top of the board:
+          the top of this page is the kanban and nothing else. */}
+      <AutoCopyPanel safeMode={safeMode} onDone={onDone} />
     </section>
   )
 }
 
 export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
   const traces = data?.traces ?? []
-  const summary = data?.summary
 
   const actionMeta = useMemo(() => {
     const map = {} as Record<ActionKey, ActionMeta>
@@ -228,47 +232,11 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
     return <div className="sg-empty">Cargando seguimiento…</div>
   }
 
+  // Only the board on top — no in-page header, no summary strip, no sweep
+  // block: the top of the retired Trazabilidad must not resurface here. The
+  // page title lives in the topbar; the sweep rides in the operations tail.
   return (
     <section className="sg">
-      <div className="sg-head">
-        <h2>Seguimiento de descargas</h2>
-        <p className="sg-sub">
-          Grabs de Radarr/Sonarr en columnas por estado — el estado <b>es</b> la columna — más la
-          cola de operaciones de la app debajo. Cada tarjeta lleva las acciones que ya vivían en
-          Trazabilidad; cancelar descargas y el detalle completo llegan en la fase 2.
-        </p>
-      </div>
-
-      <AutoCopyPanel
-        safeMode={Boolean(actions?.safe_mode)}
-        onDone={onActionDone}
-      />
-
-      {summary && (
-        <div className="sg-sum">
-          <div className="sg-sum-card">
-            <span className="sg-sum-value">{summary.downloading}</span>
-            <span className="sg-sum-label">Descargando</span>
-          </div>
-          <div className={`sg-sum-card ${summary.import_blocked > 0 ? 'warn' : ''}`}>
-            <span className="sg-sum-value">{summary.import_blocked}</span>
-            <span className="sg-sum-label">Import bloqueado</span>
-          </div>
-          <div className={`sg-sum-card ${summary.failed > 0 ? 'bad' : ''}`}>
-            <span className="sg-sum-value">{summary.failed}</span>
-            <span className="sg-sum-label">Fallidas</span>
-          </div>
-          <div className="sg-sum-card">
-            <span className="sg-sum-value">{summary.downloaded}</span>
-            <span className="sg-sum-label">Completadas</span>
-          </div>
-          <div className={`sg-sum-card ${summary.category_mismatches > 0 ? 'warn' : ''}`}>
-            <span className="sg-sum-value">{summary.category_mismatches}</span>
-            <span className="sg-sum-label">Cat. incorrecta</span>
-          </div>
-        </div>
-      )}
-
       {traces.length === 0 ? (
         <div className="sg-empty">Sin descargas registradas.</div>
       ) : (
@@ -303,7 +271,10 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
         </div>
       )}
 
-      <OpsBand />
+      <OpsBand
+        safeMode={Boolean(actions?.safe_mode)}
+        onDone={onActionDone}
+      />
     </section>
   )
 }
