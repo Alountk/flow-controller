@@ -17,6 +17,9 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | F-02 | RAU-130 | C-07 | RAU-137 |
 | C-08 | RAU-138 |  |  |
 
+> **Ciclo 2026-10-07**: `B-08`, `C-09`…`C-11` y el nuevo alcance de `F-09` están **solo en este
+> documento** — aún sin issue en Linear (la frase de arriba solo cubre los anteriores).
+
 ---
 
 ## 🔴 Bugs abiertos
@@ -701,28 +704,41 @@ de mostrar dos envolturas muertas.
 **`Page` estaba duplicado** (hook + Sidebar) y nada impedía que se desincronizara; el hook es
 ahora el **único dueño** y el Sidebar re-exporta el tipo.
 
-### F-09 — Retirar **Disco** y **Trazabilidad** · ⏸ *Pendiente — sin fecha*
+### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · 🔁 *Decidido — pendiente de prototipos*
 
-Pedida en voz alta al revisar el diseño nuevo, **postergada por el usuario**:
+Pedida en voz alta al revisar el diseño nuevo. La retirada sigue en pie, pero **el final ya está
+decidido**: no se retira para dejar un hueco — Trazabilidad se convierte en una vista nueva que
+**cambia radicalmente**.
 
-> *«La sección de Disco la podemos quitar; más adelante pondremos algo mejor.
-> Trazabilidad pasa lo mismo.»*
+> *«Vamos a seguir con la retirada de la trazabilidad; al final lo que haremos es hacer una nueva
+> vista con 4 diseños diferentes, porque va a cambiar radicalmente. Esta sección se convertirá en
+> el seguimiento de las descargas y las operaciones.»* — 2026-10-07
 
-| Página | Ruta | Estado |
-|---|---|---|
-| **Disco** | `/disco` — `DiskSpace.tsx` · `GET /api/disk` | ⏸ se queda por ahora |
-| **Trazabilidad** | `/trazabilidad` — `TraceView` · `GET /api/trace` | ⏸ se queda por ahora |
+**Qué será**: **seguimiento de las descargas y las operaciones** — cards con el estado de cada
+descarga y de cada operación, y en una fase posterior acciones sobre ellas:
 
-**No tocar hasta que el usuario diga cuándo.** Cuando llegue el momento hay que tener en
-cuenta:
+| Fase | Contenido |
+|---|---|
+| **0 · Prototipos** | **4 diseños diferentes** en la galería de prototipos → decisión del usuario. Mismo flujo que F-08: prototipos → elección → implementación (con el trade-off registrado en el manifiesto) |
+| **1 · La vista** | Las cards: descargas y operaciones con su estado — los datos ya existen (`GET /api/trace`, `GET /api/downloads`, cola de operaciones) |
+| **2 · Acciones** | **Cancelar descarga** · **Ver detalles**: destino del fichero, dónde se movió después y en qué estado se quedó (a medias, bloqueado, importado…) |
 
+**Disco queda fuera de este ciclo** — sigue ⏸ como hasta aquí; este apartado solo toca Trazabilidad.
+
+**Al sustituirla, hay que tener en cuenta** (sigue vigente):
+
+- `Trazabilidad` es la **única vista** de `Trace` / cola / etapas: la vista nueva **nace de ella**
+  (fase 1), no la tapa — **hasta que la fase 1 esté, no se retira nada**.
 - `GET /api/disk` **se arregló** en B-06 (PR `#103`): deriva de `paths.allowed_roots` y ya no
-  miente sobre el rootfs. Su valor no depende de la página.
-- `Trazabilidad` es la **única vista** de `Trace` / cola / etapas — retirarla sin sustituirla
-  deja a la app sin observabilidad de las descargas.
-- Ambas están en `NAV_ITEMS`, `PAGE_PATHS`, `PAGE_TITLES` y en `hiddenPages` (leer de
-  Radarr/Sonarr): el retiro es el mismo patrón que ya se aplicó a `Faltantes`/`Calendario` en el
-  **PR `#116`**, incluida la **migración de sus tests**.
+  miente sobre el rootfs. Su valor no depende de la página (y de hecho Disco ni se toca aquí).
+- Está en `NAV_ITEMS`, `PAGE_PATHS`, `PAGE_TITLES` y en `hiddenPages` (leer de Radarr/Sonarr): el
+  cambio es el mismo patrón que ya se aplicó a `Faltantes`/`Calendario` en el **PR `#116`**,
+  incluida la **migración de sus tests**.
+- **Nombre confirmado: «Seguimiento»** ✅ (label de sidebar; confirmado por el usuario el
+  2026-10-07). `TraceView` / `TraceActions`
+  son la base de datos y de acciones de la fase 2 — se rehacen, no se tiran.
+- **C-11** (card «Stuck» clicable) apunta aquí: el enlace del Dashboard debe seguir funcionando
+  cuando la vista cambie.
 
 ### F-10 — Raíces etiquetadas de destinos en el explorador (biblioteca · 4K · 3D) · **Pequeña** · ✅ **Entregado** (PR #148)
 
@@ -787,7 +803,7 @@ Tests: 10 en `backend/tests/interfaces/routes/tests_amule_shares.py` + 6 en
 
 ## 🔵 Recomendaciones y reglas del ciclo
 
-C-01…C-07 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.
+C-01…C-07 y C-09…C-11 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.
 
 | ID | Feature | Por qué, con evidencia |
 |----|---------|------------------------|
@@ -798,7 +814,10 @@ C-01…C-07 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplica
 | **C-05** | **Rate limiting + Request ID** | Ya en el backlog (#13/#14). Ahora que hay auth por API key, una key filtrada sin límite es un agujero. |
 | **C-06** | **Responsive + dark mode** | Ya en el backlog (#10/#11). Ninguna prueba visual. |
 | **C-07** | **Ajuste de `IMPORT_TIMEOUT` desde la UI** | Lo que ya estaba pendiente en este documento: el backend lo soporta (`intervals.import_timeout`), falta el control en la pestaña *Configuración*. Ojo: `intervals.*` **no** está en `RESTART_REQUIRED_FIELDS` pero `background_checker` lo lee en import (`status.py:79`). |
-| **C-08** | **Regla «siempre hardlink»** — nada rompe la semilla | Un cliente de descargas comparte la **ruta**, no el inodo: renombrar o mover borra la entrada sembrada aunque los datos sobrevivan. Aplicada a la cola (move), a `rename`, al endpoint muerto `/api/files/move` (fuera) y a `copytree` (ahora enlace duro por fichero). **Pendiente:** `importMode: "Move"` en `clients.py:1465,1474`, a probar contra el ajuste de hardlinks de Radarr. | ✅ |
+| **C-08** | **Regla «siempre hardlink»** — nada rompe la semilla | Un cliente de descargas comparte la **ruta**, no el inodo: renombrar o mover borra la entrada sembrada aunque los datos sobrevivan. Aplicada a la cola (move), a `rename`, al endpoint muerto `/api/files/move` (fuera) y a `copytree` (ahora enlace duro por fichero). **Pendiente:** `importMode: "Move"` en `arr_client.py:1803,1812` (antes `clients.py:1465,1474`, fichero ya inexistente tras la migración hexagonal), a probar contra el ajuste de hardlinks de Radarr. | ✅ |
+| **C-09** ✅ | **Comandos de arr cancelables + confirmación en la búsqueda masiva** | `arr_command` **ni siquiera guardaba el `command_id`** que Radarr devuelve, así que un `MissingMoviesSearch` no se podía cancelar: el 07-10-2026 una llamada a `POST /api/wanted/search` disparó **24 grabs** y el `DELETE /api/v3/command/{id}` ni era posible (409 terminal). **Hecho 2026-10-07**: `arr_command` devuelve `command_id` · nuevo `arr_cancel_command` · `POST /api/wanted/search` exige `confirm=true` (responde `needs_confirm`, sin lanzar nada) · `POST /api/wanted/search/cancel` reenvía el id al arr (su 404 se devuelve tal cual). 13 tests. **Pendiente**: la UI de confirmación con recuento — hoy el endpoint es solo API (ninguna vista lo llama). |
+| **C-10** | **Búsqueda de releases asíncrona** (job + polling con el `task_manager` que ya existe) | La búsqueda de releases tarda **91,6 s medida** (Radarr × 20 indexadores) contra un proxy que corta a ~60 s: el 504 del 07-10 se tapó subiendo `proxy_read_timeout` a 250 s **a mano en nginx**. Con un job + polling la latencia del proxy deja de importar y la clase entera de 504 desaparece. |
+| **C-11** | **Card «Stuck» clicable** del Dashboard → vista de seguimiento filtrada | El contador `import_blocked` (`App.tsx:208`) es información sin salida: no es clicable y no lleva a ninguna parte. Un clic debe abrir el seguimiento filtrado (hoy `Trazabilidad`, mañana la vista nueva de `F-09`) — es el primer eslabón de C-02. |
 
 **Descartadas (con motivo):** *WebSockets para progreso* — la cola ya usa polling adaptativo
 (3-5 s activo / 15-30 s en reposo) y el WebSocket de aMuTorrent es de comandos, no de
@@ -831,4 +850,15 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 
 ## Orden propuesto
 
-`F-07` → `F-01` → `C-01/C-02` — **F-06: estudio entregado** (→ `odd/tasks/f06-amule-local.md`); *la implementación* sigue sin fecha hasta que se elija (e) o (b)
+Act. **2026-10-07** (el anterior decía `F-07` → `F-01` → `C-01/C-02` y **F-01 ya está cerrado**):
+
+1. **Rápidos** ✅ *hechos 2026-10-07*: `B-08` (host_path en el listado) → `C-09` (guardia de
+   búsqueda masiva — cierra la clase del incidente del 07-10).
+2. **`F-09` completo** — *siguiente gran bloque por decisión del usuario*:
+   fase 0 (los **4 prototipos** de la nueva vista de **Seguimiento**) → decisión → fase 1 (la
+   vista con cards) → fase 2 (cancelar / detalles). `C-11` (card «Stuck» clicable) entra aquí y
+   puede adelantarse apuntando mientras a `Trazabilidad`.
+3. Después: `C-01` (avisos Telegram) → `F-07` (procedencia de aMule) → `C-10` (búsqueda
+   asíncrona) → `C-05` → `C-06` → `C-04`.
+4. **F-06: estudio entregado** (→ `odd/tasks/f06-amule-local.md`); *la implementación* sigue sin
+   fecha hasta que se elija (e) o (b).
