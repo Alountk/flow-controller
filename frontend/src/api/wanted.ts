@@ -70,10 +70,18 @@ export async function fetchSeriesEpisodes(seriesId: number): Promise<{ episodes:
   }
 }
 
-export async function searchWanted(source: string): Promise<ActionResult> {
+/**
+ * The MASS missing-content search (`MissingMoviesSearch` / `MissingEpisodeSearch`).
+ *
+ * The backend launches nothing without `confirm: true` — one careless call
+ * fired grabs for 24 movies at once (2026-10-07) with no way to stop them.
+ * The confirmation UI (with its count) belongs to the caller; this helper only
+ * passes the flag through honestly.
+ */
+export async function searchWanted(source: string, confirm = false): Promise<ActionResult> {
   const res = await apiFetch('/api/wanted/search', {
     method: 'POST',
-    body: JSON.stringify({ source }),
+    body: JSON.stringify({ source, confirm }),
   })
   return handleResponse(res)
 }

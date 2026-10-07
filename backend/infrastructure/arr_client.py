@@ -195,7 +195,45 @@ async def arr_command(session: aiohttp.ClientSession, service: dict, body: dict)
         ) as resp:
             text = await resp.text()
             if resp.status in (200, 201):
-                return {"ok": True, "detail": f"Comando '{body.get('name')}' encolado"}
+                result: dict = {"ok": True, "detail": f"Comando '{body.get('name')}' encolado"}
+                # Radarr answers the command's `id`: the ONLY handle to cancel
+                # it afterwards (DELETE /api/v3/command/{id}). Dropping it is
+                # what made a fired mass search unstoppable (C-09).
+                try:
+                    payload = json.loads(text)
+                except ValueError:
+                    payload = None
+                if isinstance(payload, dict) and payload.get("id") is not None:
+                    result["command_id"] = payload["id"]
+                return result
+            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+async def arr_cancel_command(session: aiohttp.ClientSession, service: dict, command_id: int) -> dict:
+    """Cancela un comando en curso en el arr: ``DELETE /api/v3/command/{id}``.
+
+    El id es el que devolvió la propia ejecución de ``arr_command``. Un 404 no
+    es un error nuestro: el comando ya terminó (o el id nunca existió) y decir
+    "cancelado" ahí sería mentir.
+    """
+    headers = arr_headers(service["api_key"])
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
+    try:
+        async with session.delete(
+            f"{service['url']}/api/v3/command/{int(command_id)}",
+            headers=headers,
+            timeout=timeout,
+        ) as resp:
+            if resp.status in (200, 201, 202, 204):
+                return {"ok": True, "detail": f"Comando {command_id} cancelado"}
+            text = await resp.text()
+            if resp.status == 404:
+                return {
+                    "ok": False,
+                    "detail": f"Comando {command_id} no encontrado: ya finalizado o id desconocido",
+                }
             return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}

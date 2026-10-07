@@ -76,6 +76,11 @@ def arr_add_series(*args, **kwargs):
     return getattr(_arr, "arr_add_series")(*args, **kwargs)
 
 
+def arr_cancel_command(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return getattr(_arr, "arr_cancel_command")(*args, **kwargs)
+
+
 def arr_categories_for(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return getattr(_arr, "arr_categories_for")(*args, **kwargs)
