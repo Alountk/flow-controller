@@ -346,7 +346,7 @@ export function Settings() {
         <Field label="Días antes de poder borrar una descarga" value={form.retention.amule_days} onChange={(v) => update('retention.amule_days', v)} type="number" />
       </Section>
 
-      <Section title="Trazabilidad">
+      <Section title="Seguimiento">
         <Field label="Límite de trazas" value={form.tracing.limit} onChange={(v) => update('tracing.limit', v)} type="number" />
       </Section>
 
