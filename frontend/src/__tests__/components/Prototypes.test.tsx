@@ -85,6 +85,32 @@ describe('Prototypes gallery', () => {
     expect(screen.getByText('Sin sección')).toBeInTheDocument()
   })
 
+  it('gives the Seguimiento designs their own labelled section', async () => {
+    // F-09's four prototypes carry section "seguimiento": the label and the
+    // section order are what keep them together instead of under "Sin sección".
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => [
+          entry({
+            name: 'seguimiento-alertas',
+            file: 'seguimiento-04-alertas.html',
+            section: 'seguimiento',
+            status: 'candidate',
+            recommend: true,
+            note: 'Lo rojo primero.',
+          }),
+        ],
+      } as Response),
+    )
+    render(<Prototypes />)
+
+    await waitFor(() => expect(screen.getByText('Seguimiento')).toBeInTheDocument())
+
+    expect(cardNamed('seguimiento-alertas')).toBeTruthy()
+    expect(within(cardNamed('seguimiento-alertas')).getByText('★ Recomendado')).toBeInTheDocument()
+  })
+
   it('marks what was chosen, and the one it recommends', async () => {
     renderGallery()
 

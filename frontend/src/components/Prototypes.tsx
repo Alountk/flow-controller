@@ -28,6 +28,7 @@ const SECTION_LABEL: Record<string, string> = {
   landing: 'Landing',
   peliculas: 'Películas',
   series: 'Series',
+  seguimiento: 'Seguimiento',
   otros: 'Sin sección',
 }
 
@@ -39,8 +40,8 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'unlisted', label: 'Sin catalogar' },
 ]
 
-/** Order sections so the two new proposals sit together, not alphabetically. */
-const SECTION_ORDER = ['peliculas', 'series', 'setup', 'landing', 'otros']
+/** Order sections so the new proposals sit together, not alphabetically. */
+const SECTION_ORDER = ['peliculas', 'series', 'seguimiento', 'setup', 'landing', 'otros']
 
 export function Prototypes() {
   const [prototypes, setPrototypes] = useState<PrototypeFile[]>([])
