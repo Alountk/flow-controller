@@ -1256,10 +1256,16 @@ async def fetch_all_movies_detailed(
             items = []
             for m in sliced:
                 path = m.get("path", "")
+                # Radarr reports the path AS IT SEES IT (/data/...); the disk
+                # lives under the mount this host sees. Asking `isdir` about
+                # the arr's view is B-08: a healthy folder read as missing.
+                # The path EXPOSED below stays the arr's own — Calidad matches
+                # path_4k/path_3d membership off that field.
+                fs_path = config.host_path(path) if path else ""
                 path_exists = False
-                if path:
+                if fs_path:
                     try:
-                        path_exists = os.path.isdir(path)
+                        path_exists = os.path.isdir(fs_path)
                     except (OSError, ValueError):
                         path_exists = False
                 has_file = m.get("hasFile", False)
@@ -1277,7 +1283,7 @@ async def fetch_all_movies_detailed(
                     # "checked and none found" or "imported already", and an
                     # unreadable folder also lands here.
                     "has_unimported_file": (
-                        not has_file and path_exists and _folder_has_video(path)
+                        not has_file and path_exists and _folder_has_video(fs_path)
                     ),
                     # The path is exposed, not only measured: the Calidad view
                     # reads the path_4k/path_3d membership off it.
@@ -1325,10 +1331,14 @@ async def fetch_all_series_detailed(
             items = []
             for s in sliced:
                 path = s.get("path", "")
+                # Same rule as the movie listing (B-08): the disk is asked
+                # through the host's view of the path, the arr's own path is
+                # what the row exposes.
+                fs_path = config.host_path(path) if path else ""
                 path_exists = False
-                if path:
+                if fs_path:
                     try:
-                        path_exists = os.path.isdir(path)
+                        path_exists = os.path.isdir(fs_path)
                     except (OSError, ValueError):
                         path_exists = False
                 items.append({
