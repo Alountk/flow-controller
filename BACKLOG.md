@@ -704,7 +704,7 @@ de mostrar dos envolturas muertas.
 **`Page` estaba duplicado** (hook + Sidebar) y nada impedía que se desincronizara; el hook es
 ahora el **único dueño** y el Sidebar re-exporta el tipo.
 
-### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · ✅ *Elección tomada: kanban — siguiente la fase 1*
+### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · 🔁 *Fase 1 entregada — quedan el retiro y la fase 2*
 
 Pedida en voz alta al revisar el diseño nuevo. La retirada sigue en pie, pero **el final ya está
 decidido**: no se retira para dejar un hueco — Trazabilidad se convierte en una vista nueva que
@@ -720,7 +720,7 @@ descarga y de cada operación, y en una fase posterior acciones sobre ellas:
 | Fase | Contenido |
 |---|---|
 | **0 · Prototipos** | ✅ **Entregados y elegidos** — los 4 (`01-cronologia` · `02-kanban` · `03-consola-densa` · `04-alertas`) el 2026-10-07; **el usuario eligió `seguimiento-02-kanban`** («el estado ES la columna»). Los otros 3 quedan `discarded` con su trade-off en `prototypes/manifest.json` |
-| **1 · La vista** | Las cards: descargas y operaciones con su estado — los datos ya existen (`GET /api/trace`, `GET /api/downloads`, cola de operaciones) |
+| **1 · La vista** | ✅ **Entregada 2026-10-07** — `Seguimiento.tsx`: kanban de 4 columnas (`downloading` · `downloaded`+`importing` · `import_blocked`+`failed` · `sent`), tarjetas con píldora de fase, progreso, motivo de bloqueo, ruta y chip de categoría incorrecta, franja de resumen y banda de la cola de operaciones. Página nueva `/seguimiento` (nav entre Series y Trazabilidad, oculta sin arr). **Trazabilidad sigue en pie**: el retiro va aparte (migrar tests al estilo PR #116) junto a **C-11** |
 | **2 · Acciones** | **Cancelar descarga** · **Ver detalles**: destino del fichero, dónde se movió después y en qué estado se quedó (a medias, bloqueado, importado…) |
 
 **Disco queda fuera de este ciclo** — sigue ⏸ como hasta aquí; este apartado solo toca Trazabilidad.
@@ -854,9 +854,9 @@ Act. **2026-10-07** (el anterior decía `F-07` → `F-01` → `C-01/C-02` y **F-
 
 1. **Rápidos** ✅ *hechos 2026-10-07*: `B-08` (host_path en el listado) → `C-09` (guardia de
    búsqueda masiva — cierra la clase del incidente del 07-10).
-2. **`F-09`** — *en curso*: fase 0 ✅ **kanban elegido** (`seguimiento-02-kanban`) →
-   **fase 1: construir la vista** (las cards) → fase 2 (cancelar / detalles). `C-11` (card
-   «Stuck» clicable) entra aquí apuntando a la vista nueva.
+2. **`F-09`** — *en curso*: fase 0 ✅ **kanban elegido** · fase 1 ✅ **la vista en `/seguimiento`**
+   → **sigue**: retiro de `Trazabilidad` (tests migrados al estilo PR #116) + `C-11` (card
+   «Stuck» apuntando a `/seguimiento`) → fase 2 (cancelar / detalles).
 3. Después: `C-01` (avisos Telegram) → `F-07` (procedencia de aMule) → `C-10` (búsqueda
    asíncrona) → `C-05` → `C-06` → `C-04`.
 4. **F-06: estudio entregado** (→ `odd/tasks/f06-amule-local.md`); *la implementación* sigue sin

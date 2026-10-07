@@ -54,13 +54,14 @@ describe('sidebar with unconfigured services', () => {
         active="dashboard"
         onNavigate={() => {}}
         developer={false}
-        hidden={['trace', 'peliculas', 'series']}
+        hidden={['trace', 'peliculas', 'series', 'seguimiento']}
       />,
     )
 
     expect(screen.queryByText('Trazabilidad')).not.toBeInTheDocument()
     expect(screen.queryByText('Películas')).not.toBeInTheDocument()
     expect(screen.queryByText('Series')).not.toBeInTheDocument()
+    expect(screen.queryByText('Seguimiento')).not.toBeInTheDocument()
   })
 
   it('keeps the local pages, which need no service', () => {
@@ -83,6 +84,7 @@ describe('sidebar with unconfigured services', () => {
     render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 
     expect(screen.getByText('Trazabilidad')).toBeInTheDocument()
+    expect(screen.getByText('Seguimiento')).toBeInTheDocument()
     expect(screen.getByText('Películas')).toBeInTheDocument()
   })
 })
@@ -110,6 +112,7 @@ describe('the app reflects what is configured', () => {
     expect(screen.queryByText('Trazabilidad')).not.toBeInTheDocument()
     expect(screen.queryByText('Películas')).not.toBeInTheDocument()
     expect(screen.queryByText('Series')).not.toBeInTheDocument()
+    expect(screen.queryByText('Seguimiento')).not.toBeInTheDocument()
   })
 
   it('keeps the arr-dependent pages when at least one arr exists', async () => {
@@ -118,6 +121,7 @@ describe('the app reflects what is configured', () => {
 
     await waitFor(() => expect(screen.getByText('Trazabilidad')).toBeInTheDocument())
     expect(screen.getByText('Películas')).toBeInTheDocument()
+    expect(screen.getByText('Seguimiento')).toBeInTheDocument()
   })
 
   it('does not report an empty pipeline as healthy', async () => {
