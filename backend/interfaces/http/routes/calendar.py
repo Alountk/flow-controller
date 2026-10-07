@@ -15,6 +15,8 @@ from application.gateways import record_own_grab
 from application.gateways import (
     fetch_radarr_calendar,
     fetch_sonarr_calendar,
+    amutorrent_add_download,
+    amutorrent_search_link,
     arr_search_movie,
     arr_search_episode,
     arr_episode_metadata,
@@ -22,6 +24,7 @@ from application.gateways import (
     arr_add_series,
     arr_fetch_releases,
     arr_grab_release,
+    direct_link_identity,
     arr_indexers,
     arr_root_folders,
     arr_movie_lookup,
@@ -265,9 +268,29 @@ async def _resolve_series_id(
     return meta.get("series_id")
 
 
+class GrabBody(CalendarGrabRequest):
+    """The grab body plus what a direct add needs.
+
+    `title` is the release's own title — the key we ask aMuTorrent's Torznab
+    for the link, because the arr's release payload carries only its guid. On
+    the arr path it rides along unused; a foreign-destination grab without it
+    fails loudly instead of guessing a query.
+    """
+    title: str = ""
+
+
+def _inside(path: str, root: str) -> bool:
+    """`path` is `root` or below it, without the `/a/b`-matches-`/a/bc` trap."""
+    normalized_path = os.path.normpath(path)
+    normalized_root = os.path.normpath(root)
+    return normalized_path == normalized_root or normalized_path.startswith(
+        normalized_root.rstrip("/") + "/"
+    )
+
+
 @router.post("/api/calendar/grab")
-async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api_key)):
-    """Descarga un release específico."""
+async def calendar_grab(req: GrabBody, _key: str = Depends(verify_api_key)):
+    """Descarga un release: por el arr, o directa al cliente si tiene destino ajeno."""
     service = find_service(req.source, "arr")
     if not service:
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
@@ -285,18 +308,70 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
     if destination is not None and not path_is_allowed(destination):
         return {"ok": False, "detail": f"Destino no permitido: {destination}"}
 
+    direct = False
+    client_name = ""
+    client_hash = None
     try:
         # The series lookup rides the grab's own session: it is a single GET to
         # the arr the grab just hit, so a second session would only add another
         # connection. `_resolve_series_id` cannot raise, so a failed lookup can
         # never turn this successful grab into the error response below.
         async with http_session() as session:
-            result = await arr_grab_release(session, service, req.guid, req.indexerId, req.movieId, req.episodeId)
-            series_id = (
-                await _resolve_series_id(session, service, req.source, req.episodeId)
-                if result.get("ok")
-                else None
-            )
+            # A destination OUTSIDE every arr root means the file is leaving
+            # the library — and if the download goes through the arr, the arr
+            # imports it on completion and REPLACES what the library already
+            # holds (the 4K-cannibalises-the-1080p incident). Such a download
+            # never touches the arr: straight to the client, our own category.
+            # Fails closed: an unreadable root list proves nothing, so the grab
+            # stays on the arr path it has always taken.
+            foreign = False
+            if destination is not None:
+                roots = await arr_root_folders(session, service)
+                foreign = bool(roots) and not any(
+                    _inside(destination, root) for root in roots
+                )
+
+            if foreign:
+                if not req.title:
+                    return {
+                        "ok": False,
+                        "detail": "Falta el título del release para resolver el enlace directo",
+                    }
+                link = await amutorrent_search_link(session, req.title)
+                if not link:
+                    return {
+                        "ok": False,
+                        "detail": (
+                            f"No encontré «{req.title}» en el indexador de aMule; no se "
+                            "envió nada al arr. Elige Destino = Biblioteca para "
+                            "descargarlo con Radarr/Sonarr."
+                        ),
+                    }
+                added = await amutorrent_add_download(session, link)
+                if not added.get("ok"):
+                    return {
+                        "ok": False,
+                        "detail": f"aMuTorrent no aceptó la descarga: {added.get('detail')}",
+                    }
+                direct = True
+                client_name, client_hash = direct_link_identity(link, req.title)
+                series_id = (
+                    await _resolve_series_id(session, service, req.source, req.episodeId)
+                    if req.episodeId
+                    else None
+                )
+                result = {
+                    "ok": True,
+                    "detail": f"{added.get('detail')} — directa: el arr no la verá ni la importará",
+                    "direct": True,
+                }
+            else:
+                result = await arr_grab_release(session, service, req.guid, req.indexerId, req.movieId, req.episodeId)
+                series_id = (
+                    await _resolve_series_id(session, service, req.source, req.episodeId)
+                    if result.get("ok")
+                    else None
+                )
     except Exception as exc:
         log.exception("calendar_grab error: %s", exc)
         return {"ok": False, "detail": f"Error interno: {exc}"}
@@ -315,6 +390,9 @@ async def calendar_grab(req: CalendarGrabRequest, _key: str = Depends(verify_api
             indexer_id=req.indexerId,
             destination=destination,
             quality=req.quality or None,
+            direct=direct,
+            client_name=client_name,
+            client_hash=client_hash,
         )
     return result
 
@@ -353,6 +431,24 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
     series_id: int | None = None
     series_resolved = False
     async with http_session() as session:
+        # Same foreign gate as the single grab, and the same fail-closed
+        # reading of an unreadable root list. Refusing is deliberate: a batch
+        # through the arr would import and replace, and resolving each guid's
+        # link needs a title the batch does not carry — one row at a time is
+        # the honest answer until the per-card buttons land.
+        if destination is not None:
+            roots = await arr_root_folders(session, service)
+            if roots and not any(_inside(destination, root) for root in roots):
+                return {
+                    "ok": False,
+                    "detail": (
+                        f"El lote con destino fuera de la biblioteca ({destination}) no "
+                        "está soportado: descarga fila a fila, que va directa al "
+                        "cliente sin pasar por el arr."
+                    ),
+                    "downloaded": [],
+                    "errors": [],
+                }
         for i, guid in enumerate(req.guids):
             idx_id = req.indexerIds[i] if i < len(req.indexerIds) else 0
             try:

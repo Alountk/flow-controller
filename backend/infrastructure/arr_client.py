@@ -4,8 +4,10 @@ import json
 import logging
 import os
 import posixpath
+import re
 import time
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, unquote_plus, urlsplit
+from xml.etree import ElementTree
 
 import aiohttp
 
@@ -36,6 +38,15 @@ def qbit_headers(api_key: str) -> dict:
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     return headers
+
+
+#: Category for downloads this app adds DIRECTLY to the client, outside any
+#: arr. The arr only polls the client for ITS own category, and it never gets
+#: a queue item for a download it was never told about — so a torrent under
+#: this name is invisible to Radarr/Sonarr: they cannot import it and cannot
+#: replace what the library already holds. That invisibility is the entire
+#: point of routing a release to a folder they manage.
+DIRECT_DOWNLOAD_CATEGORY = "flow"
 
 
 # A rejected credential is not a transient failure: retrying cannot fix it,
@@ -916,6 +927,120 @@ async def amu_torrent_categories(session: aiohttp.ClientSession) -> list[str]:
             return list(data.keys()) if isinstance(data, dict) else []
     except (asyncio.TimeoutError, aiohttp.ClientError):
         return []
+
+
+def direct_link_identity(link: str, fallback_title: str) -> tuple[str, str | None]:
+    """What the client will call the download, and its hash when knowable.
+
+    Pure, because the identity rules deserve tests without a client. The
+    `ed2k://|file <name>|<size>|<hash>|/` name IS what the client names the
+    download — but the link's hash is deliberately NOT returned: aMuTorrent
+    translates the ED2K hash into its own infohash, and guessing that mapping
+    would join the wrong torrent. A magnet carries its identity in `dn` and a
+    hex `btih`, both literal.
+    """
+    if link.startswith("ed2k://"):
+        parts = link.split("|")
+        name = parts[1][5:].strip() if len(parts) > 1 and parts[1].startswith("file ") else ""
+        return (name or fallback_title, None)
+    if link.startswith("magnet:"):
+        dn = re.search(r"[?&]dn=([^&]+)", link)
+        btih = re.search(r"xt=urn:btih:([0-9a-fA-F]{40})", link)
+        name = unquote_plus(dn.group(1)) if dn and dn.group(1) else fallback_title
+        return (name, btih.group(1).lower() if btih else None)
+    return (fallback_title, None)
+
+
+async def amutorrent_ensure_category(session: aiohttp.ClientSession, category: str) -> bool:
+    """The category exists in the client, creating it if missing.
+
+    Best effort on purpose: a torrent with NO category is still invisible to
+    the arr (it only polls its own), so a failed create must never block the
+    add — it only loses the bookkeeping label.
+    """
+    try:
+        if category in await amu_torrent_categories(session):
+            return True
+        async with session.post(
+            f"{AMUTORRENT_URL}/api/v2/torrents/createCategories",
+            headers=qbit_headers(AMUTORRENT_API_KEY),
+            data={"name": category},
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
+        ) as resp:
+            return resp.status in (200, 409)
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return False
+
+
+async def amutorrent_add_download(
+    session: aiohttp.ClientSession, url: str, category: str = DIRECT_DOWNLOAD_CATEGORY
+) -> dict:
+    """``POST /api/v2/torrents/add`` — the same call the arr itself makes.
+
+    This is the whole of option B: the link goes straight to the client under
+    OUR category, and the arr never learns the download exists.
+    """
+    await amutorrent_ensure_category(session, category)
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
+    try:
+        async with session.post(
+            f"{AMUTORRENT_URL}/api/v2/torrents/add",
+            headers=qbit_headers(AMUTORRENT_API_KEY),
+            data={"urls": url, "category": category},
+            timeout=timeout,
+        ) as resp:
+            if resp.status == 200:
+                return {"ok": True, "detail": f"Descarga añadida (categoría {category})", "category": category}
+            text = await resp.text()
+            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+async def amutorrent_search_link(session: aiohttp.ClientSession, title: str) -> str | None:
+    """The ED2K/magnet link behind `title`, from aMuTorrent's own Torznab.
+
+    The arr's release payload carries only its guid — the link lives in the
+    indexer that produced the release, so we ask the same Torznab the arr
+    asked, and match the item on guid first (it IS the indexer's id) then on
+    the exact title, case-insensitively. No fuzzy match: a wrong link is a
+    wrong download, and "not found" is an honest answer the caller shows.
+
+    ED2K searches are throttled server-side (~5 s), hence the ×4 timeout; a
+    repeat query is normally served from the client's cache.
+    """
+    if not AMUTORRENT_URL or not title:
+        return None
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 4)
+    try:
+        async with session.get(
+            f"{AMUTORRENT_URL}/indexer/amule/api",
+            params={"t": "search", "q": title, "apikey": AMUTORRENT_API_KEY},
+            timeout=timeout,
+        ) as resp:
+            if resp.status != 200:
+                log.warning("amutorrent_search_link status=%s", resp.status)
+                return None
+            text = await resp.text()
+    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
+        log.warning("amutorrent_search_link: %s", exc)
+        return None
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError:
+        log.warning("amutorrent_search_link: respuesta no es XML")
+        return None
+    want = title.strip().casefold()
+    for item in root.iter("item"):
+        item_title = (item.findtext("title") or "").strip().casefold()
+        item_guid = (item.findtext("guid") or "").strip()
+        enclosure = item.find("enclosure")
+        link = enclosure.get("url") if enclosure is not None else None
+        if not link and item_guid.casefold().startswith(("ed2k://", "magnet:")):
+            link = item_guid
+        if link and (item_guid.casefold() == want or item_title == want):
+            return link
+    return None
 
 
 async def amutorrent_reload_shared_dirs(session: aiohttp.ClientSession) -> dict:
