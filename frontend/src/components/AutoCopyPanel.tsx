@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import type {
   AutoCopyAction,
-  AutoCopyLogDecision,
-  AutoCopyLogEntry,
   AutoCopySweepEntry,
   AutoCopySweepResult,
 } from '../types'
-import { fetchAutoCopyHistory, runAutoCopySweep } from '../api/autoCopy'
+import { runAutoCopySweep } from '../api/autoCopy'
 import './AutoCopyPanel.css'
 
 /**
@@ -17,6 +15,11 @@ import './AutoCopyPanel.css'
  * door to the feature: retiring the page (F-09) would have silently retired
  * the sweep with it. Extracted first, rendered by both views during the
  * transition — and by Seguimiento for good.
+ *
+ * The DECISION LOG is gone from here by choice (2026-10-08): the band is the
+ * kanban's tail, not an archive, and the log is heading for a page of its
+ * own — logs only — when that page exists. The endpoint behind it
+ * (`/api/auto-copy/history`) stays; this component simply stopped asking.
  *
  * The sweep is an explicit POST: the endpoint must never run as a side effect
  * of a polled GET. `safeMode` is the app's `actions.safe_mode` — the same
@@ -34,66 +37,6 @@ const AUTO_COPY_ACTION_LABELS: Record<AutoCopyAction, string> = {
   copied: 'Copiada',
   proposed: 'Propuesta',
   failed: 'Falló',
-}
-
-/** Readable Spanish label for a logged decision. The log stores the sweep's
- *  outcome, so `wait` and `skip` need a label too — they are the "why not". */
-const AUTO_COPY_LOG_LABELS: Record<AutoCopyLogDecision, string> = {
-  copied: 'Copiada',
-  proposed: 'Propuesta',
-  wait: 'Esperando',
-  skip: 'Omitida',
-  failed: 'Falló',
-}
-
-function formatLogTime(epoch: number): string {
-  const then = new Date(epoch * 1000)
-  if (Number.isNaN(then.getTime())) return '—'
-  return then.toLocaleString()
-}
-
-/**
- * The append-only decision log, newest first.
- *
- * Every row is a transition — the outcome changed since the previous sweep — so
- * the list reads as a timeline, not a sweep-by-sweep dump. `reason` is the same
- * Spanish text the sweep panel shows, written for a human.
- */
-function AutoCopyHistory({
-  entries,
-  error,
-}: {
-  entries: AutoCopyLogEntry[]
-  error: string | null
-}) {
-  return (
-    <div className="auto-copy-history">
-      <h3 className="auto-copy-history-title">Historial de auto-copia</h3>
-      {error ? (
-        <p className="auto-copy-history-error">{error}</p>
-      ) : entries.length === 0 ? (
-        <p className="auto-copy-history-empty">
-          Todavía no hay movimientos. Cuando un barrido cambie el estado de una
-          descarga, aparecerá aquí.
-        </p>
-      ) : (
-        <ul className="auto-copy-history-list">
-          {entries.map((row) => (
-            <li key={row.id} className="auto-copy-history-row">
-              <span className="auto-copy-history-date">{formatLogTime(row.at)}</span>
-              <span className={`auto-copy-badge ${row.decision}`}>
-                {AUTO_COPY_LOG_LABELS[row.decision]}
-              </span>
-              <span className="auto-copy-history-row-title" title={row.title ?? ''}>
-                {row.title ?? '—'}
-              </span>
-              <span className="auto-copy-history-reason">{row.reason ?? ''}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
 }
 
 function AutoCopyErrors({ errors }: { errors: string[] }) {
@@ -204,20 +147,6 @@ function AutoCopyResult({
 export function AutoCopyPanel({ safeMode, onDone }: Props) {
   const [sweepResult, setSweepResult] = useState<AutoCopySweepResult | null>(null)
   const [sweeping, setSweeping] = useState(false)
-  const [history, setHistory] = useState<AutoCopyLogEntry[]>([])
-  const [historyError, setHistoryError] = useState<string | null>(null)
-
-  // Loads with the panel and again after every sweep: the trigger is the only
-  // thing that can add rows, so the list would otherwise be stale until reload.
-  const loadHistory = useCallback(async () => {
-    const { items, error } = await fetchAutoCopyHistory()
-    setHistory(items)
-    setHistoryError(error ?? null)
-  }, [])
-
-  useEffect(() => {
-    void loadHistory()
-  }, [loadHistory])
 
   async function runSweep() {
     setSweeping(true)
@@ -225,7 +154,6 @@ export function AutoCopyPanel({ safeMode, onDone }: Props) {
       // The api module turns a rejected fetch into a failed summary, so this
       // never throws and the button can never get stuck on "Revisando…".
       setSweepResult(await runAutoCopySweep())
-      await loadHistory()
       onDone?.()
     } finally {
       setSweeping(false)
@@ -233,24 +161,20 @@ export function AutoCopyPanel({ safeMode, onDone }: Props) {
   }
 
   return (
-    <>
-      <div className="auto-copy">
-        <div className="auto-copy-bar">
-          <button
-            className="auto-copy-btn"
-            onClick={() => void runSweep()}
-            disabled={sweeping}
-          >
-            {sweeping ? 'Revisando…' : 'Revisar descargas'}
-          </button>
-          <span className="auto-copy-hint">
-            Revisa las descargas completadas que Sonarr/Radarr no hayan importado.
-          </span>
-        </div>
-        {sweepResult && <AutoCopyResult result={sweepResult} safeMode={safeMode} />}
+    <div className="auto-copy">
+      <div className="auto-copy-bar">
+        <button
+          className="auto-copy-btn"
+          onClick={() => void runSweep()}
+          disabled={sweeping}
+        >
+          {sweeping ? 'Revisando…' : 'Revisar descargas'}
+        </button>
+        <span className="auto-copy-hint">
+          Revisa las descargas completadas que Sonarr/Radarr no hayan importado.
+        </span>
       </div>
-
-      <AutoCopyHistory entries={history} error={historyError} />
-    </>
+      {sweepResult && <AutoCopyResult result={sweepResult} safeMode={safeMode} />}
+    </div>
   )
 }

@@ -265,8 +265,12 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 16px;
-  /* The tail stays put: the board flexes around it, never the other way. */
-  flex: 0 0 auto;
+  /* The tail is a tail: it may shrink and scroll inside its own cap so the
+     kanban ALWAYS owns the majority of the view — the whole point of this
+     page. Long op lists scroll here; they never push the board off stage. */
+  flex: 0 1 auto;
+  max-height: 38%;
+  overflow-y: auto;
 }
 
 /* The sweep rides inside the tail — separated from the queue rows, and its
@@ -280,14 +284,6 @@
   margin-top: 12px;
 }
 
-.sg-ops .auto-copy-history {
-  margin-top: 12px;
-}
-
-.sg-ops .auto-copy-history-list {
-  max-height: 150px;
-  overflow-y: auto;
-}
 
 .sg-ops-title {
   font-size: 12px;

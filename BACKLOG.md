@@ -737,6 +737,15 @@ abierta — la recarga por foco/navegación cubre el resto; coste asumido). **Co
 lista de descargas con velocidad/ETA del cliente desaparece de la UI (el kanban lleva progreso y
 etapa; el endpoint `/api/downloads` sigue existiendo).
 
+**La banda se acota y el historial sale** (2026-10-08, pedido): la cola pasaba a ocupar media
+pantalla. Ahora la banda lleva `max-height: 38%` con scroll propio — **el kanban siempre es lo
+que más ocupa** —, y el **historial de auto-copia** deja de mostrarse en ella: irá a una página
+futura de **solo logs** (el disparador «Revisar descargas» y su último resultado se quedan en la
+banda). El endpoint `/api/auto-copy/history` sigue existiendo para esa página; su lector y sus
+tests se fueron con la UI (git los guarda). La pestaña *Historial* de los paneles de detalle
+(Películas/Series) es OTRA cosa — el registro de la propia fila, que jamás llamó a ese endpoint —
+y no se toca.
+
 **Cómo se hizo el retiro** (rastro para la fase 2):
 
 - La vista nueva **nació de la vieja**: fase 1 primero, retiro después — la regla «hasta que
