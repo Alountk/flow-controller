@@ -116,13 +116,18 @@ test('the view is the board and the tail — and the board alone scrolls', async
     const content = document.querySelector('.content');
     const board = document.querySelector('.sg-board');
     if (!sg || !content) return null;
+    const colBodies = [...document.querySelectorAll('.sg-col-body')];
     return {
       children: [...sg.children].map((el) => el.className),
       directSweep: Boolean(document.querySelector('.sg > .auto-copy')),
       hasSummary: Boolean(document.querySelector('.sg-sum')),
       hasHeader: Boolean(document.querySelector('.sg-head')),
       pageScrolls: content.scrollHeight - content.clientHeight,
-      boardOverflowY: board ? getComputedStyle(board).overflowY : null,
+      boardScrolls: board ? board.scrollHeight - board.clientHeight : -1,
+      colBodiesScrolling: colBodies.filter(
+        (el) => getComputedStyle(el).overflowY === 'auto',
+      ).length,
+      colBodies: colBodies.length,
     };
   });
 
@@ -133,7 +138,10 @@ test('the view is the board and the tail — and the board alone scrolls', async
   expect(layout!.directSweep).toBe(false);
   expect(layout!.hasSummary).toBe(false);
   expect(layout!.hasHeader).toBe(false);
-  // The page itself must not scroll: the board owns the overflow.
+  // The page and the BOARD itself must not scroll — each column owns its
+  // own overflow, so one long column never drags the others off screen.
   expect(layout!.pageScrolls).toBeLessThanOrEqual(1);
-  expect(layout!.boardOverflowY).toBe('auto');
+  expect(layout!.boardScrolls).toBeLessThanOrEqual(1);
+  expect(layout!.colBodies).toBeGreaterThan(0);
+  expect(layout!.colBodiesScrolling).toBe(layout!.colBodies);
 });

@@ -738,8 +738,11 @@ lista de descargas con velocidad/ETA del cliente desaparece de la UI (el kanban 
 etapa; el endpoint `/api/downloads` sigue existiendo).
 
 **La banda se acota y el historial sale** (2026-10-08, pedido): la cola pasaba a ocupar media
-pantalla. Ahora la banda lleva `max-height: 38%` con scroll propio — **el kanban siempre es lo
-que más ocupa** —, y el **historial de auto-copia** deja de mostrarse en ella: irá a una página
+pantalla. Ahora la banda lleva `max-height` con scroll propio y **cada columna del kanban tiene
+su propio scroll** — la caja de la columna ocupa toda su altura y se llena de cards hasta que
+el scroll aparece solo; el tablero y la página **nunca** scrollean. El tope de la banda pasó de
+38% a **66,5%** (+75%, pedido del operador: «que se vea un poco más»), y el **historial de
+auto-copia** deja de mostrarse en ella: irá a una página
 futura de **solo logs** (el disparador «Revisar descargas» y su último resultado se quedan en la
 banda). El endpoint `/api/auto-copy/history` sigue existiendo para esa página; su lector y sus
 tests se fueron con la UI (git los guarda). La pestaña *Historial* de los paneles de detalle
