@@ -253,6 +253,24 @@ async def verify_import(task_id: str, service: dict, source: str, ids: dict):
     copy_tasks.update(task_id, status="import_timeout", detail=f"timeout después de {config.IMPORT_POLL_TIMEOUT}s — verifica manualmente")
 
 
+async def _client_delete(matched_hash: str, delete_files: bool) -> dict:
+    """Remove a download from aMuTorrent through its own WS API.
+
+    Shared by `delete_torrent` and `cancel_download`: both end with "the
+    client no longer holds this download" and differ only on the files.
+    """
+    from infrastructure.arr_client import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
+    client, inst = await amu_ws_find_instance(matched_hash)
+    return await amu_ws(
+        "batchDelete",
+        {
+            "items": _amu_ws_items_fn(matched_hash, client=client or "amule", instance_id=inst),
+            "deleteFiles": delete_files,
+            "source": "downloads",
+        },
+    )
+
+
 async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) -> dict:
     from config import EXPECTED_CATEGORY, path_is_allowed
 
@@ -334,20 +352,43 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
     elif action == "delete_torrent":
         if not matched_hash:
             return {"ok": False, "steps": [{"target": "amutorrent", "ok": False, "detail": "sin hash correlacionado"}]}
-        delete_files = bool(payload.get("delete_files"))
-        from infrastructure.arr_client import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
-        client, inst = await amu_ws_find_instance(matched_hash)
         steps.append({
             "target": "amutorrent",
-            **await amu_ws(
-                "batchDelete",
-                {
-                    "items": _amu_ws_items_fn(matched_hash, client=client or "amule", instance_id=inst),
-                    "deleteFiles": delete_files,
-                    "source": "downloads",
-                },
-            ),
+            **await _client_delete(matched_hash, bool(payload.get("delete_files"))),
         })
+
+    elif action == "cancel_download":
+        # Cancel an in-flight download: BOTH halves, or the lie shows up
+        # later. The arr first — with removeFromClient=True only when the
+        # client hash is unknown, because then the arr is the only handle
+        # that can stop it; with the hash WE stop it in the next step, and
+        # the arr must keep the entry long enough for that (its removal
+        # with removeFromClient=False just stops the tracking). Client-only
+        # would leave the arr retrying a ghost; arr-only would leave the
+        # torrent running.
+        if not matched_hash and not queue_id:
+            return {
+                "ok": False,
+                "steps": [{"target": "?", "ok": False, "detail": "sin hash de cliente ni cola: nada que cancelar"}],
+            }
+        if queue_id:
+            if not service:
+                steps.append({"target": source or "?", "ok": False, "detail": "servicio desconocido"})
+            else:
+                from infrastructure.arr_client import arr_delete_queue
+                steps.append({
+                    "target": source,
+                    **await arr_delete_queue(
+                        session, service, int(queue_id),
+                        blocklist=False,
+                        remove_from_client=not matched_hash,
+                    ),
+                })
+        if matched_hash:
+            steps.append({
+                "target": "amutorrent",
+                **await _client_delete(matched_hash, True),
+            })
 
     elif action == "fix_path_mapping":
         if not service:

@@ -671,3 +671,106 @@ class TestForeignDestinationFollowsRadarrsPattern:
         assert result["ok"] is True, result
         assert (dest_root / "Película (2020) Bluray-1080p.mkv").exists()
         assert "calidad descargada" in task["detail"]
+
+
+class TestCancelDownload:
+    """Cancel an in-flight download: BOTH sides, or the lie shows up later."""
+
+    def test_cancels_an_arr_tracked_download_on_both_sides(self, monkeypatch):
+        removals: list[dict] = []
+        deletes: list[dict] = []
+
+        async def fake_client_delete(matched_hash, delete_files):
+            deletes.append({"hash": matched_hash, "delete_files": delete_files})
+            return {"ok": True, "detail": "borrado del cliente"}
+
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(
+            clients, "arr_delete_queue",
+            _delete_recorder(removals, {"ok": True, "detail": "fuera de la cola"}),
+        )
+        monkeypatch.setattr(copy_engine, "_client_delete", fake_client_delete)
+
+        result = asyncio.run(do_action(
+            None, "cancel_download",
+            {"source": "radarr", "matched_hash": "abc123", "ids": {"queue_id": 42}},
+        ))
+
+        assert result["ok"] is True
+        # We stop the client ourselves in the next step, so the arr must not
+        # ALSO tell the client to drop it out from under us.
+        assert removals[0]["remove_from_client"] is False
+        assert deletes == [{"hash": "abc123", "delete_files": True}]
+
+    def test_a_direct_add_has_no_arr_side_and_still_cancels(self, monkeypatch):
+        removals: list[dict] = []
+        deletes: list[dict] = []
+
+        async def fake_client_delete(matched_hash, delete_files):
+            deletes.append({"hash": matched_hash, "delete_files": delete_files})
+            return {"ok": True, "detail": "borrado del cliente"}
+
+        monkeypatch.setattr(
+            clients, "arr_delete_queue",
+            _delete_recorder(removals, {"ok": True, "detail": "no debería llamarse"}),
+        )
+        monkeypatch.setattr(copy_engine, "_client_delete", fake_client_delete)
+
+        result = asyncio.run(do_action(
+            None, "cancel_download",
+            {"source": "radarr", "matched_hash": "abc123", "ids": {}},
+        ))
+
+        assert result["ok"] is True
+        assert removals == [], "a B-10 direct add was never in an arr queue"
+        assert deletes == [{"hash": "abc123", "delete_files": True}]
+
+    def test_without_a_client_hash_the_arr_stops_it_for_us(self, monkeypatch):
+        removals: list[dict] = []
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(
+            clients, "arr_delete_queue",
+            _delete_recorder(removals, {"ok": True, "detail": "quitado"}),
+        )
+        monkeypatch.setattr(
+            copy_engine, "_client_delete",
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError("no hash — nothing to address in the client")),
+        )
+
+        result = asyncio.run(do_action(
+            None, "cancel_download",
+            {"source": "radarr", "ids": {"queue_id": 7}},
+        ))
+
+        assert result["ok"] is True
+        assert removals[0]["remove_from_client"] is True, "the arr is the only handle left"
+
+    def test_nothing_to_cancel_is_anhonest_error(self, monkeypatch):
+        result = asyncio.run(do_action(None, "cancel_download", {"source": "radarr", "ids": {}}))
+
+        assert result["ok"] is False
+        assert "nada que cancelar" in result["steps"][0]["detail"]
+
+    def test_a_failed_arr_side_fails_the_action_even_if_the_client_obeys(self, monkeypatch):
+        deletes: list[dict] = []
+
+        async def fake_client_delete(matched_hash, delete_files):
+            deletes.append(matched_hash)
+            return {"ok": True, "detail": "borrado"}
+
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(
+            clients, "arr_delete_queue",
+            _delete_recorder([], {"ok": False, "detail": "HTTP 500: boom"}),
+        )
+        monkeypatch.setattr(copy_engine, "_client_delete", fake_client_delete)
+
+        result = asyncio.run(do_action(
+            None, "cancel_download",
+            {"source": "radarr", "matched_hash": "abc", "ids": {"queue_id": 9}},
+        ))
+
+        # all steps must be ok: a half-cancelled download is a ghost on one
+        # side or the other, and the operator has to see that it failed.
+        assert result["ok"] is False
+        assert deletes == ["abc"], "the client side still ran — the report is what must be honest"

@@ -77,6 +77,9 @@ function actionsFor(trace: Trace): ActionKey[] {
       break
     case 'downloading':
       if (hasHash) list.push(trace.paused ? 'resume' : 'pause')
+      // Pause is reversible; cancelling is the one that stops the download
+      // for good — and until now nothing on a downloading trace could.
+      if (hasHash) list.push('cancel_download')
       if (hasTarget) list.push('research')
       break
     case 'sent':
@@ -90,6 +93,7 @@ function actionsFor(trace: Trace): ActionKey[] {
 function optionsFor(action: ActionKey, trace: Trace): ActionOptions | null {
   if (action === 'remove_queue') return { blocklist: true }
   if (action === 'delete_torrent') return { delete_files: true }
+  if (action === 'cancel_download') return { delete_files: true }
   if (action === 'fix_path_mapping') return derivePathMapping(trace)
   if (action === 'copy_files') {
     const src = trace.torrent?.content_path || trace.torrent?.current_path || trace.queue?.output_path || ''

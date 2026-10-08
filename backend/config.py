@@ -81,6 +81,12 @@ ACTIONS: dict[str, dict] = {
         "destructive": True,
         "scope": "amutorrent",
     },
+    "cancel_download": {
+        "label": "Cancelar descarga",
+        "description": "Cancela una descarga en curso: quita la cola del arr (si la sigue) y elimina la descarga del cliente con sus ficheros parciales.",
+        "destructive": True,
+        "scope": "amutorrent+arr",
+    },
     "fix_path_mapping": {
         "label": "Mapear ruta",
         "description": "Crea un remote path mapping en Radarr/Sonarr para que el *arr pueda ver los archivos del cliente de descargas y reintenta el import.",
