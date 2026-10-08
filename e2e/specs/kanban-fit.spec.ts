@@ -15,6 +15,10 @@ import { test, expect, login } from '../fixtures/app';
  *   but the shell never wrapped, so the content was squeezed off-screen
  *   and its cards overflowed a ~20px column. Fixed with `flex-wrap`.
  *
+ * It also pins the board/tail SPLIT: four attempts at a content-driven share
+ * ended with the two halves negotiating over every pixel, so the share is now
+ * fixed at 70/30 and measured here as a formula, not a vibe.
+ *
  * Tolerance is 1px: subpixel rounding is not overflow.
  */
 
@@ -144,4 +148,42 @@ test('the view is the board and the tail — and the board alone scrolls', async
   expect(layout!.boardScrolls).toBeLessThanOrEqual(1);
   expect(layout!.colBodies).toBeGreaterThan(0);
   expect(layout!.colBodiesScrolling).toBe(layout!.colBodies);
+});
+
+test('the board and the tail hold a fixed 70/30 split', async ({ app }) => {
+  await login(app, 'test-key');
+  await expect(app.getByRole('heading', { name: 'Resumen del sistema' })).toBeVisible();
+
+  await app.goto('/seguimiento');
+  await expect(app.locator('.sg-ops')).toBeVisible();
+
+  // The operator's calc, pinned as a formula. `.sg` fills the content box
+  // (no topbar, no page padding), so its height IS the area the two halves
+  // divide. The gap is split across the two bases (half each), which is the
+  // only way halves + gap close the box exactly — a content-driven share is
+  // what made the previous four attempts negotiate over every pixel.
+  //
+  // The empty state takes the board's share (flex-grow fills what the fixed
+  // tail leaves), so the same formula holds with or without cards.
+  const split = await app.evaluate(() => {
+    const sg = document.querySelector('.sg');
+    const board = document.querySelector('.sg-board') ?? document.querySelector('.sg-empty');
+    const ops = document.querySelector('.sg-ops');
+    if (!sg || !board || !ops) return null;
+    return {
+      sg: sg.getBoundingClientRect().height,
+      board: board.getBoundingClientRect().height,
+      ops: ops.getBoundingClientRect().height,
+      gap: parseFloat(getComputedStyle(sg).rowGap) || 0,
+    };
+  });
+
+  expect(split).not.toBeNull();
+  const half = split!.gap / 2;
+  // The exact bases the CSS encodes: 70%/30% of the box, minus half the gap.
+  expect(Math.abs(split!.board - (0.7 * split!.sg - half))).toBeLessThanOrEqual(FIT);
+  expect(Math.abs(split!.ops - (0.3 * split!.sg - half))).toBeLessThanOrEqual(FIT);
+  // And they close the box — the two halves + the gap = the whole content
+  // area, so the page cannot scroll however long either list grows.
+  expect(Math.abs(split!.board + split!.ops + split!.gap - split!.sg)).toBeLessThanOrEqual(FIT);
 });

@@ -6,10 +6,9 @@
   gap: 14px;
   /* Fill the visible content area EXACTLY: a floor (min-height) would let
      the board's content grow the page — the tail would push the board out
-     and the page would scroll again. With a fixed height the board flexes
-     into whatever is left above the tail, and the board alone scrolls.
-     100% resolves against the content box, so the page padding stays
-     outside the layout. */
+     and the page would scroll again. With a fixed height the children are
+     sized against this box, which already excludes the topbar and the page
+     padding — the operator's calc(70vh − topbar), done by the layout. */
   height: 100%;
 }
 
@@ -21,8 +20,10 @@
   gap: 14px;
   /* Stretch (the default): every column is FULL height of the board — the
      box is drawn first and the cards fill it, until the column's own body
-     starts scrolling. The board itself never scrolls: each column does. */
-  flex: 1 1 auto;
+     starts scrolling. The board itself never scrolls: each column does.
+     The 70/30 split (operator's calc): the basis eats half the gap so the
+     two halves + gap total exactly 100% — no page scroll, ever. */
+  flex: 0 0 calc(70% - 7px);
   min-height: 0;
 }
 
@@ -274,15 +275,10 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 16px;
-  /* The tail is a tail: it may shrink and scroll inside its own cap, and
-     the cap itself grew 75% at the operator's request (38 → 66.5) — the
-     kanban still fills every pixel the tail leaves, column by column.
-     The FLOOR is the operator's next request ("el doble que ahora"):
-     content-driven height left the band looking starved, so it holds at
-     least 55% and grows to the cap as the queue does. */
-  flex: 0 1 auto;
-  min-height: 55%;
-  max-height: 66.5%;
+  /* The tail is a fixed 30% of the content area (the operator's calc: roughly
+     double the ~16% it showed content-driven, without starving the board).
+     Its lists scroll INSIDE the share; they never resize the split. */
+  flex: 0 0 calc(30% - 7px);
   overflow-y: auto;
 }
 
@@ -411,7 +407,8 @@
 /* ── Estados ── */
 
 .sg-empty {
-  /* In-page empty states stretch so the tail still sits at the bottom. */
+  /* The empty state takes the BOARD's 70% share: grow fills exactly what the
+     fixed 30% tail leaves, so the split holds with or without cards. */
   flex: 1 0 auto;
   font-size: 13px;
   color: var(--text-dim);
