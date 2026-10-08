@@ -750,6 +750,17 @@ tests se fueron con la UI (git los guarda). La pestaña *Historial* de los panel
 (Películas/Series) es OTRA cosa — el registro de la propia fila, que jamás llamó a ese endpoint —
 y no se toca.
 
+**El reparto se fija en 70/30** (2026-10-08, pedido): el suelo/techo de la banda (55%/66,5%)
+seguía negociando con el tablero por cada pixel — cuatro intentos y el board siempre reclamaba
+lo que el tail soltaba. El operador propuso el reparto fijo: *«sg-board en `calc(70vh − topbar)`
+y sg-ops en `calc(30vh − topbar)`»*. Queda **70% tablero / 30% banda**, y ya no depende del
+contenido: las listas de la banda scrollean dentro de su 30% y no reventan el reparto. El
+`height: 100%` del contenedor resuelve contra la caja de contenido (sin topbar ni padding de
+página) — o sea que el `%` es ese mismo calc, hecho por el layout — y las bases restan medio
+gap (`calc(70% - 7px)` + `calc(30% - 7px)` + `14px` = 100% exacto): **la página no scrollea
+por construcción**. Con el board vacío, el empty state estira hasta la misma cuota del 70%,
+así que el reparto se mantiene con o sin cards.
+
 **Cómo se hizo el retiro** (rastro para la fase 2):
 
 - La vista nueva **nació de la vieja**: fase 1 primero, retiro después — la regla «hasta que
