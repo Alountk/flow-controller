@@ -17,7 +17,7 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | F-02 | RAU-130 | C-07 | RAU-137 |
 | C-08 | RAU-138 |  |  |
 
-> **Ciclo 2026-10-07**: `B-08`, `C-09`…`C-11` y el nuevo alcance de `F-09` están **solo en este
+> **Ciclo 2026-10-07**: `B-08`…`B-11`, `C-09`…`C-11`, `F-12`/`F-13` y el nuevo alcance de `F-09` están **solo en este
 > documento** — aún sin issue en Linear (la frase de arriba solo cubre los anteriores).
 
 ---
@@ -35,6 +35,7 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | **B-08** | **Remanente latente de B-01(b)**: `arr_client.py` hacía `os.path.isdir(path)` con la **ruta cruda del arr**, sin `host_path()` — `grep` confirmó **0 usos** en el fichero, mientras `copy_engine.py` sí traduce. Si Radarr reporta `/data/...`, una película sana se clasifica `status-error` («✗ Ruta no encontrada»). | Media | Registrado en B-01 como *"otra causa, sin confirmar en producción"*; verificado en código el 2026-10-07 | ✅ 2026-10-07 — `host_path` vive ahora en `config.py` (junto a `_VOLUME_MAP`, re-exportado desde `traces`); los chequeos de disco traducen, la ruta expuesta se queda cruda. 4 tests RED→GREEN en `tests_library_paths.py` |
 | **B-09** | Las cards del kanban hacían **overflow y no se ajustaban al ancho** — en la vista y en el prototipo. Dos causas medidas: (a) en `/seguimiento` las tarjetas son grid items cuyo mínimo automático es su min-content, y un path con `nowrap` dentro inflaba toda la tarjeta (**medido: 860,5px de tarjeta en una columna de 201,5px**, en los 3 anchos probados); (b) en los 4 prototipos, a ≤900px el sidebar pasaba a ancho completo pero `.shell` no envolvía — el contenido salía por la derecha sobre una columna de ~20px. | Media | Rojo/verde medido con Playwright en ambas superficies, antes y después | ✅ `minmax(0,1fr)` + `min-width: 0` · `.shell { flex-wrap }` · guard e2e `kanban-fit.spec.ts` (fase stub del CI) + fixtures con path largo |
 | **B-10** | Un grab con **destino fuera de la biblioteca** (4K/3D) seguía siendo de Radarr **de punta a punta**: al completarse, su *completed-download handling* lo importaba y la mejor calidad **sustituía el fichero de la biblioteca** (incidente: el 4K se comió el 1080p). El desacople seguro existía (`copy_engine` lo quita de la cola antes de copiar) pero solo corre al despachar la copia del **barrido manual, tras30 min de gracia** — tarde de sobra. | **Alta** | Diagnóstico con file:line el 2026-10-07; sustitución confirmada en producción | ✅ **Opción B**: el grab con destino extranjero va **directo a aMuTorrent** con categoría propia `flow` (Torznab propio + `torrents/add`): el arr nunca lo ve, nunca lo importa. `own_grabs` gana `direct/client_name/client_hash` (v9); el lote con destino ajeno se rechaza explícitamente; y **el barrido ve los direct-add**: `build_traces` sintetiza su traza (join exacto por nombre/hash del cliente) y `copy_files` acepta `arr_untracked` — sin cola que quitar, la garantía se cumple por construcción |
+| **B-11** | La búsqueda directa del enlace fallaba: la query era el **título completo** (expira >40 s — «No encontré…» era un timeout disfrazado) y el match por **título** es inseguro: el mismo título existe a 5,8 GB (la release) y a 13 KB (su nfo). | Media | Medido contra el indexador real 2026-10-07: «Name Year» responde ~30 s con 112 items | ✅ **PR #168** — query corta (`_search_query`) + unión por **guid** (exacto → base del guid con sufijo → tamaño como desempate); `ed2k://`/`magnet:` ya son el enlace; un `https://` es otro indexador y se rechaza diciéndolo; el timeout dice «no respondió» |
 
 **B-07 resuelto** — PRs **#128** (`8919868`) y **#129** (`078997f`). Tres fallos, una causa cada uno:
 
@@ -821,6 +822,18 @@ y fuera el combo «Destino (anulación manual)» y el botón batch «⬇️ Desc
 | Tras ella | el backend ya decide solo: destino extranjero → alta directa (B-10) — los botones envían `destination` + `title` + `library` (flag explícito: sin él, la derivación reenviaría una fila 2160p a `path_4k` aunque se pulsara → Biblioteca) |
 
 **Entregado 2026-10-07**: los 3 botones por fila (el sugerido resaltado, carpeta no configurada deshabilitada), fuera el combo, fuera el botón y la selección de lote, fuera «Acción principal»; el aviso tras el grab muestra el `detail` del backend (distingue «directa» de «encolada»). Tests migrados (4 ficheros) + e2e `flow-release-search` migrado. El backend gana el flag `library` (ruta y 10 tests del portón).
+
+### F-13 — Feedback de grab: estado en curso y toasts · **Pequeña** · ✅ *Entregada*
+
+Pedida tras el primer grab directo: «cuando le das al grab no tienes feedback… debería tener
+información para el usuario» + el estudio *sin dependencias o con librería*.
+
+| Decisión | Detalle |
+|---|---|
+| **Sin dependencias** (estudio) | react-hot-toast (~8 kB) y sonner (~4 kB) compran promises, swipe y rich markup que esta app no necesita: el contrato real es una pila de mensajes con tono, auto-dismiss y anuncio accesible → ~90 líneas sobre `useSyncExternalStore`. Dependencias runtime intactas: react, react-dom, @tanstack/react-query |
+| Durante el grab | La caja de estado se dibuja en el paso `grabbing` y dice lo que pasa y por qué puede tardar (la resolución ED2K medida tarda ~30-60 s) |
+| Resultado | **Toasts** en éxito y error: `ToastViewport` único en App (`role=status`, aria-live polite), errores9 s / aciertos4 s, tope de4, clic para cerrar |
+| Superficies existentes | se quedan tal cual: el aviso en lista del panel y el paso *done* del diálogo — el toast es lo que llega a quien ya miraba a otro lado |
 
 ## 🔵 Recomendaciones y reglas del ciclo
 

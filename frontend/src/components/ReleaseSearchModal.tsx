@@ -9,6 +9,7 @@ import {
 import { apiFetch } from '../api/auth'
 import type { BrowseResponse, FileItem } from '../types'
 import { looksThreeD } from '../utils/threeD'
+import { toast } from '../utils/toast'
 import {
   NO_RELEASE_FILTERS,
   collectLanguages,
@@ -519,7 +520,10 @@ export function ReleaseSearchModal({
   async function handleGrab(guid: string, target: 'library' | '4k' | '3d') {
     setStep('grabbing')
     setNotice('')
-    setMessage('Descargando...')
+    // The resolve can legitimately take ~30-60 s (the ED2K search is
+    // throttled server-side, measured): silence there is the experience the
+    // user reported. Say what is happening and how long it may take.
+    setMessage('Enviando la descarga al servidor… el indexador de aMule puede tardar hasta un minuto.')
     const release = releases.find(r => r.guid === guid)
     const destination = target === '4k' ? path4k : target === '3d' ? path3d : undefined
     const is3d = target === '3d' ? true : release ? isThreeD(release) : undefined
@@ -541,6 +545,10 @@ export function ReleaseSearchModal({
       // la verá" vs "Release encolado" — so the ack shows it instead of a
       // fixed phrase that would hide which one happened.
       const ack = result.detail || 'Descarga iniciada. Revisa la cola de descargas.'
+      // Ambient confirmation (F-13): the surfaces above stay where they are
+      // (the panel's in-list ack, the dialog's done step) — the toast is what
+      // reaches the operator who has already looked away.
+      toast(ack, 'ok')
       if (inPanel) {
         // PANEL: the list is the product. The results the operator still
         // needs stay on screen, the ack rides above them, and nothing cached
@@ -555,6 +563,7 @@ export function ReleaseSearchModal({
     } else {
       setStep('error')
       setMessage(result.detail)
+      toast(result.detail, 'error')
     }
   }
 
@@ -702,7 +711,7 @@ export function ReleaseSearchModal({
   // feedback) is never rendered over a results view.
   const resultsNotice = step === 'results' ? notice : ''
   const showStatus =
-    step === 'error' || step === 'done' || step === 'adding' || resultsNotice !== ''
+    step === 'error' || step === 'done' || step === 'adding' || step === 'grabbing' || resultsNotice !== ''
   const statusClass =
     step === 'error' ? 'status-error' : step === 'done' || resultsNotice !== '' ? 'status-ok' : ''
 
