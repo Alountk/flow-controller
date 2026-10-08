@@ -78,6 +78,11 @@ class _StubSession:
 
     def _resolve(self, url: str) -> _StubResponse:
         self.calls.append((url, {}))
+        # An Exception payload IS the failure: transport errors (timeouts,
+        # refused connections) reach the caller the way aiohttp raises them.
+        for fragment, (status, payload) in self.routes.items():
+            if fragment in url and isinstance(payload, Exception):
+                raise payload
         for fragment, (status, payload) in self.routes.items():
             if fragment in url:
                 return _StubResponse(status, payload)

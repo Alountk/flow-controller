@@ -39,13 +39,17 @@ def _post(**body):
     return client.post("/api/calendar/grab", json=payload).json()
 
 
-def _foreign_patches(*, link=ED2K_LINK, add_result=None, roots=None):
-    """The standard arrangement: readable roots, a resolvable link, a client that accepts."""
+def _foreign_patches(*, link=ED2K_LINK, resolved=None, add_result=None, roots=None):
+    """The standard arrangement: readable roots, a resolvable link, a client that accepts.
+
+    `resolved` mirrors amutorrent_search_link's contract: a dict with `ok`.
+    """
     roots = ["/mnt/storage/movies"] if roots is None else roots
     add_result = add_result or {"ok": True, "detail": "Descarga añadida (categoría flow)", "category": "flow"}
+    search_result = resolved if resolved is not None else {"ok": True, "link": link, "detail": "query «q»"}
     return (
         patch(ROOTS, new=AsyncMock(return_value=roots)),
-        patch(SEARCH, new=AsyncMock(return_value=link)),
+        patch(SEARCH, new=AsyncMock(return_value=search_result)),
         patch(ADD, new=AsyncMock(return_value=add_result)),
         patch(GRAB, new=AsyncMock(return_value={"ok": True, "detail": "encolado"})),
         patch(RECORD, new=MagicMock()),
@@ -74,6 +78,9 @@ def test_a_foreign_destination_goes_straight_to_the_client():
     roots.assert_awaited_once()
     search.assert_awaited_once()
     assert search.await_args.args[1] == "Your.Name.2016.1080p.BluRay.x264-GRP"
+    # The join key is the RELEASE's guid (and its size), never a title guess.
+    assert search.await_args.kwargs["guid"] == "g1"
+    assert search.await_args.kwargs["size"] == 0
     add.assert_awaited_once()
     grab.assert_not_awaited()  # the arr must never be told about this download
     assert body["ok"] is True and body["direct"] is True
@@ -110,7 +117,16 @@ def test_unreadable_roots_fail_closed_to_the_arr():
 
 
 def test_a_missing_link_sends_nothing_anywhere():
-    roots_p, search_p, add_p, grab_p, record_p = _foreign_patches(link=None)
+    roots_p, search_p, add_p, grab_p, record_p = _foreign_patches(
+        resolved={
+            "ok": False,
+            "detail": (
+                "No encontré «Never.Seen.2024.2160p» en el indexador de aMule; "
+                "no se envió nada al arr. Elige Destino = Biblioteca para "
+                "descargarlo con Radarr/Sonarr."
+            ),
+        }
+    )
     with roots_p, search_p, add_p as add, grab_p as grab, record_p as record:
         body = _post(destination=FOREIGN, title="Never.Seen.2024.2160p")
 

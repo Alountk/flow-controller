@@ -534,6 +534,7 @@ export function ReleaseSearchModal({
       is3d,
       release?.title,
       target === 'library' || undefined,
+      release?.size || undefined,
     )
     if (result.ok) {
       // The backend's own detail distinguishes the paths — "directa: el arr no
