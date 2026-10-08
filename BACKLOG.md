@@ -728,6 +728,15 @@ descarga y de cada operación, y en una fase posterior acciones sobre ellas:
 
 **Disco queda fuera de este ciclo** — sigue ⏸ como hasta aquí; este apartado solo toca Trazabilidad.
 
+**El lateral «Cola de operaciones» también se retira** (2026-10-08, pedido): duplicaba la banda
+de esta vista y su doble polling — `/api/queue` cada 2-10 s + `/api/downloads` cada 2-10 s,
+montado en **todas** las páginas — era justo el ruido que estorbaba al debug. Sus dos deberes
+se mudan a la banda: la **cancelación** de operaciones activas (el × de la fila) y la
+**invalidación de listas** cuando una operación termina de importar (ahora solo con esta vista
+abierta — la recarga por foco/navegación cubre el resto; coste asumido). **Coste aceptado**: la
+lista de descargas con velocidad/ETA del cliente desaparece de la UI (el kanban lleva progreso y
+etapa; el endpoint `/api/downloads` sigue existiendo).
+
 **Cómo se hizo el retiro** (rastro para la fase 2):
 
 - La vista nueva **nació de la vieja**: fase 1 primero, retiro después — la regla «hasta que

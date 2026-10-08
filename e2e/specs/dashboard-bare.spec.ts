@@ -29,9 +29,6 @@ test('shows the honest empty state and gates the arr-dependent pages', async ({ 
   await expect(app.getByRole('link', { name: /Disco/ })).toBeVisible();
   await expect(app.getByRole('link', { name: /Configuración/ })).toBeVisible();
 
-  // Queue sidebar: honest empties, no fake activity.
-  // These two strings sit in plain divs with no ARIA role, so no role
-  // selector can reach them without changing production markup.
-  await expect(app.getByText('Sin operaciones', { exact: true })).toBeVisible();
-  await expect(app.getByText('Sin descargas', { exact: true })).toBeVisible();
+  // The queue sidebar is retired (its polling was the noise; the operations
+  // band lives on /seguimiento now) — its two empty states went with it.
 });

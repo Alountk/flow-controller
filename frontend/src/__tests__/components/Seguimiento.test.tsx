@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Seguimiento } from '../../components/Seguimiento'
-import { queueStatus } from '../../api/files'
+import { queueCancel, queueStatus } from '../../api/files'
 import type { ActionsResponse, Trace, TraceResponse } from '../../types'
 
 /**
@@ -17,9 +17,10 @@ import type { ActionsResponse, Trace, TraceResponse } from '../../types'
  * carried live on the card — retiring the old page loses none of them.
  */
 
-vi.mock('../../api/files', () => ({ queueStatus: vi.fn() }))
+vi.mock('../../api/files', () => ({ queueStatus: vi.fn(), queueCancel: vi.fn() }))
 
 const queueStatusMock = vi.mocked(queueStatus)
+const queueCancelMock = vi.mocked(queueCancel)
 
 const OPEN_ACTIONS: ActionsResponse = { actions: [], safe_mode: false, available: [] }
 
@@ -359,5 +360,67 @@ describe('the operations band', () => {
     expect(screen.getByText('Godzilla Minus One (2023)')).toBeInTheDocument()
     expect(screen.getByText('hecha')).toBeInTheDocument()
     expect(queueStatusMock).toHaveBeenCalled()
+  })
+})
+
+describe('the operations tail carries the retired sidebar\'s duties', () => {
+  const runningOp = {
+    id: 'op-9',
+    type: 'copy',
+    name: 'Movie (2024)',
+    src: '/src/movie',
+    dst: '/dst/movie',
+    status: 'running',
+    detail: null,
+    progress: 40,
+    copied_bytes: 400,
+    total_bytes: 1000,
+    files_done: 1,
+    files_total: 2,
+    import_status: '',
+  }
+
+  it('cancels an active operation from its row', async () => {
+    queueStatusMock.mockResolvedValue({ queue: [runningOp], completed: [], running: true })
+
+    renderView(resp([trace()]))
+
+    const cancel = await screen.findByTitle('Cancelar operación')
+    fireEvent.click(cancel)
+
+    await waitFor(() => expect(queueCancelMock).toHaveBeenCalled())
+    // react-query passes its own context as a second argument.
+    expect(queueCancelMock.mock.calls[0][0]).toBe('op-9')
+  })
+
+  it('offers no cancel on a finished row', async () => {
+    queueStatusMock.mockResolvedValue({ queue: [], completed: [{ ...runningOp, status: 'done', import_status: 'imported' }], running: false })
+
+    renderView(resp([trace()]))
+
+    await screen.findByText('Movie (2024)')
+    expect(screen.queryByTitle('Cancelar operación')).toBeNull()
+  })
+
+  it('refreshes the lists when an operation reports its import finished', async () => {
+    // The effect the QueueSidebar carried shell-wide: without it the
+    // grabbed-marks the lists draw go stale after our own copy imports.
+    queueStatusMock.mockResolvedValue({
+      queue: [],
+      completed: [{ ...runningOp, status: 'done', import_status: 'imported' }],
+      running: false,
+    })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const spy = vi.spyOn(client, 'invalidateQueries')
+
+    render(
+      <QueryClientProvider client={client}>
+        <Seguimiento data={resp([trace()])} loading={false} actions={OPEN_ACTIONS} onActionDone={() => {}} />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith({ queryKey: ['wanted-movies-infinite'] }),
+    )
   })
 })
