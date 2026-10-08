@@ -997,50 +997,140 @@ async def amutorrent_add_download(
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
 
-async def amutorrent_search_link(session: aiohttp.ClientSession, title: str) -> str | None:
-    """The ED2K/magnet link behind `title`, from aMuTorrent's own Torznab.
+def _search_query(title: str) -> str:
+    """The query an ED2K network can answer — measured, not assumed.
 
-    The arr's release payload carries only its guid — the link lives in the
-    indexer that produced the release, so we ask the same Torznab the arr
-    asked, and match the item on guid first (it IS the indexer's id) then on
-    the exact title, case-insensitively. No fuzzy match: a wrong link is a
-    wrong download, and "not found" is an honest answer the caller shows.
-
-    ED2K searches are throttled server-side (~5 s), hence the ×4 timeout; a
-    repeat query is normally served from the client's cache.
+    The full release name times out (>40 s measured against the live
+    indexer); "Name Year" answers in ~30 s with the right items — the same
+    shape Radarr itself queries indexers with. So: the head before the first
+    parenthetical, cut at the first quality token, dots to spaces, the year
+    appended when the title carries one, and a token cap so a pathological
+    name cannot rebuild the original monster.
     """
-    if not AMUTORRENT_URL or not title:
-        return None
-    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 4)
+    head = re.split(r"[()]", title, maxsplit=1)[0]
+    head = re.split(
+        r"\.(?=(?:1080p|720p|2160p|4k|HDTV|WEB-?DL|BluRay|BDRip|HDRip|VHS)\b)",
+        head,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    tokens = head.replace(".", " ").split()
+    year = re.search(r"\(((?:19|20)\d{2})\)", title)
+    if year:
+        tokens.append(year.group(1))
+    return " ".join(tokens[:8]).strip()
+
+
+async def amutorrent_search_link(
+    session: aiohttp.ClientSession, title: str, *, guid: str = "", size: int = 0
+) -> dict:
+    """The download link behind a release: resolved, or an honest refusal.
+
+    Three shapes of `guid` (measured against the real release lists):
+
+    - ``ed2k://`` / ``magnet:`` — the guid IS the download link; nothing to
+      search, nothing to match;
+    - ``https://…`` — a details page from ANOTHER indexer (Prowlarr's knaben
+      entries look exactly like this): this app can only fetch links from
+      aMule's own Torznab, so the answer is a refusal that says so;
+    - anything else (the indexer's hash id) — ask aMule's Torznab with a
+      SHORT query (``_search_query``) and join on the item's ``guid``:
+      exact first, then the base of a Radarr-suffixed guid
+      (``<hash>-<suffix>``), disambiguated by enclosure size when several
+      items share the base.
+
+    Title matching is deliberately ABSENT: the same title exists at 5.8 GB
+    and at 13 KB (the release and its sidecar nfo) — only the id can pick
+    the right one. ED2K searches are throttled server-side and measured at
+    ~30 s, hence the ×12 timeout.
+    """
+    if guid.startswith("ed2k://") or guid.startswith("magnet:"):
+        return {"ok": True, "link": guid, "detail": "link del propio guid"}
+    if guid.startswith(("http://", "https://")):
+        return {
+            "ok": False,
+            "detail": (
+                "Este release viene de otro indexador (su guid es una página web, "
+                "no un enlace): el indexador de aMule no lo tiene. Elige "
+                "Destino = Biblioteca para descargarlo con Radarr/Sonarr."
+            ),
+        }
+    if not AMUTORRENT_URL:
+        return {"ok": False, "detail": "aMuTorrent no está configurado"}
+    query = _search_query(title)
+    if not query:
+        return {"ok": False, "detail": "el título no deja ninguna consulta que lanzar"}
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 12)
     try:
         async with session.get(
             f"{AMUTORRENT_URL}/indexer/amule/api",
-            params={"t": "search", "q": title, "apikey": AMUTORRENT_API_KEY},
+            params={"t": "search", "q": query, "apikey": AMUTORRENT_API_KEY},
             timeout=timeout,
         ) as resp:
             if resp.status != 200:
                 log.warning("amutorrent_search_link status=%s", resp.status)
-                return None
+                return {"ok": False, "detail": f"el indexador de aMule respondió HTTP {resp.status}"}
             text = await resp.text()
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         log.warning("amutorrent_search_link: %s", exc)
-        return None
+        return {
+            "ok": False,
+            "detail": (
+                f"el indexador de aMule no respondió ({type(exc).__name__}); "
+                "puede estar buscando en ED2K — inténtalo de nuevo o elige "
+                "Destino = Biblioteca"
+            ),
+        }
     try:
         root = ElementTree.fromstring(text)
     except ElementTree.ParseError:
         log.warning("amutorrent_search_link: respuesta no es XML")
-        return None
-    want = title.strip().casefold()
+        return {"ok": False, "detail": "el indexador de aMule devolvió algo que no es XML"}
+
+    items = []
     for item in root.iter("item"):
-        item_title = (item.findtext("title") or "").strip().casefold()
-        item_guid = (item.findtext("guid") or "").strip()
         enclosure = item.find("enclosure")
         link = enclosure.get("url") if enclosure is not None else None
-        if not link and item_guid.casefold().startswith(("ed2k://", "magnet:")):
-            link = item_guid
-        if link and (item_guid.casefold() == want or item_title == want):
-            return link
-    return None
+        item_guid = (item.findtext("guid") or "").strip()
+        length = 0
+        try:
+            length = int(enclosure.get("length") or 0) if enclosure is not None else 0
+        except ValueError:
+            length = 0
+        if link:
+            items.append((item_guid, length, link))
+    if not items:
+        return {
+            "ok": False,
+            "detail": (
+                f"el indexador de aMule no devolvió resultados para «{title}»; "
+                "elige Destino = Biblioteca para descargarlo con Radarr/Sonarr"
+            ),
+        }
+
+    want = (guid or "").strip()
+    base = want.rsplit("-", 1)[0] if want else ""
+    exact = [it for it in items if it[0] == want]
+    candidates = exact or (
+        [it for it in items if base and it[0] == base] if want and "-" in want else []
+    )
+    if not candidates:
+        return {
+            "ok": False,
+            "detail": (
+                f"No encontré «{title}» en el indexador de aMule; no se envió nada "
+                "al arr. Elige Destino = Biblioteca para descargarlo con Radarr/Sonarr."
+            ),
+        }
+    if len(candidates) > 1 and size:
+        sized = [it for it in candidates if it[1] == size]
+        if sized:
+            candidates = sized
+    # `candidates` already prefers the exact guid over base matches and is
+    # narrowed by size above; the first of THOSE is the answer. (Picking from
+    # the unfiltered exact list here once discarded the size tiebreak.)
+    chosen = candidates[0]
+    return {"ok": True, "link": chosen[2], "detail": f"query «{query}»"}
 
 
 async def amutorrent_reload_shared_dirs(session: aiohttp.ClientSession) -> dict:

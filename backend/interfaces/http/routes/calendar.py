@@ -276,6 +276,11 @@ class GrabBody(CalendarGrabRequest):
     the arr path it rides along unused; a foreign-destination grab without it
     fails loudly instead of guessing a query.
 
+    `size` is the release's byte size: when a Radarr-suffixed guid matches
+    several items sharing the base id, the enclosure size breaks the tie —
+    the same title exists at 5.8 GB and at 13 KB (the sidecar nfo), and only
+    the size can tell them apart.
+
     `library` is the explicit "the arr's own path" choice of the per-card
     buttons: without it, an absent destination still means *derived* routing
     (a 2160p release would be sent to `path_4k` even though the operator
@@ -284,6 +289,7 @@ class GrabBody(CalendarGrabRequest):
     """
     title: str = ""
     library: bool = False
+    size: int = 0
 
 
 def _inside(path: str, root: str) -> bool:
@@ -347,16 +353,15 @@ async def calendar_grab(req: GrabBody, _key: str = Depends(verify_api_key)):
                         "ok": False,
                         "detail": "Falta el título del release para resolver el enlace directo",
                     }
-                link = await amutorrent_search_link(session, req.title)
-                if not link:
-                    return {
-                        "ok": False,
-                        "detail": (
-                            f"No encontré «{req.title}» en el indexador de aMule; no se "
-                            "envió nada al arr. Elige Destino = Biblioteca para "
-                            "descargarlo con Radarr/Sonarr."
-                        ),
-                    }
+                resolved = await amutorrent_search_link(
+                    session, req.title, guid=req.guid, size=req.size
+                )
+                if not resolved.get("ok"):
+                    # No search, no add, nothing sent to the arr: the refusal
+                    # says which of the three reasons it was (other indexer,
+                    # no answer, no match) and what to do instead.
+                    return {"ok": False, "detail": resolved.get("detail") or "no se pudo resolver el enlace"}
+                link = resolved["link"]
                 added = await amutorrent_add_download(session, link)
                 if not added.get("ok"):
                     return {

@@ -140,6 +140,7 @@ export async function grabCalendarRelease(
   is3d?: boolean,
   title?: string,
   library?: boolean,
+  size?: number,
 ): Promise<{ ok: boolean; detail: string }> {
   // A rejected fetch (offline, aborted, DNS) must surface as a failed result,
   // not as an unhandled rejection that leaves the modal stuck on "Descargando".
@@ -157,6 +158,9 @@ export async function grabCalendarRelease(
   // Explicit "the arr's own path": without the flag the server would still
   // DERIVE a 2160p release to path_4k and quietly override this choice.
   if (library) body.library = true
+  // The byte size is the tie-breaker when a suffixed guid matches several
+  // items with the same base id — only size tells the release from its nfo.
+  if (size) body.size = size
   let res: Response
   try {
     res = await apiFetch('/api/calendar/grab', {
