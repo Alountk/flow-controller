@@ -276,8 +276,12 @@
   padding: 14px 16px;
   /* The tail is a tail: it may shrink and scroll inside its own cap, and
      the cap itself grew 75% at the operator's request (38 → 66.5) — the
-     kanban still fills every pixel the tail leaves, column by column. */
+     kanban still fills every pixel the tail leaves, column by column.
+     The FLOOR is the operator's next request ("el doble que ahora"):
+     content-driven height left the band looking starved, so it holds at
+     least 55% and grows to the cap as the queue does. */
   flex: 0 1 auto;
+  min-height: 55%;
   max-height: 66.5%;
   overflow-y: auto;
 }

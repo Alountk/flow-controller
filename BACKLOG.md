@@ -724,7 +724,7 @@ descarga y de cada operación, y en una fase posterior acciones sobre ellas:
 |---|---|
 | **0 · Prototipos** | ✅ **Entregados y elegidos** — los 4 (`01-cronologia` · `02-kanban` · `03-consola-densa` · `04-alertas`) el 2026-10-07; **el usuario eligió `seguimiento-02-kanban`** («el estado ES la columna»). Los otros 3 quedan `discarded` con su trade-off en `prototypes/manifest.json` |
 | **1 · La vista** | ✅ **Entregada 2026-10-07** — `Seguimiento.tsx`: kanban de 4 columnas (`downloading` · `downloaded`+`importing` · `import_blocked`+`failed` · `sent`), tarjetas con píldora de fase, progreso, motivo de bloqueo, ruta y chip de categoría incorrecta, franja de resumen y banda de la cola de operaciones. Página nueva `/seguimiento` (nav entre Series y Trazabilidad, oculta sin arr). **Prerrequisito del retiro cumplido**: el barrido de auto-copia vive ahora en `AutoCopyPanel` (montado en las dos vistas) y las acciones por traza (`TraceActions`) van en cada tarjeta — retirar Trazabilidad no pierde nada. **C-11** ✅ entregado. **Sigue**: ~~el retiro~~ ✅ **hecho**: `TraceView` (página, ruta `/trazabilidad`, nav, tests) **fuera**; el barrido y las acciones ya estaban mudados. |
-| **2 · Acciones** | **Cancelar descarga** · **Ver detalles**: destino del fichero, dónde se movió después y en qué estado se quedó (a medias, bloqueado, importado…) |
+| **2 · Acciones** | **Cancelar descarga** ✅ *hecho 2026-10-08*: botón en las cards **en curso** — quita la cola del arr (si la hay) Y la descarga del cliente con sus ficheros parciales; destructivo ⇒ el modo seguro lo bloquea y pide confirmación. **Ver detalles** ⬜ pendiente — decisión abierta: panel lateral vs vista aparte |
 
 **Disco queda fuera de este ciclo** — sigue ⏸ como hasta aquí; este apartado solo toca Trazabilidad.
 
@@ -741,8 +741,9 @@ etapa; el endpoint `/api/downloads` sigue existiendo).
 pantalla. Ahora la banda lleva `max-height` con scroll propio y **cada columna del kanban tiene
 su propio scroll** — la caja de la columna ocupa toda su altura y se llena de cards hasta que
 el scroll aparece solo; el tablero y la página **nunca** scrollean. El tope de la banda pasó de
-38% a **66,5%** (+75%, pedido del operador: «que se vea un poco más»), y el **historial de
-auto-copia** deja de mostrarse en ella: irá a una página
+38% a **66,5%** (+75%) y ganó un suelo de **55%** con los últimos 10 operaciones
+terminadas a la vista (pedidos: «que se vea un poco más» y «el doble que ahora»), y el
+**historial de auto-copia** deja de mostrarse en ella: irá a una página
 futura de **solo logs** (el disparador «Revisar descargas» y su último resultado se quedan en la
 banda). El endpoint `/api/auto-copy/history` sigue existiendo para esa página; su lector y sus
 tests se fueron con la UI (git los guarda). La pestaña *Historial* de los paneles de detalle

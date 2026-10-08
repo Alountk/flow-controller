@@ -172,7 +172,7 @@ function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }
     refetchInterval: (query) => ((query.state.data?.queue?.length ?? 0) > 0 ? 2000 : 10000),
   })
   const active = data?.queue ?? []
-  const recent = (data?.completed ?? []).slice(-5).reverse()
+  const recent = (data?.completed ?? []).slice(-10).reverse()
 
   const cancelMutation = useMutation({
     mutationFn: queueCancel,

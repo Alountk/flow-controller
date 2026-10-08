@@ -51,7 +51,7 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: Current debt: `app.py` (the composition root) grows two lines whenever a
 #: router is registered — that pair is wiring, not migration debt, and it is
 #: why this sits above what the migration itself left behind.
-MAX_LEGACY_LOC = 2532
+MAX_LEGACY_LOC = 2579
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

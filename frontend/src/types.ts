@@ -109,6 +109,7 @@ export type ActionKey =
   | 'research'
   | 'pause'
   | 'resume'
+  | 'cancel_download'
   | 'remove_queue'
   | 'delete_torrent'
   | 'fix_path_mapping'
