@@ -7,8 +7,8 @@
  *   - a request that CARRIED a key the backend refused  → the key is wrong or
  *     rotated. Ask again.
  *   - a request that carried NO key and got the expected 401 → nothing is
- *     wrong. The probes that mount with the shell (`useConfiguredServices`,
- *     `useDownloads`) do this before any key exists.
+ *     wrong. The probes that mount with the shell (`useConfiguredServices`)
+ *     do this before any key exists.
  *
  * Collapsing the two is what made the dashboard render nothing after a correct
  * login: those pre-auth rejections landed after `onAuthenticated` and knocked

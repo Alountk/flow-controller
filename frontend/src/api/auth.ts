@@ -110,11 +110,11 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
 
   if (res.status === 401) {
     // A 401 on a request that carried NO key is not a rejected key — it is the
-    // expected answer to the probes that fire before one exists. The hooks
-    // `useConfiguredServices` and `useDownloads` mount with the shell, ahead of
-    // any key, and their rejections used to arrive after a successful login and
-    // knock the app straight back to the key prompt: the dashboard rendered
-    // nothing and no test of the login flow alone could see why.
+    // expected answer to the probes that fire before one exists. The hook
+    // `useConfiguredServices` mounts with the shell, ahead of any key, and its
+    // rejection used to arrive after a successful login and knock the app
+    // straight back to the key prompt: the dashboard rendered nothing and no
+    // test of the login flow alone could see why.
     const hadKey = Boolean(_apiKey)
     forgetApiKey()
     if (hadKey) _onUnauthorized?.()

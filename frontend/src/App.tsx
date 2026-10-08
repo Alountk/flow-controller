@@ -7,7 +7,6 @@ import { Topbar } from './components/Topbar'
 import { PipelineVisual } from './components/PipelineVisual'
 import { FileManager } from './components/FileManager'
 import { Prototypes } from './components/Prototypes'
-import { QueueSidebar } from './components/QueueSidebar'
 import { Settings } from './components/Settings'
 import { DiskSpace } from './components/DiskSpace'
 import { MediaMixer } from './components/MediaMixer'
@@ -359,7 +358,6 @@ function App() {
           {page === 'prototypes' && <Prototypes />}
           </div>
 
-          <QueueSidebar />
           {/* Ambient messages: one viewport for every surface that needs to say something. */}
           <ToastViewport />
         </div>

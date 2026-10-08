@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   STAGE_LABELS,
   type ActionKey,
@@ -9,7 +9,7 @@ import {
   type TraceResponse,
   type TraceStage,
 } from '../types'
-import { queueStatus, type QueueOp } from '../api/files'
+import { queueCancel, queueStatus, type QueueOp } from '../api/files'
 import { relativeTime } from '../utils/time'
 import { AutoCopyPanel } from './AutoCopyPanel'
 import { TraceActions } from './TraceActions'
@@ -28,6 +28,12 @@ import './Seguimiento.css'
  * fields `/api/trace` actually carries: no speed, no ETA — the torrent payload
  * does not carry them and a guessed number would be the first lie the screen
  * tells.
+ *
+ * The operations band is also where the retired QueueSidebar's two duties
+ * landed: cancelling an operation (the × on an active row) and noticing when
+ * an operation finished importing (the list invalidation below). The sidebar
+ * paid for both with a /api/queue poll every 2-10 s ON EVERY PAGE — the noise
+ * this consolidation removes.
  */
 
 interface Props {
@@ -157,15 +163,52 @@ function opStatusLabel(op: QueueOp): string {
 }
 
 function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }) {
+  const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: ['queue'],
     queryFn: queueStatus,
-    // Same cadence as the queue sidebar: the band and the sidebar observe the
-    // same query key, so they can never disagree about the queue's contents.
+    // The ONLY queue poll left in the app: it lives on this view alone, not
+    // mounted shell-wide like the sidebar's was.
     refetchInterval: (query) => ((query.state.data?.queue?.length ?? 0) > 0 ? 2000 : 10000),
   })
   const active = data?.queue ?? []
   const recent = (data?.completed ?? []).slice(-5).reverse()
+
+  const cancelMutation = useMutation({
+    mutationFn: queueCancel,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['queue'] })
+    },
+  })
+
+  // Moved from the retired QueueSidebar: once OUR operation reports that the
+  // arr imported (or failed to import) what it placed, the grabbed-marks the
+  // Faltantes/Biblioteca lists draw are stale. Coverage is honest: this runs
+  // while this view is open — the sidebar's answer was a shell-wide poll
+  // every 2-10 s, which is exactly the noise being removed. Focus and
+  // navigation refetches cover the rest.
+  const importedIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const completed = data?.completed ?? []
+    let shouldRefresh = false
+    for (const op of completed) {
+      if (
+        !importedIdsRef.current.has(op.id)
+        && (op.import_status === 'imported' || op.import_status === 'import_failed')
+      ) {
+        importedIdsRef.current.add(op.id)
+        shouldRefresh = true
+      }
+    }
+    if (shouldRefresh) {
+      queryClient.invalidateQueries({ queryKey: ['wanted-movies-infinite'] })
+      queryClient.invalidateQueries({ queryKey: ['wanted-episodes-infinite'] })
+      queryClient.invalidateQueries({ queryKey: ['all-movies-infinite'] })
+      queryClient.invalidateQueries({ queryKey: ['all-series-infinite'] })
+      queryClient.invalidateQueries({ queryKey: ['wanted'] })
+      queryClient.invalidateQueries({ queryKey: ['all-movies'] })
+    }
+  }, [data, queryClient])
 
   return (
     <section className="sg-ops" aria-label="Operaciones de la app">
@@ -189,6 +232,16 @@ function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }
                   : `${op.progress}%`}
               </span>
               <span className={`sg-op-status ${op.status}`}>{opStatusLabel(op)}</span>
+              {(op.status === 'running' || op.status === 'pending') && (
+                <button
+                  type="button"
+                  className="sg-op-cancel"
+                  onClick={() => cancelMutation.mutate(op.id)}
+                  title="Cancelar operación"
+                >
+                  ×
+                </button>
+              )}
             </div>
           ))}
           {recent.map((op) => (
