@@ -14,6 +14,7 @@ import { MediaMixer } from './components/MediaMixer'
 import { Peliculas } from './components/Peliculas'
 import { Series } from './components/Series'
 import { Seguimiento } from './components/Seguimiento'
+import { ToastViewport } from './components/ToastViewport'
 import {
   apiFetch,
   forgetApiKey,
@@ -359,6 +360,8 @@ function App() {
           </div>
 
           <QueueSidebar />
+          {/* Ambient messages: one viewport for every surface that needs to say something. */}
+          <ToastViewport />
         </div>
       </div>
     </div>
