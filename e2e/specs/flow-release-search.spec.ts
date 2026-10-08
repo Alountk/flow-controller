@@ -99,8 +99,18 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
 
   // Success feedback: the backend's own detail ("Release encolado para
   // descarga") rides above the list as the panel's notice — plain div, no
-  // role → text — instead of trading that list for a done step.
-  await expect(app.getByText('Release encolado para descarga')).toBeVisible({ timeout: 15000 });
+  // role → text — instead of trading that list for a done step. Scoped to
+  // the panel region because the SAME text now also lives in the toast
+  // (F-13), and a document-wide text query is legitimately ambiguous.
+  await expect(
+    app.getByRole('region', { name: 'Panel de detalle' }).getByText('Release encolado para descarga'),
+  ).toBeVisible({ timeout: 15000 });
+
+  // …and the ambient confirmation reaches past the panel: the toast carries
+  // the same detail (F-13).
+  await expect(app.locator('.toast-ok')).toContainText('Release encolado para descarga', {
+    timeout: 15000,
+  });
   // The list SURVIVED the grab: the row that could be grabbed NEXT is still
   // on screen, because a successful grab in the panel stays on the results
   // step — that is the complaint this changed ("puse uno a descargar y no me
