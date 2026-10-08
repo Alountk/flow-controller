@@ -19,15 +19,11 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
-  align-items: start;
-  /* The kanban owns the scroll: it grows into the space above the tail and
-     no further — columns taller than the viewport scroll inside it instead
-     of stretching the page. */
+  /* Stretch (the default): every column is FULL height of the board — the
+     box is drawn first and the cards fill it, until the column's own body
+     starts scrolling. The board itself never scrolls: each column does. */
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 2px;
 }
 
 .sg-col {
@@ -35,6 +31,10 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+  /* The column IS the box: it takes the whole row and lets its body scroll. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .sg-col-head {
@@ -91,7 +91,13 @@
      inside a card used to widen the whole column past its box. */
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
-  min-height: 90px;
+  /* The column's own scroll: the box keeps its full height and the cards
+     fill it until THEY decide to scroll — one column at a time, never the
+     board. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sg-col-empty {
@@ -241,6 +247,9 @@
   background: rgba(255, 196, 74, 0.1);
   border-radius: 6px;
   padding: 7px 8px;
+  /* Queue messages carry unbroken paths — without this a long one blows the
+     card sideways instead of wrapping. */
+  overflow-wrap: anywhere;
 }
 
 .sg-card.sg-blocked:has(.sg-pill-failed) .sg-why {
@@ -265,11 +274,11 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 16px;
-  /* The tail is a tail: it may shrink and scroll inside its own cap so the
-     kanban ALWAYS owns the majority of the view — the whole point of this
-     page. Long op lists scroll here; they never push the board off stage. */
+  /* The tail is a tail: it may shrink and scroll inside its own cap, and
+     the cap itself grew 75% at the operator's request (38 → 66.5) — the
+     kanban still fills every pixel the tail leaves, column by column. */
   flex: 0 1 auto;
-  max-height: 38%;
+  max-height: 66.5%;
   overflow-y: auto;
 }
 
