@@ -2,14 +2,15 @@
 
 import asyncio
 import os
-import re
 import time
 import unicodedata
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from application import gateways
 from application.gateways import history
+from application.use_cases.scan_wanted import normalize_title, scan_wanted_files
 from config import configured_services, find_service, service_unavailable_reason
 from traces import host_path
 from application.gateways import (
@@ -27,7 +28,8 @@ from application.gateways import (
     arr_series_metadata,
 )
 from models import ActionRequest
-from interfaces.http.routes.status import verify_api_key
+from interfaces.http.deps import verify_api_key
+from interfaces.http.route_helpers import attach_grabbed_at
 from state import http_session
 import config
 
@@ -43,118 +45,6 @@ ALL_ITEMS_PAGE_SIZE = 2000
 # Without this, every keystroke would re-download the full wanted list.
 _ALL_WANTED_TTL = 60.0
 _all_wanted_cache: dict[str, tuple[float, list[dict]]] = {}
-
-# How far back a grab is still worth showing as "Pedida el ...".
-#
-# The trade-off is what a too-long and a too-short window each get wrong. A mark
-# persists only while the title is still missing, so it answers "I asked for
-# this and it has not arrived". Too short and a genuinely stuck download loses
-# its mark after a few days, which is exactly when the signal matters most. Too
-# long and a mark from an old, superseded attempt claims the current missing
-# state was requested when it was not. 90 days covers a slow season pack and a
-# month of retries while staying a statement about the present missing state.
-WANTED_GRAB_LOOKBACK = 90 * 24 * 60 * 60
-
-
-def _mark_fields(
-    rows: dict[tuple[str, str, int], dict],
-    marks: dict[tuple[str, str, int], float],
-    key: tuple[str, str, int],
-) -> dict:
-    """The two own-grab fields for one item, both read from the same newest row.
-
-    The instant comes from the date-only `marks` and the destination from the
-    matching `rows` entry; both are projections of the same
-    `own_grabs_latest_rows` result, so a payload can never pair a date from one
-    grab with a folder from another. An item with no mark gets `None` for both
-    rather than an absent field, so the frontend never has to tell "absent" from
-    "unknown".
-    """
-    row = rows.get(key)
-    return {
-        "grabbed_at": marks.get(key),
-        "grabbed_destination": row["destination"] if row else None,
-    }
-
-
-async def _attach_grabbed_at(response: dict, *, source: str = "", kind: str = "") -> dict:
-    """Add ``grabbed_at`` and ``grabbed_destination`` to every item on a body.
-
-    Shared by every surface that shows the mark — ``/api/wanted``,
-    ``/api/wanted/all``, ``/api/wanted/series/all`` and ``/api/calendar`` — so
-    there is one enrichment rather than one per route. It handles both body
-    shapes this app returns:
-
-      - the grouped ``{"wanted": {service: {"items": [...]}}}`` shape, whose kind
-        follows the service (``radarr`` → movie, ``sonarr`` → episode);
-      - a flat ``{"items": [...]}`` shape, where the caller names the ``source``
-        and ``kind`` because the items do not carry them — except the calendar,
-        whose items already carry both ``source`` and ``type``, so it passes
-        neither and the key is read per item.
-
-    Called on the assembled body rather than inside either branch of
-    ``/api/wanted`` on purpose: that route has a text-filtered branch and a plain
-    one, and enriching only one of them would silently leave half the items
-    unmarked. Do not move it back into a branch.
-
-    The marks come from ``own_grabs``, re-read per request, and never from
-    ``_fetch_all_wanted``'s cache: that cache holds the arr's data, and this mark
-    is ours. Each item is copied so a cached or caller-owned dict is never
-    mutated. An item with no mark gets ``grabbed_at: None`` and
-    ``grabbed_destination: None`` — the fields are always present, so the
-    frontend never has to tell "absent" from "unknown". The date and the
-    destination always describe the same grab row (see ``_mark_fields``).
-    """
-    # One read for both fields: `rows` carries the destination and `marks` is
-    # its date-only projection, so the two can never disagree.
-    since = time.time() - WANTED_GRAB_LOOKBACK
-    # `history.py`'s own contract: callers hand the synchronous API to
-    # `asyncio.to_thread`. This one has no index on `grabbed_at`, so it is an
-    # unindexed full scan — and it runs on every response of four routes.
-    # `own_grabs_latest_map` stays inline: with `rows` given it is a pure dict
-    # projection and does no I/O at all.
-    rows = await asyncio.to_thread(history.own_grabs_latest_rows, since)
-    marks = history.own_grabs_latest_map(since, rows=rows)
-
-    wanted = response.get("wanted")
-    if wanted:
-        for source_key, page in wanted.items():
-            items = page.get("items")
-            if not items:
-                continue
-            # Radarr wanted items are movies, Sonarr's are episodes; the own-grab
-            # key records which kind, so the mapping is explicit rather than
-            # guessed.
-            item_kind = "movie" if source_key == "radarr" else "episode"
-            page["items"] = [
-                {
-                    **item,
-                    **_mark_fields(rows, marks, (source_key, item_kind, item.get("id"))),
-                }
-                for item in items
-            ]
-        return response
-
-    items = response.get("items")
-    if items:
-        response["items"] = [
-            {
-                **item,
-                # The item's own source and type win when present (the calendar
-                # carries both); otherwise the caller's explicit source/kind.
-                **_mark_fields(
-                    rows,
-                    marks,
-                    (
-                        item.get("source") or source,
-                        item.get("type") or kind,
-                        item.get("id"),
-                    ),
-                ),
-            }
-            for item in items
-        ]
-    return response
 
 
 def normalize_for_search(value: str) -> str:
@@ -240,7 +130,7 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
                 "page": page,
                 "page_size": page_size,
             }
-        return await _attach_grabbed_at(
+        return await attach_grabbed_at(
             {"wanted": wanted, "updated_at": int(time.time()), "filtered": True}
         )
 
@@ -256,7 +146,7 @@ async def get_wanted(page: int = 1, page_size: int = 50, source: str = "", q: st
     wanted = {}
     for service, result in zip(arr_services, results):
         wanted[service["key"]] = result
-    return await _attach_grabbed_at({
+    return await attach_grabbed_at({
         "wanted": wanted,
         "updated_at": int(time.time()),
     })
@@ -315,7 +205,7 @@ async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: 
     async with http_session() as session:
         result = await fetch_all_movies_detailed(session, service, page, fetch_size)
     # Every /api/wanted/all item is a Radarr movie, so the key is explicit.
-    return await _attach_grabbed_at(
+    return await attach_grabbed_at(
         _filter_all_endpoint(result, q, page, page_size), source="radarr", kind="movie"
     )
 
@@ -333,7 +223,7 @@ async def get_all_series(page: int = 1, page_size: int = 50, q: str = "", _key: 
     async with http_session() as session:
         result = await fetch_all_series_detailed(session, service, page, fetch_size)
     # A series card is marked by any episode grab of that series.
-    return await _attach_grabbed_at(
+    return await attach_grabbed_at(
         _filter_all_endpoint(result, q, page, page_size), source="sonarr", kind="series"
     )
 
@@ -496,49 +386,6 @@ async def search_wanted_item(req: ActionRequest, _key: str = Depends(verify_api_
 # --- Wanted: Scan for misplaced files ---
 
 
-def _normalize_title(name: str) -> str:
-    """Normaliza un nombre de archivo para comparación fuzzy."""
-    if not isinstance(name, str):
-        name = str(name) if name else ""
-    if not name:
-        return ""
-    # Quitar extensión
-    name = re.sub(r'\.[a-zA-Z0-9]{2,4}$', '', name)
-    # Reemplazar puntos y guiones bajos por espacios
-    name = re.sub(r'[._]', ' ', name)
-    # Quitar calidad: 1080p, 720p, 2160p, BluRay, WEB-DL, etc.
-    name = re.sub(r'\b(2160p|1080p|720p|480p|4k|bluray|web-?dl|webrip|hdtv|dvdrip|h264|h265|x264|x265|hevc|aac|dts|ac3|remux)\b', '', name, flags=re.IGNORECASE)
-    # Quitar year entre paréntesis o solo
-    name = re.sub(r'[\(\[]?\d{4}[\)\]]?', '', name)
-    # Quitar grupos de release
-    name = re.sub(r'[-@][A-Za-z0-9]+$', '', name)
-    # Normalizar unicode (quitar acentos)
-    name = unicodedata.normalize('NFD', name)
-    name = ''.join(c for c in name if unicodedata.category(c) != 'Mn')
-    # Minúsculas y limpiar espacios
-    name = name.lower().strip()
-    name = re.sub(r'\s+', ' ', name)
-    return name
-
-
-def _match_score(filename: str, title: str) -> float:
-    """Calcula similitud entre nombre de archivo y título. Retorna 0-1."""
-    from difflib import SequenceMatcher
-    norm_file = _normalize_title(filename)
-    norm_title = _normalize_title(title)
-    if not norm_file or not norm_title:
-        return 0.0
-    # Ratio básico
-    ratio = SequenceMatcher(None, norm_file, norm_title).ratio()
-    # Bonus si el título está contenido en el nombre del archivo
-    if norm_title in norm_file:
-        ratio = max(ratio, 0.85)
-    # Bonus si el nombre del archivo está contenido en el título
-    if norm_file in norm_title:
-        ratio = max(ratio, 0.80)
-    return round(ratio, 3)
-
-
 def _validate_path(path: str) -> str:
     """Valida que la ruta esté dentro de los volúmenes permitidos."""
     if not path:
@@ -564,54 +411,6 @@ async def scan_for_movies(req: ActionRequest, _key: str = Depends(verify_api_key
         log = logging.getLogger("flow-controller")
         log.exception("scan_for_movies error: %s", exc)
         return {"ok": False, "detail": f"Error interno: {exc}", "matches": [], "scanned_files": 0}
-
-
-def _score_target(target: str, title_map: dict) -> tuple[list[dict], int]:
-    """Walk `target` and score every video against every wanted title.
-
-    CPU-bound (O(videos x titles) `SequenceMatcher.ratio()`) and pure
-    filesystem work: a folder of a few thousand files against a couple of
-    hundred titles is millions of ratio() calls. Kept off the event loop
-    because there is only one loop and it does not preempt -- inline, every
-    other request waits for the whole walk.
-    """
-    # Escaneo recursivo de archivos de video
-    video_exts = {'.mkv', '.mp4', '.avi', '.wmv', '.flv', '.mov', '.m4v', '.ts', '.mpg', '.mpeg'}
-    scanned_files = 0
-    matches = []
-
-    for root, _dirs, files in os.walk(target):
-        for fname in files:
-            ext = os.path.splitext(fname)[1].lower()
-            if ext not in video_exts:
-                continue
-            scanned_files += 1
-            full_path = os.path.join(root, fname)
-
-            best_score = 0.0
-            best_match = None
-            for norm_title, info in title_map.items():
-                score = _match_score(fname, info["title_used"])
-                if score > best_score:
-                    best_score = score
-                    best_match = info
-
-            if best_match and best_score >= 0.5:
-                target_path = best_match.get("movie_path", "")
-                matches.append({
-                    "file_path": full_path,
-                    "file_name": fname,
-                    "movie_id": best_match["movie_id"],
-                    "movie_title": best_match["movie_title"],
-                    "movie_year": best_match["movie_year"],
-                    "target_path": target_path,
-                    "score": best_score,
-                    "matched_title": best_match["title_used"],
-                })
-
-    matches.sort(key=lambda m: m["score"], reverse=True)
-    matches.sort(key=lambda m: m["score"], reverse=True)
-    return matches, scanned_files
 
 
 async def _scan_for_movies_inner(req: ActionRequest) -> dict:
@@ -675,7 +474,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
         for title in all_titles:
             if not title:
                 continue
-            norm = _normalize_title(title)
+            norm = normalize_title(title)
             if norm and norm not in title_map:
                 title_map[norm] = {
                     "movie_id": movie_id or series_id,
@@ -703,7 +502,7 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
             for title in all_titles:
                 if not title:
                     continue
-                norm = _normalize_title(title)
+                norm = normalize_title(title)
                 if norm and norm not in title_map:
                     title_map[norm] = {
                         "movie_id": movie.get("id"),
@@ -716,7 +515,9 @@ async def _scan_for_movies_inner(req: ActionRequest) -> dict:
         item_year = None
 
     # Walk + score off the loop: this is the O(videos x titles) CPU cost.
-    matches, scanned_files = await asyncio.to_thread(_score_target, target, title_map)
+    matches, scanned_files = await asyncio.to_thread(
+        scan_wanted_files, target, title_map, walk=gateways.scan
+    )
 
 
     return {

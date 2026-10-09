@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from config import ACTIONS
 from copy_engine import copy_tasks, cleanup_tasks, do_action
 from models import ActionRequest
-from interfaces.http.routes.status import verify_api_key
+from interfaces.http.deps import verify_api_key
 from state import http_session
 import config
 

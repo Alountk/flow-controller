@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends
 
 from auto_copy_driver import sweep
 from application.gateways import recent_auto_copy_log, store_available
-from interfaces.http.routes.status import verify_api_key
+from interfaces.http.deps import verify_api_key
 from state import http_session
 import config
 

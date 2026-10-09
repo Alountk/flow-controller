@@ -11,7 +11,7 @@ from config import BASE_DIR
 from application.gateways import get_settings, save_settings
 from application.gateways import test_service_connection
 from config import SERVICES, configured_services
-from interfaces.http.routes.status import verify_api_key
+from interfaces.http.deps import verify_api_key
 from state import http_session
 import config
 

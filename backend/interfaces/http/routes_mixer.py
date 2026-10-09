@@ -21,7 +21,7 @@ from media_mixer import (
     cleanup_tasks,
 )
 from task_manager import mux_tasks
-from interfaces.http.routes.status import verify_api_key
+from interfaces.http.deps import verify_api_key
 import config
 
 log = logging.getLogger("flow-controller")

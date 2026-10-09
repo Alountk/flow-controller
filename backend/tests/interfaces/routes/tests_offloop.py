@@ -153,7 +153,7 @@ class TestScanScoringIsOffTheEventLoop:
         with patch("interfaces.http.routes.wanted._validate_path", side_effect=lambda p: p), \
              patch("interfaces.http.routes.wanted.arr_movie_metadata",
                    new_callable=AsyncMock, return_value=meta), \
-             patch("interfaces.http.routes.wanted._match_score", side_effect=score):
+             patch("application.use_cases.scan_wanted._match_score", side_effect=score):
             resp = client.post(
                 "/api/wanted/scan",
                 json={"source": "radarr", "remote_path": str(tmp_path),

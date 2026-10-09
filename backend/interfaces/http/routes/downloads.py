@@ -21,7 +21,7 @@ from application.gateways import (
     fetch_arr_queue,
 )
 from config import configured_services
-from interfaces.http.routes.status import verify_api_key
+from interfaces.http.deps import verify_api_key
 from traces import normalize_hash
 from state import http_session
 
