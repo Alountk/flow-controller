@@ -475,7 +475,32 @@ class TestSpaFallback:
 
 # ── Calendar Endpoints ───────────────────────────────────────────────────────
 
+import asyncio
+import threading
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
+
+from application.use_cases.release_search import release_tasks
+
+
+@asynccontextmanager
+async def _gated_worker_session(gate: threading.Event):
+    """A session factory that holds the release-search worker BEFORE the arr.
+
+    The TestClient's portal dies with each request, so a worker left running
+    would be cancelled anyway — but it could still reach the arr inside the
+    request. This gate makes that impossible: with the worker parked here,
+    every call to the arr mock would have to come from the HANDLER itself,
+    which is exactly the inline search C-10 removes.
+
+    The wait is bounded (2 s) so the gate can never hang a test written
+    against the old synchronous handler, which also opens a session.
+    """
+    for _ in range(200):
+        if gate.is_set():
+            break
+        await asyncio.sleep(0.01)
+    yield MagicMock()
 
 
 class TestCalendarSearch:
@@ -692,31 +717,104 @@ class TestCalendarAdd:
 
 
 class TestCalendarReleases:
-    @patch("interfaces.http.routes.calendar.arr_fetch_releases", new_callable=AsyncMock)
-    def test_movie_releases(self, mock_fetch):
+    """C-10 — the POST starts a job; the search runs in a worker.
+
+    The synchronous version of this endpoint awaited Radarr × 20 indexers for
+    91.6 s inside the request — longer than the proxy's ~60 s cut, so the
+    client got a 504 before any release could come back (masked once by
+    raising `proxy_read_timeout` to 250 s by hand in nginx). Now the POST
+    answers with a task id, `GET /api/calendar/releases/{task_id}` serves the
+    payload the old handler used to return, and the arr is only ever asked by
+    the worker.
+    """
+
+    @patch("application.use_cases.release_search.arr_fetch_releases", new_callable=AsyncMock)
+    def test_post_starts_a_job_without_running_the_search_inline(self, mock_fetch):
         mock_fetch.return_value = {
-            "releases": [{"guid": "g1", "title": "Rel1", "quality": "1080p", "size": 1_000_000_000, "indexer": "Torznab", "seeders": 10, "leechers": 2, "languages": ["English"]}],
+            "releases": [{"guid": "g1", "title": "Rel1", "indexer": "Torznab"}],
             "detail": "1 releases",
         }
-        resp = client.post(
-            "/api/calendar/releases",
-            json={"source": "radarr", "type": "movie", "id": 42},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert len(data["releases"]) == 1
-        assert data["releases"][0]["guid"] == "g1"
+        gate = threading.Event()
+        with patch(
+            "interfaces.http.routes.calendar.http_session",
+            lambda: _gated_worker_session(gate),
+        ):
+            resp = client.post(
+                "/api/calendar/releases",
+                json={"source": "radarr", "type": "movie", "id": 42},
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            # A task id NOW, status running, and no payload — where the old
+            # handler would still be awaiting Radarr.
+            assert data["ok"] is True
+            assert data["task_id"]
+            assert data["status"] == "running"
+            assert "releases" not in data
+            # The worker is held at the session gate, so this call could only
+            # have come from the handler: the inline search C-10 removes.
+            mock_fetch.assert_not_called()
+            task = release_tasks.get(data["task_id"])
+            assert task is not None
+            assert task["status"] == "running"
+            release_tasks._tasks.pop(data["task_id"], None)
+        gate.set()
 
-    @patch("interfaces.http.routes.calendar.arr_fetch_releases", new_callable=AsyncMock)
-    def test_episode_releases(self, mock_fetch):
+    @patch("application.use_cases.release_search.arr_fetch_releases", new_callable=AsyncMock)
+    def test_episode_post_starts_a_job(self, mock_fetch):
         mock_fetch.return_value = {"releases": [], "detail": "0 releases"}
+        gate = threading.Event()
+        with patch(
+            "interfaces.http.routes.calendar.http_session",
+            lambda: _gated_worker_session(gate),
+        ):
+            resp = client.post(
+                "/api/calendar/releases",
+                json={"source": "sonarr", "type": "episode", "id": 99},
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["ok"] is True
+            assert data["task_id"]
+            assert data["status"] == "running"
+            mock_fetch.assert_not_called()
+            release_tasks._tasks.pop(data["task_id"], None)
+        gate.set()
+
+    def test_release_status_endpoint_serves_the_task(self):
+        """The collect endpoint answers in the `{"ok": True, **task}` shape
+        `GET /api/tasks/{task_id}` already uses, with the old synchronous
+        payload (`releases` + `detail`) inside the task once it settles."""
+        task_id = "rel-status-001"
+        release_tasks.create(
+            task_id,
+            status="done",
+            detail="1 releases",
+            releases=[{"guid": "g1", "title": "Rel1"}],
+        )
+        data = client.get(f"/api/calendar/releases/{task_id}").json()
+        assert data["ok"] is True
+        assert data["id"] == task_id
+        assert data["status"] == "done"
+        assert data["detail"] == "1 releases"
+        assert data["releases"] == [{"guid": "g1", "title": "Rel1"}]
+        release_tasks._tasks.pop(task_id, None)
+
+    def test_release_status_unknown_task_uses_the_task_endpoint_shape(self):
+        data = client.get("/api/calendar/releases/no-such-task").json()
+        assert data == {"ok": False, "error": "tarea no encontrada"}
+
+    def test_unknown_service_refuses_without_starting_a_job(self):
+        """Validation still answers synchronously, exactly as before: no job
+        id for a request that could never run."""
         resp = client.post(
             "/api/calendar/releases",
-            json={"source": "sonarr", "type": "episode", "id": 99},
+            json={"source": "pluto", "type": "movie", "id": 1},
         )
-        assert resp.status_code == 200
         data = resp.json()
         assert data["releases"] == []
+        assert "Servicio desconocido" in data["detail"]
+        assert "task_id" not in data
 
     def test_unknown_type_returns_error(self):
         resp = client.post(

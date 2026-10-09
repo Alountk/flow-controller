@@ -1,7 +1,12 @@
 import { Fragment, useState, useRef, useCallback, useEffect } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { addCalendarItem } from '../../shared/api/calendar.ts'
-import { fetchCalendarReleases, type Release } from '../../shared/api/releases.ts'
+import {
+  startCalendarReleaseSearch,
+  fetchReleaseSearchStatus,
+  type Release,
+  type ReleaseSearchTask,
+} from '../../shared/api/releases.ts'
 import { grabCalendarRelease } from '../../shared/api/grabs.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
@@ -67,6 +72,11 @@ export interface ReleaseSearchItem {
 type ModalStep = 'initial' | 'searching' | 'adding' | 'results' | 'grabbing' | 'done' | 'error'
 
 const SEARCH_TIMEOUT = 240 // seconds — must match backend REQUEST_TIMEOUT * 48
+
+/** Job statuses the release-search poll stops at: `done` carries the result,
+ *  `error` the reason. Anything else keeps the query refetching — the same
+ *  terminal-set idea TraceActions applies to copy tasks. */
+const TERMINAL_STATUSES = ['done', 'error']
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '?'
@@ -270,6 +280,13 @@ export function ReleaseSearchModal({
     restored?.threeDOverrides ?? {},
   )
   const [elapsed, setElapsed] = useState(0)
+  // C-10: the release search is a job now. This is its handle while the poll
+  // runs — null whenever no search is in flight.
+  const [releaseJob, setReleaseJob] = useState<{ task_id: string; status: string } | null>(null)
+  // The indexer choice of the in-flight search: `handleSearch` receives it as
+  // a parameter, and the results must be filtered under THAT choice when the
+  // job completes, not under whatever the select says by then.
+  const pendingChoice = useRef<string>('all')
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Once-per-mount guard for the panel's 🔍 button: a second click in the
@@ -421,6 +438,83 @@ export function ReleaseSearchModal({
     }
   }, [step])
 
+  // ── C-10: the search as a job, polled ──────────────────────────────────────
+  // The POST only starts the job; this is the other half — the pattern
+  // TraceActions already uses for copy tasks: a react-query query keyed by
+  // the task id, refetched every 1.5 s, stopping at a terminal status. No
+  // request outlives the proxy's ~60 s cut, so the 504 class of 2026-10-07
+  // cannot happen again: the slowest search is now a series of fast polls.
+  const releaseJobQuery = useQuery({
+    queryKey: ['release-task', releaseJob?.task_id],
+    queryFn: () => fetchReleaseSearchStatus(releaseJob!.task_id),
+    enabled: !!releaseJob && !TERMINAL_STATUSES.includes(releaseJob.status),
+    retry: false,
+    refetchInterval: (query) => {
+      const data = query.state.data as ReleaseSearchTask | undefined
+      if (data && TERMINAL_STATUSES.includes(data.status ?? '')) return false
+      return 1500
+    },
+  })
+
+  /**
+   * What `handleSearch` used to do with the POST's answer, applied identically
+   * to whatever the job delivers: filter by the chosen indexer, render the
+   * results, or land on the error step with the backend's own detail. The
+   * payload itself (`releases` + `detail`) is unchanged from the synchronous
+   * contract, so this logic did not have to learn anything new.
+   */
+  function applyReleaseResult(result: { releases: Release[]; detail: string }, choice: string) {
+    const selectedName = choice === 'all'
+      ? null
+      : indexers.find(i => String(i.id) === choice)?.name
+    const filtered = choice === 'all'
+      ? result.releases
+      : result.releases.filter(r => r.indexer === selectedName)
+    if (filtered.length > 0) {
+      setReleases(filtered)
+      // A new search is a new list: whatever was corrected against the old
+      // rows would otherwise be applied, silently, to different releases.
+      setThreeDOverrides({})
+      setStep('results')
+    } else {
+      setStep('error')
+      if (choice !== 'all' && result.releases.length > 0) {
+        const nameFound = indexers.find(i => String(i.id) === choice)?.name || choice
+        setMessage(`${nameFound}: 0 releases encontrados. Hay ${result.releases.length} releases en total en otros indexadores.`)
+      } else {
+        setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
+      }
+    }
+  }
+
+  // Settle the job where `handleSearch` used to settle the POST's answer —
+  // same filtering, same empty-result error, same message strings: the step
+  // machine never learns it is now reading a poll. A `running` status does
+  // nothing here; the query above keeps asking.
+  useEffect(() => {
+    const data = releaseJobQuery.data
+    if (!releaseJob || !data) return
+    if (!data.ok) {
+      // The task is gone (TTL expired, backend restarted) or the status read
+      // itself failed: a poll that cannot answer is an error, never a hang.
+      setReleaseJob(null)
+      setStep('error')
+      setMessage(data.detail || data.error || 'Error obteniendo estado de tarea')
+      return
+    }
+    if (data.status === 'done') {
+      const choice = pendingChoice.current
+      setReleaseJob(null)
+      applyReleaseResult({ releases: data.releases ?? [], detail: data.detail ?? '' }, choice)
+    } else if (data.status === 'error') {
+      // The job's `detail` is the exact `Error interno: ...` string the
+      // synchronous POST used to return — same error channel, same step.
+      setReleaseJob(null)
+      setStep('error')
+      setMessage(data.detail || 'La búsqueda de releases falló')
+    }
+  }, [releaseJobQuery.data, releaseJob])
+
   /**
    * `choice` is the indexer the search runs under. It is a real parameter,
    * not state, because the panel's auto-search on an indexer change fires in
@@ -436,28 +530,18 @@ export function ReleaseSearchModal({
     const idxName = choice !== 'all' ? (indexers.find(i => String(i.id) === choice)?.name || '') : ''
     setMessage(`Buscando releases${idxName ? ` en ${idxName}` : ' en todos los indexadores'}...`)
     try {
-      const result = await fetchCalendarReleases(item.source, item.type, item.id)
-      const selectedName = choice === 'all'
-        ? null
-        : indexers.find(i => String(i.id) === choice)?.name
-      const filtered = choice === 'all'
-        ? result.releases
-        : result.releases.filter(r => r.indexer === selectedName)
-      if (filtered.length > 0) {
-        setReleases(filtered)
-        // A new search is a new list: whatever was corrected against the old
-        // rows would otherwise be applied, silently, to different releases.
-        setThreeDOverrides({})
-        setStep('results')
-      } else {
-        setStep('error')
-        if (choice !== 'all' && result.releases.length > 0) {
-          const nameFound = indexers.find(i => String(i.id) === choice)?.name || choice
-          setMessage(`${nameFound}: 0 releases encontrados. Hay ${result.releases.length} releases en total en otros indexadores.`)
-        } else {
-          setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
-        }
+      const started = await startCalendarReleaseSearch(item.source, item.type, item.id)
+      if (started.task_id) {
+        // C-10: the POST only starts the job. The results arrive through the
+        // status poll above and are applied by the effect with THIS choice.
+        pendingChoice.current = choice
+        setReleaseJob({ task_id: started.task_id, status: started.status ?? 'running' })
+        return
       }
+      // No task id = a request that never became a job: the backend's own
+      // refusal (unknown service or type) or a transport failure, answered
+      // with the same detail the synchronous endpoint always carried.
+      applyReleaseResult({ releases: started.releases ?? [], detail: started.detail ?? '' }, choice)
     } catch (err) {
       setStep('error')
       setMessage(`Error inesperado: ${err}`)

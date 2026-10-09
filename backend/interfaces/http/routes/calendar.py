@@ -23,7 +23,6 @@ from application.gateways import (
     arr_episode_metadata,
     arr_add_movie,
     arr_add_series,
-    arr_fetch_releases,
     arr_grab_release,
     direct_link_identity,
     arr_indexers,
@@ -33,6 +32,7 @@ from application.gateways import (
     arr_movie_exists,
     arr_series_exists,
 )
+from application.use_cases.release_search import release_tasks, start_release_search
 from models import (
     CalendarSearchRequest,
     CalendarAddRequest,
@@ -216,34 +216,69 @@ async def _indexers_for(source: str) -> dict:
     return result
 
 
+async def _enrich_indexer_ids(source: str, result: dict) -> dict:
+    """Enrich releases with indexerId by matching indexer name → id. The
+    cached list is reused: re-asking the arr on every search was the reason a
+    Radarr indexer list was fetched twice in a row.
+
+    This runs inside the search JOB now (C-10), not in the request: the
+    worker hands it the arr's payload and it hands back the payload the
+    status endpoint will serve. Empty results skip the indexer list entirely —
+    the same rule the synchronous handler had.
+    """
+    if not result.get("releases"):
+        return result
+    indexers = (await _indexers_for(source)).get("indexers", [])
+    name_to_id = {idx["name"]: idx["id"] for idx in indexers if idx.get("name")}
+    for r in result["releases"]:
+        if not r.get("indexerId"):
+            r["indexerId"] = name_to_id.get(r.get("indexer", ""), 0)
+    return result
+
+
 @router.post("/api/calendar/releases")
 async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(verify_api_key)):
-    """Obtiene releases disponibles para un movie/episode."""
+    """Lanza la búsqueda de releases como job y devuelve el task_id (C-10).
+
+    This handler used to await Radarr × 20 indexers inline — 91.6 s measured,
+    against a proxy that cuts at ~60 s, so the request died as a 504 before
+    any release could come back (masked once by raising `proxy_read_timeout`
+    to 250 s by hand in nginx). The search now runs in a worker behind
+    `release_tasks` and this route answers in milliseconds; the result is
+    collected at `GET /api/calendar/releases/{task_id}`, which serves the
+    payload the synchronous handler used to return.
+
+    Validation still answers synchronously and in the old shape: a request
+    that could never run (unknown service, unknown type) never gets a job id.
+    """
     service = find_service(req.source, "arr")
     if not service:
         return {"releases": [], "detail": f"Servicio desconocido: {req.source}"}
+    if req.type not in ("movie", "episode"):
+        return {"releases": [], "detail": f"Tipo desconocido: {req.type}"}
+    return start_release_search(
+        req.source,
+        service,
+        req.type,
+        req.id,
+        session_factory=http_session,
+        enrich=lambda result: _enrich_indexer_ids(req.source, result),
+    )
 
-    try:
-        async with http_session() as session:
-            if req.type == "movie":
-                result = await arr_fetch_releases(session, service, movie_id=req.id)
-            elif req.type == "episode":
-                result = await arr_fetch_releases(session, service, episode_id=req.id)
-            else:
-                return {"releases": [], "detail": f"Tipo desconocido: {req.type}"}
-            # Enrich releases with indexerId by matching indexer name → id. The
-            # cached list is reused: re-asking the arr on every search was the
-            # reason a Radarr indexer list was fetched twice in a row.
-            if result.get("releases"):
-                indexers = (await _indexers_for(req.source)).get("indexers", [])
-                name_to_id = {idx["name"]: idx["id"] for idx in indexers if idx.get("name")}
-                for r in result["releases"]:
-                    if not r.get("indexerId"):
-                        r["indexerId"] = name_to_id.get(r.get("indexer", ""), 0)
-        return result
-    except Exception as exc:
-        log.exception("calendar_releases error: %s", exc)
-        return {"releases": [], "detail": f"Error interno: {exc}"}
+
+@router.get("/api/calendar/releases/{task_id}")
+async def calendar_release_status(task_id: str, _key: str = Depends(verify_api_key)):
+    """Estado y resultado del job de búsqueda.
+
+    The same `{"ok": True, **task}` answer `GET /api/tasks/{task_id}` gives
+    for copy/mixer tasks, so polling reads one shape across the app. Once the
+    job is `done`, the `releases` + `detail` fields inside the task ARE the
+    payload the synchronous POST used to return.
+    """
+    task = release_tasks.get(task_id)
+    if not task:
+        return {"ok": False, "error": "tarea no encontrada"}
+    return {"ok": True, **task}
 
 
 async def _resolve_series_id(
