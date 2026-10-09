@@ -67,10 +67,11 @@ Fuera de alcance: cambio de comportamiento visible de APIs o UI, nuevas dependen
   - Aceptación: ✅ sin `__getattr__` en gateways; ✅ contratos 17 (4 puertas nuevas); ✅ greps de aceptación vacíos; `MAX_LEGACY_LOC` = **2578 ≤ 2579**; suite **1001 passed, 0 failed** (+20 tests, RED observado: 5 failing gates).
   - Checks: `cd backend && ../.venv/bin/python -m pytest -q` · `... tests/contracts -q` · mypy omitido (no configurado — documentado).
   - Pendiente T4: entrada obsoleta en `vulture_whitelist.py` (fuera de superficies).
-- [ ] **T4 — Higiene de flecos** (ruta: INLINE — documentación, mecánico)
-  - Reconciliar F-03 (verdad única en BACKLOG), cerrar/reabrir con motivo los checkboxes drift en `odd/tasks/*.md` (10 ficheros), `MAX_LEGACY_LOC` actualizado al valor real tras T1/T3.
-  - Aceptación: sin estados contradictorios entre BACKLOG y odd/tasks.
-  - Checks: revisión estructural (sin runner).
+- [x] **T4 — Higiene de flecos** (ruta: INLINE — documentación, mecánico)
+  - F-03 reconciliado con evidencia: `BACKLOG.md:16` 🟡→✅ (parte 2 frontend = wizard `a4851fa` en main, `SetupPage` routeda), consistente con `:340` ✅.
+  - Checkboxes drift cerrados con motivo: `b02-indexadores` (T8-T9, B-02 ✅), `archivos-tres-destinos` (6 criterios, F-10 ✅ PR #148), `f05-amule-retention` (T5-T8 F-05 ✅; T9 queda abierto — aparte), `f03-setup-wizard` (T10 ×2).
+  - `MAX_LEGACY_LOC` 2579 → **2578** (ratchet ajustado al valor real post-T3); `vulture_whitelist.py` entrada `__getattr__` obsoleta eliminada.
+  - Aceptación: ✅ sin estados contradictorios; verificación: contratos **17 passed** + suite **1001 passed**.
 
 ## Progreso
 
@@ -79,9 +80,9 @@ Fuera de alcance: cambio de comportamiento visible de APIs o UI, nuevas dependen
 - [x] T1 (S1, `refactor/placement-domain`) — commit **ddf7f0c**
 - [x] T2 (S2, `refactor/frontend-feature-folders`) — commits **b8b7980** + T2b
 - [x] T3 (S3, `refactor/typed-ports`) — pendiente de commit con este doc
-- [ ] T4
+- [x] T4 (S4, `chore/estructura-flecos`) — pendiente de commit con este doc
 
-Siguiente paso: commit S3 → T4 higiene de flecos.
+**Feature COMPLETA** (4/4). Siguiente paso: delivery humano — PRs encadenados stacked-to-main (S1→S4), decisión del usuario.
 
 Estado RDD: **desactivado por el usuario (global) el 2026-10-09** → S1 entregado sin review nativo (`disabled/unmanaged`). Verificación de S1: writer + spot-check del padre (981/0, contratos 13).
 

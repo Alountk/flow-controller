@@ -102,7 +102,7 @@ PR A se sostiene solo: la página *Configuración* gana el "probar lo que estoy 
 - [x] T9 — 3 reescritas (cada servicio en su paso · clave en el paso 7 · un POST por paso) +
       2 de gate (ninguno configurado → bloqueado · **solo Radarr** → desbloqueado). Las 2 del
       gate original quedan **verbatim**. 13 → 15 tests.
-- [ ] T10 — Docs, commit y PR.
+- [x] T10 — Docs, commit y PR. (Cerrado: parte 1 backend — PR #92 en main; BACKLOG F-03 ✅.)
 
 ## Criterios de aceptación
 - Un `POST /api/setup` con `paths.allowed_roots` los persiste (hoy se descartan).
@@ -124,7 +124,7 @@ Un commit por PR; A solo toca `backend/routes/settings.py`, `backend/clients.py`
 
 ## Progreso
 - [x] T1-T9
-- [ ] T10 — docs, commit y PR.
+- [x] T10 — docs, commit y PR. (Cerrado: parte 2 — wizard en main `a4851fa`; BACKLOG F-03 ✅.)
 
 ## Siguiente paso
 T7-T10: la parte 2 (frontend).

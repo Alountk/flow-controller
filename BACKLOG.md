@@ -13,7 +13,7 @@ Todo lo de este documento está creado en **Linear**, proyecto **`flow-controlle
 | B-02 | RAU-126 | C-03 | RAU-133 |
 | B-01 | RAU-127 | C-04 | RAU-134 |
 | F-01 | RAU-128 | C-05 | RAU-135 |
-| F-03 🟡 | **Wizard de primera puesta en marcha** paso a paso (tipo Overseerr/aMuleTorrent). **Parte 1 (backend)** ✅ — `/api/setup` acepta **todos los grupos** (parcial-seguro), `/api/services/test` acepta **candidatos sin guardar**, y `save_settings` expone **`persisted`** para no decir "guardado" con el volumen de solo lectura. **Parte 2 (frontend)** ⬜ — rutas unificadas + el wizard | 🟦🟦 |
+| F-03 ✅ | **Wizard de primera puesta en marcha** paso a paso (tipo Overseerr/aMuleTorrent). **Parte 1 (backend)** ✅ — `/api/setup` acepta **todos los grupos** (parcial-seguro), `/api/services/test` acepta **candidatos sin guardar**, y `save_settings` expone **`persisted`** para no decir "guardado" con el volumen de solo lectura. **Parte 2 (frontend)** ✅ — wizard paso a paso con focus card (`a4851fa`), `SetupPage` routeda en `App` | 🟩🟩 |
 | F-02 | RAU-130 | C-07 | RAU-137 |
 | C-08 | RAU-138 |  |  |
 

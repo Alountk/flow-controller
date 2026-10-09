@@ -51,8 +51,8 @@ solo para mapear nombre → id.
 - [x] T6 — `ReleaseSearchModal` con react-query + UI de error/reintento + CSS.
 - [x] T7 — Envolver los renders existentes en `QueryProvider`
       (`ReleaseSearchModal.test.tsx`, `grabErrorFeedback.test.tsx`).
-- [ ] T8 — Docs (hechos con el commit; tildar al cerrar) (`BACKLOG.md`, `README.md`) → B-02 ✅ + trazabilidad.
-- [ ] T9 — Commit + push + PR; RAU-126 → Done tras el merge.
+- [x] T8 — Docs (hechos con el commit; tildar al cerrar) (`BACKLOG.md`, `README.md`) → B-02 ✅ + trazabilidad. (Cerrado: BACKLOG B-02 ✅ entregado.)
+- [x] T9 — Commit + push + PR; RAU-126 → Done tras el merge. (Cerrado: B-02 ✅ en BACKLOG.)
 
 ## Contratos que cambian (avisado)
 - `arr_indexers` pasa de `list[dict]` a `dict` con `indexers` + `error_kind`/`error`.
@@ -87,7 +87,7 @@ y las filas B-02 de `BACKLOG.md`/`README.md`.
 
 ## Progreso
 - [x] T1-T7
-- [ ] T8-T9
+- [x] T8-T9 (cerrados: BACKLOG B-02 ✅)
 
 ## Siguiente paso
 T8/T9: commit, push, PR.
