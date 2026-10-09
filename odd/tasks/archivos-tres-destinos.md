@@ -39,16 +39,16 @@ por debajo"*, *"4K · 2160p"*, *"3D"*.
 | 5 | **`detail` nombra al arr que no devolvió carpetas raíz** | misma regla que `calendar_destinations`: decir lo que pasó en vez de afirmar éxito con una lista corta. Sin arr configurado, `detail` vacío: no falló nada |
 | 6 | **Etiquetas por servicio (`LIBRARY_LABELS`)** | el combo ofrece películas y series juntas: "Biblioteca" sola no dice a cuál apunta cada opción. Clave desconocida → `f"Biblioteca ({key}) · 1080 y por debajo"` |
 
-## Criterios de aceptación (pendientes)
+## Criterios de aceptación (verificados en PR #148 · BACKLOG F-10 ✅ Entregado)
 
-- [ ] `GET /api/files/roots` conserva `path`/`name` exactamente como antes y añade
+- [x] `GET /api/files/roots` conserva `path`/`name` exactamente como antes y añade
   `role`, `label` (`service` en bibliotecas) con `detail` siempre presente.
-- [ ] Las raíces de navegación siguen siendo `roots[0]`/`roots[1]`.
-- [ ] Un destino sin configurar (`PATH_4K = ""`) o que no exista en disco no aparece.
-- [ ] Un arr configurado que devuelve `[]` no pone biblioteca y lo dice en `detail`.
-- [ ] El combo de *Archivos* pinta `label ?? name` y agrupa los destinos en
+- [x] Las raíces de navegación siguen siendo `roots[0]`/`roots[1]`.
+- [x] Un destino sin configurar (`PATH_4K = ""`) o que no exista en disco no aparece.
+- [x] Un arr configurado que devuelve `[]` no pone biblioteca y lo dice en `detail`.
+- [x] El combo de *Archivos* pinta `label ?? name` y agrupa los destinos en
   `Destinos` (optgroup solo si hay algún destino).
-- [ ] `python3 -m pytest -q` verde (**860**: base 852 + 8 nuevos), `pyflakes`
+- [x] `python3 -m pytest -q` verde (**860**: base 852 + 8 nuevos), `pyflakes`
   limpio, `npx tsc -b --noEmit` y `npm test` verdes (**391**: base 390 + 1).
 
 ## Verificación
