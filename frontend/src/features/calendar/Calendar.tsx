@@ -1,0 +1,171 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import type { CalendarItem, CalendarResponse } from '../../shared/types.ts'
+import { formatGrabMark } from '../../shared/utils/grabMark.ts'
+import { ReleaseSearchModal } from '../release-search/ReleaseSearchModal.tsx'
+import './Calendar.css'
+import { apiFetch } from '../../shared/api/auth.ts'
+
+async function fetchCalendar(start: string, end: string): Promise<CalendarResponse> {
+  const res = await apiFetch(`/api/calendar?start=${start}&end=${end}`, {})
+  return res.json() as Promise<CalendarResponse>
+}
+
+function formatDate(d: string): string {
+  if (!d) return '?'
+  const date = new Date(d + 'T00:00:00')
+  return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+function groupByDate(items: CalendarItem[]): Map<string, CalendarItem[]> {
+  const map = new Map<string, CalendarItem[]>()
+  for (const item of items) {
+    const key = item.date || 'Sin fecha'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(item)
+  }
+  return map
+}
+
+export interface CalendarProps {
+  /**
+   * Show only one item type: "movie" for Películas' Estrenos, "episode" for
+   * Series'. Omitted means BOTH types, exactly as the Calendario page shows
+   * them today.
+   */
+  type?: 'movie' | 'episode'
+  /**
+   * When provided, clicking a card REPORTS the selection to the caller — the
+   * sections' detail panel takes over and NOTHING opens as a modal, for every
+   * card (with a file or without one). When absent the calendar keeps its
+   * standalone behaviour exactly: a card missing its file opens the release
+   * search overlay, one that has its file does nothing.
+   */
+  onSelect?: (item: CalendarItem) => void
+}
+
+export function Calendar({ type, onSelect }: CalendarProps) {
+  const [range, setRange] = useState(() => {
+    const today = new Date()
+    const end = new Date()
+    end.setDate(end.getDate() + 30)
+    return {
+      start: today.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+    }
+  })
+  const [scanItem, setScanItem] = useState<CalendarItem | null>(null)
+
+  const { data, isPending } = useQuery({
+    queryKey: ['calendar', range.start, range.end],
+    queryFn: () => fetchCalendar(range.start, range.end),
+  })
+
+  function shiftDays(delta: number) {
+    const s = new Date(range.start + 'T00:00:00')
+    const e = new Date(range.end + 'T00:00:00')
+    s.setDate(s.getDate() + delta)
+    e.setDate(e.getDate() + delta)
+    setRange({ start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) })
+  }
+
+  // Filter the FETCHED items, not the query: both sections ask for the same
+  // range, so they share one cache entry and the type only shapes the render.
+  const items = data ? (type ? data.items.filter((i) => i.type === type) : data.items) : []
+  const grouped = groupByDate(items)
+  const movieCount = items.filter((i) => i.type === 'movie').length
+  const episodeCount = items.filter((i) => i.type === 'episode').length
+  // Unfiltered (the Calendario page) both counts stay side by side, exactly as
+  // before; a filtered section only counts what it can show.
+  const counts: string[] = []
+  if (type !== 'episode') counts.push(`${movieCount} películas`)
+  if (type !== 'movie') counts.push(`${episodeCount} episodios`)
+  const countLabel = counts.join(' · ')
+
+  return (
+    <section className="calendar">
+      <div className="calendar-header">
+        <h2>Calendario</h2>
+        <div className="calendar-nav">
+          <button className="action-btn" onClick={() => shiftDays(-7)}>← Semana</button>
+          <span className="calendar-range">
+            {range.start} — {range.end}
+            {data && (
+              <span className="calendar-count">
+                {' '}· {countLabel}
+              </span>
+            )}
+          </span>
+          <button className="action-btn" onClick={() => shiftDays(7)}>Semana →</button>
+        </div>
+      </div>
+
+      {isPending ? (
+        <div className="wanted-loading">Cargando calendario...</div>
+      ) : data && items.length > 0 ? (
+        <div className="calendar-grid">
+          {Array.from(grouped.entries()).map(([date, items]: [string, CalendarItem[]]) => (
+            <div key={date} className="calendar-day">
+              <div className="calendar-day-header">
+                <span className="calendar-day-date">{formatDate(date)}</span>
+                <span className="calendar-day-count">{items.length}</span>
+              </div>
+              <div className="calendar-day-items">
+                {items.map((item) => {
+                  const grabbed = formatGrabMark(item.grabbed_at, item.grabbed_destination)
+                  return (
+                    <div
+                      key={`${item.source}-${item.id}`}
+                      className={`calendar-card ${item.has_file ? 'status-ok' : 'status-pending'}${grabbed ? ' status-grabbed' : ''}`}
+                      onClick={() => {
+                        // A caller that selects gets EVERY card; standalone,
+                        // only a missing one opens the overlay — as ever.
+                        if (onSelect) onSelect(item)
+                        else if (!item.has_file) setScanItem(item)
+                      }}
+                      style={onSelect || !item.has_file ? { cursor: 'pointer' } : undefined}
+                    >
+                      {item.remotePoster && (
+                        <img className="calendar-poster" src={item.remotePoster} alt={item.title} />
+                      )}
+                      <div className="calendar-info">
+                        {item.type === 'episode' ? (
+                          <div className="calendar-title">
+                            <span className="calendar-series">{item.series_title}</span>
+                            <span className="calendar-ep">
+                              S{String(item.season_number ?? 0).padStart(2, '0')}E{String(item.episode_number ?? 0).padStart(2, '0')}
+                            </span>
+                            <span className="calendar-ep-title">{item.title}</span>
+                          </div>
+                        ) : (
+                          <div className="calendar-title">
+                            {item.title}
+                            {item.year && <span className="wanted-year"> ({item.year})</span>}
+                          </div>
+                        )}
+                        <div className="calendar-type-badge">
+                          {item.type === 'movie' ? '🎬 Película' : '📺 Episodio'}
+                          {item.has_file && <span className="badge-ok"> ✓</span>}
+                        </div>
+                        {/* No mark means show nothing at all, not a dash. */}
+                        {grabbed && (
+                          <div className="calendar-grabbed" title={item.grabbed_destination ?? undefined}>
+                            {grabbed}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="wanted-empty">No hay contenido programado en este rango</div>
+      )}
+
+      {scanItem && <ReleaseSearchModal item={scanItem} onClose={() => setScanItem(null)} />}
+    </section>
+  )
+}

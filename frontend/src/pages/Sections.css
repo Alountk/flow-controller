@@ -1,0 +1,965 @@
+/*
+ * Películas and Series — master-detail shell (PR 1 of F-08, rows + panel
+ * search in PR 5).
+ *
+ * Same visual language as the chosen prototypes
+ * (peliculas-02-maestro-detalle / series-04-maestro-detalle): sub-view tabs,
+ * dense list on the left, detail panel on the right. PR 5 gives the pane's
+ * rows the prototype's shape and hosts the release search inline in the
+ * panel; the mock-up's disabled placeholder controls are gone — the real
+ * ones live inside the Releases tab.
+ */
+
+.section-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 32px;
+}
+
+/* ---- Header ---- */
+.sec-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sec-header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* ---- Sub-view tabs ---- */
+.sec-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-subtab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sec-subtab:hover {
+  color: var(--text);
+}
+
+.sec-subtab.is-active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.sec-subtab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---- Master-detail split ---- */
+.sec-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.sec-master,
+.sec-detail {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* The panel must stay reachable while the list scrolls. The action lives next
+   to the rows it acts on, so a panel that scrolls off the top is a panel you
+   cannot get back to without scrolling up first.
+
+   72px = the sticky topbar (56) + this grid's 16px gap. The panel scrolls
+   internally rather than growing, so a long release list never pushes it
+   below the fold either.
+
+   `sticky` fails SILENTLY the moment an ancestor gains `overflow: hidden` —
+   `.section-shell` and `.layout` must stay free of it. The `overflow: hidden`
+   on the rule above is on this element itself and is harmless. */
+.sec-detail {
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 88px);
+  overflow-y: auto;
+}
+
+/* ---- Master list ---- */
+.sec-master-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-master-title {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.sec-master-sub {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.sec-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.sec-table th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* List empty state: a single cell spanning the five columns. */
+.sec-table .sec-empty {
+  text-align: left;
+}
+
+/* ---- Empty states ---- */
+.sec-empty {
+  padding: 24px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.sec-empty-detail {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- Detail panel ---- */
+.sec-detail-head {
+  display: flex;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-poster {
+  width: 72px;
+  height: 104px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--bg-elev-2);
+  border: 1px dashed var(--border);
+}
+
+.sec-detail-titles {
+  min-width: 0;
+}
+
+.sec-detail-titles h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sec-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 10px 0 0;
+  font-size: 11.5px;
+}
+
+.sec-meta dt {
+  color: var(--text-dim);
+}
+
+.sec-meta dd {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* ---- Detail tabs ----
+ * Every tab is real since PR 6: Releases holds the search (PR 5), the rest
+ * carry their own data — no tab renders disabled any more. */
+.sec-detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sec-dtab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+
+.sec-dtab:hover {
+  color: var(--text);
+}
+
+/* The tab whose content is on screen. */
+.sec-dtab.is-active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+/* ---- Pane rows in the master column (PR 2 → restyled in PR 5) -------------
+ * The list column holds MediaPane's own rows. PR 5 gives the SECTION variant
+ * the chosen prototype's dense shape (peliculas-02 / series-04): a 34×48
+ * CSS-drawn mini-poster with the title's initials — never an external image —
+ * title and year, a status pill, a quality chip, the path, and the selection
+ * as a left bar. Every selector here is scoped under `.sec-master`, and
+ * every action the row had stays on the row.
+ */
+
+/* The rows run edge to edge like the prototype's list; the toolbar and the
+   pane's own states (loading, error, empty) keep their breathing room. */
+.sec-master .wanted {
+  padding: 0;
+}
+
+.sec-master .wanted .wanted-actions {
+  margin-bottom: 10px;
+  padding: 12px 14px 0;
+}
+
+/* No Faltantes/Todas buttons here (the sub-view tabs are the filter): the
+   filter pill collapses to the plain search field. */
+.sec-master .wanted-filter {
+  flex: 1;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.sec-master .wanted-search {
+  width: 100%;
+  margin-left: 0;
+}
+
+/* Dense list, not a card grid: one row after another, hairline separated. */
+.sec-master .wanted-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sec-master .wanted-list {
+  gap: 0;
+}
+
+/* One row: mini-poster · body · actions. Two classes on purpose — `sec-row`
+   carries the shape, `wanted-card`/`wanted-row` is what every existing query
+   and the pane's own styles key on.
+
+   Flex + wrap, not the prototype's two-column grid: that prototype has NO
+   actions column (all action lives in the panel), but these rows keep their
+   buttons (PR 5). Inlined at one line, the buttons' ~194px track left the
+   body 69.7px while year + pill + gaps alone demand 104.2px — and because
+   `.sec-row-name` is `overflow: hidden`, its automatic minimum (min-width:
+   auto) collapses to 0, so the title clamped to a ZERO-width box at 1280px
+   (visible as a missing title, "hidden" to Playwright). Wrapping lets the
+   actions take their own line when they cannot share one; the title keeps
+   the space the prototype gives it, ellipsis included. Single line is
+   preserved whenever there is room (body basis ≥ 220px ⇒ ≥ 116px of title
+   box beyond the 104.2px the year and pill need). */
+.sec-master .sec-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 11px;
+  padding: 9px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  align-items: center;
+}
+
+.sec-master .sec-row:last-child {
+  border-bottom: none;
+}
+
+.sec-master .sec-row:hover {
+  background: var(--bg-elev-2);
+}
+
+/* Mini-poster: a CSS gradient tinted per title + its initials. The row's
+   real poster, when the data carries one, layers ON TOP of these initials
+   (below) — they stay in the DOM as the load/error fallback, so the box is
+   never blank. `relative` anchors that overlay to the box. */
+.sec-row-poster {
+  position: relative;
+  width: 34px;
+  height: 48px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.88);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* The poster itself, drawn over the initials: cover so a portrait image fills
+   the 34×48 box without distortion. Removed on error (MediaPane) — the
+   initials underneath are the fallback, never an empty box. Lazy on purpose:
+   these lists paginate, and a page of 50 posters is 50 requests. */
+.sec-row-poster-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+}
+
+.sec-row-body {
+  min-width: 0;
+  /* The basis is the row's promise to the title: the top line needs ~104px
+     (year + pill + gaps) before a single letter fits, so with 220px the body
+     claims a readable title box whenever it shares a line, and pushes the
+     actions to their own line when sharing would starve the title. */
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sec-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sec-row-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* The ellipsis pair: shrink under pressure (never below 0 — the wrap
+     above guarantees the box it shrinks inside), and fill spare width so a
+     long title truncates instead of overflowing the row. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sec-row-year {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.sec-row-state {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.sec-row-bottom {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The status pill — the prototype's `pill` shape, labelled only with what
+   the row's own data can back. */
+.sec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.sec-pill::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sec-pill-ok {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+.sec-pill-warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+}
+
+.sec-pill-bad {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  border-color: color-mix(in srgb, var(--bad) 35%, transparent);
+}
+
+/* The quality chip: the file's own quality name, or nothing — never a guess. */
+.sec-q-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sec-row-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.sec-row-ep {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.sec-row-ep-title,
+.sec-row-date,
+.sec-row-ep-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Every action the row had stays ON the row — same buttons, same labels.
+   margin-left: auto keeps them right-aligned on their line — alone on it when
+   the row wrapped, beside the body when it did not. */
+.sec-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.sec-row .wanted-grabbed {
+  flex-shrink: 0;
+}
+
+/* Selectable rows: a pointer cursor, and a focus ring for keyboard users. */
+.sec-master .sec-row.is-selectable {
+  cursor: pointer;
+}
+
+.sec-master .sec-row.is-selectable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The selection is the prototype's left bar ON TOP of the row: the pill and
+   the grab mark keep saying what the row is, the bar says "this one". */
+.sec-master .sec-row[aria-current='true'] {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+/* ---- Calendar in the master column (PR 3) ---------------------------------
+ * For Estrenos the calendar IS the list, so it takes the same inner space the
+ * pane's rows take. Its own header was sized for a full page: in the narrower
+ * column the title shrinks and the range wraps instead of overflowing.
+ */
+
+.sec-master .calendar {
+  padding: 12px 14px;
+}
+
+.sec-master .calendar-header h2 {
+  font-size: 15px;
+}
+
+.sec-master .calendar-range {
+  white-space: normal;
+}
+
+/* ---- Calidad in the master column (PR 4) ----------------------------------
+ * The sub-view is a filterable table: a chip row picks the class (4K, 3D,
+ * en biblioteca, desconocida), the table lists every title of that class with
+ * the facts the class was read from — quality, path, and which routing folder
+ * holds it. Rows are selectable like the pane's rows.
+ */
+
+.sec-calidad {
+  padding: 12px 14px;
+}
+
+.sec-class-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/* Same pill language as `.sec-q-chip`, but interactive: a filter, not a
+   disabled display chip in the action panel. */
+.sec-class-chip {
+  appearance: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.sec-class-chip:hover {
+  color: var(--text);
+}
+
+.sec-class-chip.is-active {
+  background: var(--accent-soft);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: var(--text);
+}
+
+.sec-class-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The honest note: where the class comes from, per section. */
+.sec-q-note {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+/* Column widths for the six Calidad columns (table-layout: fixed reads them
+   from the first row). Ruta and Título need room; Año does not. */
+.sec-q-table th:nth-child(1) { width: 24%; }
+.sec-q-table th:nth-child(2) { width: 8%; }
+.sec-q-table th:nth-child(3) { width: 14%; }
+.sec-q-table th:nth-child(4) { width: 14%; }
+.sec-q-table th:nth-child(5) { width: 27%; }
+.sec-q-table th:nth-child(6) { width: 13%; }
+
+.sec-q-table td {
+  padding: 8px 14px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.sec-q-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* A path stays readable but dimmer than the title it belongs to. */
+.sec-q-table .sec-q-path {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+/* The class chip inside a row: a label, not a button (the buttons above are
+   the filter). */
+.sec-class-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Selectable rows: same wiring as the pane's — pointer, focus ring, and a
+   selection highlight that keeps the row's text readable. */
+.sec-q-row {
+  cursor: pointer;
+}
+
+.sec-q-row:hover td {
+  background: var(--bg-elev-2);
+}
+
+.sec-q-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.sec-q-row[aria-current='true'] td {
+  background: var(--accent-soft);
+}
+
+.sec-q-row[aria-current='true'] td:first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ---- Detail panel content (PR 2) ---- */
+.sec-poster-img {
+  object-fit: cover;
+  border-style: solid;
+}
+
+.sec-meta dd.sec-grabbed {
+  color: var(--warn);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Inline release search (PR 5) ----------------------------------------
+ * The panel's Releases tab: ReleaseSearchModal in its 'panel' presentation —
+ * no backdrop, no modal chrome, no positioning. The search fills the panel it
+ * lives in; every class inside it keeps the styling ReleaseSearchModal.css
+ * already gives the modal's results, filters and destination combo.
+ */
+.release-inline {
+  width: 100%;
+  min-width: 0;
+}
+
+.release-inline .scan-modal-body {
+  padding: 14px 16px;
+  overflow: visible;
+}
+
+/* The honest note, at the panel's foot like the prototype's detail-foot:
+   releases live here since PR 5, the calendar still opens its modal, and
+   the remaining tabs carry real data since PR 6. */
+.sec-panel-note {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+}
+
+/* ---- Detail-panel tabs (PR 6): Archivos · Episodios · Historial ----------
+ * The tab bodies are read-only views of what the endpoints already answer.
+ * `.sec-tab-note` is an honest state (no path, never requested, nothing
+ * here) — a sentence, never an empty table pretending to be data. */
+.sec-tab-note {
+  margin: 0;
+  padding: 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+/* The grab record: label/value pairs like the panel's own meta list. */
+.sec-history {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 12.5px;
+}
+
+.sec-history dt {
+  color: var(--text-dim);
+}
+
+.sec-history dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Episodes (Episodios tab) ----
+ * The season chips above the table: they grow DOWN to two rows and scroll
+ * after that. Chip height lives in --chip-h alone, so a future chip restyle
+ * moves the cap with it instead of leaving a hard-coded 58px behind. The
+ * buttons are `.sec-class-chip`, the same pill the Calidad filters use. */
+.eseasons {
+  --chip-h: 26px;
+  --gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  max-height: calc(2 * var(--chip-h) + var(--gap));
+  overflow-y: auto;
+  margin: 10px 12px 8px;
+}
+
+/* The header each season group is preceded by: name, year, and only the count
+   clauses that are true. Sticky, the prototype's .eseason: a long season anchors
+   its own name while the rows scroll under it. */
+.sec-ep-table .sec-season-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 7px 14px;
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.sec-ep-table .sec-season-head .sec-season-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.sec-ep-table .sec-season-head .sec-season-year {
+  margin-left: 8px;
+}
+
+.sec-ep-table .sec-season-head .sec-season-counts {
+  margin-left: 8px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+/* Episode rows are the prototype's `.etr`: two self-describing lines rather
+   than cells in a grid. The 3px left border is where the marked row reads. */
+.sec-ep-table .sec-ep-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 14px;
+  border-bottom: 1px solid rgba(39, 39, 42, 0.55);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+
+.sec-ep-table .sec-ep-row:hover {
+  background: var(--bg-elev-2);
+  border-left-color: var(--border);
+}
+
+.sec-ep-table .sec-ep-row.is-marked {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+.sec-ep-table .sec-ep-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.sec-ep-table .sec-ep-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.sec-ep-table .sec-ep-bot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.sec-ep-code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.sec-ep-name {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sec-ep-pill {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.sec-ep-pill.is-ok {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: rgba(108, 214, 143, 0.35);
+}
+
+.sec-ep-pill.is-missing {
+  color: var(--warn);
+  border-color: var(--border);
+}
+
+.sec-ep-date {
+  font-size: 11px;
+  color: var(--text-dim2);
+  flex-shrink: 0;
+}
+
+/* An absent quality reads as a dash with no badge. Its own class so it never
+   collides with the date — a selector matching both would let a test pass on
+   the wrong fact. */
+.sec-ep-qual {
+  font-size: 11px;
+  color: var(--text-dim2);
+  flex-shrink: 0;
+}
+
+.sec-q-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.sec-q-tag.is-4k {
+  color: var(--accent);
+  border-color: rgba(74, 158, 255, 0.45);
+}
+
+.sec-ep-path {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+/* The Archivos listing keeps the section's table voice; the path column may
+   hold long names, so it wraps instead of clipping. */
+.sec-files-table {
+  table-layout: auto;
+}
+
+.sec-files-table td {
+  font-size: 12px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.sec-files-table .sec-file-name {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Implementation notes ---- */
+.sec-notes {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+
+.sec-notes h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sec-notes ol {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.sec-notes li {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.sec-notes li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1180px) {
+  .sec-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

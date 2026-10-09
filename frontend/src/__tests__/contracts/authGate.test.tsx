@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthGate } from '../../components/AuthGate'
-import App from '../../App'
-import { forgetApiKey, hasStoredApiKey, rememberApiKey, verifyApiKey } from '../../api/auth'
+import { AuthGate } from '../../app/AuthGate.tsx'
+import App from '../../app/App.tsx'
+import { forgetApiKey, hasStoredApiKey, rememberApiKey, verifyApiKey } from '../../shared/api/auth.ts'
 
 /**
  * The backend no longer serves the API key — handing it out anonymously let

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import App from '../../App'
+import App from '../../app/App.tsx'
 import {
   apiFetch,
   forgetApiKey,
@@ -9,7 +9,7 @@ import {
   rememberApiKey,
   setUnauthorizedHandler,
   UnauthorizedError,
-} from '../../api/auth'
+} from '../../shared/api/auth.ts'
 
 /**
  * Central auth handling.
