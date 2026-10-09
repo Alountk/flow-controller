@@ -106,7 +106,7 @@ class TestFileEndpointsAreOffTheEventLoop:
         victim.mkdir()
         (victim / "inner.mkv").write_bytes(b"x")
         seen: dict = {}
-        with patch("interfaces.http.routes.files.shutil.rmtree",
+        with patch("application.use_cases.place_file.shutil.rmtree",
                    side_effect=_spy(seen, "rmtree", shutil.rmtree)):
             resp = self._post("/api/files/delete", {"remote_path": str(victim)})
 
@@ -122,7 +122,7 @@ class TestFileEndpointsAreOffTheEventLoop:
         src.write_bytes(b"x")
         dst = tmp_path / "b.mkv"
         seen: dict = {}
-        with patch("interfaces.http.routes.files.shutil.copy2",
+        with patch("application.use_cases.place_file.shutil.copy2",
                    side_effect=_spy(seen, "copy2", shutil.copy2)):
             resp = self._post("/api/files/copy",
                               {"remote_path": str(src), "local_path": str(dst)})

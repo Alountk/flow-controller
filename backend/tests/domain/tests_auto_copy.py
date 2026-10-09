@@ -23,8 +23,10 @@ from domain.policy import (
 #: The purity check below reads source, so it must read the IMPLEMENTATION.
 #: Pointed at the re-export instead it would scan a file made of `from
 #: domain.policy import ...` and pass while proving nothing at all.
+#: (`domain/policy.py` became the package `domain/policy/` in T1 so
+#: `placement.py` could sit beside it; `__init__.py` still holds the code.)
 from tests import BACKEND_ROOT  # noqa: E402
-MODULE_PATH = BACKEND_ROOT / "domain" / "policy.py"
+MODULE_PATH = BACKEND_ROOT / "domain" / "policy" / "__init__.py"
 
 
 def _trace(stage=None, queue=None):

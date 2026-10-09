@@ -1,10 +1,14 @@
-"""File browser, queue, copy/move routes."""
+"""File browser, queue, copy/move routes.
+
+Placement policy (hardlink-first, rename-or-fallback, the seed guard, the
+queue trim) lives in `domain.policy.placement`; the filesystem orchestration
+lives in `application.use_cases.place_file`. What remains here is HTTP: parse
+the request, call, map the result.
+"""
 
 import asyncio
 import logging
 import os
-import shutil
-import tempfile
 import time
 from pathlib import Path
 
@@ -14,6 +18,7 @@ import state
 from config import find_service
 from traces import host_path
 from application.gateways import arr_root_folders, history
+from application.use_cases import place_file
 from import_service import post_move_import
 from models import ActionRequest
 from domain.naming import MEDIA_EXTENSIONS
@@ -23,43 +28,6 @@ import config
 
 log = logging.getLogger("flow-controller")
 router = APIRouter()
-
-CHUNK_SIZE = 1024 * 1024  # 1MB
-
-
-def _seed_block_reason(src: str, verb: str) -> str | None:
-    """Why `src` must not be renamed or moved by us — or None when it may.
-
-    A torrent client shares a PATH, not an inode. Renaming or moving a file
-    removes the directory entry it is seeding, and the data surviving does not
-    help: the seeder's path is what disappeared. Placing an extra name (a
-    hardlink or a copy) never touches it, which is why the operations allowed
-    here are the ones that ADD a name and not the ones that change one.
-
-    **Only the torrent folder is guarded.** aMule is excluded on purpose, and
-    two independent reasons say the same thing:
-
-    - its downloads sit on a *different mount* from the library
-      (`/mnt/storage-6tb` vs `/mnt/storage`), so a hardlink between them is
-      impossible — there was no hardlink here to protect in the first place;
-    - aMule has no seed ratio and no swarm obligation, and an ED2K can be
-      fetched again from the network, so a file there is disposable on a
-      schedule rather than a fragile seed. Blocking it would protect nothing
-      while getting in the way of the retention cleanup.
-
-    The folder comes from settings, so changing it in Configuración moves the
-    guard with it.
-    """
-    resolved = os.path.realpath(src)
-    root = os.path.realpath(config.FOLDER_DOWNLOAD_TORRENT)
-    if resolved == root or resolved.startswith(root + "/"):
-        return (
-            f"'{Path(src).name}' está en la carpeta de descargas de torrents ({root}) y no se "
-            f"puede {verb}: qBittorrent comparte exactamente esa ruta, y renombrarla o moverla "
-            f"rompe el hardlink con el que sigue sembrando. En su lugar, copia o coloca el "
-            f"fichero — se resuelve con un enlace duro y la semilla no se entera."
-        )
-    return None
 
 
 def _validate_path(path: str) -> str:
@@ -265,31 +233,17 @@ async def file_rename(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Renombra un archivo o directorio."""
     src = _validate_path(req.remote_path or "")
     dst = _validate_path(req.local_path or "")
-    blocked = _seed_block_reason(src, "renombrar")
+    blocked = place_file.seed_block_reason(src, config.FOLDER_DOWNLOAD_TORRENT, "renombrar")
     if blocked:
         return {"ok": False, "detail": blocked}
-    try:
-        await asyncio.to_thread(os.rename, src, dst)
-        return {"ok": True, "detail": f"Renombrado: {Path(src).name} → {Path(dst).name}"}
-    except Exception as exc:
-        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    return await asyncio.to_thread(place_file.rename_path, src, dst)
 
 
 @router.post("/api/files/delete")
 async def file_delete(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Elimina un archivo o directorio."""
     target = _validate_path(req.remote_path or "")
-    try:
-        p = Path(target)
-        # Both branches are unbounded: a recursive delete or an unlink over a
-        # stalled mount must not hold the loop hostage.
-        if p.is_dir():
-            await asyncio.to_thread(shutil.rmtree, p)
-        else:
-            await asyncio.to_thread(p.unlink)
-        return {"ok": True, "detail": f"Eliminado: {p.name}"}
-    except Exception as exc:
-        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    return await asyncio.to_thread(place_file.delete_path, target)
 
 
 @router.post("/api/files/copy")
@@ -297,116 +251,10 @@ async def file_copy(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Copia un archivo o directorio."""
     src = _validate_path(req.remote_path or "")
     dst = _validate_path(req.local_path or "")
-    try:
-        src_path = Path(src)
-        if src_path.is_dir():
-            await asyncio.to_thread(shutil.copytree, src, dst, copy_function=_link_or_copy)
-        else:
-            await asyncio.to_thread(shutil.copy2, src, dst)
-        return {"ok": True, "detail": f"Copiado: {src_path.name} → {dst}"}
-    except Exception as exc:
-        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    return await asyncio.to_thread(place_file.copy_path, src, dst)
 
 
 # ── Copy + Queue ──────────────────────────────────────────────────────────────
-
-def _link_or_copy(src: str, dst: str) -> None:
-    """Enlaza si el sistema de ficheros deja, y copia si no.
-
-    `shutil.copytree` lo invoca una vez por fichero, así que una carpeta de
-    release colocada en el mismo dispositivo no cuesta un byte extra y la
-    semilla sigue intacta. Solo un corte de dispositivo (EXDEV) paga el
-    duplicado real — y ahí no hay más remedio.
-    """
-    try:
-        os.link(src, dst)
-    except OSError:
-        shutil.copy2(src, dst)
-
-
-def _copy_with_progress(src: str, dst: str, op: dict) -> None:
-    """Copia un archivo con progreso, actualizando op en un dict compartido.
-
-    Escribe en un temporal del MISMO directorio y solo lo renombra al final: un
-    fallo a mitad no deja un fichero a medias con el nombre definitivo, y un
-    destino que ya sea otro nombre del MISMO inodo jamás se abre para escritura
-    — eso vaciaría el inodo que la fuente todavía referencia.
-    """
-    src_path = Path(src)
-    if src_path.is_dir():
-        shutil.copytree(src, dst, copy_function=_link_or_copy)
-        return
-    total = src_path.stat().st_size
-    op["total_bytes"] = total
-    op["copied_bytes"] = 0
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            dir=str(Path(dst).parent), delete=False, prefix=".copy_", suffix=".part"
-        ) as fdst:
-            tmp_path = fdst.name
-            with open(src, "rb") as fin:
-                while True:
-                    if op.get("cancelled"):
-                        raise InterruptedError("Cancelado por el usuario")
-                    chunk = fin.read(CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    fdst.write(chunk)
-                    op["copied_bytes"] += len(chunk)
-                    op["progress"] = round(op["copied_bytes"] / total * 100) if total else 100
-        os.rename(tmp_path, dst)
-        tmp_path = None
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
-def _place_file(src: str, dst: str, op: dict) -> None:
-    """Pone `src` en `dst` sin destruir nunca `src`.
-
-    El enlace duro es la primera opción: instantáneo, sin un byte extra, y la
-    descarga sigue sembrando desde el mismo inodo — la misma razón que ya
-    invoca `copy_file_chunked` en `copy_engine`. Solo el sistema de ficheros
-    puede rechazarlo (EXDEV cuando `dst` vive en otro dispositivo), y entonces
-    copiamos los bytes: pero el origen queda intacto, porque esto *coloca*, no
-    mueve.
-    """
-    src_path = Path(src)
-    dst_path = Path(dst)
-    dst_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Ya hay un nombre en cada extremo apuntando al mismo inodo: no hay nada que
-    # hacer, y sobre todo NO hay que abrir `dst` para escritura.
-    if src_path.exists() and dst_path.exists() and os.path.samefile(src, dst):
-        op["total_bytes"] = op["copied_bytes"] = src_path.stat().st_size
-        op["progress"] = 100
-        op["files_done"] = op["files_total"] = 1
-        return
-
-    try:
-        os.link(src, dst)
-    except OSError:
-        _copy_with_progress(src, dst, op)
-    else:
-        op["total_bytes"] = op["copied_bytes"] = src_path.stat().st_size
-        op["progress"] = 100
-    op["files_done"] = op["files_total"] = 1
-
-
-def _copytree_with_progress(src: str, dst: str, op: dict) -> None:
-    """Copia un directorio con progreso por archivos."""
-    src_path = Path(src)
-    all_files = [f for f in src_path.rglob("*") if f.is_file()]
-    total_files = len(all_files)
-    op["files_total"] = total_files
-    op["files_done"] = 0
-    op["total_bytes"] = sum(f.stat().st_size for f in all_files)
-    op["copied_bytes"] = 0
-    shutil.copytree(src, dst, copy_function=_link_or_copy)
-    op["files_done"] = total_files
-    op["copied_bytes"] = op["total_bytes"]
-    op["progress"] = 100
 
 
 async def _ensure_consumer() -> None:
@@ -459,25 +307,9 @@ async def _consume_queue():
             src = op["src"]
             dst = op["dst"]
             if op["type"] == "copy":
-                src_path = Path(src)
-                if src_path.is_dir():
-                    await asyncio.to_thread(_copytree_with_progress, src, dst, op)
-                else:
-                    await asyncio.to_thread(_place_file, src, dst, op)
+                await asyncio.to_thread(place_file.place_path, src, dst, op)
             else:
-                src_path = Path(src)
-                try:
-                    dst_parent = Path(dst).parent
-                    if not dst_parent.exists():
-                        await asyncio.to_thread(dst_parent.mkdir, parents=True, exist_ok=True)
-                    await asyncio.to_thread(os.rename, src, dst)
-                except OSError:
-                    if src_path.is_dir():
-                        await asyncio.to_thread(_copytree_with_progress, src, dst, op)
-                    else:
-                        await asyncio.to_thread(_copy_with_progress, src, dst, op)
-                    if not op.get("cancelled"):
-                        await asyncio.to_thread(shutil.rmtree if src_path.is_dir() else os.remove, src)
+                await asyncio.to_thread(place_file.move_path, src, dst, op)
             async with queue_lock:
                 if op.get("cancelled"):
                     op["status"] = "cancelled"
@@ -542,7 +374,7 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
     if not src or not dst:
         return {"ok": False, "detail": "Se requieren remote_path y local_path"}
     if op_type == "move":
-        blocked = _seed_block_reason(src, "mover")
+        blocked = place_file.seed_block_reason(src, config.FOLDER_DOWNLOAD_TORRENT, "mover")
         if blocked:
             return {"ok": False, "detail": blocked}
 
@@ -568,8 +400,7 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
     }
     async with queue_lock:
         file_queue.append(op)
-        if len(file_queue) > 50:
-            file_queue[:] = [o for o in file_queue if o["status"] in ("pending", "running")]
+        place_file.trim_queue(file_queue)
 
     # Durable from the moment it is accepted, so a restart still shows it.
     await asyncio.to_thread(history.record_operation, op)
