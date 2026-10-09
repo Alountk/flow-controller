@@ -41,10 +41,10 @@ Fuera de alcance: cambio de comportamiento visible de APIs o UI, nuevas dependen
 
 | Slice | Tarea | Rama | PR |
 |---|---|---|---|
-| S1 | T1 política→dominio | `refactor/placement-domain` | → main |
-| S2 | T2 frontend features | `refactor/frontend-feature-folders` | → main (base: S1) |
-| S3 | T3 ports tipados | `refactor/typed-ports` | → main (base: S2) |
-| S4 | T4 higiene flecos | `chore/estructura-flecos` | → main (base: S3) |
+| S1 | T1 política→dominio | `refactor/placement-domain` | **#175** → main |
+| S2 | T2 frontend features | `refactor/frontend-feature-folders` | **#176** → main (base: S1) |
+| S3 | T3 ports tipados | `refactor/typed-ports` | **#177** → main (base: S2) |
+| S4 | T4 higiene flecos | `chore/estructura-flecos` | **#178** → main (base: S3) |
 
 - Runner de verificación backend: `cd backend && ../.venv/bin/python -m pytest -q` (venv en la RAÍZ del repo, Python 3.12, espejo de CI `ci.yml:41-49`; NO poner el venv dentro de `backend/` — contamina los contratos de legacy LOC/pyflakes/vulture).
 
