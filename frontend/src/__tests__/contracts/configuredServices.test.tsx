@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import App from '../../App'
-import { Sidebar } from '../../components/Sidebar'
-import { rememberApiKey, forgetApiKey, setUnauthorizedHandler } from '../../api/auth'
-import type { ServiceKey } from '../../types'
+import App from '../../app/App.tsx'
+import { Sidebar } from '../../app/Sidebar.tsx'
+import { rememberApiKey, forgetApiKey, setUnauthorizedHandler } from '../../shared/api/auth.ts'
+import type { ServiceKey } from '../../shared/types.ts'
 
 /**
  * A service the user has not configured must be invisible, not broken.

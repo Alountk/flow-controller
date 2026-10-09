@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import App from '../../App'
-import { forgetApiKey, hasStoredApiKey, setUnauthorizedHandler } from '../../api/auth'
-import type { ServiceTestResult } from '../../api/services'
+import App from '../../app/App.tsx'
+import { forgetApiKey, hasStoredApiKey, setUnauthorizedHandler } from '../../shared/api/auth.ts'
+import type { ServiceTestResult } from '../../shared/api/services.ts'
 
 /**
  * A fresh install must be configurable from the UI, step by step.
