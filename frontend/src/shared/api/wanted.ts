@@ -78,12 +78,41 @@ export async function fetchSeriesEpisodes(seriesId: number): Promise<{ episodes:
  * The confirmation UI (with its count) belongs to the caller; this helper only
  * passes the flag through honestly.
  */
-export async function searchWanted(source: string, confirm = false): Promise<ActionResult> {
+export interface BulkSearchResult extends ActionResult {
+  /** The backend asked for permission and launched NOTHING (C-09). */
+  needs_confirm?: boolean
+  /** The command that would run / did run: MissingMoviesSearch or its twin. */
+  command?: string
+  /** The backend's own sentence: the ack of the launch, or the reason. */
+  detail?: string
+  /** Radarr's/Sonarr's handle for the launched command — cancel's argument. */
+  command_id?: number
+}
+
+export async function searchWanted(source: string, confirm = false): Promise<BulkSearchResult> {
   const res = await apiFetch('/api/wanted/search', {
     method: 'POST',
     body: JSON.stringify({ source, confirm }),
   })
-  return handleResponse(res)
+  return (await handleResponse(res)) as BulkSearchResult
+}
+
+/**
+ * Hand the command id back so the arr stops that specific command.
+ *
+ * Only meaningful ONCE a launch happened — the `command_id` the confirmed
+ * search returned. A command that already finished answers 404 at the arr,
+ * which comes back as `ok: false` with its own detail (C-09 contract).
+ */
+export async function cancelWantedSearch(
+  source: string,
+  commandId: number,
+): Promise<BulkSearchResult> {
+  const res = await apiFetch('/api/wanted/search/cancel', {
+    method: 'POST',
+    body: JSON.stringify({ source, command_id: commandId }),
+  })
+  return (await handleResponse(res)) as BulkSearchResult
 }
 
 export async function searchWantedItem(
