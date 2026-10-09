@@ -250,6 +250,11 @@ def fetch_amu_torrents_by_category(*args, **kwargs):
     return _arr.fetch_amu_torrents_by_category(*args, **kwargs)
 
 
+def fetch_arr_grabbed(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _arr.fetch_arr_grabbed(*args, **kwargs)
+
+
 def fetch_arr_queue(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.fetch_arr_queue(*args, **kwargs)
@@ -283,6 +288,11 @@ def get_setting(*args, **kwargs):
 def get_settings(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return settings.get_settings(*args, **kwargs)
+
+
+def list_own_grabs(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return history.list_own_grabs(*args, **kwargs)
 
 
 def recent_auto_copy_log(*args, **kwargs):

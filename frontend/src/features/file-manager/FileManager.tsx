@@ -253,6 +253,17 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     return <span className="fm-age">hace {days} {days === 1 ? 'día' : 'días'}</span>
   }
 
+  /** The row's provenance chip (F-07): why the file is here — `cola ·
+   *  importando` / `histórico` / `lo pedimos nosotros`. Display-only: it
+   *  explains, it never gates. A file no source claims (`null`, both fields
+   *  together) renders NOTHING — same honesty rule as the age chip, because
+   *  a guessed provenance would be a claim nobody made. */
+  function provenanceChip(item: FileItem) {
+    const label = retentionByPath.get(item.path)?.provenance_label
+    if (!label) return null
+    return <span className="fm-prov">{label}</span>
+  }
+
   function toggleRowSelection(itemPath: string) {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -510,6 +521,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
                 <span className="fm-name">{item.name}</span>
               )}
               {ageChip(item)}
+              {provenanceChip(item)}
               <span className="fm-size">{item.is_dir ? '—' : formatSize(item.size)}</span>
               <span className="fm-date">{formatDate(item.modified)}</span>
               <div className="fm-item-actions">

@@ -17,8 +17,10 @@ from fastapi import APIRouter, Depends, HTTPException
 import state
 from config import find_service
 from traces import host_path
+from application import gateways
 from application.gateways import arr_root_folders, history
 from application.use_cases import place_file
+from application.use_cases.file_provenance import file_provenance
 from import_service import post_move_import
 from models import ActionRequest
 from domain.naming import MEDIA_EXTENSIONS
@@ -181,6 +183,16 @@ async def file_retention(path: str = "/", _key: str = Depends(verify_api_key)):
     The clock is persisted the first time a file is observed and never
     refreshed: recomputing it per sweep would mean nothing ever expires. Rows
     whose file has disappeared are pruned here so the table tracks the disk.
+
+    **Provenance (F-07) rides on the same rows**: each file says where it
+    came from — `cola · importando`, `histórico`, `lo pedimos nosotros` — via
+    `application.use_cases.file_provenance`, which crosses the arr queue, the
+    arr history and our own-grab registry behind a shared TTL. Display-only:
+    the answer may be seconds stale and degrades to `null` (no chip) when a
+    source is unreachable; it never blocks the listing and never claims what
+    it could not prove. The file-list flow already joins these rows by path
+    in the frontend, so a parallel endpoint would double the round trip to
+    answer a question this one is already asked.
     """
     target = _validate_path(path)
     if not os.path.isdir(target):
@@ -195,16 +207,40 @@ async def file_retention(path: str = "/", _key: str = Depends(verify_api_key)):
     seen = await asyncio.to_thread(history.remember_downloads, full)
     await asyncio.to_thread(history.prune_downloads, target, set(full))
 
+    # One provenance answer per name, from the three sources behind the one
+    # seam. Empty directory → the service short-circuits without a single
+    # outbound call; a dead arr degrades its chips to null inside the seam.
+    provenance: dict[str, dict] = {}
+    if entries:
+        async with http_session() as session:
+            provenance = await file_provenance(
+                (entry.name for entry in entries),
+                session=session,
+                services=config.configured_services("arr"),
+                # Resolved per request off the gateway module (the disk_report
+                # pattern): a test can re-stub the source without patching a
+                # name this module bound at import.
+                queue_loader=gateways.fetch_arr_queue,
+                history_loader=gateways.fetch_arr_grabbed,
+                own_loader=gateways.list_own_grabs,
+            )
+
     now = time.time()
     days = config.RETENTION_AMULE_DAYS
     files = []
     for entry in entries:
+        # Explicit nulls for the unclaimed: the key is always present, the
+        # chip renders only when a source actually named the file.
+        claim = provenance.get(entry.name) or {
+            "provenance": None,
+            "provenance_label": None,
+        }
         first = seen.get(str(entry))
         if first is None:
             # The store is unavailable: report the file without an age rather
             # than inventing one — a made-up age could justify a deletion.
             files.append({"name": entry.name, "first_seen_at": None,
-                          "age_days": None, "expired": False})
+                          "age_days": None, "expired": False, **claim})
             continue
         age_days = max(0.0, (now - first) / 86400.0)
         files.append({
@@ -212,6 +248,7 @@ async def file_retention(path: str = "/", _key: str = Depends(verify_api_key)):
             "first_seen_at": first,
             "age_days": round(age_days, 2),
             "expired": age_days >= days,
+            **claim,
         })
 
     return {"ok": True, "path": target, "days": days, "files": files}

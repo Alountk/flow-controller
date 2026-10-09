@@ -363,6 +363,19 @@
   border-color: var(--warn);
 }
 
+/* F-07: procedencia — same quiet pill family as the age chip, italic so two
+   chips side by side still read as two different questions. */
+.fm-prov {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 .fm-date {
   min-width: 80px;
 }

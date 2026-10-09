@@ -29,11 +29,33 @@ client = TestClient(app, raise_server_exceptions=False)
 
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):
-    """A private database and restored settings/constants per test."""
+    """A private database and restored settings/constants per test.
+
+    The arr loaders are stubbed empty at the gateways: with RADARR_URL set by
+    `conftest.py` the services are "configured", and a provenance lookup that
+    reached for them would either dial localhost:7878 for every listing or —
+    worse — read a real local arr and make these assertions depend on whatever
+    happens to be downloading. Tests that want arr answers re-stub below.
+    """
     before = copy.deepcopy(settings_mod.get_settings())
     history.close()
     history.init_db(tmp_path / "history.db")
+
+    async def _no_arr_records(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr("application.gateways.fetch_arr_queue", _no_arr_records)
+    monkeypatch.setattr("application.gateways.fetch_arr_grabbed", _no_arr_records)
+
+    # The provenance snapshot outlives a single request by design; without an
+    # explicit cold start here, a queue chip planted by one test would still
+    # be claimed by the next one's listing (same lesson as tests_trace_cache).
+    from application.use_cases import file_provenance as provenance_module
+
+    provenance_module._snapshot = None
+
     yield
+    provenance_module._snapshot = None
     history.close()
     settings_mod._settings = before
     config.rebuild()
@@ -137,3 +159,63 @@ class TestItNeverDeletesAndNeverLeavesTheAllowedRoots:
         resp = client.get("/api/files/retention", params={"path": "/etc"})
 
         assert resp.status_code == 403, resp.text
+
+
+class TestProvenanceChips:
+    """F-07 — each row says where the file came from. Display-only.
+
+    The chip travels ON the retention rows (the file-list flow the File
+    Manager already joins by path); a parallel endpoint would double the
+    listing round trip to answer a question the listing itself asks.
+    """
+
+    def test_every_row_carries_a_provenance_field_even_when_nothing_claims_it(
+        self, tmp_path
+    ):
+        d = _files(tmp_path / "downloads")
+
+        rows = {f["name"]: f for f in _get(d).json()["files"]}
+
+        assert rows["Movie.2016.mkv"]["provenance"] is None
+        assert rows["Movie.2016.mkv"]["provenance_label"] is None
+        assert rows["notes.txt"]["provenance"] is None, (
+            "absence is explicit null, never a missing key — the frontend "
+            "renders no chip for it"
+        )
+
+    def test_a_file_we_asked_for_directly_carries_the_own_chip(self, tmp_path):
+        """The local attribution end to end: own_grabs -> route -> row.
+
+        A direct grab (B-10) never reaches an arr, so this needs no HTTP at
+        all — the registry alone claims the file, by the exact client name
+        recorded when it was added.
+        """
+        d = _files(tmp_path / "downloads")
+        history.record_own_grab(
+            "radarr", direct=True, client_name="Movie.2016.mkv"
+        )
+
+        rows = {f["name"]: f for f in _get(d).json()["files"]}
+
+        assert rows["Movie.2016.mkv"]["provenance"] == "own"
+        assert rows["Movie.2016.mkv"]["provenance_label"] == "lo pedimos nosotros"
+        assert rows["notes.txt"]["provenance"] is None, (
+            "the chip is about the file the registry named, not its neighbour"
+        )
+
+    def test_a_file_the_arr_is_importing_carries_the_queue_chip(
+        self, tmp_path, monkeypatch
+    ):
+        async def _one_queue_item(session, service):
+            return [{"title": "Movie.2016.mkv", "movieId": 9}]
+
+        monkeypatch.setattr(
+            "application.gateways.fetch_arr_queue", _one_queue_item
+        )
+
+        d = _files(tmp_path / "downloads")
+
+        rows = {f["name"]: f for f in _get(d).json()["files"]}
+
+        assert rows["Movie.2016.mkv"]["provenance"] == "queue"
+        assert rows["Movie.2016.mkv"]["provenance_label"] == "cola · importando"

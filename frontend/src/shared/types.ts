@@ -493,15 +493,26 @@ export interface BrowseResponse {
   error?: string
 }
 
+/** F-07 — where a file came from: the arr's import queue, the arr's history,
+ *  or a grab this app made itself (`own_grabs`). `null` means no source
+ *  claims the file — the UI shows no chip rather than guessing. */
+export type FileProvenance = 'own' | 'queue' | 'history'
+
 /** One file in GET /api/files/retention's `files` (backend `file_retention`).
  *  Marking only — the endpoint never deletes. `age_days: null` means the clock
  *  store could not be read: an UNKNOWN age, never a zero one, so the UI shows
- *  nothing rather than a number nobody measured. */
+ *  nothing rather than a number nobody measured.
+ *
+ *  `provenance`/`provenance_label` (F-07) follow the same honesty: the key is
+ *  the machine value, the label the Spanish text the backend chose, and both
+ *  are null together when nothing attributes the file. */
 export interface RetentionFile {
   name: string
   first_seen_at: number | null
   age_days: number | null
   expired: boolean
+  provenance: FileProvenance | null
+  provenance_label: string | null
 }
 
 export interface RetentionResponse {

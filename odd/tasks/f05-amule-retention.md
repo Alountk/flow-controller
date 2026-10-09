@@ -76,4 +76,4 @@ Un commit por PR; A toca `backend/{settings,config,history}.py`, `backend/routes
 ## Progreso
 - [x] T1-T4
 - [x] T5-T8 (cerrado: BACKLOG F-05 ✅ Entregado — A+B)
-- [ ] T9 (aparte: procedencia, fuera del alcance de F-05)
+- [x] T9 (aparte: procedencia, fuera del alcance de F-05) — ✅ **hecho en F-07** (2026-10-09): chip de procedencia en FileManager + caché de traces movida a application; ver `odd/tasks/flecos-producto.md` T4.
