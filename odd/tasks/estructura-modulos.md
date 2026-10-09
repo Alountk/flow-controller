@@ -60,10 +60,13 @@ Fuera de alcance: cambio de comportamiento visible de APIs o UI, nuevas dependen
   - Aceptación: sin imports pages→pages ✅; MediaPane original eliminado ✅; vitest+tsc+eslint verdes ✅ (54 files/419 tests, tsc 0, eslint 0 — baseline idéntico).
   - Verificación: T2a writer (5 checks) + verificador independiente (0 bloqueantes, auth.ts SHA idéntico) + spot-check padre; T2b assess **medium** → writer self-verification + spot-check padre (419/419, `wc -l` 223).
   - Checks: `./node_modules/.bin/{vitest run, tsc -b --noEmit, eslint src/}` en `frontend/` (NUNCA `npm` — alias a pnpm en esta shell).
-- [ ] **T3 — Ports tipados (adiós service locator)** (ruta: DELEGADA — writer trigger: 2+ ficheros no triviales)
-  - Sustituir `gateways.py:31` `__getattr__`/`ModuleType` por `Protocol` en `ports.py`; `verify_api_key` → `interfaces/http/deps.py`; `_attach_grabbed_at` deja de ser privado cruzado; probes (`disk_usage`, `os.walk`) → infra + use case.
-  - Aceptación: sin `__getattr__` de binding en gateways; un binding mal hecho falla en import/tipo; contratos verdes.
-  - Checks: `pytest backend/tests -q`, `mypy backend` si existe configurado (si no, omitir documentado).
+- [x] **T3 — Ports tipados (adiós service locator)** (ruta: DELEGADA ×2 — S3 = rama `refactor/typed-ports`; superficie añadida `backend/app.py` aprobada por el usuario tras mi error de ruta `backend/app/`)
+  - `ports.py`: 4 Protocols presence-level (`ArrClient`, `SettingsStore`, `HistoryStore`, `CredentialsStore`) + `SystemProbe`/`ScanWalk` con firmas reales; `gateways.bind()` valida `isinstance` → binding erróneo revienta en import (`TypeError`), `__getattr__`/`ModuleType` eliminados.
+  - `verify_api_key` → `interfaces/http/deps.py` (7 importadores + patch targets retargeteados); `_attach_grabbed_at` → `route_helpers.py` público.
+  - Probes → `infrastructure/{system_probe,wanted_scan}.py` + use cases `disk_report`/`scan_wanted` con callables inyectados; rutas parse→call→map; `app.py` net −1 línea.
+  - Aceptación: ✅ sin `__getattr__` en gateways; ✅ contratos 17 (4 puertas nuevas); ✅ greps de aceptación vacíos; `MAX_LEGACY_LOC` = **2578 ≤ 2579**; suite **1001 passed, 0 failed** (+20 tests, RED observado: 5 failing gates).
+  - Checks: `cd backend && ../.venv/bin/python -m pytest -q` · `... tests/contracts -q` · mypy omitido (no configurado — documentado).
+  - Pendiente T4: entrada obsoleta en `vulture_whitelist.py` (fuera de superficies).
 - [ ] **T4 — Higiene de flecos** (ruta: INLINE — documentación, mecánico)
   - Reconciliar F-03 (verdad única en BACKLOG), cerrar/reabrir con motivo los checkboxes drift en `odd/tasks/*.md` (10 ficheros), `MAX_LEGACY_LOC` actualizado al valor real tras T1/T3.
   - Aceptación: sin estados contradictorios entre BACKLOG y odd/tasks.
@@ -75,9 +78,10 @@ Fuera de alcance: cambio de comportamiento visible de APIs o UI, nuevas dependen
 - [x] Feature document creada (2026-10-08)
 - [x] T1 (S1, `refactor/placement-domain`) — commit **ddf7f0c**
 - [x] T2 (S2, `refactor/frontend-feature-folders`) — commits **b8b7980** + T2b
-- [ ] T3..T4
+- [x] T3 (S3, `refactor/typed-ports`) — pendiente de commit con este doc
+- [ ] T4
 
-Siguiente paso: T3 — ports tipados (adiós service locator).
+Siguiente paso: commit S3 → T4 higiene de flecos.
 
 Estado RDD: **desactivado por el usuario (global) el 2026-10-09** → S1 entregado sin review nativo (`disabled/unmanaged`). Verificación de S1: writer + spot-check del padre (981/0, contratos 13).
 

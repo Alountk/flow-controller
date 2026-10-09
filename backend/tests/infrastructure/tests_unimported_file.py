@@ -126,7 +126,7 @@ def test_an_imported_movie_never_reads_its_folder(monkeypatch, tmp_path):
 
 
 def test_the_wanted_route_carries_the_field_to_the_client(tmp_path):
-    """`_filter_all_endpoint`/`_attach_grabbed_at` reshape the page — the new
+    """`_filter_all_endpoint`/`attach_grabbed_at` reshape the page — the new
     field must survive both, or the fix never reaches the screen."""
     (tmp_path / "Película (2021).mkv").write_bytes(b"x")
     payload = [

@@ -13,7 +13,6 @@ body itself was never executed.
 """
 
 from interfaces.http.routes import settings as settings_route
-from interfaces.http.routes import status as status_module
 import asyncio
 import copy
 from infrastructure import credentials
@@ -1401,7 +1400,7 @@ class TestWantedGrabMarks:
         assert body["wanted"]["radarr"]["items"][0]["grabbed_at"] == grabbed_at
 
     def test_a_grab_outside_the_lookback_window_is_not_marked(self):
-        from interfaces.http.routes.wanted import WANTED_GRAB_LOOKBACK
+        from interfaces.http.route_helpers import WANTED_GRAB_LOOKBACK
 
         old = time.time() - WANTED_GRAB_LOOKBACK - 60
         history.record_own_grab("radarr", movie_id=11, grabbed_at=old)
@@ -2432,8 +2431,8 @@ class TestConfiguredServices:
 
         from app import app as _app
 
-        with patch("infrastructure.settings_store.auth_required", return_value=True), patch.object(
-            status_module, "credentials"
+        with patch("infrastructure.settings_store.auth_required", return_value=True), patch(
+            "interfaces.http.deps.credentials"
         ) as creds:
             creds.verify_api_key.return_value = False
             unauth = TestClient(_app, raise_server_exceptions=False)
@@ -2786,22 +2785,30 @@ class TestWhatCountsAsItsOwnFilesystem:
     """The rule `/api/disk` leans on, pinned on real paths.
 
     Both halves are exercised: a mount point must be trusted, a plain
-    directory must not.
+    directory must not. The rule moved to `application.use_cases.disk_report`
+    (T3) with the syscalls behind an injected probe — the real adapter stands
+    in here exactly as the composition root hands it to the route.
     """
 
-    def test_a_mount_point_is_not_flagged(self):
-        from interfaces.http.routes.calendar import _is_foreign_filesystem
+    @pytest.fixture
+    def probe(self):
+        from infrastructure import system_probe
 
-        assert _is_foreign_filesystem("/") is False
+        return system_probe
 
-    def test_a_plain_directory_is_flagged(self, tmp_path):
-        from interfaces.http.routes.calendar import _is_foreign_filesystem
+    def test_a_mount_point_is_not_flagged(self, probe):
+        from application.use_cases.disk_report import is_foreign_filesystem
 
-        assert _is_foreign_filesystem(str(tmp_path)) is True
+        assert is_foreign_filesystem("/", probe=probe) is False
 
-    def test_a_missing_path_is_not_flagged_as_foreign(self):
+    def test_a_plain_directory_is_flagged(self, tmp_path, probe):
+        from application.use_cases.disk_report import is_foreign_filesystem
+
+        assert is_foreign_filesystem(str(tmp_path), probe=probe) is True
+
+    def test_a_missing_path_is_not_flagged_as_foreign(self, probe):
         """Absence is a different failure and already has its own message;
         conflating them would hide "no existe" behind "no es un montaje"."""
-        from interfaces.http.routes.calendar import _is_foreign_filesystem
+        from application.use_cases.disk_report import is_foreign_filesystem
 
-        assert _is_foreign_filesystem("/definitely/not/here") is False
+        assert is_foreign_filesystem("/definitely/not/here", probe=probe) is False

@@ -48,7 +48,6 @@ class TestTheTraceFanOutIsShared:
         import time
 
         from interfaces.http.routes import status as status
-        from interfaces.http.routes.status import _TRACE_TTL
 
         self._cold()
         with patch("interfaces.http.routes.status.build_traces", new_callable=AsyncMock) as build:
@@ -56,13 +55,13 @@ class TestTheTraceFanOutIsShared:
             self._get()
             built = status._trace_cache
             assert built is not None, "the first poll must have cached something"
-            status._trace_cache = (time.time() - _TRACE_TTL - 1, built[1])
+            status._trace_cache = (time.time() - status._TRACE_TTL - 1, built[1])
             self._get()
 
         assert build.call_count == 2, "an expired entry must be rebuilt"
 
     def test_the_ttl_is_shorter_than_the_frontend_poll(self):
         """If this ever inverts, one tab pays the full fan-out every cycle again."""
-        from interfaces.http.routes.status import _TRACE_TTL
+        from interfaces.http.routes import status as status
 
-        assert _TRACE_TTL < 15, "the frontend polls /api/trace every 15 s"
+        assert status._TRACE_TTL < 15, "the frontend polls /api/trace every 15 s"

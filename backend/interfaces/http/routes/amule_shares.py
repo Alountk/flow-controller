@@ -35,7 +35,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from application.gateways import amutorrent_reload_shared_dirs, get_setting
 from config import ALLOWED_ROOTS
-from interfaces.http.routes.status import verify_api_key
+from interfaces.http.deps import verify_api_key
 from state import http_session
 
 router = APIRouter()

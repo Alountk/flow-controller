@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-import shutil
 import time
 from datetime import date, timedelta
 
@@ -11,7 +10,9 @@ import aiohttp
 from fastapi import APIRouter, Depends
 
 from config import ALLOWED_ROOTS, destination_for_quality, find_service, path_is_allowed, service_unavailable_reason
+from application import gateways
 from application.gateways import record_own_grab
+from application.use_cases.disk_report import disk_report
 from application.gateways import (
     fetch_radarr_calendar,
     fetch_sonarr_calendar,
@@ -39,8 +40,8 @@ from models import (
     CalendarGrabRequest,
     CalendarGrabBatchRequest,
 )
-from interfaces.http.routes.status import verify_api_key
-from interfaces.http.routes.wanted import _attach_grabbed_at
+from interfaces.http.deps import verify_api_key
+from interfaces.http.route_helpers import attach_grabbed_at
 from state import http_session
 
 log = logging.getLogger("flow-controller")
@@ -73,7 +74,7 @@ async def get_calendar(start: str = "", end: str = "", _key: str = Depends(verif
     all_items.sort(key=lambda x: x.get("date") or "9999")
     # Each item carries its own `source` and `type`, so the shared helper reads
     # the mark key from the item instead of being told which one it is.
-    return await _attach_grabbed_at({"items": all_items, "start": start, "end": end})
+    return await attach_grabbed_at({"items": all_items, "start": start, "end": end})
 
 
 @router.post("/api/calendar/search")
@@ -567,78 +568,13 @@ async def calendar_destinations(source: str = "radarr", _key: str = Depends(veri
     return {"folders": folders, "arr_available": True, "detail": ""}
 
 
-def _is_foreign_filesystem(path: str) -> bool:
-    """Whether ``path`` is NOT its own filesystem — i.e. is not a mount point.
-
-    ``shutil.disk_usage`` measures the filesystem that *contains* a path, so a
-    plain directory answers with whatever holds it. That is how a folder on the
-    app's own 63 GB rootfs was served as a working "Storage (6TB)" volume: the
-    number was real, the label was not, and nothing on the way told them apart.
-
-    A path that does not exist is deliberately NOT foreign. It is a different
-    failure with a different message — "no existe" and "no es un montaje" are
-    not the same answer, and hiding one behind the other loses information.
-    (`os.path.ismount` answers ``False`` for a missing path rather than
-    raising, so existence has to be asked first.)
-    """
-    if not os.path.exists(path):
-        return False
-    try:
-        return not os.path.ismount(path)
-    except OSError:
-        return False
-
-
-def _volume_name(path: str) -> str:
-    """A label that claims nothing.
-
-    The old endpoint invented ``Storage (6TB)`` — a capacity the code never
-    measured. The last path component is all we actually know.
-    """
-    return os.path.basename(path.rstrip(os.sep)) or path
-
-
 @router.get("/api/disk")
-async def get_disk_usage(_key: str = Depends(verify_api_key)):
+async def get_volumes(_key: str = Depends(verify_api_key)):
     """Uso de disco de cada volumen configurado.
 
-    The volumes are the deployment's own ``paths.allowed_roots``, not a list
-    written down when this page was built: those roots are already the
-    authority for which folders this app may write to, so they are also the
-    answer to "which storages exist". Every volume is checked for being its
-    own filesystem first — reporting usage for a path that merely *sits*
-    somewhere would be confident and wrong, which is worse than reporting
-    nothing.
+    The roots, the mount-point rule and the numbers live in
+    `application.use_cases.disk_report` behind an injected probe (T3): this
+    handler hands over what the deployment configured and maps the returned
+    dict to its response — parse, call, map, nothing else.
     """
-    result = []
-    for path in ALLOWED_ROOTS:
-        entry = {"name": _volume_name(path), "path": path}
-        if _is_foreign_filesystem(path):
-            entry.update({
-                "total_bytes": 0,
-                "used_bytes": 0,
-                "free_bytes": 0,
-                "percent": 0,
-                "error": "no es un punto de montaje (las cifras serían las de otro disco)",
-            })
-            result.append(entry)
-            continue
-        try:
-            usage = shutil.disk_usage(path)
-        except (OSError, FileNotFoundError):
-            entry.update({
-                "total_bytes": 0,
-                "used_bytes": 0,
-                "free_bytes": 0,
-                "percent": 0,
-                "error": "no disponible",
-            })
-        else:
-            entry.update({
-                "total_bytes": usage.total,
-                "used_bytes": usage.used,
-                "free_bytes": usage.free,
-                "percent": round(usage.used / usage.total * 100, 1) if usage.total > 0 else 0,
-            })
-        result.append(entry)
-    return {"volumes": result}
+    return disk_report(ALLOWED_ROOTS, probe=gateways.system)

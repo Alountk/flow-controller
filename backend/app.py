@@ -26,11 +26,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from application import gateways
-from infrastructure import credentials as credentials_module
-from infrastructure import arr_client
-from infrastructure import settings_store
-from infrastructure import sqlite_history
-from infrastructure import sqlite_history as history
+from infrastructure import arr_client, settings_store, sqlite_history, system_probe, wanted_scan
+from infrastructure import credentials as credentials_module, sqlite_history as history
 from config import FRONTEND_DIST
 from state import buf_handler, _load_log_file, close_shared_session, open_shared_session
 
@@ -41,9 +38,11 @@ gateways.bind(
     settings=settings_store,
     sqlite_history=sqlite_history,
     credentials_module=credentials_module,
+    system=system_probe,
+    scan=wanted_scan.walk,
 )
 
-from interfaces.http.routes.status import router as status_router, background_checker
+from interfaces.http.routes import status as status_routes
 from interfaces.http.routes.wanted import router as wanted_router
 from interfaces.http.routes.calendar import router as calendar_router
 from interfaces.http.routes.files import router as files_router
@@ -86,7 +85,7 @@ async def lifespan(_app: FastAPI):
     history.mark_interrupted()
 
     open_shared_session()
-    task = asyncio.create_task(background_checker())
+    task = asyncio.create_task(status_routes.background_checker())
     try:
         yield
     finally:
@@ -102,7 +101,7 @@ app = FastAPI(lifespan=lifespan)
 
 # ── Include routers ───────────────────────────────────────────────────────────
 
-app.include_router(status_router)
+app.include_router(status_routes.router)
 app.include_router(wanted_router)
 app.include_router(calendar_router)
 app.include_router(files_router)
