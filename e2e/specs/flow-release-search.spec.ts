@@ -55,8 +55,9 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // no modal ever, and no search either (selection never searches). This
   // resolves to ONE button even though Playwright matches role names by
   // substring, because the panel is not open yet: the click below is what
-  // opens it.
-  await app.getByRole('button', { name: '🔍 Buscar' }).click();
+  // opens it. exact: since C-09 the bulk trigger "🔍 Buscar todas las
+  // faltantes" shares the substring — the row's own button is the target.
+  await app.getByRole('button', { name: '🔍 Buscar', exact: true }).click();
 
   // Releases is what must be showing now: it is the panel's default tab and
   // every sub-view switch resets it (Peliculas.tsx detailTab), but the detail

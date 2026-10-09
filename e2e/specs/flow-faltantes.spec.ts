@@ -59,7 +59,10 @@ test('the stub listing renders rows and the Biblioteca sub-view is reachable', a
 
   // The card's own actions, one button per rendered row — the section rows
   // keep every action the page's cards had (MediaPane.tsx:935/941).
-  await expect(app.getByRole('button', { name: '🔍 Buscar' })).toBeVisible({ timeout: 15000 });
+  // exact: since C-09 the bulk trigger "🔍 Buscar todas las faltantes"
+  // shares this substring (Playwright name matching is substring-based),
+  // and this assertion is about the ROW's own button.
+  await expect(app.getByRole('button', { name: '🔍 Buscar', exact: true })).toBeVisible({ timeout: 15000 });
   await expect(app.getByRole('button', { name: '📁 En carpeta' })).toBeVisible({ timeout: 15000 });
 
   // NOT the honest failure state — MediaPane.tsx:1008, role=alert
