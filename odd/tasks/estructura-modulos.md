@@ -55,11 +55,11 @@ Fuera de alcance: cambio de comportamiento visible de APIs o UI, nuevas dependen
   - Nota: `domain/policy.py` → `domain/policy/__init__.py` (paquete, para no sombrear el import existente).
   - Aceptación: ✅ política testeable sin HTTP (37 tests nuevos); contratos verdes; suite verde.
   - Checks: `cd backend && ../.venv/bin/python -m pytest -q` → **981 passed, 0 failed** (baseline 941 passed + 37 nuevos); `... pytest tests/contracts -q` → **13 passed**; grep `os.rename|copytree|_link_or_copy` en la ruta → sin resultados; `MAX_LEGACY_LOC` = 2579 (sin aumento).
-- [ ] **T2 — Frontend: feature folders + MediaPane + shim** (ruta: DELEGADA — writer trigger: decenas de ficheros; S2 = rama `refactor/frontend-feature-folders`)
-  - Sub-pasos: (a) ✅ borrar `CalendarModal.tsx` shim + renombrar CSS (grep = 0); (b) ✅ `src/{app,pages,features,shared}` + 118 moves + tests espejo; (c) ⏳ MediaPane desmantelado — REUBICADO a `features/media-pane/MediaPane.tsx` con diff solo-imports (1441 líneas intactas); (d) ✅ `api/calendar.ts` → `shared/api/{calendar,releases,grabs}.ts` (7 exports paritarios); (e) ✅ `Field` → `shared/ui/`.
-  - Aceptación: sin imports cruzados pages→pages ✅; `MediaPane.tsx` original eliminado ⏳; vitest+tsc verdes ✅ (54 files/419 tests, tsc 0, eslint 0).
-  - Verificación T2a: writer (5 checks) + verificador independiente `gentle-ai-verify` → **0 findings bloqueantes**; auth.ts hot-path byte-idéntico (SHA `aae0eccb...`); spot-check padre 419/419.
-  - Checks: `./node_modules/.bin/vitest run`, `./node_modules/.bin/tsc -b --noEmit`, `./node_modules/.bin/eslint src/` (en `frontend/`; NUNCA `npm` — alias a pnpm en esta shell).
+- [x] **T2 — Frontend: feature folders + MediaPane + shim** (ruta: DELEGADA ×2 — S2 = rama `refactor/frontend-feature-folders`)
+  - Sub-pasos: (a) ✅ shim `CalendarModal.tsx` borrado + CSS renombrado (grep = 0); (b) ✅ `src/{app,pages,features,shared}` + 118 moves + tests espejo; (c) ✅ MediaPane **desmantelado**: 1441 → 223 líneas de composición + 11 módulos (max 379), contrato público intacto (3 importadores sin cambios), desviación deliberada documentada (ramas `render*` como funciones, no componentes, para no remontar filas con estado); (d) ✅ `api/calendar.ts` → `shared/api/{calendar,releases,grabs}.ts` (7 exports paritarios); (e) ✅ `Field` → `shared/ui/`.
+  - Aceptación: sin imports pages→pages ✅; MediaPane original eliminado ✅; vitest+tsc+eslint verdes ✅ (54 files/419 tests, tsc 0, eslint 0 — baseline idéntico).
+  - Verificación: T2a writer (5 checks) + verificador independiente (0 bloqueantes, auth.ts SHA idéntico) + spot-check padre; T2b assess **medium** → writer self-verification + spot-check padre (419/419, `wc -l` 223).
+  - Checks: `./node_modules/.bin/{vitest run, tsc -b --noEmit, eslint src/}` en `frontend/` (NUNCA `npm` — alias a pnpm en esta shell).
 - [ ] **T3 — Ports tipados (adiós service locator)** (ruta: DELEGADA — writer trigger: 2+ ficheros no triviales)
   - Sustituir `gateways.py:31` `__getattr__`/`ModuleType` por `Protocol` en `ports.py`; `verify_api_key` → `interfaces/http/deps.py`; `_attach_grabbed_at` deja de ser privado cruzado; probes (`disk_usage`, `os.walk`) → infra + use case.
   - Aceptación: sin `__getattr__` de binding en gateways; un binding mal hecho falla en import/tipo; contratos verdes.
@@ -73,8 +73,11 @@ Fuera de alcance: cambio de comportamiento visible de APIs o UI, nuevas dependen
 
 - [x] Revisión estructural y propuesta (2026-10-08, evidencia en sesión)
 - [x] Feature document creada (2026-10-08)
-- [x] T1 (S1, rama `refactor/placement-domain`) — commit **ddf7f0c**, verificado 2026-10-08
-- [ ] T2..T4
+- [x] T1 (S1, `refactor/placement-domain`) — commit **ddf7f0c**
+- [x] T2 (S2, `refactor/frontend-feature-folders`) — commits **b8b7980** + T2b
+- [ ] T3..T4
+
+Siguiente paso: T3 — ports tipados (adiós service locator).
 
 Estado RDD: **desactivado por el usuario (global) el 2026-10-09** → S1 entregado sin review nativo (`disabled/unmanaged`). Verificación de S1: writer + spot-check del padre (981/0, contratos 13).
 
