@@ -48,7 +48,7 @@ Cerrar los flecos de producto abiertos tras la reestructuración: C-items, proce
 
 ## Tareas
 - [x] **T1 — C-07: cerrar en BACKLOG** (INLINE, S) — ✅ `BACKLOG.md:883` marcado con evidencia (`Settings.tsx:295` + `config.py:207` + rebuild en save); verificación estructural (grep del campo y del backend).
-- [ ] **T2 — C-09: UI de confirmación con recuento** (DELEGADA, S/M): caller de `searchWanted(confirm=false)` en la búsqueda masiva de wanted — diálogo con recuento antes de confirmar, usa `confirm=true` + endpoint de cancel. Checks: vitest/tsc/eslint.
+- [x] **T2 — C-09: UI de confirmación con recuento** (DELEGADA, S/M) — ✅ nuevo `BulkSearchFlow` (probe `confirm=false` → diálogo de recuento → `confirm=true` solo tras aceptar → paso launched con cancel por `command_id`); trigger restaurado (había sido borrado en `4fcb976`, casualty de layout, no respuesta al incidente); guard desactivado con filtro de texto activo (el total sería filtrado). Checks: vitest **55/424** (RED observado: trigger inexistente), tsc 0, eslint 0, greps de `confirm=true` solo vía diálogo.
 - [ ] **T3 — C-10: releases asíncronos** (DELEGADA, M): job con `task_manager` + polling en `POST /api/calendar/releases` (fin del 504). Checks: pytest + vitest/tsc.
 - [ ] **T4 — F-07+f05 T9: procedencia de ficheros** (DELEGADA, M): caché de traces a application, chip `cola·importando/histórico/nosotros` en FileManager; marcar T9 en `f05-amule-retention.md`. Checks: pytest + vitest/tsc.
 - [ ] **T5 — C-02: gestor de import bloqueado** (DELEGADA, M): reintentar/limpiar `import_blocked`. Checks: pytest + vitest/tsc.
