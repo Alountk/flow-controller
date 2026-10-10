@@ -1,5 +1,15 @@
 /* Seguimiento — the kanban chosen in F-09 phase 0 (seguimiento-02-kanban). */
 
+/* The frame around `.sg` is the positioned box for the detail overlay
+   (F-09 phase 2). It contributes NO geometry of its own: 100% of the same
+   content `.sg` took directly from `.content`, so the two-child DOM
+   contract, the 70/30 split and the board-only scroll the e2e measures
+   (kanban-fit.spec.ts) hold identically with the panel closed OR open. */
+.sg-frame {
+  position: relative;
+  height: 100%;
+}
+
 .sg {
   display: flex;
   flex-direction: column;
@@ -268,6 +278,167 @@
   white-space: nowrap;
 }
 
+/* The door to the detail overlay: its own row so it never crowds the
+   action bar, and pill-shaped like the chips above it. */
+.sg-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.sg-detail-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.sg-detail-btn:hover {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.sg-detail-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── Panel de detalle (F-09 fase 2) ── */
+
+/* The overlay sits ON the operations tail's 30% zone — absolute, inside the
+   frame, OUTSIDE `.sg` — so it never participates in the flex split: the
+   tail keeps polling underneath and is revealed again on close. */
+.sg-det {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 30%;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+
+.sg-det-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sg-det-close {
+  margin-left: auto;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.sg-det-close:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.sg-det-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sg-det-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  /* Titles carry no spaces at all (S01E01…) — wrap them, don't overflow. */
+  overflow-wrap: anywhere;
+}
+
+.sg-det-meta {
+  margin: 0;
+  display: grid;
+  /* Label column sized by its content, value takes the rest — paths wrap
+     via overflow-wrap instead of widening the panel. */
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.sg-det-meta dt {
+  color: var(--text-dim);
+  font-weight: 650;
+}
+
+.sg-det-meta dd {
+  margin: 0;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sg-det-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sg-det-progress .sg-bar {
+  flex: 1;
+  margin-top: 0;
+}
+
+.sg-det-progress > span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* The block reason, exactly as the card tints it (warn for a block, bad for
+   a failure) — but carrying EVERY message the queue reported, not only the
+   first one the card had room for. */
+.sg-det-why {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+
+.sg-det-why-label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.sg-det-why p {
+  margin: 4px 0 0;
+}
+
+.sg-det:has(.sg-pill-failed) .sg-det-why {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+}
+
 /* ── Banda de operaciones ── */
 
 .sg-ops {
@@ -430,6 +601,12 @@
 @media (max-width: 768px) {
   .sg-board {
     grid-template-columns: 1fr;
+  }
+
+  /* The stacked view has no spare right edge: the panel takes the whole
+     frame while open, the same overlay-without-re-layout deal as desktop. */
+  .sg-det {
+    width: 100%;
   }
 
   .sg-op {

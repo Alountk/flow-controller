@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Seguimiento } from '../../pages/Seguimiento.tsx'
 import { queueCancel, queueStatus } from '../../shared/api/files.ts'
@@ -422,5 +422,180 @@ describe('the operations tail carries the retired sidebar\'s duties', () => {
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith({ queryKey: ['wanted-movies-infinite'] }),
     )
+  })
+})
+
+describe('the detail panel', () => {
+  /** The `dt`/`dd` value of a labelled row inside the panel (null = no such row). */
+  function field(panel: HTMLElement, label: string): string | null {
+    const dt = [...panel.querySelectorAll('dt')].find((d) => d.textContent === label)
+    const dd = dt?.nextElementSibling ?? null
+    return dd ? (dd.textContent ?? '').trim() : null
+  }
+
+  it('draws every real field /api/trace carries — and no speed, no ETA', () => {
+    // The honesty rule the cards already inherit (Seguimiento header): the
+    // panel is the FULL truth of the payload, so it may only draw fields the
+    // payload actually carries. A guessed speed would be its first lie too.
+    renderView(resp([trace()]))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+
+    const panel = screen.getByRole('complementary', { name: 'Detalle de Dune (2021)' })
+    expect(within(panel).getByRole('heading', { name: 'Dune (2021)' })).toBeInTheDocument()
+
+    // Identity + status
+    expect(field(panel, 'Etapa')).toBe('Descargando')
+    expect(field(panel, 'Fecha')).toBe('2026-10-07T11:42:00Z')
+    expect(field(panel, 'Índice')).toBe('AMULE')
+    expect(field(panel, 'Cliente de descarga')).toBe('aMuTorrent')
+    expect(field(panel, 'Host del cliente')).toBe('amutorrent')
+    expect(field(panel, 'ID de descarga')).toBe('hash-1')
+    expect(field(panel, 'Hash emparejado')).toBe('hash-1')
+    expect(field(panel, 'Pausa')).toBe('No')
+
+    // Torrent facts — progress is a real field, drawn as the card draws it
+    expect(field(panel, 'Progreso')).toContain('67%')
+    const bar = within(panel).getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuenow', '67')
+    expect(field(panel, 'Estado del torrent')).toBe('downloading')
+    expect(field(panel, 'Categoría')).toBe('radarr')
+    expect(field(panel, 'Categoría esperada')).toBe('radarr')
+    expect(field(panel, 'Tamaño')).toBe('6.3 GB')
+    expect(field(panel, 'Guardado en')).toBe('/downloads')
+
+    // Absent facts say so with the empty marker — never with an invention
+    expect(field(panel, 'Destino')).toBe('—')
+    expect(field(panel, 'ID de cola')).toBe('—')
+
+    // The honesty pin: the payload has no speed and no ETA, so the panel
+    // must not draw either (same rule the cards are held to).
+    const text = panel.textContent ?? ''
+    expect(text).not.toMatch(/MB\/s/)
+    expect(text).not.toMatch(/ETA/)
+    expect(text).not.toMatch(/velocidad/i)
+  })
+
+  it('explains a block with every queue message and the category verdict', () => {
+    renderView(
+      resp([
+        trace({
+          stage: 'import_blocked',
+          title: 'Transformers (2014)',
+          category_ok: false,
+          expected_category: 'tv-sonarr',
+          torrent: { ...trace().torrent!, category: 'amule' },
+          queue: {
+            state: 'warning',
+            status: 'importBlocked',
+            output_path: '/data/movies/Transformers',
+            messages: ['motivo uno', 'motivo dos'],
+          },
+        }),
+      ]),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+
+    const panel = screen.getByRole('complementary', { name: 'Detalle de Transformers (2014)' })
+    expect(field(panel, 'Etapa')).toBe('Import bloqueado')
+    // The card draws only the FIRST message; the panel carries them all.
+    expect(within(panel).getByText('motivo uno')).toBeInTheDocument()
+    expect(within(panel).getByText('motivo dos')).toBeInTheDocument()
+    expect(within(panel).getByText('Cat. incorrecta')).toBeInTheDocument()
+    expect(field(panel, 'Categoría')).toBe('amule')
+    expect(field(panel, 'Categoría esperada')).toBe('tv-sonarr')
+    expect(field(panel, 'Estado de la cola')).toBe('warning')
+    expect(field(panel, 'Estado de importación')).toBe('importBlocked')
+    expect(field(panel, 'Ruta de salida')).toBe('/data/movies/Transformers')
+  })
+
+  it('closes from its button and from Escape', () => {
+    renderView(resp([trace()]))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+    expect(screen.getByRole('complementary', { name: 'Detalle de Dune (2021)' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar detalle' }))
+    expect(screen.queryByRole('complementary')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+    expect(screen.getByRole('complementary')).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('complementary')).toBeNull()
+  })
+
+  it('swaps its content in place when another card is selected', () => {
+    renderView(
+      resp([
+        trace({ title: 'Dune (2021)', download_id: 'hash-a' }),
+        trace({ title: 'The Bear', download_id: 'hash-b', stage: 'sent' }),
+      ]),
+    )
+
+    fireEvent.click(
+      within(screen.getByRole('article', { name: 'Dune (2021)' })).getByRole('button', {
+        name: 'Ver detalles',
+      }),
+    )
+    expect(
+      screen.getByRole('complementary', { name: 'Detalle de Dune (2021)' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      within(screen.getByRole('article', { name: 'The Bear' })).getByRole('button', {
+        name: 'Ver detalles',
+      }),
+    )
+
+    // One panel, new content — the open panel swaps, never stacks.
+    const panels = screen.getAllByRole('complementary')
+    expect(panels).toHaveLength(1)
+    expect(panels[0]).toHaveAccessibleName('Detalle de The Bear')
+    expect(screen.queryByRole('complementary', { name: 'Detalle de Dune (2021)' })).toBeNull()
+  })
+
+  it('closes itself when the record leaves the payload', () => {
+    // The panel is derived from the trace list, not from a copied snapshot:
+    // a download that disappears (cancelled, acked away) must not leave a
+    // stale detail open over a board that no longer has its card.
+    const { rerender } = renderView(resp([trace()]))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+    expect(screen.getByRole('complementary')).toBeInTheDocument()
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    rerender(
+      <QueryClientProvider client={client}>
+        <Seguimiento data={resp([])} loading={false} actions={OPEN_ACTIONS} onActionDone={() => {}} />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.queryByRole('complementary')).toBeNull()
+    expect(screen.getByText('Sin descargas registradas.')).toBeInTheDocument()
+  })
+
+  it('leaves the board/tail DOM contract untouched while open', () => {
+    // The e2e contract (kanban-fit.spec.ts:139-150, :153-188): `.sg` IS the
+    // board + tail, exactly two children, and the 70/30 split is measured on
+    // those two boxes. The panel must live OUTSIDE `.sg` so opening it can
+    // change neither — an overlay, not a third flex child.
+    const { container } = renderView(
+      resp([trace({ title: 'Dune (2021)', download_id: 'hash-a' }), trace({ title: 'Otra', download_id: 'hash-b' })]),
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ver detalles' })[0])
+    expect(screen.getByRole('complementary')).toBeInTheDocument()
+
+    const sg = container.querySelector('.sg')
+    expect(sg).not.toBeNull()
+    expect([...sg!.children].map((el) => el.className)).toEqual(['sg-board', 'sg-ops'])
+    expect(sg!.contains(screen.getByRole('complementary'))).toBe(false)
+    // The tail coexists: still mounted, still the home of the sweep.
+    expect(container.querySelector('.sg-ops')).not.toBeNull()
+    expect(container.querySelector('.sg-ops .auto-copy')).not.toBeNull()
+    expect(container.querySelectorAll('.sg-col')).toHaveLength(4)
+    // …and the overlay is rendered, just not inside the measured grid.
+    expect(container.querySelector('.sg-det')).not.toBeNull()
   })
 })
