@@ -27,7 +27,7 @@
 
 .action-btn:hover:not(:disabled) {
   border-color: var(--accent);
-  background: rgba(99, 102, 241, 0.12);
+  background: var(--accent-soft);
 }
 
 .action-btn:disabled {
@@ -36,13 +36,13 @@
 }
 
 .action-btn.destructive {
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+  color: var(--bad-text);
 }
 
 .action-btn.destructive:hover:not(:disabled) {
   border-color: var(--bad);
-  background: rgba(239, 68, 68, 0.12);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
 
 .action-result {
@@ -62,13 +62,13 @@
 }
 
 .action-result.ok {
-  border-color: rgba(34, 197, 94, 0.3);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
   color: var(--ok);
 }
 
 .action-result.bad {
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+  color: var(--bad-text);
 }
 
 .action-result-close {
@@ -257,8 +257,8 @@
 }
 
 .cancel-btn:hover {
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--bad);
+  color: var(--bad);
 }
 
 .copy-importing {

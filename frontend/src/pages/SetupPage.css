@@ -324,7 +324,7 @@
 .setup-page .setup-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
   font-size: 14px;
   padding: 10px 20px;
 }
@@ -339,12 +339,23 @@
   filter: none;
 }
 
-@media (max-width: 560px) {
+/* 640 is the unified small breakpoint (was 560). The review rows stack their
+   label above the value here too: at ~360px the 130px label column squeezed
+   the value into a wrapping sliver. */
+@media (max-width: 640px) {
   .setup-card {
     padding: 24px 20px;
   }
 
   .setup-grid {
     grid-template-columns: 1fr;
+  }
+
+  .setup-sum-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .setup-sum-row .sum-k {
+    grid-column: 1 / -1;
   }
 }

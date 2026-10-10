@@ -28,14 +28,14 @@ export class ErrorBoundary extends Component<Props, State> {
           alignItems: 'center',
           justifyContent: 'center',
           height: '100vh',
-          background: '#111113',
-          color: '#fafafa',
+          background: 'var(--bg)',
+          color: 'var(--text)',
           fontFamily: 'monospace',
           padding: '24px',
           textAlign: 'center',
         }}>
           <h1 style={{ fontSize: '18px', marginBottom: '12px' }}>Algo salió mal</h1>
-          <p style={{ fontSize: '13px', color: '#71717a', marginBottom: '16px', maxWidth: '500px' }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '16px', maxWidth: '500px' }}>
             {this.state.error?.message || 'Error desconocido'}
           </p>
           <button
@@ -43,9 +43,9 @@ export class ErrorBoundary extends Component<Props, State> {
             style={{
               padding: '8px 20px',
               borderRadius: '8px',
-              border: '1px solid #27272a',
-              background: '#18181b',
-              color: '#fafafa',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-elev)',
+              color: 'var(--text)',
               cursor: 'pointer',
               fontSize: '13px',
             }}

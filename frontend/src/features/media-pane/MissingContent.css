@@ -44,15 +44,15 @@
 
 .wanted-tab.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
   border-color: var(--accent);
 }
 
 .wanted-search-result {
   padding: 8px 12px;
   border-radius: 8px;
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--accent);
   font-size: 12px;
   margin-bottom: 12px;
@@ -124,12 +124,12 @@
 .wanted-search:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(120, 180, 255, 0.15);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .wanted-actions .search-all {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
   border: none;
   padding: 8px 16px;
   border-radius: 8px;
@@ -245,7 +245,7 @@
 
 .wanted-filter-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .wanted-poster {
@@ -426,7 +426,7 @@
 }
 
 .scan-folder-item:hover {
-  background: rgba(99, 102, 241, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .scan-no-subfolders {
@@ -534,7 +534,7 @@
 
 .scan-match.selected {
   border-color: var(--accent);
-  background: rgba(99, 102, 241, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .scan-match input[type="checkbox"] {
@@ -585,7 +585,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: rgba(99, 102, 241, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   border: 1px solid var(--accent);
   border-radius: 8px;
   margin-bottom: 16px;
@@ -804,7 +804,7 @@
 .scan-custom-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(120, 180, 255, 0.15);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 @media (max-width: 640px) {
@@ -846,7 +846,7 @@
 }
 
 .scan-file-item.selected {
-  background: rgba(99, 102, 241, 0.12);
+  background: var(--accent-soft);
 }
 
 .scan-file-item .fm-icon {

@@ -23,7 +23,7 @@
 .settings-restart-badge {
   font-size: 10px;
   background: var(--warn);
-  color: #000;
+  color: var(--on-warn);
   padding: 1px 5px;
   border-radius: 4px;
   font-weight: 600;
@@ -44,7 +44,7 @@
 .settings-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(120, 180, 255, 0.15);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .settings-toggle {
@@ -59,7 +59,7 @@
 
 .settings-toggle.on {
   background: var(--ok);
-  color: #fff;
+  color: var(--on-fill);
   border-color: var(--ok);
 }
 
