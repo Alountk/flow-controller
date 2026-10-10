@@ -78,7 +78,7 @@
 
 .proto-filter.active {
   border-color: var(--accent);
-  background: rgba(74, 158, 255, 0.12);
+  background: color-mix(in srgb, var(--info) 12%, transparent);
   color: var(--text);
 }
 
@@ -92,7 +92,7 @@
 }
 
 .proto-filter.active .proto-count {
-  background: rgba(74, 158, 255, 0.22);
+  background: color-mix(in srgb, var(--info) 22%, transparent);
   color: var(--text);
 }
 
@@ -137,7 +137,7 @@
 
 .proto-card.active {
   border-color: var(--accent);
-  background: rgba(74, 158, 255, 0.1);
+  background: color-mix(in srgb, var(--info) 10%, transparent);
 }
 
 /* A discarded design is still useful evidence — dimmed, never hidden. */
@@ -163,23 +163,23 @@
 }
 
 .proto-badge.selected {
-  background: rgba(74, 158, 255, 0.18);
+  background: color-mix(in srgb, var(--info) 18%, transparent);
   color: var(--accent);
 }
 
 .proto-badge.discarded {
-  background: rgba(255, 92, 92, 0.14);
-  color: var(--bad, #ff5c5c);
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad);
 }
 
 .proto-badge.candidate {
-  background: rgba(255, 196, 74, 0.14);
-  color: var(--warn, #ffc44a);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
 }
 
 .proto-badge.recommend {
-  background: rgba(108, 214, 143, 0.16);
-  color: var(--ok, #6cd68f);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
 }
 
 .proto-card-name {

@@ -57,7 +57,7 @@
   border: none;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;

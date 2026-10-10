@@ -1,17 +1,101 @@
+/* ── Design tokens ──────────────────────────────────────────────────────────
+   Single source of truth for colour. The baseline below is the LIGHT palette;
+   the dark palette overrides the SAME property names under
+   `prefers-color-scheme: dark`. There is deliberately NO toggle and no
+   persisted setting — the system preference is the only switch (a visible
+   toggle would need settings plumbing; noted as follow-up).
+   Derived tokens (aliases + soft tints) are declared only once: they resolve
+   through the palette above them, so they flip with it automatically. */
 :root {
-  --bg: #111113;
-  --bg-elev: #18181b;
-  --bg-elev-2: #1c1c21;
-  --border: #27272a;
-  --text: #fafafa;
-  --text-dim: #71717a;
-  --ok: #22c55e;
-  --ok-dim: #15803d;
-  --bad: #ef4444;
-  --bad-dim: #991b1b;
-  --warn: #eab308;
-  --accent: #6366f1;
-  --accent-soft: rgba(99, 102, 241, 0.12);
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #f4f4f5;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #fafafa;
+
+  /* Text (primary → secondary → dim → dimmest) */
+  --text: #18181b;
+  --text-2: #3f3f46;
+  --text-dim: #52525b;
+  --text-dim2: #71717a;
+  --text-3: #71717a;
+
+  /* Borders */
+  --border: #e4e4e7;
+  --border-color: rgba(0, 0, 0, 0.15);
+
+  /* States — brand hues preserved (indigo / green / amber / red / blue) */
+  --ok: #15803d;
+  --ok-dim: #166534;
+  --warn: #a16207;
+  --bad: #b91c1c;
+  --bad-strong: #991b1b;
+  --bad-dim: #7f1d1d;
+  --bad-text: #b91c1c;
+  --accent: #4f46e5;
+  --info: #2563eb;
+
+  /* Interaction + text drawn on filled controls */
+  --hover: rgba(0, 0, 0, 0.04);
+  --on-fill: #ffffff;
+  --on-warn: #000000;
+
+  /* Derived — declared once, follows the palette above */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --ok-soft: color-mix(in srgb, var(--ok) 15%, transparent);
+  --surface: var(--bg);
+  --surface-1: var(--bg-elev);
+  --surface-2: var(--bg-elev-2);
+  --card-bg: var(--bg-elev);
+  --accent-bg: var(--accent-soft);
+  --err: var(--bad);
+  --text-secondary: var(--text-2);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* The dark palette: same property names, only the values change. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    /* Surfaces (today's shipped dark look, kept byte-for-byte) */
+    --bg: #111113;
+    --bg-elev: #18181b;
+    --bg-elev-2: #1c1c21;
+
+    /* Text */
+    --text: #fafafa;
+    --text-2: #d4d4d8;
+    --text-dim: #71717a;
+    --text-dim2: #71717a;
+    --text-3: #a1a1aa;
+
+    /* Borders */
+    --border: #27272a;
+    --border-color: rgba(255, 255, 255, 0.18);
+
+    /* States */
+    --ok: #22c55e;
+    --ok-dim: #15803d;
+    --warn: #eab308;
+    --bad: #ef4444;
+    --bad-strong: #dc2626;
+    --bad-dim: #991b1b;
+    --bad-text: #fca5a5;
+    --accent: #6366f1;
+    --info: #4a9eff;
+
+    /* Interaction + on-fill (invariant, kept parallel for review) */
+    --hover: rgba(255, 255, 255, 0.04);
+    --on-fill: #ffffff;
+    --on-warn: #000000;
+  }
+}
+
+/* Selection reads as accent-tinted in both schemes (was the UA default). */
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 * {

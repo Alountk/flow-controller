@@ -575,7 +575,7 @@
 
 .sec-class-chip.is-active {
   background: var(--accent-soft);
-  border-color: rgba(99, 102, 241, 0.45);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--text);
 }
 
@@ -783,7 +783,7 @@
   flex-direction: column;
   gap: 3px;
   padding: 7px 14px;
-  border-bottom: 1px solid rgba(39, 39, 42, 0.55);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
   border-left: 3px solid transparent;
   cursor: pointer;
 }
@@ -851,7 +851,7 @@
 .sec-ep-pill.is-ok {
   color: var(--ok);
   background: var(--ok-soft);
-  border-color: rgba(108, 214, 143, 0.35);
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
 }
 
 .sec-ep-pill.is-missing {
@@ -889,7 +889,7 @@
 
 .sec-q-tag.is-4k {
   color: var(--accent);
-  border-color: rgba(74, 158, 255, 0.45);
+  border-color: color-mix(in srgb, var(--info) 45%, transparent);
 }
 
 .sec-ep-path {
@@ -958,7 +958,10 @@
 }
 
 /* ---- Responsive ---- */
-@media (max-width: 1180px) {
+/* 1280 is the unified desktop breakpoint (was 1180): the same width where
+   the Seguimiento board drops 4 → 2 columns. Stacking here can only make the
+   split safer on narrow desktops — the two-pane band starts below it. */
+@media (max-width: 1280px) {
   .sec-split {
     grid-template-columns: minmax(0, 1fr);
   }

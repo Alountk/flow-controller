@@ -110,7 +110,7 @@
 
 .calendar-indexer-error {
   font-size: 11px;
-  color: var(--bad, #f85149);
+  color: var(--bad);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -288,7 +288,7 @@
 .release-chip.active {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .release-filter-clear {
@@ -518,7 +518,7 @@
   font-weight: 600;
   padding: 5px 10px;
   border-radius: 6px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.18));
+  border: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -550,7 +550,7 @@
    which point it stops being one. Always rendered — offering the control only
    when the heuristic already guessed would leave no way to correct a miss. */
 .release-3d {
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.18));
+  border: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-secondary);
   border-radius: 4px;
@@ -565,7 +565,7 @@
 .release-3d.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .release-3d:focus-visible {
