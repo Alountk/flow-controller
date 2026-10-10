@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../../shared/types.ts'
 import { runAction, type ActionOptions } from '../../shared/api/actions.ts'
+import { ackBlockedImport } from '../../shared/api/traces.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import './TraceActions.css'
 
@@ -116,6 +117,7 @@ const ACTIVE_STATUSES = ['running', 'done', 'importing', 'renamed_needed']
 export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState<ActionKey | null>(null)
+  const [acking, setAcking] = useState(false)
   const [result, setResult] = useState<ActionResult | null>(null)
   const [copyTask, setCopyTask] = useState<TaskProgress | null>(null)
 
@@ -205,6 +207,31 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
     }
   }
 
+  /**
+   * C-02 "limpiar": one click, no modal — the action records an
+   * acknowledgement, it changes nothing on the arr, so there is nothing to
+   * confirm. Success is NOT reported in a banner: `onDone` refetches the
+   * board and the card leaves the column, which is the only feedback that
+   * cannot lie about what happened. A refusal comes back as the same
+   * `ActionResult` banner the actions use.
+   */
+  async function clearBlocked() {
+    setAcking(true)
+    setResult(null)
+    try {
+      const res = await ackBlockedImport(trace)
+      if (res.ok) {
+        onDone()
+      } else {
+        setResult(res)
+      }
+    } catch (e) {
+      setResult({ ok: false, error: (e as Error).message })
+    } finally {
+      setAcking(false)
+    }
+  }
+
   async function cancelTask() {
     if (!copyTask) return
     try {
@@ -242,6 +269,20 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
           </button>
         )
       })}
+
+      {/* C-02's "limpiar": NOT in the server catalogue — the catalogue is
+          arr-command material (config.ACTIONS) and this is view state about
+          a trace. Gated on the stage so only the blocked card offers it. */}
+      {trace.stage === 'import_blocked' && (
+        <button
+          className="action-btn"
+          title="Reconoce este bloqueo: la tarjeta deja de ocupar la columna Bloqueado (el estado en el arr no cambia)"
+          disabled={busy !== null || acking || copyTask !== null}
+          onClick={() => void clearBlocked()}
+        >
+          {acking ? '…' : 'Descartar bloqueo'}
+        </button>
+      )}
 
       {result && (
         <div className={`action-result ${result.ok ? 'ok' : 'bad'}`}>

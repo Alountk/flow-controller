@@ -6,6 +6,7 @@ import traceback
 
 import aiohttp
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from config import (
     AMUTORRENT_INDEXER,
@@ -13,7 +14,13 @@ from config import (
     configured_services,
     find_service,
 )
-from application.gateways import check_service, arr_headers
+from application.gateways import (
+    acknowledge_blocked,
+    arr_headers,
+    blocked_acks,
+    check_service,
+)
+from application.use_cases.blocked_acks import incident_key, visible_traces
 from application.use_cases.trace_cache import get_traces
 from interfaces.http.deps import verify_api_key
 from state import status_cache, http_session
@@ -90,11 +97,54 @@ async def refresh_status(_key: str = Depends(verify_api_key)):
 # for traces, it does not own how stale they may be — and the reuse that move
 # unlocked is the reason it was part of the provenance task rather than an
 # appendix.
+#
+# C-02 filters AFTER that read, at the response seam: the column and the
+# summary below draw from the same list (one filtered list, two uses), and
+# the cache stays unfiltered so an acknowledgement can never change what any
+# other reader of `get_traces` — the sweep above all — observes.
+
+
+class BlockedAckRequest(BaseModel):
+    """The incident the operator is acknowledging.
+
+    Carries only what `incident_key` derives the key from — the same identity
+    fields `runAction` posts for an action, so both seams agree on "which
+    download" without inventing a second identity scheme.
+    """
+
+    source: str = ""
+    download_id: str = ""
+    ids: dict = {}
+
+
+@router.post("/api/trace/blocked/ack")
+async def ack_blocked(req: BlockedAckRequest, _key: str = Depends(verify_api_key)):
+    """Clear one blocked import off the board (C-02 "limpiar", one click).
+
+    The blocked stage itself belongs to the arr and is recomputed every poll;
+    what is recorded here is the operator's acknowledgement of THIS incident.
+    The refusal cases answer `ok: false` in a 200 (the route ran; the answer
+    is no), never a 500: a trace that cannot be named must not be hidden, and
+    an unavailable store must not claim a clear that would not survive the
+    next poll.
+    """
+    key = incident_key(req.model_dump())
+    if key is None:
+        return {
+            "ok": False,
+            "error": "la traza no tiene identificador: no se puede descartar",
+        }
+    if not acknowledge_blocked(key):
+        return {
+            "ok": False,
+            "error": "el historial no está disponible; no se ha descartado nada",
+        }
+    return {"ok": True, "key": key}
 
 
 @router.get("/api/trace")
 async def get_trace(_key: str = Depends(verify_api_key)):
-    traces = await get_traces()
+    traces = visible_traces(await get_traces(), blocked_acks())
     summary = {
         "downloading": sum(1 for t in traces if t["stage"] == "downloading"),
         "downloaded": sum(1 for t in traces if t["stage"] == "downloaded"),
