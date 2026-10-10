@@ -324,10 +324,10 @@ describe('FileManager multi-file selection', () => {
       },
       retention: {
         '/mnt/storage': [
-          { name: 'Recien.mkv', first_seen_at: 1759200000, age_days: 0.4, expired: false },
-          { name: 'Nuevo.mkv', first_seen_at: 1759000000, age_days: 2.4, expired: false },
-          { name: 'Viejo.mkv', first_seen_at: 1758000000, age_days: 12.4, expired: true },
-          { name: 'SinEdad.mkv', first_seen_at: null, age_days: null, expired: false },
+          { name: 'Recien.mkv', first_seen_at: 1759200000, age_days: 0.4, expired: false, provenance: null, provenance_label: null },
+          { name: 'Nuevo.mkv', first_seen_at: 1759000000, age_days: 2.4, expired: false, provenance: null, provenance_label: null },
+          { name: 'Viejo.mkv', first_seen_at: 1758000000, age_days: 12.4, expired: true, provenance: null, provenance_label: null },
+          { name: 'SinEdad.mkv', first_seen_at: null, age_days: null, expired: false, provenance: null, provenance_label: null },
         ],
       },
     })
@@ -353,14 +353,53 @@ describe('FileManager multi-file selection', () => {
     expect(within(row).queryByText(/días|día|hoy|caducado/)).toBeNull()
   })
 
+  it('marks each row with its provenance chip, and shows nothing when no source claims it', async () => {
+    // F-07: procedencia — cola · importando / histórico / lo pedimos nosotros.
+    // Display-only: the chip explains why the file is there, it never gates
+    // an action, and an unclaimed file gets NO chip (null == absence).
+    mockFetch({
+      listings: {
+        '/mnt/storage': [file('Cola.mkv'), file('Historico.mkv'), file('Nuestro.mkv'), file('SinDueno.mkv')],
+      },
+      retention: {
+        '/mnt/storage': [
+          {
+            name: 'Cola.mkv', first_seen_at: 1, age_days: 1, expired: false,
+            provenance: 'queue', provenance_label: 'cola · importando',
+          },
+          {
+            name: 'Historico.mkv', first_seen_at: 1, age_days: 1, expired: false,
+            provenance: 'history', provenance_label: 'histórico',
+          },
+          {
+            name: 'Nuestro.mkv', first_seen_at: 1, age_days: 1, expired: false,
+            provenance: 'own', provenance_label: 'lo pedimos nosotros',
+          },
+          {
+            name: 'SinDueno.mkv', first_seen_at: 1, age_days: 1, expired: false,
+            provenance: null, provenance_label: null,
+          },
+        ],
+      },
+    })
+    await openPane('Cola.mkv')
+
+    expect(await screen.findByText('cola · importando')).toBeInTheDocument()
+    expect(screen.getByText('histórico')).toBeInTheDocument()
+    expect(screen.getByText('lo pedimos nosotros')).toBeInTheDocument()
+
+    const row = screen.getByText('SinDueno.mkv').closest('.fm-item') as HTMLElement
+    expect(row.querySelector('.fm-prov')).toBeNull()
+  })
+
   it('Marcar caducados shows only when something is expired, and selects exactly those rows', async () => {
     // Nothing is past the window: the button must not exist at all.
     mockFetch({
       listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv')] },
       retention: {
         '/mnt/storage': [
-          { name: 'A.mkv', first_seen_at: 1, age_days: 1.5, expired: false },
-          { name: 'B.mkv', first_seen_at: 1, age_days: 2.5, expired: false },
+          { name: 'A.mkv', first_seen_at: 1, age_days: 1.5, expired: false, provenance: null, provenance_label: null },
+          { name: 'B.mkv', first_seen_at: 1, age_days: 2.5, expired: false, provenance: null, provenance_label: null },
         ],
       },
     })
@@ -376,9 +415,9 @@ describe('FileManager multi-file selection', () => {
       listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('C.mkv')] },
       retention: {
         '/mnt/storage': [
-          { name: 'A.mkv', first_seen_at: 1, age_days: 12, expired: true },
-          { name: 'B.mkv', first_seen_at: 1, age_days: 2, expired: false },
-          { name: 'C.mkv', first_seen_at: 1, age_days: 12, expired: true },
+          { name: 'A.mkv', first_seen_at: 1, age_days: 12, expired: true, provenance: null, provenance_label: null },
+          { name: 'B.mkv', first_seen_at: 1, age_days: 2, expired: false, provenance: null, provenance_label: null },
+          { name: 'C.mkv', first_seen_at: 1, age_days: 12, expired: true, provenance: null, provenance_label: null },
         ],
       },
     })
@@ -401,9 +440,9 @@ describe('FileManager multi-file selection', () => {
       listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('C.mkv')] },
       retention: {
         '/mnt/storage': [
-          { name: 'A.mkv', first_seen_at: 1, age_days: 12, expired: true },
-          { name: 'B.mkv', first_seen_at: 1, age_days: 2.5, expired: false },
-          { name: 'C.mkv', first_seen_at: 1, age_days: 12, expired: true },
+          { name: 'A.mkv', first_seen_at: 1, age_days: 12, expired: true, provenance: null, provenance_label: null },
+          { name: 'B.mkv', first_seen_at: 1, age_days: 2.5, expired: false, provenance: null, provenance_label: null },
+          { name: 'C.mkv', first_seen_at: 1, age_days: 12, expired: true, provenance: null, provenance_label: null },
         ],
       },
       deleteDelayMs: 2,
