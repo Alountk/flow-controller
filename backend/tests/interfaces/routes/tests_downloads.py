@@ -9,7 +9,7 @@ stubbed HTTP transport, since the bugs worth catching live in that logic.
 import asyncio
 from unittest.mock import patch
 
-from interfaces.http.routes.downloads import _build_download, _progress_percent, collect_downloads
+from application.use_cases.downloads_cache import _build_download, _progress_percent, collect_downloads
 from tests._stubs import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
@@ -82,7 +82,7 @@ def _collect(routes):
     # The collector opens its own session, so the patch must be a factory bound
     # to these routes — `_StubSession` bare would answer every call with 503.
     arr = [s for s in services if s["kind"] == "arr"]
-    with patch("interfaces.http.routes.downloads.configured_services", return_value=arr), patch(
+    with patch("application.use_cases.downloads_cache.configured_services", return_value=arr), patch(
         "infrastructure.arr_client.AMUTORRENT_URL", AMU_URL
     ), patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
         return asyncio.run(_run())
