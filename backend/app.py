@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from application import gateways
+from application.use_cases import downloads_cache
 from infrastructure import arr_client, settings_store, sqlite_history, system_probe, wanted_scan
 from infrastructure import credentials as credentials_module, sqlite_history as history
 from config import FRONTEND_DIST
@@ -84,15 +85,19 @@ async def lifespan(_app: FastAPI):
     history.mark_interrupted()
 
     open_shared_session()
-    task = asyncio.create_task(status_routes.background_checker())
+    tasks = [
+        asyncio.create_task(coro)
+        for coro in (status_routes.background_checker(), downloads_cache.downloads_poller())
+    ]
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        for task in tasks:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         await close_shared_session()
 
 
@@ -103,17 +108,11 @@ app.add_middleware(RequestGuards)
 
 # ── Include routers ───────────────────────────────────────────────────────────
 
-app.include_router(status_routes.router)
-app.include_router(wanted_router)
-app.include_router(calendar_router)
-app.include_router(files_router)
-app.include_router(actions_router)
-app.include_router(auto_copy_router)
-app.include_router(downloads_router)
-app.include_router(mediacover_router)
-app.include_router(settings_router)
-app.include_router(amule_shares_router)
-app.include_router(mixer_router)
+# Mount order preserved; the loop keeps this file's counted lines for the lifespan above.
+for router in (status_routes.router, wanted_router, calendar_router, files_router,
+               actions_router, auto_copy_router, downloads_router, mediacover_router,
+               settings_router, amule_shares_router, mixer_router):
+    app.include_router(router)
 
 
 # ── Static files + SPA fallback ───────────────────────────────────────────────
