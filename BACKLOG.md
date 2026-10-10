@@ -564,7 +564,7 @@ Sin decidir: intervalo y TTL de (e) · licencia GPL exacta de (b).
 
 ---
 
-### F-07 — Marcar la procedencia de los ficheros de aMule · **Pendiente**
+### F-07 — Marcar la procedencia de los ficheros de aMule · ✅ **Entregado** (PR #182, 2026-10-09)
 
 La segunda mitad de lo que se pidió: *"saber si los archivos están controlados por radarr o
 sonarr"*. La primera (F-05, por edad) ya responde a *"localizar los que puedo borrar"*; esta
@@ -707,7 +707,7 @@ de mostrar dos envolturas muertas.
 **`Page` estaba duplicado** (hook + Sidebar) y nada impedía que se desincronizara; el hook es
 ahora el **único dueño** y el Sidebar re-exporta el tipo.
 
-### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · ✅ *Retirada — pendiente la fase 2*
+### F-09 — Nueva vista de **Seguimiento**: retira y sustituye a **Trazabilidad** · **Grande** · ✅ *Retirada — fase 2 completa*
 
 Pedida en voz alta al revisar el diseño nuevo. La retirada sigue en pie, pero **el final ya está
 decidido**: no se retira para dejar un hueco — Trazabilidad se convierte en una vista nueva que
@@ -724,7 +724,7 @@ descarga y de cada operación, y en una fase posterior acciones sobre ellas:
 |---|---|
 | **0 · Prototipos** | ✅ **Entregados y elegidos** — los 4 (`01-cronologia` · `02-kanban` · `03-consola-densa` · `04-alertas`) el 2026-10-07; **el usuario eligió `seguimiento-02-kanban`** («el estado ES la columna»). Los otros 3 quedan `discarded` con su trade-off en `prototypes/manifest.json` |
 | **1 · La vista** | ✅ **Entregada 2026-10-07** — `Seguimiento.tsx`: kanban de 4 columnas (`downloading` · `downloaded`+`importing` · `import_blocked`+`failed` · `sent`), tarjetas con píldora de fase, progreso, motivo de bloqueo, ruta y chip de categoría incorrecta, franja de resumen y banda de la cola de operaciones. Página nueva `/seguimiento` (nav entre Series y Trazabilidad, oculta sin arr). **Prerrequisito del retiro cumplido**: el barrido de auto-copia vive ahora en `AutoCopyPanel` (montado en las dos vistas) y las acciones por traza (`TraceActions`) van en cada tarjeta — retirar Trazabilidad no pierde nada. **C-11** ✅ entregado. **Sigue**: ~~el retiro~~ ✅ **hecho**: `TraceView` (página, ruta `/trazabilidad`, nav, tests) **fuera**; el barrido y las acciones ya estaban mudados. |
-| **2 · Acciones** | **Cancelar descarga** ✅ *hecho 2026-10-08*: botón en las cards **en curso** — quita la cola del arr (si la hay) Y la descarga del cliente con sus ficheros parciales; destructivo ⇒ el modo seguro lo bloquea y pide confirmación. **Ver detalles** ⬜ pendiente — decisión abierta: panel lateral vs vista aparte |
+| **2 · Acciones** | **Cancelar descarga** ✅ *hecho 2026-10-08*: botón en las cards **en curso** — quita la cola del arr (si la hay) Y la descarga del cliente con sus ficheros parciales; destructivo ⇒ el modo seguro lo bloquea y pide confirmación. **Ver detalles** ✅ *hecho 2026-10-10*: **panel lateral** (decisión del usuario) — `TraceDetailPanel` overlay 30% fuera de `.sg`, campos reales de `/api/trace` sin velocidad/ETA (PR #187) |
 
 **Disco queda fuera de este ciclo** — sigue ⏸ como hasta aquí; este apartado solo toca Trazabilidad.
 
@@ -874,16 +874,16 @@ C-01…C-07 y C-09…C-11 son mías; **C-08 es tuya** («siempre hardlink») y y
 
 | ID | Feature | Por qué, con evidencia |
 |----|---------|------------------------|
-| **C-01** | **Aviso de import bloqueado** (webhook/Telegram/email) | La app *existe* para detectar que el flujo se corta, y hoy solo te enteras si miras la pantalla. El ROADMAP ya lo tenía en Fase 4. |
-| **C-02** | **Gestor de import bloqueado**: reintentar / limpiar en un clic | Hay un caso real documentado en producción (`Transformers … 2160p`, `importBlocked`). Hoy solo se *ve*, no se actúa. |
+| **C-01** 🕐 *en cola* | **Aviso de import bloqueado** (webhook/Telegram/email) | La app *existe* para detectar que el flujo se corta, y hoy solo te enteras si miras la pantalla. El ROADMAP ya lo tenía en Fase 4. |
+| **C-02** ✅ | **Gestor de import bloqueado**: reintentar / limpiar en un clic | Hay un caso real documentado en producción (`Transformers … 2160p`, `importBlocked`). Hoy solo se *ve*, no se actúa. |
 | **C-03** ✅ | **E2E con Playwright** | **Entregado en #97-#100**: `e2e/` + 5 specs + stub `fake-arr` con payloads capturados + CI en dos fases (bare / con stub). B-01 y B-02 eran exactamente el tipo de fallo que ni el CSS ni los tests unitarios cazan. |
-| **C-04** | **Upgrades automáticos programados** 1080p → 4K | Extensión natural de F-01: en vez de pedirlo a mano, una cola de upgrade por perfil de calidad. |
-| **C-05** | **Rate limiting + Request ID** | Ya en el backlog (#13/#14). Ahora que hay auth por API key, una key filtrada sin límite es un agujero. |
-| **C-06** | **Responsive + dark mode** | Ya en el backlog (#10/#11). Ninguna prueba visual. |
+| **C-04** ❌ *retirada* | **Upgrades automáticos programados** 1080p → 4K | **Retirada 2026-10-10 (usuario): ya no tiene sentido** — existen destinos 1080p/3D/4K por separado. |
+| **C-05** ✅ | **Rate limiting + Request ID** | Ya en el backlog (#13/#14). Ahora que hay auth por API key, una key filtrada sin límite es un agujero. |
+| **C-06** ✅ *falta revisión visual* | **Responsive + dark mode** | Ya en el backlog (#10/#11). Ninguna prueba visual. |
 | **C-07** ✅ | **Ajuste de `IMPORT_TIMEOUT` desde la UI** | **Hecho y verificado 2026-10-09**: el campo existe en *Configuración* (`frontend/src/features/settings/Settings.tsx:295`, `form.intervals.import_timeout`), el backend lo soporta (`intervals.import_timeout`, `config.py:207`) y `rebuild()` lo recarga en save sin reinicio (`intervals.*` fuera de `RESTART_REQUIRED_FIELDS` a propósito). Ojo mantenido: `background_checker` lo lee en import (`status.py:79`) — el valor nuevo surte efecto en el siguiente ciclo de rebuild. |
 | **C-08** | **Regla «siempre hardlink»** — nada rompe la semilla | Un cliente de descargas comparte la **ruta**, no el inodo: renombrar o mover borra la entrada sembrada aunque los datos sobrevivan. Aplicada a la cola (move), a `rename`, al endpoint muerto `/api/files/move` (fuera) y a `copytree` (ahora enlace duro por fichero). **Pendiente:** `importMode: "Move"` en `arr_client.py:1803,1812` (antes `clients.py:1465,1474`, fichero ya inexistente tras la migración hexagonal), a probar contra el ajuste de hardlinks de Radarr. | ✅ |
-| **C-09** ✅ | **Comandos de arr cancelables + confirmación en la búsqueda masiva** | `arr_command` **ni siquiera guardaba el `command_id`** que Radarr devuelve, así que un `MissingMoviesSearch` no se podía cancelar: el 07-10-2026 una llamada a `POST /api/wanted/search` disparó **24 grabs** y el `DELETE /api/v3/command/{id}` ni era posible (409 terminal). **Hecho 2026-10-07**: `arr_command` devuelve `command_id` · nuevo `arr_cancel_command` · `POST /api/wanted/search` exige `confirm=true` (responde `needs_confirm`, sin lanzar nada) · `POST /api/wanted/search/cancel` reenvía el id al arr (su 404 se devuelve tal cual). 13 tests. **Pendiente**: la UI de confirmación con recuento — hoy el endpoint es solo API (ninguna vista lo llama). |
-| **C-10** | **Búsqueda de releases asíncrona** (job + polling con el `task_manager` que ya existe) | La búsqueda de releases tarda **91,6 s medida** (Radarr × 20 indexadores) contra un proxy que corta a ~60 s: el 504 del 07-10 se tapó subiendo `proxy_read_timeout` a 250 s **a mano en nginx**. Con un job + polling la latencia del proxy deja de importar y la clase entera de 504 desaparece. |
+| **C-09** ✅ | **Comandos de arr cancelables + confirmación en la búsqueda masiva** | `arr_command` **ni siquiera guardaba el `command_id`** que Radarr devuelve, así que un `MissingMoviesSearch` no se podía cancelar: el 07-10-2026 una llamada a `POST /api/wanted/search` disparó **24 grabs** y el `DELETE /api/v3/command/{id}` ni era posible (409 terminal). **Hecho 2026-10-07**: `arr_command` devuelve `command_id` · nuevo `arr_cancel_command` · `POST /api/wanted/search` exige `confirm=true` (responde `needs_confirm`, sin lanzar nada) · `POST /api/wanted/search/cancel` reenvía el id al arr (su 404 se devuelve tal cual). 13 tests. **Hecho 2026-10-09**: la UI de confirmación con recuento (`BulkSearchFlow`, PR #180) llama al endpoint con `confirm=false` → diálogo de recuento → `confirm=true`, y ofrece cancel por `command_id`. |
+| **C-10** ✅ | **Búsqueda de releases asíncrona** (job + polling con el `task_manager` que ya existe) | La búsqueda de releases tarda **91,6 s medida** (Radarr × 20 indexadores) contra un proxy que corta a ~60 s: el 504 del 07-10 se tapó subiendo `proxy_read_timeout` a 250 s **a mano en nginx**. Con un job + polling la latencia del proxy deja de importar y la clase entera de 504 desaparece. |
 | **C-11** ✅ | **Card «Stuck» clicable** del Dashboard → vista de seguimiento | El contador `import_blocked` era información sin salida. **Hecho 2026-10-07**: la card es un botón que abre `/seguimiento` — el primer eslabón de C-02. |
 
 **Descartadas (con motivo):** *WebSockets para progreso* — la cola ya usa polling adaptativo
@@ -916,6 +916,8 @@ Ver `README.md` → *Backlog de mejoras* para las tablas cerradas (#1-#24).
 ---
 
 ## Orden propuesto
+
+Act. **2026-10-10** (entrega de los flecos — PRs #180–#187): `C-02` ✅ · `C-05` ✅ · `C-06` ✅ *(falta revisión visual humana)* · `C-09` UI ✅ · `C-10` ✅ · `F-07` ✅ · `F-09` fase 2 ✅ (panel lateral) · `C-04` **retirada** (obsoleta: ya existen destinos 1080p/3D/4K) · `C-01` **en cola** (decisión del usuario).
 
 Act. **2026-10-07** (el anterior decía `F-07` → `F-01` → `C-01/C-02` y **F-01 ya está cerrado**):
 
