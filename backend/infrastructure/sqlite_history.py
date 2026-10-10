@@ -24,7 +24,7 @@ from pathlib import Path
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -171,6 +171,21 @@ CREATE TABLE IF NOT EXISTS auto_copy_log (
 CREATE TABLE IF NOT EXISTS amule_downloads (
     path          TEXT PRIMARY KEY,
     first_seen_at REAL NOT NULL
+);
+
+-- v10: one row per acknowledged blocked-import incident (C-02 "limpiar").
+-- The stage is derived from the arr queue on every poll, so the arr keeps
+-- reporting the block however the operator feels about it; what can be
+-- durable is the acknowledgement itself. Keyed by the incident key the
+-- route derives (identity + queue entry), never by stage, so a re-block
+-- under a new queue entry is a new incident and shows again.
+--
+-- Same migration discipline as v2-v9: `CREATE TABLE IF NOT EXISTS` inside the
+-- script `init_db` runs on every start, so an older file simply gains the
+-- table and the version bump only records it.
+CREATE TABLE IF NOT EXISTS blocked_acks (
+    key         TEXT PRIMARY KEY,
+    acked_at    REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_auto_copy_log_newest ON auto_copy_log (at DESC, id DESC);
 """
@@ -890,6 +905,46 @@ def store_available() -> bool:
     """
     with _lock:
         return _conn is not None
+
+
+def acknowledge_blocked(key: str) -> bool:
+    """Record that the operator cleared one blocked-import incident (C-02).
+
+    Idempotent: re-acknowledging the same incident refreshes nothing but the
+    timestamp, which is what "one click" should cost. Returns ``False`` when
+    the store is unavailable — the route reports that honestly instead of
+    claiming a clear that would not survive the next poll.
+    """
+    with _lock:
+        if _conn is None:
+            return False
+        try:
+            _conn.execute(
+                "INSERT OR REPLACE INTO blocked_acks (key, acked_at) VALUES (?, ?)",
+                (key, time.time()),
+            )
+            _conn.commit()
+            return True
+        except sqlite3.Error as exc:
+            log.warning("Could not acknowledge blocked trace %s: %s", key, exc)
+            return False
+
+
+def blocked_acks() -> set[str]:
+    """Every acknowledged blocked-import incident key.
+
+    Degrades to ``set()`` when the store is down: an unreadable acknowledgement
+    list must show the blocked traces again, never hide them — hiding what you
+    cannot read is the failure mode that loses a real blockage.
+    """
+    with _lock:
+        if _conn is None:
+            return set()
+        try:
+            return {row[0] for row in _conn.execute("SELECT key FROM blocked_acks")}
+        except sqlite3.Error as exc:
+            log.warning("Could not read blocked acknowledgements: %s", exc)
+            return set()
 
 
 def mark_interrupted() -> int:

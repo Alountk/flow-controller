@@ -315,6 +315,16 @@ def store_available(*args, **kwargs):
     return history.store_available(*args, **kwargs)
 
 
+def acknowledge_blocked(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return history.acknowledge_blocked(*args, **kwargs)
+
+
+def blocked_acks(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return history.blocked_acks(*args, **kwargs)
+
+
 def test_service_connection(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.test_service_connection(*args, **kwargs)
