@@ -487,7 +487,7 @@ limitarlo a `ALLOWED_ROOTS`.
 
 ---
 
-### F-06 — Estudio: implementación local de aMule · ✅ **Estudio entregado**
+### F-06 — Estudio: implementación local de aMule · ✅ **Estudio entregado · opción (e) implementada** (PR #185); (b) aparcaada por la licencia GPL
 
 Pedida: *"explorar el cómo sería de viable implementar un motor de amule en nuestro proyecto
 para tener más control sobre los archivos y el flow del programa"* — **para un estudio más
@@ -928,5 +928,4 @@ Act. **2026-10-07** (el anterior decía `F-07` → `F-01` → `C-01/C-02` y **F-
    **sigue**: fase 2 (cancelar / detalles).
 3. Después: `C-01` (avisos Telegram) → `F-07` (procedencia de aMule) → `C-10` (búsqueda
    asíncrona) → `C-05` → `C-06` → `C-04`.
-4. **F-06: estudio entregado** (→ `odd/tasks/f06-amule-local.md`); *la implementación* sigue sin
-   fecha hasta que se elija (e) o (b).
+4. **F-06: estudio entregado y opción (e) IMPLEMENTADA** (PR #185, 2026-10-10 — caché TTL 3 s con poller de fondo); (b) sigue sin fecha hasta verificar la licencia GPL exacta.
