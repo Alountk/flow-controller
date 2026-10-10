@@ -29,7 +29,7 @@ from application import gateways
 from infrastructure import arr_client, settings_store, sqlite_history, system_probe, wanted_scan
 from infrastructure import credentials as credentials_module, sqlite_history as history
 from config import FRONTEND_DIST
-from state import buf_handler, _load_log_file, close_shared_session, open_shared_session
+from state import _LOG_BUFFER, buf_handler, _load_log_file, close_shared_session, open_shared_session
 
 # Before the routes, and not after: they bind their adapter names at import, so
 # a router imported first would be handed a `gateways` full of None.
@@ -52,6 +52,7 @@ from interfaces.http.routes.downloads import router as downloads_router
 from interfaces.http.routes.mediacover import router as mediacover_router
 from interfaces.http.routes.settings import router as settings_router, PROTOTYPES_DIR
 from interfaces.http.routes.amule_shares import router as amule_shares_router
+from interfaces.http.middleware import RequestGuards
 from interfaces.http.routes_mixer import router as mixer_router
 
 logging.basicConfig(
@@ -61,12 +62,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("flow-controller")
 
-# Attach log buffer handler
 log.addHandler(buf_handler)
 
 # Load persisted logs into buffer on startup
 for entry in _load_log_file():
-    from state import _LOG_BUFFER
     _LOG_BUFFER.append(entry)
 
 
@@ -98,6 +97,9 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# The edge guard — request id + budgets — wraps everything mounted below it.
+app.add_middleware(RequestGuards)
 
 # ── Include routers ───────────────────────────────────────────────────────────
 
@@ -135,9 +137,7 @@ async def root():
 
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
-    if full_path.startswith("api/"):
-        return {"detail": "Not Found"}
-    if full_path.startswith("prototypes/"):
+    if full_path.startswith(("api/", "prototypes/")):
         return {"detail": "Not Found"}
     candidate = os.path.normpath(os.path.join(FRONTEND_DIST, full_path))
     if candidate.startswith(FRONTEND_DIST) and os.path.isfile(candidate):
