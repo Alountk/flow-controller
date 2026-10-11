@@ -37,3 +37,7 @@ se aplasta a ~360px (sin scroll horizontal que quepa).
 
 ## Progress
 - 2026-10-11: doc creada, rama `feat/dashboard-responsive`. Mirror Engram: pendiente (ver nota).
+- 2026-10-11: **T1 [x]** commit `cdd74f7` (CSS responsive + contract test 7 asserts, RED→GREEN).
+  Checks: vitest 448/448, tsc exit 0, eslint exit 0 (writer) + spot-check padre vitest 448/448.
+  Assess (RDD off, base main, committed-only): riesgo **medium**, `review_due=false`
+  (`under_budget`) → frontera revisada avanza a `cdd74f7`. Mirror Engram: aún pendiente.
