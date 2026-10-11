@@ -510,6 +510,119 @@ describe('the detail panel', () => {
     expect(field(panel, 'Ruta de salida')).toBe('/data/movies/Transformers')
   })
 
+  /** The `<section>` a labelled row lives in, keyed by its visible heading. */
+  function sectionOf(panel: HTMLElement, heading: string): Element | null {
+    const h = [...panel.querySelectorAll('h4')].find((el) => el.textContent === heading)
+    return h?.closest('section') ?? null
+  }
+
+  it('groups the body into General, Ficheros and Bloqueo/Cola sections', () => {
+    // The Stitch 05 design restructures the flat <dl> into three visible
+    // groups: an operator scanning the panel reads the headings, not ~20
+    // bare rows. Each expected fact must land in ITS section, not just exist.
+    renderView(
+      resp([
+        trace({
+          queue: {
+            state: 'warning',
+            status: 'importBlocked',
+            output_path: '/data/movies/Dune',
+            messages: ['motivo uno'],
+          },
+        }),
+      ]),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+
+    const panel = screen.getByRole('complementary', { name: 'Detalle de Dune (2021)' })
+    expect(within(panel).getByRole('heading', { name: 'General', level: 4 })).toBeInTheDocument()
+    expect(within(panel).getByRole('heading', { name: 'Ficheros', level: 4 })).toBeInTheDocument()
+    expect(
+      within(panel).getByRole('heading', { name: 'Bloqueo/Cola', level: 4 }),
+    ).toBeInTheDocument()
+
+    const labelsIn = (heading: string) =>
+      [...(sectionOf(panel, heading)?.querySelectorAll('dt') ?? [])].map((d) => d.textContent)
+
+    expect(labelsIn('General')).toEqual(
+      expect.arrayContaining(['Etapa', 'Fecha', 'Índice', 'Pausa', 'Progreso']),
+    )
+    expect(labelsIn('Ficheros')).toEqual(
+      expect.arrayContaining(['Estado del torrent', 'Guardado en', 'Destino', 'Ruta de salida']),
+    )
+    expect(labelsIn('Bloqueo/Cola')).toEqual(
+      expect.arrayContaining(['Estado de la cola', 'Categoría esperada', 'ID de cola']),
+    )
+  })
+
+  it('carries the release title inside the header zone', () => {
+    // Design 05: the header row IS title + pill + chips + close. The title
+    // below the header (the old markup) is the layout bug being fixed.
+    renderView(resp([trace()]))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+
+    const panel = screen.getByRole('complementary', { name: 'Detalle de Dune (2021)' })
+    const title = within(panel).getByRole('heading', { name: 'Dune (2021)' })
+    const head = panel.querySelector('.sg-det-head')
+    expect(head).not.toBeNull()
+    expect(head!.contains(title)).toBe(true)
+    // The close button keeps its top-right home in that same zone.
+    expect(head!.querySelector('.sg-det-close')).not.toBeNull()
+  })
+
+  it('marks path and ID values with the mono styling hook', () => {
+    // C-06 token contract: mono is for machine facts (paths, IDs) only —
+    // a human label like "Etapa" must NOT read as an identifier.
+    renderView(resp([trace()]))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+
+    const panel = screen.getByRole('complementary', { name: 'Detalle de Dune (2021)' })
+    const classesOf = (label: string) => {
+      const dt = [...panel.querySelectorAll('dt')].find((d) => d.textContent === label)
+      return dt?.nextElementSibling?.classList ?? null
+    }
+
+    expect(classesOf('ID de descarga')).toContain('sg-det-mono')
+    expect(classesOf('Hash emparejado')).toContain('sg-det-mono')
+    expect(classesOf('Guardado en')).toContain('sg-det-mono')
+    expect(classesOf('Índice')).not.toContain('sg-det-mono')
+    expect(classesOf('Etapa')).not.toContain('sg-det-mono')
+  })
+
+  it('renders every block message the payload carries, in order', () => {
+    // The card shows only the FIRST message; the panel carries them all.
+    // Order matters: the queue reports causes in sequence.
+    renderView(
+      resp([
+        trace({
+          stage: 'import_blocked',
+          title: 'Transformers (2014)',
+          queue: {
+            state: 'warning',
+            status: 'importBlocked',
+            output_path: '/data/movies/Transformers',
+            messages: ['motivo uno', 'motivo dos', 'motivo tres'],
+          },
+        }),
+      ]),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ver detalles' }))
+
+    const panel = screen.getByRole('complementary', { name: 'Detalle de Transformers (2014)' })
+    const why = panel.querySelector('.sg-det-why')
+    expect(why).not.toBeNull()
+    const text = why!.textContent ?? ''
+    expect(text).toContain('motivo uno')
+    expect(text).toContain('motivo dos')
+    expect(text).toContain('motivo tres')
+    expect(text.indexOf('motivo uno')).toBeLessThan(text.indexOf('motivo dos'))
+    expect(text.indexOf('motivo dos')).toBeLessThan(text.indexOf('motivo tres'))
+  })
+
   it('closes from its button and from Escape', () => {
     renderView(resp([trace()]))
 

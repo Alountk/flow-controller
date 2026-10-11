@@ -279,11 +279,20 @@ function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }
 }
 
 /** One `dt`/`dd` row; an absent fact reads `—`, never a guess. */
-function DetailRow({ label, value }: { label: string; value: string | number | null | undefined }) {
+function DetailRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string
+  value: string | number | null | undefined
+  /** Machine facts (paths, IDs) read monospace; human labels never do. */
+  mono?: boolean
+}) {
   return (
     <>
       <dt>{label}</dt>
-      <dd>{value ?? '—'}</dd>
+      <dd className={mono ? 'sg-det-mono' : undefined}>{value ?? '—'}</dd>
     </>
   )
 }
@@ -306,6 +315,10 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
  * no speed, no ETA, nothing extrapolated. Every field of the retired
  * Trazabilidad's record is here; queue messages appear in full (the card
  * shows only the first).
+ *
+ * Presentation follows Stitch 05: the title rides IN the header row, the
+ * body is three headed groups (General / Ficheros / Bloqueo/Cola) instead
+ * of one flat list, and paths/IDs read monospace (`sg-det-mono`, C-06).
  */
 function TraceDetailPanel({ trace, onClose }: { trace: Trace; onClose: () => void }) {
   useEffect(() => {
@@ -322,7 +335,10 @@ function TraceDetailPanel({ trace, onClose }: { trace: Trace; onClose: () => voi
 
   return (
     <aside className="sg-det" aria-label={`Detalle de ${trace.title}`}>
+      {/* Header zone (Stitch 05): title + stage pill + status chips + close —
+          the title lives IN this row, never below it. */}
       <div className="sg-det-head">
+        <h3 className="sg-det-title">{trace.title}</h3>
         <span className={`sg-svc sg-${trace.source}`}>{trace.source}</span>
         <span className={`sg-pill sg-pill-${trace.stage}`}>{STAGE_LABELS[trace.stage]}</span>
         {trace.category_ok === false && (
@@ -342,68 +358,87 @@ function TraceDetailPanel({ trace, onClose }: { trace: Trace; onClose: () => voi
         </button>
       </div>
 
-      <h3 className="sg-det-title">{trace.title}</h3>
+      {/* Body in three visible groups (Stitch 05): one flat ~20-row list
+          answers nothing — the headings are how the operator scans it. */}
+      <section className="sg-det-group">
+        <h4 className="sg-det-group-title">General</h4>
+        <dl className="sg-det-meta">
+          <DetailRow label="Etapa" value={STAGE_LABELS[trace.stage]} />
+          <DetailRow label="Fecha" value={trace.date} />
+          <DetailRow label="Índice" value={trace.indexer} />
+          <DetailRow label="Cliente de descarga" value={trace.download_client} />
+          <DetailRow label="Host del cliente" value={trace.download_client_host} />
+          <DetailRow label="ID de descarga" value={trace.download_id} mono />
+          <DetailRow label="Hash emparejado" value={trace.matched_hash} mono />
+          <DetailRow label="Pausa" value={trace.paused ? 'Sí' : 'No'} />
+          <dt>Progreso</dt>
+          <dd className="sg-det-progress">
+            {torrent ? (
+              <>
+                <div
+                  className="sg-bar"
+                  role="progressbar"
+                  aria-valuenow={torrent.progress}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`Progreso de ${trace.title} (detalle)`}
+                >
+                  <i style={{ width: `${torrent.progress}%` }} />
+                </div>
+                <span>{torrent.progress}%</span>
+              </>
+            ) : (
+              '—'
+            )}
+          </dd>
+        </dl>
+      </section>
 
-      <dl className="sg-det-meta">
-        <DetailRow label="Etapa" value={STAGE_LABELS[trace.stage]} />
-        <DetailRow label="Fecha" value={trace.date} />
-        <DetailRow label="Índice" value={trace.indexer} />
-        <DetailRow label="Cliente de descarga" value={trace.download_client} />
-        <DetailRow label="Host del cliente" value={trace.download_client_host} />
-        <DetailRow label="ID de descarga" value={trace.download_id} />
-        <DetailRow label="Hash emparejado" value={trace.matched_hash} />
-        <DetailRow label="Pausa" value={trace.paused ? 'Sí' : 'No'} />
-        <dt>Progreso</dt>
-        <dd className="sg-det-progress">
-          {torrent ? (
+      <section className="sg-det-group">
+        <h4 className="sg-det-group-title">Ficheros</h4>
+        <dl className="sg-det-meta">
+          {torrent && (
             <>
-              <div
-                className="sg-bar"
-                role="progressbar"
-                aria-valuenow={torrent.progress}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={`Progreso de ${trace.title} (detalle)`}
-              >
-                <i style={{ width: `${torrent.progress}%` }} />
-              </div>
-              <span>{torrent.progress}%</span>
+              <DetailRow label="Estado del torrent" value={torrent.state} />
+              <DetailRow label="Categoría" value={torrent.category} />
+              <DetailRow label="Tamaño" value={torrent.size === null ? null : formatBytes(torrent.size)} />
+              <DetailRow label="Guardado en" value={torrent.save_path} mono />
+              <DetailRow label="Ruta actual" value={torrent.current_path} mono />
+              <DetailRow label="Contenido" value={torrent.content_path} mono />
             </>
-          ) : (
-            '—'
           )}
-        </dd>
-        {torrent && (
-          <>
-            <DetailRow label="Estado del torrent" value={torrent.state} />
-            <DetailRow label="Categoría" value={torrent.category} />
-            <DetailRow label="Tamaño" value={torrent.size === null ? null : formatBytes(torrent.size)} />
-            <DetailRow label="Guardado en" value={torrent.save_path} />
-            <DetailRow label="Ruta actual" value={torrent.current_path} />
-            <DetailRow label="Contenido" value={torrent.content_path} />
-          </>
-        )}
-        <DetailRow label="Categoría esperada" value={trace.expected_category} />
-        <DetailRow label="Destino" value={trace.destination} />
-        {queue && (
-          <>
-            <DetailRow label="Estado de la cola" value={queue.state} />
-            <DetailRow label="Estado de importación" value={queue.status} />
-            <DetailRow label="Ruta de salida" value={queue.output_path} />
-          </>
-        )}
-        <DetailRow label="ID de cola" value={trace.ids.queue_id} />
-        <DetailRow label="ID de episodio" value={trace.ids.episode_id} />
-        <DetailRow label="ID de película" value={trace.ids.movie_id} />
-        <DetailRow label="ID de serie" value={trace.ids.series_id} />
-      </dl>
+          <DetailRow label="Destino" value={trace.destination} mono />
+          {queue && <DetailRow label="Ruta de salida" value={queue.output_path} mono />}
+        </dl>
+      </section>
+
+      <section className="sg-det-group">
+        <h4 className="sg-det-group-title">Bloqueo/Cola</h4>
+        <dl className="sg-det-meta">
+          {queue && (
+            <>
+              <DetailRow label="Estado de la cola" value={queue.state} />
+              <DetailRow label="Estado de importación" value={queue.status} />
+            </>
+          )}
+          <DetailRow label="Categoría esperada" value={trace.expected_category} />
+          <DetailRow label="ID de cola" value={trace.ids.queue_id} mono />
+          <DetailRow label="ID de episodio" value={trace.ids.episode_id} mono />
+          <DetailRow label="ID de película" value={trace.ids.movie_id} mono />
+          <DetailRow label="ID de serie" value={trace.ids.series_id} mono />
+        </dl>
+      </section>
 
       {messages.length > 0 && (
         <div className="sg-det-why">
           <span className="sg-det-why-label">Motivo</span>
-          {messages.map((m, i) => (
-            <p key={`${i}-${m}`}>{m}</p>
-          ))}
+          {/* Every message the payload carries, in the order it reported
+              them — the card only had room for the first. */}
+          <ol className="sg-det-why-list">
+            {messages.map((m, i) => (
+              <li key={`${i}-${m}`}>{m}</li>
+            ))}
+          </ol>
         </div>
       )}
     </aside>
