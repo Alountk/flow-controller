@@ -13,7 +13,9 @@ qBittorrent-compatible API" — we make both halves of that flow ourselves).
 """
 
 import asyncio
+import logging
 
+import config
 from infrastructure import arr_client
 from infrastructure.arr_client import (
     DIRECT_DOWNLOAD_CATEGORY,
@@ -228,6 +230,22 @@ def test_an_unknown_scheme_keeps_the_title_and_no_hash():
 # ── The add ───────────────────────────────────────────────────────────────
 
 
+class _KwargSession(_StubSession):
+    """Stub that also records the kwargs each POST was made with.
+
+    ``_StubSession.calls`` keeps only the URL, and the request timeout is a
+    kwarg — a budget regression would be invisible without recording it.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.post_kwargs: list[tuple[str, dict]] = []
+
+    def post(self, url, **kwargs):
+        self.post_kwargs.append((str(url), kwargs))
+        return super().post(url, **kwargs)
+
+
 def test_a_successful_add_uses_our_category_and_creates_it_when_missing():
     session = _StubSession({
         f"{AMUTORRENT_URL}/api/v2/torrents/categories": (200, {}),
@@ -268,6 +286,66 @@ def test_the_add_failure_is_returned_verbatim():
 
     assert result["ok"] is False
     assert "HTTP 400" in result["detail"]
+
+
+def test_the_add_waits_long_enough_for_the_throttled_ed2k_network():
+    # The add POST is where the client starts its server-side ED2K work —
+    # the same measured ~30 s the search docstring budgets for with ×12.
+    # At ×2 (10 s) the POST reached the client (download started) while our
+    # side already gave up with a bare "TimeoutError: ".
+    session = _KwargSession({
+        f"{AMUTORRENT_URL}/api/v2/torrents/categories": (200, {DIRECT_DOWNLOAD_CATEGORY: {}}),
+        f"{AMUTORRENT_URL}/api/v2/torrents/add": (200, {}),
+    })
+
+    asyncio.run(amutorrent_add_download(session, ED2K_LINK))
+
+    add_calls = [(u, kw) for u, kw in session.post_kwargs if "torrents/add" in u]
+    assert add_calls, "the add request went out"
+    assert add_calls[0][1]["timeout"].total == config.REQUEST_TIMEOUT * 12
+
+
+def test_a_timed_out_add_says_how_long_it_waited():
+    # str(TimeoutError()) is empty, so a bare f"{type}: {exc}" produced the
+    # user-facing detail `TimeoutError: ` — an empty tail that says nothing.
+    session = _StubSession({
+        f"{AMUTORRENT_URL}/api/v2/torrents/categories": (200, {DIRECT_DOWNLOAD_CATEGORY: {}}),
+        f"{AMUTORRENT_URL}/api/v2/torrents/add": (0, asyncio.TimeoutError()),
+    })
+
+    result = asyncio.run(amutorrent_add_download(session, ED2K_LINK))
+
+    assert result["ok"] is False
+    assert "sin respuesta tras" in result["detail"]
+    assert f"{int(config.REQUEST_TIMEOUT * 12)}s" in result["detail"]
+
+
+def test_an_add_error_with_a_message_keeps_that_message():
+    session = _StubSession({
+        f"{AMUTORRENT_URL}/api/v2/torrents/categories": (200, {DIRECT_DOWNLOAD_CATEGORY: {}}),
+        f"{AMUTORRENT_URL}/api/v2/torrents/add": (0, asyncio.TimeoutError("went away")),
+    })
+
+    result = asyncio.run(amutorrent_add_download(session, ED2K_LINK))
+
+    assert result["detail"] == "TimeoutError: went away"
+
+
+def test_the_add_logs_the_category_and_link_it_is_about_to_post(caplog):
+    session = _StubSession({
+        f"{AMUTORRENT_URL}/api/v2/torrents/categories": (200, {DIRECT_DOWNLOAD_CATEGORY: {}}),
+        f"{AMUTORRENT_URL}/api/v2/torrents/add": (200, {}),
+    })
+
+    # The add logs at INFO and the suite's effective capture floor is
+    # WARNING (pytest's handler preempts app.py's basicConfig), so the
+    # level must be lifted here or the record never reaches caplog.
+    with caplog.at_level(logging.INFO, logger="flow-controller"):
+        asyncio.run(amutorrent_add_download(session, ED2K_LINK))
+
+    assert "amutorrent_add_download" in caplog.text
+    assert DIRECT_DOWNLOAD_CATEGORY in caplog.text
+    assert ED2K_LINK[:48] in caplog.text
 
 
 def test_direct_add_is_the_category_the_arr_never_polls():
