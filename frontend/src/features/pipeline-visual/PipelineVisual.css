@@ -1,19 +1,39 @@
 /* ---- Dashboard Grid ---- */
+/* Default: 4 columns (901–1279px keeps this; handoff treats it as baseline). */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin: 24px 0;
+  min-width: 0;
+}
+
+/* Handoff brief: 2 columns ≤900px, 1 column ≤640px (640 block must stay
+   after the 900 block so the narrowest rule wins at small widths). */
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dash-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Grid/flex child protection: keeps cards from blowing out tracks at 360px. */
+  min-width: 0;
+  /* Inherited by label/value/sub so long titles wrap instead of scrolling. */
+  overflow-wrap: anywhere;
 }
 
 /* The Stuck card is a door, not a stat: it opens the seguimiento board (C-11). */
