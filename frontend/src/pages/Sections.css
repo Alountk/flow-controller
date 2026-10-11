@@ -76,6 +76,19 @@
   align-items: start;
 }
 
+/* Per-screen ratios (design handoff): the shared ≈52/48 above stays the
+   default, Películas gives the list 60 and Series gives the panel 60.
+   Scoped through each screen's own root class — no wrapper element. Both
+   tracks keep `minmax(0, …)` so a long path or a wide table contracts the
+   column instead of overflowing the grid. */
+.sec-peliculas .sec-split {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+}
+
+.sec-series .sec-split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+}
+
 .sec-master,
 .sec-detail {
   background: var(--bg-elev);
@@ -892,6 +905,22 @@
   border-color: color-mix(in srgb, var(--info) 45%, transparent);
 }
 
+/* The monitored flag: the same quiet chip voice as the quality tag, drawn
+   ONLY when the listing carried the field — an absent flag is unknown, and
+   unknown wears nothing (never "Sin monitorear"). */
+.sec-mon-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .sec-ep-path {
   font-family: var(--mono);
   font-size: 10.5px;
@@ -917,6 +946,10 @@
 }
 
 .sec-files-table .sec-file-name {
+  /* The path-bearing cell: a file's own name is a machine fact, and the
+     C-06 token contract gives machine facts `--mono`. Size and date keep the
+     normal font — they are read as quantities, not identifiers. */
+  font-family: var(--mono);
   color: var(--text);
   overflow-wrap: anywhere;
 }
@@ -962,7 +995,12 @@
    the Seguimiento board drops 4 → 2 columns. Stacking here can only make the
    split safer on narrow desktops — the two-pane band starts below it. */
 @media (max-width: 1280px) {
-  .sec-split {
+  /* Stacking beats every ratio — the scoped overrides are more specific
+     than `.sec-split`, so they must collapse here too, or the narrow
+     viewport would keep two columns the two-pane band cannot hold. */
+  .sec-split,
+  .sec-peliculas .sec-split,
+  .sec-series .sec-split {
     grid-template-columns: minmax(0, 1fr);
   }
 }
