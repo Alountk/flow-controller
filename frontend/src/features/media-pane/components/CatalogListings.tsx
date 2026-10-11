@@ -88,6 +88,7 @@ export function renderCatalogMovies({
                   poster={movie.remotePoster || undefined}
                   // "" is unknown, never a guessed class: no chip at all.
                   chip={movie.quality || undefined}
+                  monitored={movie.monitored}
                   path={movie.path || undefined}
                   grabbed={grabbed}
                   grabbedDestination={movie.grabbed_destination}
@@ -222,6 +223,7 @@ export function renderCatalogSeries({
                   poster={series.remotePoster || undefined}
                   // Sonarr's list carries no quality: no chip, never a
                   // guessed one (the Calidad view says so on screen).
+                  monitored={series.monitored}
                   path={series.path || undefined}
                   grabbed={grabbed}
                   grabbedDestination={series.grabbed_destination}

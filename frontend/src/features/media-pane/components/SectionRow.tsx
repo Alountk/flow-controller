@@ -66,6 +66,9 @@ interface SectionRowProps {
   /** The quality/class chip, when the row's data carries one (the Calidad
    *  view keeps its own class badge on top of this). */
   chip?: string
+  /** The listing's monitored flag, when the payload carries it. Absent →
+   *  no chip at all: unknown must never read as "Sin monitorear". */
+  monitored?: boolean
   path?: string
   grabbed?: string | null
   grabbedDestination?: string | null
@@ -86,6 +89,7 @@ export function SectionRow({
   status,
   poster,
   chip,
+  monitored,
   path,
   grabbed,
   grabbedDestination,
@@ -126,6 +130,11 @@ export function SectionRow({
         </span>
         <span className="sec-row-bottom">
           {chip && <span className="sec-q-tag">{chip}</span>}
+          {/* Only when the field exists: `null`/`undefined` is unknown, and
+              unknown wears no chip rather than the negative label. */}
+          {monitored != null && (
+            <span className="sec-mon-tag">{monitored ? 'Monitorizada' : 'Sin monitorear'}</span>
+          )}
           {path && <span className="sec-row-path" title={path}>{path}</span>}
           {extra}
           {/* Null means never requested: show nothing, not a dash. */}

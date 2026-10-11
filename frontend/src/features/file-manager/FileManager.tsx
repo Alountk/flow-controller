@@ -81,6 +81,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const [toast, setToast] = useState<string | null>(null)
   const [batchReport, setBatchReport] = useState<BatchReport | null>(null)
   const [batchBusy, setBatchBusy] = useState(false)
+  const [nameFilter, setNameFilter] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const onPathChangeRef = useRef<((index: number, path: string) => void) | null>(null)
   onPathChangeRef.current = onPathChange
@@ -225,7 +226,15 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
 
   const items = browseData?.ok ? browseData.items : []
   const itemKey = (item: FileItem) => item.path
-  const allVisibleSelected = areAllVisibleSelected(selected, items, itemKey)
+  // The row-name filter: case-insensitive substring on the name only. An
+  // unfiltered pane keeps the whole listing — `visibleItems === items` —
+  // and every on-screen action below (selection, batch) works on exactly
+  // this list, so it can never act on a row nobody is looking at.
+  const filterQuery = nameFilter.trim().toLowerCase()
+  const visibleItems = filterQuery
+    ? items.filter((item) => item.name.toLowerCase().includes(filterQuery))
+    : items
+  const allVisibleSelected = areAllVisibleSelected(selected, visibleItems, itemKey)
 
   // The join: the retention endpoint answers a top-level `path` plus each
   // file's `name`, while rows are keyed by `item.path`. Both come from the
@@ -235,7 +244,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const retentionByPath = new Map<string, RetentionFile>(
     (retentionData?.files ?? []).map((f) => [`${retentionData!.path}/${f.name}`, f]),
   )
-  const expiredPaths = items
+  const expiredPaths = visibleItems
     .filter((item) => retentionByPath.get(item.path)?.expired)
     .map((item) => item.path)
 
@@ -276,7 +285,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   function toggleAllSelection() {
     // The shared helper, never a second copy: select-all only ever touches the
     // rows currently on screen, so it cannot act on a file nobody is looking at.
-    setSelected((prev) => toggleVisibleSelection(prev, items, itemKey))
+    setSelected((prev) => toggleVisibleSelection(prev, visibleItems, itemKey))
   }
 
   /**
@@ -288,9 +297,9 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
    * runs the unlinks itself, so both go through the same loop.
    */
   async function runBatch(action: 'copy' | 'move' | 'delete') {
-    // Selection is cleared on every navigation, so every selected path belongs
-    // to the listing currently on screen.
-    const targets = items.filter((item) => selected.has(item.path))
+    // Selection dies on navigation AND on a filter change, so every selected
+    // path belongs to the rows currently on screen.
+    const targets = visibleItems.filter((item) => selected.has(item.path))
     if (targets.length === 0 || batchBusy) return
 
     setBatchBusy(true)
@@ -373,6 +382,20 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
           ⬆
         </button>
         <div className="fm-path" title={path}>{path}</div>
+        <input
+          type="search"
+          className="fm-filter"
+          placeholder="Filtrar archivos..."
+          aria-label="Filtrar archivos"
+          value={nameFilter}
+          onChange={(e) => {
+            setNameFilter(e.target.value)
+            // The selection describes rows on screen: a row the filter hides
+            // can no longer be acted on, so it leaves the selection — the
+            // same rule navigation already applies.
+            setSelected(new Set())
+          }}
+        />
         <button className="fm-action-btn" onClick={() => setCreating(true)}>
           + Carpeta
         </button>
@@ -408,7 +431,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         </div>
       )}
 
-      {items.length > 0 && (
+      {visibleItems.length > 0 && (
         <div className="fm-select-bar">
           <label className="fm-select-all">
             <input
@@ -486,9 +509,13 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         <div className="fm-loading">Cargando...</div>
       ) : items.length === 0 ? (
         <div className="fm-empty">Directorio vacío</div>
+      ) : visibleItems.length === 0 ? (
+        // Same dim line as an empty directory — a filter that matches
+        // nothing still has to say so instead of leaving a blank pane.
+        <div className="fm-empty">Sin resultados</div>
       ) : (
         <div className="fm-list">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <div
               key={item.path}
               className={`fm-item ${selected.has(item.path) ? 'selected' : ''} ${item.is_dir ? 'dir' : ''}`}
@@ -520,6 +547,9 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
               ) : (
                 <span className="fm-name">{item.name}</span>
               )}
+              {/* The row's own path (T2): derived from the row's data, never
+                  invented — a row with no path renders no path cell. */}
+              {item.path && <span className="fm-row-path" title={item.path}>{item.path}</span>}
               {ageChip(item)}
               {provenanceChip(item)}
               <span className="fm-size">{item.is_dir ? '—' : formatSize(item.size)}</span>
