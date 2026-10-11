@@ -126,9 +126,9 @@
 
 .auto-copy-badge.copied { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
 .auto-copy-badge.proposed { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-.auto-copy-badge.failed { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+.auto-copy-badge.failed { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad-text); }
 .auto-copy-badge.wait { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
-.auto-copy-badge.skip { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: var(--text-dim); }
+.auto-copy-badge.skip { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: color-mix(in srgb, var(--text) 70%, transparent); }
 
 .auto-copy-entry-reason {
   margin: 6px 0 0;

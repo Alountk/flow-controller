@@ -452,7 +452,7 @@
 }
 
 .sec-pill-bad {
-  color: var(--bad);
+  color: var(--bad-text);
   background: color-mix(in srgb, var(--bad) 12%, transparent);
   border-color: color-mix(in srgb, var(--bad) 35%, transparent);
 }

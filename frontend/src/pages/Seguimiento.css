@@ -205,7 +205,7 @@
 
 .sg-pill-failed {
   background: color-mix(in srgb, var(--bad) 12%, transparent);
-  color: var(--bad);
+  color: var(--bad-text);
 }
 
 .sg-pill-sent {

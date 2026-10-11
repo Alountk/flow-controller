@@ -64,11 +64,13 @@
     --bg-elev: #18181b;
     --bg-elev-2: #1c1c21;
 
-    /* Text */
+    /* Text — C-06 dark-contrast adjustment pending human visual review:
+       --text-dim/--text-dim2 lightened from #71717a to #8b8b93 so dim small
+       text reaches ~5.2:1 on --bg-elev. Light palette intentionally untouched. */
     --text: #fafafa;
     --text-2: #d4d4d8;
-    --text-dim: #71717a;
-    --text-dim2: #71717a;
+    --text-dim: #8b8b93;
+    --text-dim2: #8b8b93;
     --text-3: #a1a1aa;
 
     /* Borders */

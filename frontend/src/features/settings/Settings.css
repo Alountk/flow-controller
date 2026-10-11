@@ -118,7 +118,7 @@
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--ok);
+  background: var(--ok-dim);
   color: var(--on-fill);
   padding: 10px 20px;
   border-radius: 8px;

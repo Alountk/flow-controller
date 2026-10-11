@@ -58,7 +58,7 @@
 }
 
 .settings-toggle.on {
-  background: var(--ok);
+  background: var(--ok-dim);
   color: var(--on-fill);
   border-color: var(--ok);
 }
