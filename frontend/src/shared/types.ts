@@ -382,6 +382,11 @@ export interface AllSeries {
   monitored: boolean
   episode_count: number
   episode_file_count: number
+  /** Seasons Sonarr counted for the series (`statistics.seasonCount`), when
+   *  the payload carries it: the row appends "· N temporadas" to its
+   *  episodes line. Optional because a response without the field must keep
+   *  the legacy line exactly as it reads today. */
+  season_count?: number
   /** Unix seconds when this app asked to download ANY of the series' episodes,
    *  or null when it never did (or the grab is outside the lookback window). */
   grabbed_at?: number | null
