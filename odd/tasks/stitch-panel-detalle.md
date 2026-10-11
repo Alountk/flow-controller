@@ -38,3 +38,8 @@ Pulir `TraceDetailPanel` (F-09 fase 2) alineado con el diseño Stitch
 ## Progress
 - 2026-10-11: doc creada, rama `feat/panel-detalle-polish` (desde main, paralela
   a #188). Mirror Engram pendiente (conflicto de sesiones).
+- 2026-10-11: **T1 [x]** commit `cec2e8d` (secciones General/Ficheros/Bloqueo,
+  título en cabecera, `sg-det-mono` sobre `--mono`, motivos ordenados; RED→GREEN,
+  4 tests nuevos). Checks: vitest 57/445 (baseline main 441 + 4), tsc 0, eslint 0
+  (writer) + spot-check padre 445/445. Assess (RDD off, base main): riesgo
+  **medium**, `review_due=false` (`under_budget`) → frontera = `cec2e8d`.
