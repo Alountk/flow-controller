@@ -1594,7 +1594,7 @@ async def fetch_all_series_detailed(
                         path_exists = os.path.isdir(fs_path)
                     except (OSError, ValueError):
                         path_exists = False
-                items.append({
+                item = {
                     "id": s.get("id"),
                     "title": s.get("title", ""),
                     "year": s.get("year"),
@@ -1608,7 +1608,15 @@ async def fetch_all_series_detailed(
                     "monitored": s.get("monitored", False),
                     "episode_count": s.get("statistics", {}).get("episodeCount", 0),
                     "episode_file_count": s.get("statistics", {}).get("episodeFileCount", 0),
-                })
+                }
+                # OPTIONAL end-to-end: Sonarr reports `statistics.seasonCount`
+                # only when its payload carries statistics. When it does not,
+                # the key travels ABSENT rather than None/0 — an absent key
+                # is what keeps the frontend on its legacy, suffix-less line.
+                season_count = s.get("statistics", {}).get("seasonCount")
+                if season_count is not None:
+                    item["season_count"] = season_count
+                items.append(item)
             return {"items": items, "total": total, "page": page, "page_size": page_size}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {**_empty_page(page, page_size), **arr_failure(service, exc=exc)}

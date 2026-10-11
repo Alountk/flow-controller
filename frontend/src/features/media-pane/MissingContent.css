@@ -218,6 +218,22 @@
   margin-top: 2px;
 }
 
+/* The series completeness verdict — the card variant of the section row's
+   `.sec-row-complete`: derived from the payload's counts, never invented. */
+.wanted-complete {
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.wanted-complete-ok {
+  color: var(--ok);
+}
+
+.wanted-complete-warn {
+  color: var(--warn);
+}
+
 .wanted-filter {
   display: flex;
   gap: 4px;

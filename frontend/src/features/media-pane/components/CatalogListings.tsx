@@ -169,6 +169,40 @@ interface CatalogSeriesProps extends ListingViewProps {
   onScan: (series: ScanSeriesInput) => void
 }
 
+/**
+ * The two claims a series row may add around its episode counts, derived
+ * ONLY from what the payload carries (the handoff's honesty rule):
+ *
+ * - `seasonSuffix` — " · N temporadas" when Sonarr reported a season count
+ *   (≥1); an absent or unusable value keeps the legacy line, word for word;
+ * - `completeness` — the verdict about `missing = episode_count −
+ *   episode_file_count`: counts that differ warn how many episodes are
+ *   missing, equal counts read complete, and no total at all (0/absent)
+ *   means NO verdict — with no total there is nothing to be complete about,
+ *   so no line is drawn and no number is invented.
+ */
+function seriesSummary(series: AllSeries): {
+  seasonSuffix: string
+  completeness: { text: string; tone: 'ok' | 'warn' } | null
+} {
+  const seasons = series.season_count
+  const seasonSuffix =
+    typeof seasons === 'number' && seasons >= 1 ? ` · ${seasons} temporadas` : ''
+  if (!(series.episode_count > 0) || typeof series.episode_file_count !== 'number') {
+    return { seasonSuffix, completeness: null }
+  }
+  // missing < 0 (more files than the count reports) still means nothing is
+  // missing — only a positive remainder is a "Faltan N…".
+  const missing = series.episode_count - series.episode_file_count
+  return {
+    seasonSuffix,
+    completeness:
+      missing > 0
+        ? { text: `Faltan ${missing} episodios para completar la serie`, tone: 'warn' }
+        : { text: 'Todos los episodios descargados', tone: 'ok' },
+  }
+}
+
 export function renderCatalogSeries({
   items,
   onScan,
@@ -191,6 +225,7 @@ export function renderCatalogSeries({
         <div className="wanted-grid">
           {items.map((series) => {
             const grabbed = formatGrabMark(series.grabbed_at, series.grabbed_destination)
+            const summary = seriesSummary(series)
             const actions = (
               <>
                 <button
@@ -230,9 +265,18 @@ export function renderCatalogSeries({
                   extra={
                     series.episode_count > 0 ? (
                       <span className="sec-row-ep-count">
-                        {series.episode_file_count}/{series.episode_count} episodios
+                        {series.episode_file_count}/{series.episode_count} episodios{summary.seasonSuffix}
                       </span>
                     ) : undefined
+                  }
+                  extraLine={
+                    summary.completeness && (
+                      <span
+                        className={`sec-row-complete sec-row-complete-${summary.completeness.tone}`}
+                      >
+                        {summary.completeness.text}
+                      </span>
+                    )
                   }
                 >
                   {actions}
@@ -267,7 +311,12 @@ export function renderCatalogSeries({
                   </div>
                   {series.episode_count > 0 && (
                     <div className="wanted-ep-count">
-                      {series.episode_file_count}/{series.episode_count} episodios
+                      {series.episode_file_count}/{series.episode_count} episodios{summary.seasonSuffix}
+                    </div>
+                  )}
+                  {summary.completeness && (
+                    <div className={`wanted-complete wanted-complete-${summary.completeness.tone}`}>
+                      {summary.completeness.text}
                     </div>
                   )}
                   {/* A series card is marked by a grab of ANY of its

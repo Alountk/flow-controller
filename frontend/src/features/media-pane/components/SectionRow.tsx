@@ -74,6 +74,9 @@ interface SectionRowProps {
   grabbedDestination?: string | null
   /** The rest of the second line: episode code + title + date, counts… */
   extra?: ReactNode
+  /** The line UNDER `extra`: the series completeness verdict, drawn only
+   *  when the payload's own counts back it (no total → no line). */
+  extraLine?: ReactNode
   /** Every action the row had — the same buttons, nothing dropped. */
   children: ReactNode
 }
@@ -94,6 +97,7 @@ export function SectionRow({
   grabbed,
   grabbedDestination,
   extra,
+  extraLine,
   children,
 }: SectionRowProps) {
   const hue = posterHue(title)
@@ -144,6 +148,9 @@ export function SectionRow({
             </span>
           )}
         </span>
+        {/* Its own line under the bottom one: the body is a column, so the
+            verdict reads below the counts, never beside them. */}
+        {extraLine}
       </span>
       <span className="sec-row-actions">{children}</span>
     </div>

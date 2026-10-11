@@ -500,6 +500,26 @@
   min-width: 0;
 }
 
+/* The series completeness verdict: a DERIVED line under the episodes count,
+   drawn only when the payload's own counts back it (no total → no line).
+   The body is a column, so this span lands on its own line by construction. */
+.sec-row-complete {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sec-row-complete-ok {
+  color: var(--ok);
+}
+
+.sec-row-complete-warn {
+  color: var(--warn);
+}
+
 /* Every action the row had stays ON the row — same buttons, same labels.
    margin-left: auto keeps them right-aligned on their line — alone on it when
    the row wrapped, beside the body when it did not. */
