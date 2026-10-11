@@ -174,8 +174,8 @@ button.dash-card:focus-visible {
 
 .node-state.online { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
 .node-state.misconfigured { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
-.node-state.offline { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
-.node-state.unknown { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: var(--text-dim); }
+.node-state.offline { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad-text); }
+.node-state.unknown { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: color-mix(in srgb, var(--text) 70%, transparent); }
 
 .node-reason {
   font-size: 12px;

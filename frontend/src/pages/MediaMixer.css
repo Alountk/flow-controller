@@ -317,17 +317,17 @@
 
 .mixer-status-error {
   background: color-mix(in srgb, var(--bad) 15%, transparent);
-  color: var(--bad);
+  color: var(--bad-text);
 }
 
 .mixer-status-cancelled {
   background: color-mix(in srgb, var(--text-dim) 15%, transparent);
-  color: var(--text-dim);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
 .mixer-status-pending {
   background: color-mix(in srgb, var(--text-dim) 15%, transparent);
-  color: var(--text-dim);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
 .mixer-task-detail {
