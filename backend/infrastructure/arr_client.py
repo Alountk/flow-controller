@@ -972,6 +972,20 @@ async def amutorrent_ensure_category(session: aiohttp.ClientSession, category: s
         return False
 
 
+def _empty_answer_detail(exc: BaseException, timeout: aiohttp.ClientTimeout) -> str:
+    """A failure detail that never ends in an empty tail.
+
+    ``str(TimeoutError())`` is empty, so the bare ``f"{type}: {exc}"``
+    pattern showed users a dangling ``TimeoutError: `` — when the exception
+    carries no message, the effective timeout in seconds is the detail
+    instead (user-facing text stays Spanish, like the module's other
+    details).
+    """
+    if str(exc):
+        return f"{type(exc).__name__}: {exc}"
+    return f"{type(exc).__name__}: sin respuesta tras {int(timeout.total)}s"
+
+
 async def amutorrent_add_download(
     session: aiohttp.ClientSession, url: str, category: str = DIRECT_DOWNLOAD_CATEGORY
 ) -> dict:
@@ -981,7 +995,12 @@ async def amutorrent_add_download(
     OUR category, and the arr never learns the download exists.
     """
     await amutorrent_ensure_category(session, category)
-    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
+    # Same ×12 as amutorrent_search_link's docstring: ED2K work is throttled
+    # server-side and measured at ~30 s, and the add POST is what kicks that
+    # work off — at ×2 (10 s) the client had already accepted the link (the
+    # download started) while our side timed out with a bare "TimeoutError: ".
+    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 12)
+    log.info("amutorrent_add_download category=%s link=%s", category, url[:48])
     try:
         async with session.post(
             f"{AMUTORRENT_URL}/api/v2/torrents/add",
@@ -994,7 +1013,7 @@ async def amutorrent_add_download(
             text = await resp.text()
             return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
-        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+        return {"ok": False, "detail": _empty_answer_detail(exc, timeout)}
 
 
 def _search_query(title: str) -> str:
@@ -2021,7 +2040,7 @@ async def arr_grab_release(session: aiohttp.ClientSession, service: dict, guid: 
                 detail = f"HTTP {resp.status}: {text[:200]}"
             return {"ok": False, "detail": detail}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
-        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+        return {"ok": False, "detail": _empty_answer_detail(exc, timeout)}
 
 
 async def arr_manual_import(session: aiohttp.ClientSession, service: dict, file_path: str, movie_id: int) -> dict:
