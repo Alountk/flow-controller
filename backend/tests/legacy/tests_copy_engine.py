@@ -774,3 +774,27 @@ class TestCancelDownload:
         # side or the other, and the operator has to see that it failed.
         assert result["ok"] is False
         assert deletes == ["abc"], "the client side still ran — the report is what must be honest"
+
+
+def test_the_copy_creation_site_tags_the_copy_channel(tmp_path, monkeypatch):
+    """T2(a): a copy job is born on the `copy` channel so its terminal event
+    invalidates the copy-task query and nothing else."""
+    payload = _foreign_payload(tmp_path)
+
+    monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+    monkeypatch.setattr(config, "path_is_allowed", lambda path: True)
+    monkeypatch.setattr(
+        clients,
+        "arr_delete_queue",
+        _delete_recorder([], {"ok": True, "detail": "Item eliminado de la cola"}),
+    )
+    # The background worker is out of scope here: this test inspects the
+    # registry entry the creation site produced, nothing more.
+    monkeypatch.setattr(copy_engine, "run_copy_background", _run_recorder([]))
+
+    result = asyncio.run(do_action(None, "copy_files", payload))
+    task = copy_tasks.get(result["task_id"])
+    try:
+        assert task is not None and task["channel"] == "copy"
+    finally:
+        del copy_tasks._tasks[result["task_id"]]

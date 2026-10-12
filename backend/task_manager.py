@@ -15,6 +15,8 @@ import logging
 import threading
 import time
 
+import event_bus
+
 log = logging.getLogger("flow-controller")
 
 
@@ -26,8 +28,13 @@ class TaskManager:
         self._lock = threading.RLock()
         self._ttl = ttl
 
-    def create(self, task_id: str, **kwargs) -> dict:
-        """Create a new task entry."""
+    def create(self, task_id: str, channel: str = "", **kwargs) -> dict:
+        """Create a new task entry.
+
+        `channel` names the frontend surface the task belongs to (`"grab"`,
+        `"release"`, `"copy"`, `"mixer"`) so the SSE event it eventually
+        publishes invalidates that surface's query and no other.
+        """
         task = {
             "id": task_id,
             "status": "pending",
@@ -36,6 +43,7 @@ class TaskManager:
             "detail": None,
             "cancelled": False,
             "progress": 0,
+            "channel": channel,
             **kwargs,
         }
         with self._lock:
@@ -49,10 +57,35 @@ class TaskManager:
             return self._tasks.get(task_id)
 
     def update(self, task_id: str, **kwargs) -> None:
-        """Update fields on a task."""
+        """Update fields on a task.
+
+        The moment a status BECOMES `done` or `error` (the transition, not
+        every later refresh of an already-terminal task) an SSE event goes out
+        so the waiting query invalidates at once instead of on its next poll.
+        Best-effort by design: the bus never raises, and the publish sits
+        outside the lock and inside its own try — a dropped event costs one
+        polling cycle, never the task itself.
+        """
+        event: dict | None = None
         with self._lock:
-            if task_id in self._tasks:
-                self._tasks[task_id].update(kwargs)
+            task = self._tasks.get(task_id)
+            if task is None:
+                return
+            was = task.get("status")
+            task.update(kwargs)
+            if task.get("status") in ("done", "error") and task["status"] != was:
+                event = {
+                    "kind": "task",
+                    "channel": task.get("channel", ""),
+                    "task_id": task["id"],
+                    "status": task["status"],
+                    "detail": task.get("detail"),
+                }
+        if event is not None:
+            try:
+                event_bus.publish(event)
+            except Exception:  # noqa: BLE001 — publishing must never break a task
+                log.debug("task event for %s dropped", task_id, exc_info=True)
 
     def cancel(self, task_id: str) -> dict:
         """Request cancellation of a task."""

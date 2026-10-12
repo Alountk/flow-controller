@@ -609,6 +609,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         dst_path = str(Path(root) / smart_name)
         task_id = str(uuid.uuid4())
         copy_tasks.create(task_id,
+            channel="copy",
             status="running",
             src_path=resolved_src,
             dst_path=dst_path,
