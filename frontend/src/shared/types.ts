@@ -583,6 +583,41 @@ export interface DestinationOptions {
   detail: string
 }
 
+/** Mirrors `_build_download()` / `collect_downloads()` in
+ *  `backend/application/use_cases/downloads_cache.py`. `problem` is the arr's
+ *  own verdict (importBlocked/failed/downloadFailed or a warning status).
+ *  `speed`/`eta_seconds` exist in the payload but the UI never renders them
+ *  (honesty rule: only what the app can know is shown). */
+export interface DownloadEntry {
+  id: string
+  source: ServiceKey
+  title: string
+  status: string
+  tracked_state: string
+  tracked_status: string
+  problem: boolean
+  messages: string[]
+  progress: number
+  size: number
+  sizeleft: number
+  timeleft: string
+  download_client: string
+  indexer: string
+  matched: boolean
+  speed: number | null
+  eta_seconds: number | null
+  seeders: number | null
+  leechers: number | null
+  torrent_state: string | null
+}
+
+/** Mirrors GET /api/downloads (snapshot behind `downloads_cache`). */
+export interface DownloadsResponse {
+  downloads: DownloadEntry[]
+  errors: Array<{ source: string; detail?: string }>
+  updated_at: number
+}
+
 export interface DiskVolume {
   name: string
   path: string

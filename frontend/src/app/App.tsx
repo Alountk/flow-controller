@@ -10,6 +10,7 @@ import { Prototypes } from '../pages/Prototypes.tsx'
 import { Settings } from '../features/settings/Settings.tsx'
 import { DiskSpace } from '../pages/DiskSpace.tsx'
 import { ServiceChips } from './ServiceChips.tsx'
+import { DashboardCards } from './DashboardCards.tsx'
 import { MediaMixer } from '../pages/MediaMixer.tsx'
 import { Peliculas } from '../pages/Peliculas.tsx'
 import { Series } from '../pages/Series.tsx'
@@ -35,6 +36,8 @@ import {
   type ServiceKey,
   type TraceResponse,
   type ConfigResponse,
+  type DownloadsResponse,
+  type DiskResponse,
 } from '../shared/types.ts'
 import type { Page } from './Sidebar.tsx'
 
@@ -100,6 +103,9 @@ function App() {
   // above them because they gate on `connected`.
   const eventStream = useEventStream(configData?.auth_required ?? true)
 
+  // Hoisted with the queries: the dashboard-only readers below gate on it.
+  const [page, setPage] = usePageRoute()
+
   const { data, error, isPending } = useQuery<StatusResponse>({
     queryKey: ['status'],
     queryFn: () => fetchJson('/api/status'),
@@ -123,6 +129,24 @@ function App() {
     queryFn: () => fetchJson('/api/actions'),
     refetchInterval: 60000,
     enabled: authenticated,
+  })
+
+  // Dashboard-only readers (Stitch 01): the downloads snapshot feeds the
+  // "Descargas atascadas" card (T6 wires the `kind:"downloads"` event to this
+  // key; the 10 s poll is the fallback), the disk volumes feed "Espacio en
+  // disco" — the DiskSpace page shares the ['disk'] key when you open it.
+  const { data: downloadsData } = useQuery<DownloadsResponse>({
+    queryKey: ['downloads'],
+    queryFn: () => fetchJson('/api/downloads'),
+    refetchInterval: eventStream.connected ? false : 10000,
+    enabled: authenticated && page === 'dashboard',
+  })
+
+  const { data: diskData } = useQuery<DiskResponse>({
+    queryKey: ['disk'],
+    queryFn: () => fetchJson('/api/disk'),
+    refetchInterval: 30000,
+    enabled: authenticated && page === 'dashboard',
   })
 
   // A fresh install has no key to authenticate with, so it gets the setup page
@@ -182,8 +206,6 @@ function App() {
     return () => setUnauthorizedHandler(null)
   }, [])
 
-  const [page, setPage] = usePageRoute()
-
   const developer = configData?.developer ?? false
 
   const handleActionDone = useCallback(() => {
@@ -220,11 +242,6 @@ function App() {
   // `every` on an empty list is true, which would report an empty pipeline as
   // healthy. Nothing configured is not the same as everything working.
   const nothingConfigured = servicesReady && services.length === 0
-
-  const downloading = traceData?.summary?.downloading ?? 0
-  const importBlocked = traceData?.summary?.import_blocked ?? 0
-  const failed = traceData?.summary?.failed ?? 0
-  const completed = traceData?.summary?.downloaded ?? 0
 
   // Waiting on /api/config, or validating a remembered key.
   if (checkingStored) {
@@ -290,33 +307,14 @@ function App() {
 
                   {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
 
-                  <div className="dashboard-grid">
-                  <div className="dash-card">
-                    <span className="dash-label">Descargando</span>
-                    <span className="dash-value accent">{downloading}</span>
-                    <span className="dash-sub">activas</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="dash-card"
-                    onClick={() => setPage('seguimiento')}
-                    title="Ver el seguimiento de las descargas"
-                  >
-                    <span className="dash-label">Stuck</span>
-                    <span className="dash-value warn">{importBlocked}</span>
-                    <span className="dash-sub">atención</span>
-                  </button>
-                  <div className="dash-card">
-                    <span className="dash-label">Fallidas</span>
-                    <span className="dash-value bad">{failed}</span>
-                    <span className="dash-sub">últimas 24h</span>
-                  </div>
-                  <div className="dash-card">
-                    <span className="dash-label">Completadas</span>
-                    <span className="dash-value ok">{completed}</span>
-                    <span className="dash-sub">esta semana</span>
-                  </div>
-                </div>
+                  <DashboardCards
+                    downloads={downloadsData?.downloads ?? []}
+                    disk={diskData}
+                    summary={traceData?.summary}
+                    traces={traceData?.traces ?? []}
+                    services={services}
+                    onOpenSeguimiento={() => setPage('seguimiento')}
+                  />
               </>
             )}
 

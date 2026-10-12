@@ -57,18 +57,18 @@ button.dash-card:focus-visible {
 }
 
 .dash-label {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--text-dim);
   font-weight: 600;
 }
 
 .dash-value {
-  font-size: 32px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
+  /* Design 01 headline-lg: 1.5rem / 700. */
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.33;
 }
 
 .dash-value.ok { color: var(--ok); }
@@ -79,6 +79,23 @@ button.dash-card:focus-visible {
 .dash-sub {
   font-size: 12px;
   color: var(--text-dim);
+}
+
+/* Hairline footer row of design 01: pinned to the card bottom, rendered only
+   when there is a fact to report. */
+.dash-foot {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.dash-foot.warn { color: var(--warn); }
+.dash-foot.bad { color: var(--bad-text); }
+.dash-foot.mono {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
 }
 
 /* Shared: the dashboard fetch error and the Settings error boxes both use it.

@@ -96,6 +96,24 @@ para un segundo PR.
 ## Progress
 - 2026-10-13: doc creada antes de la primera escritura; decisiones del usuario
   registradas; mapa diseño→datos con evidencia.
+- 2026-10-13: **T1 [x]** commit `3df6695` (ServiceChips + topbar right, RED→GREEN
+  4 tests). Checks: vitest 533/533 (baseline 529+4), tsc 0, eslint 0.
+- 2026-10-13: **T2 [x]** commit `497efce` (título h1+subtítulo en Topbar, se retira
+  content-header; unit×2 + e2e×3 re-punteados a heading 'Dashboard'; +1 test de
+  subtítulo). Checks: vitest 533/533, tsc 0, eslint 0. e2e: GATE en CI.
+- 2026-10-13: **T5 [x]** commit `b7b68fb` (PipelineVisual+banner+leyenda fuera;
+  Dashboard.css con grid/tarjetas/error-box; pulse→Topbar.css; content-header CSS
+  fuera de global.css; contrato responsive re-apuntado; darkModePolish −2 entries
+  `.node-state`; −664 líneas). ⚠ Incidente: el `git rm` de pipeline-visual borró
+  `node-fs.d.ts` (shim ambiental `declare module 'node:fs'` — el paquete NO tiene
+  @types/node) → TS2307 en 4 tests; recreado en `src/test/node-fs.d.ts` (causa
+  raíz verificada con stash/probe). Checks: vitest 518/518, tsc 0, eslint 0.
+- 2026-10-13: **T3 [x]** commit de este mismo cambio (hash anotado en T4)
+  (DashboardCards: 4 tarjetas design-01
+  con footers honestos, puerta C-11 → card1; queries ['downloads'] SSE-gated y
+  ['disk'] dashboard-only; .dash-foot; dash-value 24px/700). RED→GREEN: 10 tests
+  nuevos; test C-11 re-punteado. Checks: vitest 528/528 (65→66 files), tsc 0,
+  eslint 0.
 
 ## Log
 - L1 (2026-10-13, usuario): "podemos empezar a implementar el nuevo diseño hecho

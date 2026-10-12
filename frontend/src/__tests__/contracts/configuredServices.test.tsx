@@ -120,14 +120,14 @@ describe('the app reflects what is configured', () => {
     expect(screen.getByText('Películas')).toBeInTheDocument()
   })
 
-  it('opens the Seguimiento board from the Stuck card (C-11)', async () => {
-    // The dashboard counted import-blocked downloads and led nowhere; the
-    // count is the app's whole reason to exist, so it is now a door.
+  it('opens the Seguimiento board from the atascadas card (C-11)', async () => {
+    // The dashboard counts stuck downloads and led nowhere; the count is the
+    // app's whole reason to exist, so it is a door (design 01 card 1).
     mockFetch(['radarr'])
     renderApp()
 
     await waitFor(() => expect(screen.getByText('Archivos')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /Stuck/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Descargas atascadas/ }))
 
     await waitFor(() =>
       expect(screen.getByText('Sin descargas registradas.')).toBeInTheDocument(),
