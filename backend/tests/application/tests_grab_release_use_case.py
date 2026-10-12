@@ -29,6 +29,8 @@ from unittest.mock import AsyncMock, patch
 
 from application.use_cases.grab_release import grab_tasks, start_grab
 
+import event_bus
+
 FOREIGN = "/mnt/storage-6tb/Movies4K"
 LIBRARY_ROOT = "/mnt/storage/movies"
 
@@ -237,3 +239,34 @@ def test_a_foreign_grab_without_a_title_settles_the_old_refusal(
     mock_search.assert_not_awaited()
     mock_record.assert_not_called()
     _forget(started["task_id"])
+
+
+@patch("application.use_cases.grab_release.record_own_grab")
+@patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
+def test_the_creation_site_tags_the_channel_and_the_settlement_publishes_it(
+    mock_grab, mock_record
+):
+    """T2(a) end to end for grab: the site says `channel="grab"`, and the
+    terminal transition publishes exactly that to the SSE bus."""
+    mock_grab.return_value = {"ok": True, "detail": "Release encolado"}
+
+    async def scenario():
+        queue = event_bus.subscribe()
+        try:
+            started = _start()
+            task = await _await_settled(started["task_id"])
+            event = await asyncio.wait_for(queue.get(), 1)
+            return task, event
+        finally:
+            event_bus.unsubscribe(queue)
+            grab_tasks._tasks.pop(started["task_id"], None)
+
+    task, event = asyncio.run(scenario())
+    assert task["channel"] == "grab"
+    assert event == {
+        "kind": "task",
+        "channel": "grab",
+        "task_id": task["id"],
+        "status": "done",
+        "detail": "Release encolado",
+    }

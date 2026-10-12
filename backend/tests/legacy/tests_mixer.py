@@ -354,3 +354,36 @@ class TestCodecPriority:
 
     def test_hevc_before_h264(self):
         assert CODEC_PRIORITY["hevc"] < CODEC_PRIORITY["h264"]
+
+
+def test_the_mux_creation_site_tags_the_mixer_channel(tmp_path, monkeypatch):
+    """T2(a): a mux job carries `channel="mixer"` from creation, so its
+    terminal event lands on ['mixer-tasks'] and nowhere else."""
+    import asyncio
+
+    import event_bus
+    import media_mixer
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    # The worker must never run ffmpeg in a unit test — the coroutine it
+    # would execute is swapped for an empty one.
+    monkeypatch.setattr(media_mixer, "_run_mux_background", lambda *a, **k: _noop())
+
+    async def scenario():
+        queue = event_bus.subscribe()  # must be subscribed FROM a loop
+        try:
+            task_id = media_mixer.start_mux(
+                {"path": "/downloads/in/video.mkv", "track_index": 0},
+                [],
+                str(tmp_path / "out"),
+            )
+            task = media_mixer.mux_tasks.get(task_id)
+            await asyncio.sleep(0)
+            return task
+        finally:
+            event_bus.unsubscribe(queue)
+
+    task = asyncio.run(scenario())
+    assert task is not None and task["channel"] == "mixer"

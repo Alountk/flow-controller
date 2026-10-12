@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import time
 
+import event_bus
 from state import http_session
 from traces import build_traces
 
@@ -49,4 +50,11 @@ async def get_traces() -> list[dict]:
     async with http_session() as session:
         traces = await build_traces(session)
     _trace_cache = (time.time(), traces)
+    # sse-events T2(b): the refresh itself announces the new version — a
+    # best-effort event, never a reason to fail the read (the bus cannot
+    # raise, and the try keeps that promise local even if it changes).
+    try:
+        event_bus.publish({"kind": "trace", "version": time.time()})
+    except Exception:  # noqa: BLE001 — a dropped event costs one poll
+        pass
     return traces

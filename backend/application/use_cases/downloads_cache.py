@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import time
 
+import event_bus
 from application.gateways import (
     arr_categories_for,
     amu_torrent_categories,
@@ -170,6 +171,13 @@ async def get_downloads() -> dict:
             raise
         return cached[1]
     _downloads_cache = (time.time(), snapshot)
+    # sse-events T2(b): only a real refresh speaks; a cached read (the
+    # poller's every other tick) must stay silent. Best-effort: a dropped
+    # event costs one polling cycle, never the snapshot.
+    try:
+        event_bus.publish({"kind": "downloads", "version": time.time()})
+    except Exception:  # noqa: BLE001 — publishing must not fail a read
+        pass
     return snapshot
 
 

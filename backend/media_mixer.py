@@ -282,6 +282,7 @@ def start_mux(
     output_path = _generate_output_path(video_source, output_dir)
 
     mux_tasks.create(task_id,
+        channel="mixer",
         status="running",
         progress=0.0,
         detail="Starting mux...",

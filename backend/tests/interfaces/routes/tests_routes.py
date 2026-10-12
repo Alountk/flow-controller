@@ -103,6 +103,13 @@ def _get_paths() -> list[str]:
             path = path.replace("{" + name + "}", value)
         if "{" in path:
             continue  # still needs a path param we cannot invent
+        if path == "/api/events":
+            # Server-sent events: the body NEVER ends, so a plain GET here
+            # would hang the suite instead of asserting on it. The route body
+            # is executed end to end by tests_events.py (auth, wire format,
+            # heartbeat, disconnect) — this guard skips only the transport
+            # property that makes a generic GET impossible.
+            continue
         paths.append(path)
     return sorted(set(paths))
 

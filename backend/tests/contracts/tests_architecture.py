@@ -51,7 +51,11 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: Current debt: `app.py` (the composition root) grows two lines whenever a
 #: router is registered — that pair is wiring, not migration debt, and it is
 #: why this sits above what the migration itself left behind.
-MAX_LEGACY_LOC = 2578
+#: 2578 -> 2730 (sse-events): `event_bus.py` is a new top-level module — the
+#: one place a bus reachable FROM task_manager (legacy), the application use
+#: cases, AND the routes can live without a layer pointing outward; plus one
+#: router-registration line in `app.py`. Owned by the sse-events PR.
+MAX_LEGACY_LOC = 2730
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

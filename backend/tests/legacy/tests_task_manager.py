@@ -8,8 +8,10 @@ Task methods are called from both the event loop and worker threads
 (``asyncio.to_thread``), so the guard must be a ``threading`` lock.
 """
 
+import asyncio
 import threading
 
+import event_bus
 from task_manager import TaskManager
 
 
@@ -160,3 +162,101 @@ def test_concurrent_access_is_safe_smoke():
         thread.join()
 
     assert errors == [], f"concurrent access raised: {errors!r}"
+
+
+# ── sse-events: terminal updates publish, carrying the task's channel ────────
+#
+# T2(a): only the transition INTO done/error publishes, only with the channel
+# the creation site tagged, and only ever as a best-effort event — the bus
+# contract is pinned separately in tests_event_bus.py.
+
+
+def test_create_defaults_the_channel_to_empty():
+    tasks = _manager()
+    tasks.create("t1", status="running")
+
+    assert tasks.get("t1")["channel"] == "", (
+        "every task must carry a channel key so publishers can read it safely"
+    )
+
+
+def test_a_terminal_update_publishes_with_the_tasks_channel():
+    async def scenario():
+        queue = event_bus.subscribe()
+        try:
+            tasks = TaskManager(ttl=600)
+            tasks.create("t1", channel="grab", status="running")
+            tasks.update("t1", status="done", detail="Release encolado")
+            return await asyncio.wait_for(queue.get(), 1)
+        finally:
+            event_bus.unsubscribe(queue)
+
+    event = asyncio.run(scenario())
+    assert event == {
+        "kind": "task",
+        "channel": "grab",
+        "task_id": "t1",
+        "status": "done",
+        "detail": "Release encolado",
+    }
+
+
+def test_an_error_settlement_publishes_too():
+    async def scenario():
+        queue = event_bus.subscribe()
+        try:
+            tasks = TaskManager(ttl=600)
+            tasks.create("t1", channel="release", status="running")
+            tasks.update("t1", status="error", detail="Error interno: boom")
+            return await asyncio.wait_for(queue.get(), 1)
+        finally:
+            event_bus.unsubscribe(queue)
+
+    event = asyncio.run(scenario())
+    assert event["status"] == "error"
+    assert event["channel"] == "release"
+    assert event["detail"] == "Error interno: boom"
+
+
+def test_a_non_terminal_update_publishes_nothing():
+    async def scenario():
+        queue = event_bus.subscribe()
+        try:
+            tasks = TaskManager(ttl=600)
+            tasks.create("t1", channel="copy", status="running")
+            tasks.update("t1", progress=50, detail="copiando archivos...")
+            await asyncio.sleep(0)
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return True
+            return False
+        finally:
+            event_bus.unsubscribe(queue)
+
+    assert asyncio.run(scenario()) is True, (
+        "a progress update must not invalidate the frontend's query"
+    )
+
+
+def test_a_status_already_terminal_publishes_only_once():
+    """`becomes` done — the transition, not every later field refresh."""
+
+    async def scenario():
+        queue = event_bus.subscribe()
+        try:
+            tasks = TaskManager(ttl=600)
+            tasks.create("t1", channel="grab", status="running")
+            tasks.update("t1", status="done", detail="primera")
+            await asyncio.wait_for(queue.get(), 1)
+            tasks.update("t1", status="done", detail="refresco de detalle")
+            await asyncio.sleep(0)
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return True
+            return False
+        finally:
+            event_bus.unsubscribe(queue)
+
+    assert asyncio.run(scenario()) is True

@@ -134,3 +134,39 @@ def test_failed_job_settles_as_error_with_the_sync_detail(mock_fetch):
     assert task["detail"] == "Error interno: arr exploded"
     assert task["releases"] == []
     release_tasks._tasks.pop(started["task_id"], None)
+
+
+@patch("application.use_cases.release_search.arr_fetch_releases", new_callable=AsyncMock)
+def test_the_creation_site_tags_the_channel_and_the_settlement_publishes_it(
+    mock_fetch,
+):
+    """T2(a) end to end for release search: `channel="release"` travels from
+    the creation site into the terminal SSE event."""
+    mock_fetch.return_value = {"releases": [], "detail": "0 releases"}
+
+    async def scenario():
+        import event_bus
+
+        queue = event_bus.subscribe()
+        try:
+            started = start_release_search(
+                "radarr",
+                {"name": "Radarr"},
+                "movie",
+                42,
+                session_factory=_session,
+                enrich=_identity,
+            )
+            task = await _await_settled(started["task_id"])
+            event = await asyncio.wait_for(queue.get(), 1)
+            return task, event
+        finally:
+            event_bus.unsubscribe(queue)
+            release_tasks._tasks.pop(started["task_id"], None)
+
+    task, event = asyncio.run(scenario())
+    assert task["channel"] == "release"
+    assert event["kind"] == "task"
+    assert event["channel"] == "release"
+    assert event["task_id"] == task["id"]
+    assert event["status"] == "done"

@@ -24,6 +24,7 @@ import {
 } from '../shared/api/auth.ts'
 import { usePageRoute } from '../shared/hooks/usePageRoute.ts'
 import { useConfiguredServices } from '../shared/hooks/useConfiguredServices.ts'
+import { useEventStream } from '../shared/hooks/useEventStream.ts'
 import { fetchSetupStatus } from '../shared/api/setup.ts'
 import {
   parseStatus,
@@ -104,6 +105,14 @@ function App() {
     queryFn: () => fetchJson('/api/config'),
     staleTime: Infinity,
   })
+
+  // Mounted ONCE, shell-wide: server events invalidate queries the moment
+  // they happen; every refetchInterval stays as the fallback (sse-events T3).
+  // The stream is gated on auth being satisfied (key stored OR auth
+  // disabled): while /api/config is still loading, treat auth as required
+  // and fail closed — a keyless EventSource would 401-retry into C-05's
+  // auth-failure budget before the user ever reaches the key prompt.
+  useEventStream(configData?.auth_required ?? true)
 
   // A fresh install has no key to authenticate with, so it gets the setup page
   // instead of the key prompt.

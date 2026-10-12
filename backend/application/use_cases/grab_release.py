@@ -89,6 +89,7 @@ def start_grab(
     task_id = str(uuid.uuid4())
     grab_tasks.create(
         task_id,
+        channel="grab",
         status="running",
         detail="Descarga lanzada",
     )

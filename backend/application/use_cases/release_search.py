@@ -65,6 +65,7 @@ def start_release_search(
     task_id = str(uuid.uuid4())
     release_tasks.create(
         task_id,
+        channel="release",
         status="running",
         source=source,
         req_type=req_type,
