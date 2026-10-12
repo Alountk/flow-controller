@@ -36,8 +36,26 @@ const indexers = {
 /** The real Radarr message that surfaces when its release cache expires. */
 const CACHE_ERROR = "Couldn't find requested release in cache, try searching again"
 
-function mockFetch(grab: () => Response | Promise<Response>) {
-  const fn = vi.fn((input: RequestInfo | URL) => {
+const START_GRAB = {
+  ok: true,
+  task_id: 'grab-1',
+  status: 'running',
+  detail: 'Descarga lanzada',
+}
+
+/** What the status GET serves once the worker settles the job. */
+const settled = (body: Record<string, unknown>): Response =>
+  ({ ok: true, json: async () => body } as Response)
+
+interface GrabMock {
+  /** The grab POST's answer. Defaults to a started job (async-grab). */
+  post?: () => Response | Promise<Response>
+  /** The grab status GET's answer — the settled payload. */
+  settled?: () => Response | Promise<Response>
+}
+
+function mockFetch(grab: GrabMock = {}) {
+  const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.includes('/api/calendar/indexers')) {
       return Promise.resolve({ ok: true, json: async () => indexers } as Response)
@@ -56,7 +74,10 @@ function mockFetch(grab: () => Response | Promise<Response>) {
       } as Response)
     }
     if (url.includes('/api/calendar/grab')) {
-      return Promise.resolve(grab())
+      if (init?.method === 'POST') {
+        return Promise.resolve(grab.post ? grab.post() : settled(START_GRAB))
+      }
+      return Promise.resolve(grab.settled ? grab.settled() : settled({}))
     }
     return Promise.resolve({ ok: true, json: async () => ({}) } as Response)
   })
@@ -91,10 +112,9 @@ describe('grab error feedback', () => {
   })
 
   it('shows the real failure reason, not a shrug', async () => {
-    mockFetch(() => ({
-      ok: true,
-      json: async () => ({ ok: false, detail: CACHE_ERROR }),
-    } as Response))
+    mockFetch({
+      settled: () => settled({ ok: false, id: 'grab-1', status: 'done', detail: CACHE_ERROR }),
+    })
 
     await openAndPress()
 
@@ -103,8 +123,11 @@ describe('grab error feedback', () => {
 
   it('tells the user to re-enter the key when it is rejected', async () => {
     // apiFetch handles the 401 centrally (it clears the key and prompts for it),
-    // so the client reports what to do instead of the raw response body.
-    mockFetch(() => ({ ok: false, status: 401, json: async () => ({}) } as Response))
+    // so the client reports what to do instead of the raw response body. A 401
+    // never carries a task id, so this stays on the synchronous path.
+    mockFetch({
+      post: () => ({ ok: false, status: 401, json: async () => ({}) } as Response),
+    })
 
     await openAndPress()
 
@@ -146,17 +169,19 @@ describe('grab error feedback', () => {
 
   it('lets the user get back to the results after a failure', async () => {
     let failing = true
-    mockFetch(() =>
-      failing
-        ? ({
-            ok: true,
-            json: async () => ({ ok: false, detail: CACHE_ERROR }),
-          } as Response)
-        : ({
-            ok: true,
-            json: async () => ({ ok: true, detail: 'Release encolado para descarga' }),
-          } as Response),
-    )
+    // Each press starts a NEW job (the backend mints a fresh task id every
+    // time), so the second poll cannot read the first job's settled body.
+    let presses = 0
+    mockFetch({
+      post: () => {
+        presses += 1
+        return settled({ ok: true, task_id: `grab-${presses}`, status: 'running', detail: 'Descarga lanzada' })
+      },
+      settled: () =>
+        failing
+          ? settled({ ok: false, id: `grab-${presses}`, status: 'done', detail: CACHE_ERROR })
+          : settled({ ok: true, id: `grab-${presses}`, status: 'done', detail: 'Release encolado para descarga' }),
+    })
 
     await openAndPress()
     await waitFor(() => expect(screen.getByText(CACHE_ERROR)).toBeInTheDocument())

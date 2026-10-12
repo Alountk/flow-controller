@@ -480,7 +480,9 @@ import threading
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from application.use_cases.grab_release import grab_tasks
 from application.use_cases.release_search import release_tasks
+from tests._stubs import post_grab_and_settle
 
 
 @asynccontextmanager
@@ -828,28 +830,110 @@ class TestCalendarReleases:
 
 
 class TestCalendarGrab:
-    @patch("interfaces.http.routes.calendar.arr_grab_release", new_callable=AsyncMock)
+    """async-grab — the POST starts a job; the grab runs in a worker.
+
+    The synchronous version of this endpoint awaited the whole chain inline —
+    the ED2K resolve alone measures 30-60 s against a proxy that cuts at ~60 s,
+    so the request died as a 504 while the download was already on its way.
+    Now the POST answers with a task id, `GET /api/calendar/grab/{task_id}`
+    serves the payload the old handler used to return, and the gateways are
+    only ever asked by the worker.
+    """
+
+    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
+    def test_post_starts_a_job_without_running_the_grab_inline(self, mock_grab):
+        mock_grab.return_value = {"ok": True, "detail": "Release encolado"}
+        gate = threading.Event()
+        with patch(
+            "interfaces.http.routes.calendar.http_session",
+            lambda: _gated_worker_session(gate),
+        ):
+            resp = client.post(
+                "/api/calendar/grab",
+                json={"source": "radarr", "guid": "some-guid-123"},
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            # A task id NOW, status running, and no payload — where the old
+            # handler would still be awaiting the arr.
+            assert data["ok"] is True
+            assert data["task_id"]
+            assert data["status"] == "running"
+            assert "direct" not in data
+            # The worker is held at the session gate, so this call could only
+            # have come from the HANDLER itself — the inline grab async-grab
+            # removes.
+            mock_grab.assert_not_called()
+            task = grab_tasks.get(data["task_id"])
+            assert task is not None
+            assert task["status"] == "running"
+            grab_tasks._tasks.pop(data["task_id"], None)
+        gate.set()
+
+    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
     def test_grab_ok(self, mock_grab):
         mock_grab.return_value = {"ok": True, "detail": "Release encolado"}
-        resp = client.post(
-            "/api/calendar/grab",
-            json={"source": "radarr", "guid": "some-guid-123"},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
+        body = post_grab_and_settle({"source": "radarr", "guid": "some-guid-123"})
+        assert body["ok"] is True
+        assert body["status"] == "done"
+        assert body["detail"] == "Release encolado"
         mock_grab.assert_called_once()
 
-    @patch("interfaces.http.routes.calendar.arr_grab_release", new_callable=AsyncMock)
+    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
     def test_grab_error(self, mock_grab):
         mock_grab.return_value = {"ok": False, "detail": "HTTP 404: not found"}
+        body = post_grab_and_settle({"source": "radarr", "guid": "bad-guid"})
+        assert body["ok"] is False
+        assert body["status"] == "done"
+        assert body["detail"] == "HTTP 404: not found"
+
+    def test_grab_status_endpoint_serves_the_task(self):
+        """The collect endpoint answers in the `{"ok": True, **task}` shape
+        `GET /api/tasks/{task_id}` already uses, with the payload the
+        synchronous POST used to return inside the task once it settles."""
+        task_id = "grab-status-001"
+        grab_tasks.create(
+            task_id,
+            status="done",
+            ok=True,
+            detail="Release encolado",
+            direct=False,
+        )
+        data = client.get(f"/api/calendar/grab/{task_id}").json()
+        assert data["ok"] is True
+        assert data["id"] == task_id
+        assert data["status"] == "done"
+        assert data["detail"] == "Release encolado"
+        assert data["direct"] is False
+        grab_tasks._tasks.pop(task_id, None)
+
+    def test_grab_status_unknown_task_uses_the_task_endpoint_shape(self):
+        data = client.get("/api/calendar/grab/no-such-task").json()
+        assert data == {"ok": False, "error": "tarea no encontrada"}
+
+    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
+    def test_unknown_service_refuses_without_starting_a_job(self, mock_grab):
+        """Validation still answers synchronously, exactly as before: no job
+        id for a request that could never run."""
         resp = client.post(
             "/api/calendar/grab",
-            json={"source": "radarr", "guid": "bad-guid"},
+            json={"source": "pluto", "guid": "g1"},
         )
-        assert resp.status_code == 200
         data = resp.json()
-        assert data["ok"] is False
+        assert data == {"ok": False, "detail": "servicio desconocido: pluto"}
+        assert "task_id" not in data
+        mock_grab.assert_not_called()
+
+    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
+    def test_destination_not_allowed_refuses_without_starting_a_job(self, mock_grab):
+        resp = client.post(
+            "/api/calendar/grab",
+            json={"source": "radarr", "guid": "g1", "destination": "/etc/not-allowed"},
+        )
+        data = resp.json()
+        assert data == {"ok": False, "detail": "Destino no permitido: /etc/not-allowed"}
+        assert "task_id" not in data
+        mock_grab.assert_not_called()
 
 
 class TestCalendarIndexers:

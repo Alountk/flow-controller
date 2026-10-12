@@ -50,6 +50,46 @@ export async function fetchCalendarDestinations(source: string): Promise<Destina
   }
 }
 
+/**
+ * What `POST /api/calendar/grab` answers: a job to poll (`task_id`), or —
+ * when validation refuses the request — the same synchronous body the
+ * endpoint has always returned for a request that could never run
+ * (`ok` + `detail`, with no task id).
+ *
+ * async-grab: the POST used to await the whole chain inline — the ED2K
+ * resolve alone measures 30-60 s against a proxy that cuts at ~60 s, so the
+ * request died as a 504 while the download was already on its way. It now
+ * answers in milliseconds; the grab itself runs as a job behind the
+ * backend's task_manager and is collected at `fetchGrabStatus`.
+ */
+export interface GrabStart {
+  ok: boolean
+  detail: string
+  task_id?: string
+  status?: string
+  /** Present on the settled payload: the download bypassed the arr. */
+  direct?: boolean
+}
+
+/**
+ * What `GET /api/calendar/grab/{task_id}` answers: the task_manager shape
+ * every task endpoint in this app already serves (`{"ok": true, ...task}`).
+ * Once `status` is `done`, `ok`/`detail`/`direct` inside the task ARE the
+ * payload the synchronous POST used to return — where a settled `ok: false`
+ * is a refusal the worker produced (the task ran fine), while a status read
+ * that cannot find the task answers `error` and carries no `status` at all.
+ * On `error`, `detail` is the exact `Error interno: ...` string the
+ * synchronous handler used to return.
+ */
+export interface GrabTask {
+  ok: boolean
+  id?: string
+  status?: string
+  detail?: string
+  direct?: boolean
+  error?: string
+}
+
 export async function grabCalendarRelease(
   source: string,
   guid: string,
@@ -62,7 +102,7 @@ export async function grabCalendarRelease(
   title?: string,
   library?: boolean,
   size?: number,
-): Promise<{ ok: boolean; detail: string }> {
+): Promise<GrabStart> {
   // A rejected fetch (offline, aborted, DNS) must surface as a failed result,
   // not as an unhandled rejection that leaves the modal stuck on "Descargando".
   // `destination` and `quality` are only added when set, so a library grab (the
@@ -96,7 +136,29 @@ export async function grabCalendarRelease(
     const msg = (typeof errorBody.detail === 'string' ? errorBody.detail : null) || `HTTP ${res.status}`
     return { ok: false, detail: msg }
   }
-  return res.json() as Promise<{ ok: boolean; detail: string }>
+  return res.json() as Promise<GrabStart>
+}
+
+/**
+ * The settled (or still running) state of one grab job — the clone of
+ * `fetchReleaseSearchStatus`, keyed by the task id the POST returned.
+ *
+ * Never rejects: a transport failure resolves to `{ok: false, detail}`,
+ * which the poll reads as a failed status read instead of hanging on a
+ * `running` task forever.
+ */
+export async function fetchGrabStatus(taskId: string): Promise<GrabTask> {
+  try {
+    const res = await apiFetch(`/api/calendar/grab/${encodeURIComponent(taskId)}`, {})
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+      return { ok: false, detail: msg }
+    }
+    return await res.json() as GrabTask
+  } catch (err) {
+    return { ok: false, detail: `Error de conexión: ${err}` }
+  }
 }
 
 export async function grabCalendarReleaseBatch(

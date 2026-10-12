@@ -44,9 +44,9 @@ function ok(body: unknown) {
 }
 
 /** Every endpoint the inline search can reach. `grabOk` flips only the grab
- *  answer, so the failure path is one argument away. */
+ *  OUTCOME (the settled payload), so the failure path is one argument away. */
 function stubFetch(grabOk = true) {
-  const fn = vi.fn((input: RequestInfo | URL) => {
+  const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.includes('/api/calendar/indexers')) {
       return ok({
@@ -57,9 +57,14 @@ function stubFetch(grabOk = true) {
       return ok({ releases: [release], detail: '1 releases encontrados' })
     }
     if (url.includes('/api/calendar/grab')) {
+      // async-grab: the POST starts the job; the status GET settles it with
+      // byte for byte the body the synchronous endpoint used to return.
+      if (init?.method === 'POST') {
+        return ok({ ok: true, task_id: 'grab-1', status: 'running', detail: 'Descarga lanzada' })
+      }
       return grabOk
-        ? ok({ ok: true, detail: 'Descarga iniciada' })
-        : ok({ ok: false, detail: 'boom' })
+        ? ok({ ok: true, id: 'grab-1', status: 'done', detail: 'Descarga iniciada' })
+        : ok({ ok: false, id: 'grab-1', status: 'done', detail: 'boom' })
     }
     if (url.includes('/api/settings')) {
       return ok({ paths: { path_4k: '', path_3d: '' } })

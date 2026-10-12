@@ -16,15 +16,12 @@ from application.use_cases.disk_report import disk_report
 from application.gateways import (
     fetch_radarr_calendar,
     fetch_sonarr_calendar,
-    amutorrent_add_download,
-    amutorrent_search_link,
     arr_search_movie,
     arr_search_episode,
     arr_episode_metadata,
     arr_add_movie,
     arr_add_series,
     arr_grab_release,
-    direct_link_identity,
     arr_indexers,
     arr_root_folders,
     arr_movie_lookup,
@@ -32,6 +29,7 @@ from application.gateways import (
     arr_movie_exists,
     arr_series_exists,
 )
+from application.use_cases.grab_release import grab_tasks, start_grab
 from application.use_cases.release_search import release_tasks, start_release_search
 from models import (
     CalendarSearchRequest,
@@ -339,7 +337,23 @@ def _inside(path: str, root: str) -> bool:
 
 @router.post("/api/calendar/grab")
 async def calendar_grab(req: GrabBody, _key: str = Depends(verify_api_key)):
-    """Descarga un release: por el arr, o directa al cliente si tiene destino ajeno."""
+    """Descarga un release como job y devuelve el task_id (async-grab).
+
+    This handler used to await the whole chain inline — the ED2K resolve
+    alone measures 30-60 s against a proxy that cuts at ~60 s, so the request
+    died as a 504 while the download was already on its way (masked once by
+    raising `proxy_read_timeout` by hand in nginx). The grab now runs in a
+    worker behind `grab_tasks` and this route answers in milliseconds; the
+    result is collected at `GET /api/calendar/grab/{task_id}`, which serves
+    the payload the synchronous handler used to return.
+
+    Validation still answers synchronously and in the old shape: a request
+    that could never run (unknown service, destination outside the allowed
+    roots) never gets a job id. Everything that needs a session — the roots
+    gate, the foreign check, the resolve, the add, the arr grab, the
+    registry row — runs in the worker, because that is where the slow
+    phases live.
+    """
     service = find_service(req.source, "arr")
     if not service:
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
@@ -360,92 +374,37 @@ async def calendar_grab(req: GrabBody, _key: str = Depends(verify_api_key)):
     if destination is not None and not path_is_allowed(destination):
         return {"ok": False, "detail": f"Destino no permitido: {destination}"}
 
-    direct = False
-    client_name = ""
-    client_hash = None
-    try:
-        # The series lookup rides the grab's own session: it is a single GET to
-        # the arr the grab just hit, so a second session would only add another
-        # connection. `_resolve_series_id` cannot raise, so a failed lookup can
-        # never turn this successful grab into the error response below.
-        async with http_session() as session:
-            # A destination OUTSIDE every arr root means the file is leaving
-            # the library — and if the download goes through the arr, the arr
-            # imports it on completion and REPLACES what the library already
-            # holds (the 4K-cannibalises-the-1080p incident). Such a download
-            # never touches the arr: straight to the client, our own category.
-            # Fails closed: an unreadable root list proves nothing, so the grab
-            # stays on the arr path it has always taken.
-            foreign = False
-            if destination is not None:
-                roots = await arr_root_folders(session, service)
-                foreign = bool(roots) and not any(
-                    _inside(destination, root) for root in roots
-                )
+    return start_grab(
+        req.source,
+        service,
+        destination=destination,
+        guid=req.guid,
+        indexer_id=req.indexerId,
+        movie_id=req.movieId,
+        episode_id=req.episodeId,
+        quality=req.quality,
+        title=req.title,
+        size=req.size,
+        session_factory=http_session,
+        resolve_series=_resolve_series_id,
+    )
 
-            if foreign:
-                if not req.title:
-                    return {
-                        "ok": False,
-                        "detail": "Falta el título del release para resolver el enlace directo",
-                    }
-                resolved = await amutorrent_search_link(
-                    session, req.title, guid=req.guid, size=req.size
-                )
-                if not resolved.get("ok"):
-                    # No search, no add, nothing sent to the arr: the refusal
-                    # says which of the three reasons it was (other indexer,
-                    # no answer, no match) and what to do instead.
-                    return {"ok": False, "detail": resolved.get("detail") or "no se pudo resolver el enlace"}
-                link = resolved["link"]
-                added = await amutorrent_add_download(session, link)
-                if not added.get("ok"):
-                    return {
-                        "ok": False,
-                        "detail": f"aMuTorrent no aceptó la descarga: {added.get('detail')}",
-                    }
-                direct = True
-                client_name, client_hash = direct_link_identity(link, req.title)
-                series_id = (
-                    await _resolve_series_id(session, service, req.source, req.episodeId)
-                    if req.episodeId
-                    else None
-                )
-                result = {
-                    "ok": True,
-                    "detail": f"{added.get('detail')} — directa: el arr no la verá ni la importará",
-                    "direct": True,
-                }
-            else:
-                result = await arr_grab_release(session, service, req.guid, req.indexerId, req.movieId, req.episodeId)
-                series_id = (
-                    await _resolve_series_id(session, service, req.source, req.episodeId)
-                    if result.get("ok")
-                    else None
-                )
-    except Exception as exc:
-        log.exception("calendar_grab error: %s", exc)
-        return {"ok": False, "detail": f"Error interno: {exc}"}
 
-    # Only a grab that actually succeeded enters the own-grab registry (D3), and
-    # the recording is best-effort: it must not change the response. `0` is the
-    # request's "not this kind of title" default, so it becomes NULL rather than
-    # a bogus id.
-    if result.get("ok"):
-        await asyncio.to_thread(record_own_grab, 
-            req.source,
-            movie_id=req.movieId or None,
-            episode_id=req.episodeId or None,
-            series_id=series_id,
-            guid=req.guid,
-            indexer_id=req.indexerId,
-            destination=destination,
-            quality=req.quality or None,
-            direct=direct,
-            client_name=client_name,
-            client_hash=client_hash,
-        )
-    return result
+@router.get("/api/calendar/grab/{task_id}")
+async def calendar_grab_status(task_id: str, _key: str = Depends(verify_api_key)):
+    """Estado y resultado del job de descarga.
+
+    The same `{"ok": True, **task}` answer `GET /api/tasks/{task_id}` gives
+    for copy/mixer tasks, so polling reads one shape across the app. Once the
+    job is `done`, the `ok`/`detail`/`direct` fields inside the task ARE the
+    payload the synchronous POST used to return — a settled `ok: false` is a
+    refusal the worker produced, while a status read that cannot find the
+    task answers `error` and carries no `status` at all.
+    """
+    task = grab_tasks.get(task_id)
+    if not task:
+        return {"ok": False, "error": "tarea no encontrada"}
+    return {"ok": True, **task}
 
 
 @router.post("/api/calendar/grab-batch")

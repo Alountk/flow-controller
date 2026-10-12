@@ -10,13 +10,19 @@ already holds. These tests pin the gate and both sides of it:
 - anything else (library, destination inside an arr root, UNREADABLE root
   list) → the arr path exactly as before — the gate fails closed.
 
-Only the collaborators the route module imports are patched, so the real
-route body runs.
+async-grab: the single grab is a job now, so `_post` goes through
+`post_grab_and_settle` (POST + worker settle on one loop) and the worker's
+collaborators are patched where the WORKER reads them —
+`application.use_cases.grab_release`. Only the collaborators the batch route
+module still imports are patched for the batch, which stays synchronous.
+
+Only the collaborators each side imports are patched, so the real route and
+worker bodies run.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from tests._stubs import client
+from tests._stubs import client, post_grab_and_settle
 
 ED2K_LINK = (
     "ed2k://|file Your.Name.2016.1080p.BluRay.x264-GRP.mkv"
@@ -26,17 +32,22 @@ ED2K_LINK = (
 FOREIGN = "/mnt/storage-6tb/Movies4K"
 INSIDE_ROOT = "/mnt/storage/movies/_manual"
 
-ROOTS = "interfaces.http.routes.calendar.arr_root_folders"
-GRAB = "interfaces.http.routes.calendar.arr_grab_release"
-SEARCH = "interfaces.http.routes.calendar.amutorrent_search_link"
-ADD = "interfaces.http.routes.calendar.amutorrent_add_download"
-RECORD = "interfaces.http.routes.calendar.record_own_grab"
+#: Where the background worker reads its collaborators (async-grab).
+WORKER = "application.use_cases.grab_release"
+#: Where the synchronous batch route still reads its own.
+BATCH = "interfaces.http.routes.calendar"
+
+ROOTS = f"{WORKER}.arr_root_folders"
+GRAB = f"{WORKER}.arr_grab_release"
+SEARCH = f"{WORKER}.amutorrent_search_link"
+ADD = f"{WORKER}.amutorrent_add_download"
+RECORD = f"{WORKER}.record_own_grab"
 
 
 def _post(**body):
     payload = {"source": "radarr", "guid": "g1", "movieId": 855}
     payload.update(body)
-    return client.post("/api/calendar/grab", json=payload).json()
+    return post_grab_and_settle(payload)
 
 
 def _foreign_patches(*, link=ED2K_LINK, resolved=None, add_result=None, roots=None):
@@ -164,8 +175,11 @@ def test_a_foreign_grab_without_a_title_fails_before_any_call():
 
 
 def test_the_batch_refuses_a_foreign_destination_upfront():
-    roots_p, search_p, add_p, grab_p, record_p = _foreign_patches()
-    with roots_p as roots, search_p, add_p, grab_p as grab, record_p as record:
+    # The batch is synchronous and still reads ITS collaborators from the
+    # route module: roots to ask the gate, grab/record that must never run.
+    with patch(f"{BATCH}.arr_root_folders", new=AsyncMock(return_value=["/mnt/storage/movies"])) as roots, \
+            patch(f"{BATCH}.arr_grab_release", new=AsyncMock(return_value={"ok": True, "detail": "encolado"})) as grab, \
+            patch(f"{BATCH}.record_own_grab", new=MagicMock()) as record:
         resp = client.post(
             "/api/calendar/grab-batch",
             json={
