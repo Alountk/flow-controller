@@ -9,6 +9,7 @@ import { FileManager } from '../features/file-manager/FileManager.tsx'
 import { Prototypes } from '../pages/Prototypes.tsx'
 import { Settings } from '../features/settings/Settings.tsx'
 import { DiskSpace } from '../pages/DiskSpace.tsx'
+import { ServiceChips } from './ServiceChips.tsx'
 import { MediaMixer } from '../pages/MediaMixer.tsx'
 import { Peliculas } from '../pages/Peliculas.tsx'
 import { Series } from '../pages/Series.tsx'
@@ -260,6 +261,7 @@ function App() {
             title={PAGE_TITLES[page]}
             loading={isPending}
             lastUpdated={data ? Date.now() : null}
+            right={page === 'dashboard' ? <ServiceChips services={services} /> : undefined}
           />
 
           <div className="content-and-queue">
