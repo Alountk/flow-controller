@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../../shared/types.ts'
 import { runAction, type ActionOptions } from '../../shared/api/actions.ts'
 import { ackBlockedImport } from '../../shared/api/traces.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
+import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
 import './TraceActions.css'
 
 interface Props {
@@ -115,6 +116,9 @@ const TERMINAL_STATUSES = ['imported', 'renamed_needed', 'import_timeout', 'erro
 const ACTIVE_STATUSES = ['running', 'done', 'importing', 'renamed_needed']
 
 export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
+  // B1: while the SSE stream is connected, copy-task events replace the poll
+  // below (`refetchInterval` → false); a disconnect wakes it back up.
+  const { connected } = useContext(EventStreamContext)
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState<ActionKey | null>(null)
   const [acking, setAcking] = useState(false)
@@ -130,7 +134,7 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
       return res.json() as Promise<{ ok: boolean } & TaskProgress>
     },
     enabled: !!copyTask && ACTIVE_STATUSES.includes(copyTask.status),
-    refetchInterval: (query) => {
+    refetchInterval: connected ? false : (query) => {
       const data = query.state.data as ({ ok: boolean } & TaskProgress) | undefined
       if (!data) return 1500
       if (TERMINAL_STATUSES.includes(data.status)) return false

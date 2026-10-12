@@ -2,10 +2,11 @@
  * sse-events T3 — server events → react-query invalidations.
  *
  * Opens ONE `EventSource` against `/api/events` and maps each event kind to
- * the query key that surface actually uses. The polling fallback is
- * deliberately untouched: this hook accelerates a refresh, it never replaces
- * `refetchInterval` (documented exclusion — nginx buffering burned this
- * deployment once, and the safety net stays until SSE is proven in prod).
+ * the query key that surface actually uses. The polling fallback stays the
+ * safety net for every query SSE does not cover — this hook accelerates a
+ * refresh first (nginx buffering burned this deployment once, so the net
+ * stays until SSE is proven in prod), and B1 only lets the TASK queries
+ * covered in full sleep while the stream reports connected (see below).
  *
  * Auth: `EventSource` cannot send headers, so the key rides as `?key=` —
  * the same key `apiFetch` would put in `X-Api-Key`, read through the same
@@ -24,11 +25,27 @@
  * Feature detection: jsdom has no `EventSource`, and a hardened browser may
  * have it blocked. Either way this hook must no-op — an app that crashes
  * because push failed would defeat the fallback it is accelerating.
+ *
+ * B1 — connection status: this hook OWNS the EventSource, so it is the only
+ * place that knows whether the stream is up, and it reports that through
+ * `EventStreamContext`. `open` → connected (a reconnect after an error is an
+ * `open` too, and counts as connected), `error`/cleanup → disconnected. The
+ * context's DEFAULT is `disconnected`, so a component rendered with no
+ * provider around it — every existing test, every early-return screen — keeps
+ * today's polling exactly as it is. Consumers flip their task
+ * `refetchInterval` to `false` only while `connected` is true.
  */
 
-import { useEffect } from 'react'
+import { createContext, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { getApiKey } from '../api/auth.ts'
+
+export interface EventStreamStatus {
+  connected: boolean
+}
+
+/** Default `disconnected`: no provider mounted → every poll stays as today. */
+export const EventStreamContext = createContext<EventStreamStatus>({ connected: false })
 
 interface TaskEvent {
   kind?: string
@@ -61,7 +78,7 @@ function parsePayload(data: string): TaskEvent | null {
   return null
 }
 
-export function useEventStream(authRequired: boolean): void {
+export function useEventStream(authRequired: boolean): EventStreamStatus {
   const queryClient = useQueryClient()
   // Read at render time: logging in re-renders App, which re-runs the effect
   // and reopens the stream WITH the key the first connection never had.
@@ -69,6 +86,8 @@ export function useEventStream(authRequired: boolean): void {
   // Condition (a) a key exists, or (b) auth is disabled — nothing else may
   // open the stream (see the GATE note above).
   const enabled = Boolean(apiKey) || !authRequired
+  // B1: the latest stream event wins — `open` true, `error`/close false.
+  const [connected, setConnected] = useState(false)
 
   useEffect(() => {
     if (!enabled) return // auth pending: polling fallback covers everything
@@ -76,6 +95,9 @@ export function useEventStream(authRequired: boolean): void {
 
     const url = apiKey ? `/api/events?key=${encodeURIComponent(apiKey)}` : '/api/events'
     const source = new EventSource(url)
+
+    const onOpen = () => setConnected(true)
+    const onError = () => setConnected(false)
 
     const onTask = (event: MessageEvent) => {
       const payload = parsePayload(event.data)
@@ -94,15 +116,26 @@ export function useEventStream(authRequired: boolean): void {
       // yet, so there is no key to invalidate. Do not invent one here.
     }
 
+    source.addEventListener('open', onOpen)
+    source.addEventListener('error', onError)
     source.addEventListener('task', onTask)
     source.addEventListener('trace', onTrace)
     source.addEventListener('downloads', onDownloads)
 
     return () => {
+      source.removeEventListener('open', onOpen)
+      source.removeEventListener('error', onError)
       source.removeEventListener('task', onTask)
       source.removeEventListener('trace', onTrace)
       source.removeEventListener('downloads', onDownloads)
       source.close() // native EventSource retry only helps a connection it holds
+      // This effect's stream is gone (logout, key change, unmount): nothing
+      // covers task events until a replacement stream reports `open`.
+      setConnected(false)
     }
   }, [queryClient, apiKey, enabled])
+
+  // Memoized so a re-render of App that does not flip `connected` hands the
+  // provider the same object and the gated consumers do not re-render.
+  return useMemo(() => ({ connected }), [connected])
 }

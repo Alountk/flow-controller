@@ -24,7 +24,7 @@ import {
 } from '../shared/api/auth.ts'
 import { usePageRoute } from '../shared/hooks/usePageRoute.ts'
 import { useConfiguredServices } from '../shared/hooks/useConfiguredServices.ts'
-import { useEventStream } from '../shared/hooks/useEventStream.ts'
+import { useEventStream, EventStreamContext } from '../shared/hooks/useEventStream.ts'
 import { fetchSetupStatus } from '../shared/api/setup.ts'
 import {
   parseStatus,
@@ -112,7 +112,9 @@ function App() {
   // disabled): while /api/config is still loading, treat auth as required
   // and fail closed — a keyless EventSource would 401-retry into C-05's
   // auth-failure budget before the user ever reaches the key prompt.
-  useEventStream(configData?.auth_required ?? true)
+  // B1: the returned status is what the provider below feeds to the task
+  // polls — connected, they sleep; disconnected (the default), they stand.
+  const eventStream = useEventStream(configData?.auth_required ?? true)
 
   // A fresh install has no key to authenticate with, so it gets the setup page
   // instead of the key prompt.
@@ -241,137 +243,139 @@ function App() {
   }
 
   return (
-    <div className="layout">
-      <Sidebar active={page} onNavigate={setPage} developer={developer} hidden={hiddenPages} />
+    <EventStreamContext.Provider value={eventStream}>
+      <div className="layout">
+        <Sidebar active={page} onNavigate={setPage} developer={developer} hidden={hiddenPages} />
 
-      <div className="main">
-        <Topbar
-          title={PAGE_TITLES[page]}
-          loading={isPending}
-          lastUpdated={data ? Date.now() : null}
-        />
+        <div className="main">
+          <Topbar
+            title={PAGE_TITLES[page]}
+            loading={isPending}
+            lastUpdated={data ? Date.now() : null}
+          />
 
-        <div className="content-and-queue">
-          <div className="content">
-            {/* Loud on purpose: unreadable credentials otherwise look like every
-                service being misconfigured, with no hint at the real cause. */}
-            {configData?.encryption_ok === false && (
-              <div className="wanted-error" role="alert">
-                <strong>No se pudieron leer las credenciales guardadas</strong>
-                {/* Coerced to text on purpose. A non-string here once arrived as
-                    `encryption_error: {}` and React error #31 — objects are not
-                    valid as a React child — took the whole dashboard down behind
-                    ErrorBoundary while every request stayed green. No shape of
-                    data should be able to unmount the app. */}
-                <span>{String(configData.encryption_error ?? '')}</span>
-              </div>
+          <div className="content-and-queue">
+            <div className="content">
+              {/* Loud on purpose: unreadable credentials otherwise look like every
+                  service being misconfigured, with no hint at the real cause. */}
+              {configData?.encryption_ok === false && (
+                <div className="wanted-error" role="alert">
+                  <strong>No se pudieron leer las credenciales guardadas</strong>
+                  {/* Coerced to text on purpose. A non-string here once arrived as
+                      `encryption_error: {}` and React error #31 — objects are not
+                      valid as a React child — took the whole dashboard down behind
+                      ErrorBoundary while every request stayed green. No shape of
+                      data should be able to unmount the app. */}
+                  <span>{String(configData.encryption_error ?? '')}</span>
+                </div>
+              )}
+              {page === 'dashboard' && (
+                <>
+                  <div className="content-header">
+                    <h1>Resumen del sistema</h1>
+                    <p>Estado actual del pipeline de media y actividad reciente</p>
+                  </div>
+
+                  {nothingConfigured ? (
+                    <div className="wanted-empty" role="alert">
+                      No hay ningún servicio configurado todavía. Ve a <strong>Configuración</strong> para
+                      añadir la URL y la API key de Radarr, Sonarr o aMuTorrent.
+                    </div>
+                  ) : (
+                    <PipelineVisual services={services} />
+                  )}
+
+                  {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
+
+                  {!nothingConfigured && (
+                  <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
+                    <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
+                    <div>
+                      <div className="flow-title">
+                        {allOnline
+                          ? 'Flujo operativo'
+                          : anyOffline
+                            ? `Flujo cortado en ${broken?.label ?? 'servicio'}`
+                            : 'Comprobando servicios…'}
+                      </div>
+                      <div className="flow-desc">
+                        {allOnline
+                          ? 'Los servicios configurados responden correctamente.'
+                          : anyOffline
+                            ? broken?.reason
+                            : 'Esperando la primera comprobación.'}
+                      </div>
+                    </div>
+                  </div>
+                  )}
+
+                  <div className="dashboard-grid">
+                  <div className="dash-card">
+                    <span className="dash-label">Descargando</span>
+                    <span className="dash-value accent">{downloading}</span>
+                    <span className="dash-sub">activas</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="dash-card"
+                    onClick={() => setPage('seguimiento')}
+                    title="Ver el seguimiento de las descargas"
+                  >
+                    <span className="dash-label">Stuck</span>
+                    <span className="dash-value warn">{importBlocked}</span>
+                    <span className="dash-sub">atención</span>
+                  </button>
+                  <div className="dash-card">
+                    <span className="dash-label">Fallidas</span>
+                    <span className="dash-value bad">{failed}</span>
+                    <span className="dash-sub">últimas 24h</span>
+                  </div>
+                  <div className="dash-card">
+                    <span className="dash-label">Completadas</span>
+                    <span className="dash-value ok">{completed}</span>
+                    <span className="dash-sub">esta semana</span>
+                  </div>
+                </div>
+
+                <div className="legend">
+                  <span><span className="dot" style={{ background: 'var(--ok)' }} /> Servicio online</span>
+                  <span><span className="dot" style={{ background: 'var(--bad)' }} /> Servicio offline / flujo cortado</span>
+                </div>
+              </>
             )}
-            {page === 'dashboard' && (
-              <>
-                <div className="content-header">
-                  <h1>Resumen del sistema</h1>
-                  <p>Estado actual del pipeline de media y actividad reciente</p>
-                </div>
 
-                {nothingConfigured ? (
-                  <div className="wanted-empty" role="alert">
-                    No hay ningún servicio configurado todavía. Ve a <strong>Configuración</strong> para
-                    añadir la URL y la API key de Radarr, Sonarr o aMuTorrent.
-                  </div>
-                ) : (
-                  <PipelineVisual services={services} />
-                )}
+            {page === 'peliculas' && <Peliculas />}
 
-                {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
+            {page === 'series' && <Series />}
 
-                {!nothingConfigured && (
-                <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
-                  <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
-                  <div>
-                    <div className="flow-title">
-                      {allOnline
-                        ? 'Flujo operativo'
-                        : anyOffline
-                          ? `Flujo cortado en ${broken?.label ?? 'servicio'}`
-                          : 'Comprobando servicios…'}
-                    </div>
-                    <div className="flow-desc">
-                      {allOnline
-                        ? 'Los servicios configurados responden correctamente.'
-                        : anyOffline
-                          ? broken?.reason
-                          : 'Esperando la primera comprobación.'}
-                    </div>
-                  </div>
-                </div>
-                )}
+            {page === 'seguimiento' && (
+              <Seguimiento
+                data={traceData ?? null}
+                loading={traceLoading}
+                actions={actionsData ?? null}
+                onActionDone={handleActionDone}
+              />
+            )}
 
-                <div className="dashboard-grid">
-                <div className="dash-card">
-                  <span className="dash-label">Descargando</span>
-                  <span className="dash-value accent">{downloading}</span>
-                  <span className="dash-sub">activas</span>
-                </div>
-                <button
-                  type="button"
-                  className="dash-card"
-                  onClick={() => setPage('seguimiento')}
-                  title="Ver el seguimiento de las descargas"
-                >
-                  <span className="dash-label">Stuck</span>
-                  <span className="dash-value warn">{importBlocked}</span>
-                  <span className="dash-sub">atención</span>
-                </button>
-                <div className="dash-card">
-                  <span className="dash-label">Fallidas</span>
-                  <span className="dash-value bad">{failed}</span>
-                  <span className="dash-sub">últimas 24h</span>
-                </div>
-                <div className="dash-card">
-                  <span className="dash-label">Completadas</span>
-                  <span className="dash-value ok">{completed}</span>
-                  <span className="dash-sub">esta semana</span>
-                </div>
-              </div>
+            {page === 'disk' && <DiskSpace />}
 
-              <div className="legend">
-                <span><span className="dot" style={{ background: 'var(--ok)' }} /> Servicio online</span>
-                <span><span className="dot" style={{ background: 'var(--bad)' }} /> Servicio offline / flujo cortado</span>
-              </div>
-            </>
-          )}
+            {page === 'files' && (
+              <FileManager />
+            )}
 
-          {page === 'peliculas' && <Peliculas />}
+            {page === 'mixer' && <MediaMixer />}
 
-          {page === 'series' && <Series />}
+            {page === 'config' && <Settings />}
 
-          {page === 'seguimiento' && (
-            <Seguimiento
-              data={traceData ?? null}
-              loading={traceLoading}
-              actions={actionsData ?? null}
-              onActionDone={handleActionDone}
-            />
-          )}
+            {page === 'prototypes' && <Prototypes />}
+            </div>
 
-          {page === 'disk' && <DiskSpace />}
-
-          {page === 'files' && (
-            <FileManager />
-          )}
-
-          {page === 'mixer' && <MediaMixer />}
-
-          {page === 'config' && <Settings />}
-
-          {page === 'prototypes' && <Prototypes />}
+            {/* Ambient messages: one viewport for every surface that needs to say something. */}
+            <ToastViewport />
           </div>
-
-          {/* Ambient messages: one viewport for every surface that needs to say something. */}
-          <ToastViewport />
         </div>
       </div>
-    </div>
+    </EventStreamContext.Provider>
   )
 }
 
