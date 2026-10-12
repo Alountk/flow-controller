@@ -7,7 +7,7 @@ import {
   type Release,
   type ReleaseSearchTask,
 } from '../../shared/api/releases.ts'
-import { grabCalendarRelease } from '../../shared/api/grabs.ts'
+import { grabCalendarRelease, fetchGrabStatus, type GrabTask } from '../../shared/api/grabs.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
 import { looksThreeD } from '../../shared/utils/threeD.ts'
@@ -283,6 +283,10 @@ export function ReleaseSearchModal({
   // C-10: the release search is a job now. This is its handle while the poll
   // runs — null whenever no search is in flight.
   const [releaseJob, setReleaseJob] = useState<{ task_id: string; status: string } | null>(null)
+  // async-grab: same deal for the grab. `handleGrab` receives the start's
+  // task id and this holds it while the status poll runs — null whenever no
+  // grab is in flight (and after every settle).
+  const [grabJob, setGrabJob] = useState<{ task_id: string; status: string } | null>(null)
   // The indexer choice of the in-flight search: `handleSearch` receives it as
   // a parameter, and the results must be filtered under THAT choice when the
   // job completes, not under whatever the select says by then.
@@ -456,6 +460,24 @@ export function ReleaseSearchModal({
     },
   })
 
+  // ── async-grab: the grab as a job, polled ─────────────────────────────────
+  // The same pattern as the search above, keyed by the grab's own task id:
+  // the POST only starts the job, this is the other half. A status read that
+  // cannot answer (transport failure, task gone) has NO `status`, so the
+  // interval below keeps asking instead of treating it as terminal — the
+  // settle effect decides what a statusless answer means.
+  const grabJobQuery = useQuery({
+    queryKey: ['grab-task', grabJob?.task_id],
+    queryFn: () => fetchGrabStatus(grabJob!.task_id),
+    enabled: !!grabJob && !TERMINAL_STATUSES.includes(grabJob.status),
+    retry: false,
+    refetchInterval: (query) => {
+      const data = query.state.data as GrabTask | undefined
+      if (data && data.status && TERMINAL_STATUSES.includes(data.status)) return false
+      return 1500
+    },
+  })
+
   /**
    * What `handleSearch` used to do with the POST's answer, applied identically
    * to whatever the job delivers: filter by the chosen indexer, render the
@@ -514,6 +536,73 @@ export function ReleaseSearchModal({
       setMessage(data.detail || 'La búsqueda de releases falló')
     }
   }, [releaseJobQuery.data, releaseJob])
+
+  /**
+   * What `handleGrab` used to do with the POST's answer, applied identically
+   * to whatever the grab delivers — the synchronous refusal, the transport
+   * failure, or the payload the settled job carries: the ack toast plus the
+   * panel's notice / the overlay's done step, or the error step with the
+   * backend's own detail. The payload (`ok`/`detail`) is unchanged from the
+   * synchronous contract, so this logic did not have to learn anything new.
+   */
+  function applyGrabOutcome(result: { ok: boolean; detail: string }) {
+    if (result.ok) {
+      // The backend's own detail distinguishes the paths — "directa: el arr no
+      // la verá" vs "Release encolado" — so the ack shows it instead of a
+      // fixed phrase that would hide which one happened.
+      const ack = result.detail || 'Descarga iniciada. Revisa la cola de descargas.'
+      // Ambient confirmation (F-13): the surfaces above stay where they are
+      // (the panel's in-list ack, the dialog's done step) — the toast is what
+      // reaches the operator who has already looked away.
+      toast(ack, 'ok')
+      if (inPanel) {
+        // PANEL: the list is the product. The results the operator still
+        // needs stay on screen, the ack rides above them, and nothing cached
+        // is thrown away.
+        setNotice(ack)
+        setStep('results')
+      } else {
+        // The overlay IS a dialog: it ends on 'done' with its exit, as ever.
+        setStep('done')
+        setMessage(ack)
+      }
+    } else {
+      setStep('error')
+      setMessage(result.detail)
+      toast(result.detail, 'error')
+    }
+  }
+
+  // Settle the grab job where `handleGrab` used to settle the POST's answer —
+  // same ack, same error step, same toast: the step machine never learns it
+  // is now reading a poll. A `running` status does nothing here; the query
+  // above keeps asking.
+  useEffect(() => {
+    const data = grabJobQuery.data
+    if (!grabJob || !data) return
+    if (data.status === 'done') {
+      // The payload IS the old synchronous body — `ok: false` here is a
+      // refusal the worker produced (the task ran fine), not a failed read.
+      setGrabJob(null)
+      applyGrabOutcome({ ok: data.ok !== false, detail: data.detail ?? '' })
+    } else if (data.status === 'error') {
+      // The worker's `detail` is the exact `Error interno: ...` string the
+      // synchronous POST used to return — same error channel, same step.
+      setGrabJob(null)
+      const detail = data.detail || 'La descarga falló'
+      setStep('error')
+      setMessage(detail)
+      toast(detail, 'error')
+    } else if (!data.status) {
+      // The task is gone (TTL expired, backend restarted) or the status read
+      // itself failed: a poll that cannot answer is an error, never a hang.
+      setGrabJob(null)
+      const detail = data.detail || data.error || 'Error obteniendo estado de tarea'
+      setStep('error')
+      setMessage(detail)
+      toast(detail, 'error')
+    }
+  }, [grabJobQuery.data, grabJob])
 
   /**
    * `choice` is the indexer the search runs under. It is a real parameter,
@@ -603,7 +692,8 @@ export function ReleaseSearchModal({
     setNotice('')
     // The resolve can legitimately take ~30-60 s (the ED2K search is
     // throttled server-side, measured): silence there is the experience the
-    // user reported. Say what is happening and how long it may take.
+    // user reported. Say what is happening and how long it may take. The
+    // message stays until the settled detail replaces it.
     setMessage('Enviando la descarga al servidor… el indexador de aMule puede tardar hasta un minuto.')
     const release = releases.find(r => r.guid === guid)
     const destination = target === '4k' ? path4k : target === '3d' ? path3d : undefined
@@ -621,31 +711,16 @@ export function ReleaseSearchModal({
       target === 'library' || undefined,
       release?.size || undefined,
     )
-    if (result.ok) {
-      // The backend's own detail distinguishes the paths — "directa: el arr no
-      // la verá" vs "Release encolado" — so the ack shows it instead of a
-      // fixed phrase that would hide which one happened.
-      const ack = result.detail || 'Descarga iniciada. Revisa la cola de descargas.'
-      // Ambient confirmation (F-13): the surfaces above stay where they are
-      // (the panel's in-list ack, the dialog's done step) — the toast is what
-      // reaches the operator who has already looked away.
-      toast(ack, 'ok')
-      if (inPanel) {
-        // PANEL: the list is the product. The results the operator still
-        // needs stay on screen, the ack rides above them, and nothing cached
-        // is thrown away.
-        setNotice(ack)
-        setStep('results')
-      } else {
-        // The overlay IS a dialog: it ends on 'done' with its exit, as ever.
-        setStep('done')
-        setMessage(ack)
-      }
-    } else {
-      setStep('error')
-      setMessage(result.detail)
-      toast(result.detail, 'error')
+    if (result.task_id) {
+      // async-grab: the POST only starts the job. The outcome arrives
+      // through the status poll above and is applied by the effect — the
+      // step stays 'grabbing' (busy, re-click blocked) until it does.
+      setGrabJob({ task_id: result.task_id, status: result.status ?? 'running' })
+      return
     }
+    // No task id = a synchronous refusal (transport failure or a request
+    // that could never run): the same detail the endpoint always carried.
+    applyGrabOutcome(result)
   }
 
   const isProcessing = step === 'searching' || step === 'adding' || step === 'grabbing'

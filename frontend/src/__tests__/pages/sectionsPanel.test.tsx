@@ -141,7 +141,11 @@ function stubFetch() {
       return ok({ releases: [release], detail: '1 releases encontrados' })
     }
     if (url.includes('/api/calendar/grab')) {
-      return ok({ ok: true, detail: 'Descarga iniciada', downloaded: [], errors: [] })
+      // async-grab: the POST starts the job; the status GET settles it.
+      if (init?.method === 'POST') {
+        return ok({ ok: true, task_id: 'grab-1', status: 'running', detail: 'Descarga lanzada' })
+      }
+      return ok({ ok: true, id: 'grab-1', status: 'done', detail: 'Descarga iniciada' })
     }
     if (url.includes('/api/calendar?')) {
       return ok({ items: [], start: '2026-10-01', end: '2026-11-01' })
@@ -158,10 +162,15 @@ function stubFetch() {
 
 type FetchMock = ReturnType<typeof stubFetch>
 
-/** Every grab request body, in order. */
+/** Every grab request body, in order. Status GETs carry no body, so only
+ *  the POSTs count. */
 function grabBodies(fn: FetchMock): Record<string, unknown>[] {
   return fn.mock.calls
-    .filter(([input]) => String(input).includes('/api/calendar/grab'))
+    .filter(
+      ([input, init]) =>
+        String(input).includes('/api/calendar/grab') &&
+        (init as RequestInit | undefined)?.method === 'POST',
+    )
     .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>)
 }
 

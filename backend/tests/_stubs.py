@@ -9,18 +9,52 @@ without it they either share a directory or fight over import order.
 Not collected by pytest: `python_files = tests*.py` does not match `_stubs`.
 """
 
+import asyncio
 import json
 from urllib.parse import urlencode
 
 import aiohttp
+import httpx
 from fastapi.testclient import TestClient
 
 from app import app
 from config import SERVICES
+from application.use_cases.grab_release import grab_tasks
 
 #: One client for the whole suite. Importing it is enough: the app is built at
 #: import time, and each test replaces what the routes call, not the client.
 client = TestClient(app, raise_server_exceptions=False)
+
+# ── async-grab: POST + settle on one loop ────────────────────────────────────
+
+
+async def _post_grab_scenario(payload: dict) -> dict:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as session:
+        resp = await session.post("/api/calendar/grab", json=payload)
+        body = resp.json()
+        task_id = body.get("task_id")
+        if not task_id:
+            # A synchronous refusal keeps the body it has always had.
+            return body
+        for _ in range(500):
+            task = grab_tasks.get(task_id)
+            if task and task.get("status") in ("done", "error"):
+                return {"ok": True, **task}
+            await asyncio.sleep(0.01)
+        raise AssertionError(f"grab {task_id} never settled: {grab_tasks.get(task_id)}")
+
+
+def post_grab_and_settle(payload: dict) -> dict:
+    """POST /api/calendar/grab and wait for its worker to settle (async-grab).
+
+    The route answers instantly with a task id; the outcome is produced by the
+    background worker. TestClient's per-request portal dies with the request,
+    so the POST and the wait share ONE event loop (httpx over ASGITransport) —
+    the same shape production polling uses against the status endpoint. A
+    synchronous refusal is returned as-is, without a task to wait for.
+    """
+    return asyncio.run(_post_grab_scenario(payload))
 
 #: Routes resolve their service from the real config, so URL stubs must use the
 #: configured Radarr URL rather than an invented one.

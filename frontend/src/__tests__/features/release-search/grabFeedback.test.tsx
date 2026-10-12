@@ -33,8 +33,23 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function stubFetch(grab: () => Promise<Response>) {
-  const fn = vi.fn((input: RequestInfo | URL) => {
+const START_GRAB = {
+  ok: true,
+  task_id: 'grab-1',
+  status: 'running',
+  detail: 'Descarga lanzada',
+}
+
+const settled = (body: Record<string, unknown>): Response =>
+  ({ ok: true, json: async () => body } as Response)
+
+/**
+ * async-grab: the POST only starts the job (or gates, for the in-flight
+ * test) and the status GET serves the settled payload — `ok`/`detail` byte
+ * for byte the body the synchronous endpoint used to return.
+ */
+function stubFetch(grabStatus: () => Response | Promise<Response>, post?: () => Response | Promise<Response>) {
+  const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const ok = (body: unknown) => Promise.resolve({ ok: true, json: async () => body } as Response)
     if (url.includes('/api/calendar/indexers')) {
@@ -46,7 +61,12 @@ function stubFetch(grab: () => Promise<Response>) {
     if (url.includes('/api/settings')) {
       return ok({ paths: { path_4k: '/mnt/4k', path_3d: '/mnt/3d' } })
     }
-    if (url.includes('/api/calendar/grab')) return grab()
+    if (url.includes('/api/calendar/grab')) {
+      if (init?.method === 'POST') {
+        return Promise.resolve(post ? post() : ok(START_GRAB))
+      }
+      return Promise.resolve(grabStatus())
+    }
     return ok({})
   })
   vi.stubGlobal('fetch', fn)
@@ -85,7 +105,10 @@ describe('grab feedback', () => {
 
   it('says what is happening while the grab is in flight', async () => {
     const gate = deferred<Response>()
-    stubFetch(() => gate.promise)
+    stubFetch(
+      () => settled({ ok: true, id: 'grab-1', status: 'done', detail: 'Release encolado para descarga' }),
+      () => gate.promise,
+    )
 
     await openAndPress()
 
@@ -93,12 +116,14 @@ describe('grab feedback', () => {
     await screen.findByText(/Enviando la descarga al servidor/)
     expect(screen.getByText(/puede tardar hasta un minuto/)).toBeInTheDocument()
 
-    gate.resolve({ ok: true, json: async () => ({ ok: true, detail: 'Release encolado para descarga' }) } as Response)
+    gate.resolve({ ok: true, json: async () => START_GRAB } as Response)
     await waitFor(() => expect(screen.getByText('Release encolado para descarga')).toBeInTheDocument())
   })
 
   it('toasts the backend detail on success', async () => {
-    stubFetch(() => Promise.resolve({ ok: true, json: async () => ({ ok: true, detail: 'directa: el arr no la verá' }) } as Response))
+    stubFetch(() =>
+      settled({ ok: true, id: 'grab-1', status: 'done', detail: 'directa: el arr no la verá' }),
+    )
 
     await openAndPress()
 
@@ -107,7 +132,9 @@ describe('grab feedback', () => {
   })
 
   it('toasts the reason on failure, next to the error step', async () => {
-    stubFetch(() => Promise.resolve({ ok: true, json: async () => ({ ok: false, detail: 'No encontré «X» en el indexador de aMule' }) } as Response))
+    stubFetch(() =>
+      settled({ ok: false, id: 'grab-1', status: 'done', detail: 'No encontré «X» en el indexador de aMule' }),
+    )
 
     await openAndPress()
 

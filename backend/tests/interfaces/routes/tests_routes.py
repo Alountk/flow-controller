@@ -24,7 +24,7 @@ import aiohttp
 import pytest
 
 from app import app
-from tests._stubs import CONFIGURED_RADARR_URL, _StubSession, client  # noqa: F401
+from tests._stubs import CONFIGURED_RADARR_URL, _StubSession, client, post_grab_and_settle  # noqa: F401
 from config import SERVICES, ALLOWED_ROOTS
 
 ARR_SERVICES = [s for s in SERVICES if s["kind"] == "arr"]
@@ -348,15 +348,14 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={"source": "radarr", "guid": "g1", "indexerId": 7, "movieId": 855},
+            body = post_grab_and_settle(
+                {"source": "radarr", "guid": "g1", "indexerId": 7, "movieId": 855},
             )
 
-        assert resp.json()["ok"] is True
+        assert body["ok"] is True
         rows = self._rows()
         assert len(rows) == 1
         assert rows[0]["source"] == "radarr"
@@ -369,15 +368,14 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": False, "detail": "HTTP 404: not found"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={"source": "radarr", "guid": "bad-guid", "movieId": 855},
+            body = post_grab_and_settle(
+                {"source": "radarr", "guid": "bad-guid", "movieId": 855},
             )
 
-        assert resp.json()["ok"] is False
+        assert body["ok"] is False
         assert self._rows() == []
 
     def test_the_batch_records_each_successful_guid(self):
@@ -430,12 +428,11 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={
+            body = post_grab_and_settle(
+                {
                     "source": "radarr",
                     "guid": "g1",
                     "indexerId": 7,
@@ -444,7 +441,7 @@ class TestGrabOwnRegistry:
                 },
             )
 
-        assert resp.json()["ok"] is True
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] == "/mnt/storage/movies/_manual"
 
     def test_a_grab_without_a_destination_persists_null(self):
@@ -453,15 +450,12 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={"source": "radarr", "guid": "g1", "movieId": 855},
-            )
+            body = post_grab_and_settle({"source": "radarr", "guid": "g1", "movieId": 855})
 
-        assert resp.json()["ok"] is True
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] is None
 
     def test_a_4k_release_with_no_chosen_destination_lands_in_the_4k_folder(
@@ -478,12 +472,11 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={
+            body = post_grab_and_settle(
+                {
                     "source": "radarr",
                     "guid": "g1",
                     "movieId": 855,
@@ -491,7 +484,7 @@ class TestGrabOwnRegistry:
                 },
             )
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] == "/mnt/storage/movies/4k"
 
     def test_the_owners_own_choice_beats_the_derived_one(self, monkeypatch):
@@ -506,12 +499,11 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={
+            body = post_grab_and_settle(
+                {
                     "source": "radarr",
                     "guid": "g1",
                     "movieId": 855,
@@ -520,7 +512,7 @@ class TestGrabOwnRegistry:
                 },
             )
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] == "/mnt/storage/movies/_manual"
 
     @pytest.mark.parametrize("quality", ["Bluray-1080p", "WEBDL-720p", "HDTV-480p", ""])
@@ -534,12 +526,11 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={
+            body = post_grab_and_settle(
+                {
                     "source": "radarr",
                     "guid": "g1",
                     "movieId": 855,
@@ -547,7 +538,7 @@ class TestGrabOwnRegistry:
                 },
             )
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] is None
 
     def test_an_unconfigured_4k_folder_means_the_library(self, monkeypatch):
@@ -559,12 +550,11 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={
+            body = post_grab_and_settle(
+                {
                     "source": "radarr",
                     "guid": "g1",
                     "movieId": 855,
@@ -572,7 +562,7 @@ class TestGrabOwnRegistry:
                 },
             )
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] is None
 
     def test_the_batch_routes_by_quality_too(self, monkeypatch):
@@ -622,12 +612,11 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={
+            body = post_grab_and_settle(
+                {
                     "source": "radarr",
                     "guid": "g1",
                     "movieId": 855,
@@ -636,7 +625,7 @@ class TestGrabOwnRegistry:
                 },
             )
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] == "/mnt/storage/movies/3d"
 
     def test_an_unconfigured_3d_folder_falls_back_to_the_quality(self, monkeypatch):
@@ -649,12 +638,11 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={
+            body = post_grab_and_settle(
+                {
                     "source": "radarr",
                     "guid": "g1",
                     "movieId": 855,
@@ -663,7 +651,7 @@ class TestGrabOwnRegistry:
                 },
             )
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] == "/mnt/storage/movies/4k"
 
     def test_a_row_that_is_not_3d_is_untouched_by_the_3d_setting(self, monkeypatch):
@@ -673,27 +661,25 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={"source": "radarr", "guid": "g1", "movieId": 855, "quality": "Bluray-1080p"},
+            body = post_grab_and_settle(
+                {"source": "radarr", "guid": "g1", "movieId": 855, "quality": "Bluray-1080p"},
             )
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["destination"] is None
 
     def test_a_grab_records_the_release_quality(self):
         from unittest.mock import AsyncMock
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={
+            body = post_grab_and_settle(
+                {
                     "source": "radarr",
                     "guid": "g1",
                     "movieId": 855,
@@ -701,7 +687,7 @@ class TestGrabOwnRegistry:
                 },
             )
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["quality"] == "Bluray-2160p"
 
     def test_a_grab_without_a_quality_records_null_not_a_default(self):
@@ -710,15 +696,12 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={"source": "radarr", "guid": "g1", "movieId": 855},
-            )
+            body = post_grab_and_settle({"source": "radarr", "guid": "g1", "movieId": 855})
 
-        assert resp.json()["ok"] is True, resp.text
+        assert body["ok"] is True
         assert self._rows()[0]["quality"] is None
 
     def test_the_batch_records_one_quality_per_row(self):
@@ -771,7 +754,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         mock_grab = AsyncMock(return_value={"ok": True, "detail": "Release encolado"})
-        with patch("interfaces.http.routes.calendar.arr_grab_release", new=mock_grab):
+        with patch("application.use_cases.grab_release.arr_grab_release", new=mock_grab):
             resp = client.post(
                 "/api/calendar/grab",
                 json={
@@ -784,8 +767,11 @@ class TestGrabOwnRegistry:
 
         assert resp.json()["ok"] is False
         assert "Destino no permitido" in resp.json()["detail"]
+        # The refusal stays synchronous: a request that could never run never
+        # gets a job id (async-grab).
+        assert "task_id" not in resp.json()
         assert self._rows() == [], "an invalid destination must not persist a grab"
-        # Rejection happens before the arr grab: nothing was sent, nothing stored.
+        # Rejection happens before any job starts: nothing was sent, nothing stored.
         mock_grab.assert_not_called()
 
     def test_a_batch_destination_outside_the_allowed_roots_is_rejected_and_writes_no_row(self):
@@ -815,16 +801,12 @@ class TestGrabOwnRegistry:
         history.close()  # no database: the recording must be a silent no-op
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "application.use_cases.grab_release.arr_grab_release",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
-            resp = client.post(
-                "/api/calendar/grab",
-                json={"source": "radarr", "guid": "g1", "movieId": 855},
-            )
+            body = post_grab_and_settle({"source": "radarr", "guid": "g1", "movieId": 855})
 
-        assert resp.status_code == 200
-        assert resp.json()["ok"] is True
+        assert body["ok"] is True
 
 
 # ── The grab route WRITES the series id the mark reader needs ────────────────
@@ -875,19 +857,22 @@ class TestGrabWritesSeriesId:
                 raise metadata
             return metadata if metadata is not None else {}
 
-        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
+        # The worker reads the grab gateway from the use case; the series
+        # lookup is injected from the route, so its gateway stays where the
+        # batch route (and this patch) can see it.
+        with patch("application.use_cases.grab_release.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
              patch("interfaces.http.routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
-            return client.post("/api/calendar/grab", json=payload)
+            return post_grab_and_settle(payload)
 
     def test_an_episode_grab_records_its_real_series_and_the_reader_emits_the_key(self):
         """Write then read through the route: the series mark this feature was
         requested for must survive a real grab, not a hand-seeded row."""
-        resp = self._post(
+        body = self._post(
             {"source": "sonarr", "guid": "g1", "indexerId": 7, "episodeId": 42},
             metadata={"season_number": 2, "episode_number": 5, "title": "Pilot", "series_id": 99},
         )
 
-        assert resp.json()["ok"] is True
+        assert body["ok"] is True
         rows = self._rows()
         assert len(rows) == 1
         assert rows[0]["episode_id"] == 42
@@ -900,9 +885,9 @@ class TestGrabWritesSeriesId:
         assert ("sonarr", "episode", 42) in marks
 
     def test_a_movie_grab_stores_no_series_and_emits_no_series_key(self):
-        resp = self._post({"source": "radarr", "guid": "g1", "indexerId": 7, "movieId": 855})
+        body = self._post({"source": "radarr", "guid": "g1", "indexerId": 7, "movieId": 855})
 
-        assert resp.json()["ok"] is True
+        assert body["ok"] is True
         rows = self._rows()
         assert rows[0]["movie_id"] == 855
         assert rows[0]["series_id"] is None
@@ -912,12 +897,12 @@ class TestGrabWritesSeriesId:
         assert ("radarr", "series", 855) not in marks
 
     def test_a_failed_series_lookup_still_records_the_grab_and_succeeds(self):
-        resp = self._post(
+        body = self._post(
             {"source": "sonarr", "guid": "g1", "indexerId": 7, "episodeId": 42},
             metadata=RuntimeError("sonarr timed out"),
         )
 
-        assert resp.json()["ok"] is True, "a follow-up lookup must never fail the grab"
+        assert body["ok"] is True, "a follow-up lookup must never fail the grab"
         rows = self._rows()
         assert len(rows) == 1
         assert rows[0]["episode_id"] == 42
