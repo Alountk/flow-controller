@@ -8,6 +8,7 @@ import aiohttp
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+import event_bus
 from config import (
     AMUTORRENT_INDEXER,
     all_services,
@@ -59,6 +60,15 @@ async def check_all(session: aiohttp.ClientSession) -> None:
         status_cache["updated_at"] = int(time.time())
     finally:
         status_cache["checking"] = False
+        # sse-events B2: the check itself announces the new version — the
+        # 15 s tick and /api/status/refresh both run THIS function, so one
+        # event at the end of every call covers both paths, and a best-effort
+        # event is never a reason to fail the check (the bus cannot raise,
+        # and the try keeps that promise local even if it changes).
+        try:
+            event_bus.publish({"kind": "status", "version": time.time()})
+        except Exception:  # noqa: BLE001 — a dropped event costs one poll
+            pass
 
 
 async def background_checker() -> None:

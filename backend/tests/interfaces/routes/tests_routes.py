@@ -18,7 +18,7 @@ import copy
 from infrastructure import credentials
 from infrastructure import sqlite_history as history
 import time
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import aiohttp
 import pytest
@@ -2488,6 +2488,96 @@ class TestHealthCheckSkipsUnconfigured:
 
         probed = [call.args[1]["key"] for call in probe.await_args_list]
         assert probed == ["radarr"]
+
+
+class TestTheStatusCheckAnnouncesItself:
+    """B2.2 — every completed check publishes exactly one `status` event.
+
+    `status_cache` only changes when `check_all` runs (the 15 s tick and the
+    `/api/status/refresh` route both funnel through it), so announcing at the
+    end of that function is what lets the frontend drop its 5 s `['status']`
+    poll while SSE is connected — one event per real check, never per reader.
+    """
+
+    @staticmethod
+    def _drain(queue) -> list[dict]:
+        events = []
+        while True:
+            try:
+                events.append(queue.get_nowait())
+            except asyncio.QueueEmpty:
+                return events
+
+    def test_one_check_publishes_exactly_one_status_event(self):
+        import event_bus
+        from interfaces.http.routes import status as status_route
+
+        async def scenario():
+            queue = event_bus.subscribe()
+            try:
+                with patch(
+                    "interfaces.http.routes.status.configured_services",
+                    return_value=[{"key": "radarr", "kind": "arr", "url": "http://r:1", "api_key": "k"}],
+                ), patch(
+                    "interfaces.http.routes.status.check_service",
+                    new=AsyncMock(return_value=("online", "ok", {})),
+                ):
+                    await status_route.check_all(None)
+                return self._drain(queue)
+            finally:
+                event_bus.unsubscribe(queue)
+
+        events = asyncio.run(scenario())
+        assert len(events) == 1, "one check must announce exactly one version"
+        assert events[0]["kind"] == "status"
+        assert isinstance(events[0]["version"], float), (
+            "the version timestamp is what a client can dedupe on"
+        )
+
+    def test_the_no_services_branch_announces_too(self):
+        """The early return (nothing configured) still finished a check —
+        a dashboard watching over an empty install must get its event."""
+        import event_bus
+        from interfaces.http.routes import status as status_route
+
+        async def scenario():
+            queue = event_bus.subscribe()
+            try:
+                with patch(
+                    "interfaces.http.routes.status.configured_services",
+                    return_value=[],
+                ):
+                    await status_route.check_all(None)
+                return self._drain(queue)
+            finally:
+                event_bus.unsubscribe(queue)
+
+        events = asyncio.run(scenario())
+        assert len(events) == 1, "the early-return path must announce too"
+        assert events[0]["kind"] == "status"
+
+    def test_the_refresh_endpoint_publishes_exactly_one_status_event(self):
+        """`/api/status/refresh` runs the same `check_all`: same announcement,
+        still one event — the tick and the endpoint share the publisher."""
+        import event_bus
+
+        async def subscribe():
+            return event_bus.subscribe()
+
+        queue = asyncio.run(subscribe())
+        try:
+            with patch(
+                "interfaces.http.routes.status.configured_services",
+                return_value=[],
+            ):
+                resp = client.get("/api/status/refresh")
+            assert resp.status_code == 200
+            events = self._drain(queue)
+        finally:
+            event_bus.unsubscribe(queue)
+
+        assert len(events) == 1, "the refresh route must announce exactly once"
+        assert events[0]["kind"] == "status"
 
 
 # ── Secrets must survive a round-trip through the settings form ──────────────

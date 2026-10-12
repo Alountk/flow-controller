@@ -55,7 +55,10 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: one place a bus reachable FROM task_manager (legacy), the application use
 #: cases, AND the routes can live without a layer pointing outward; plus one
 #: router-registration line in `app.py`. Owned by the sse-events PR.
-MAX_LEGACY_LOC = 2730
+#: 2730 -> 2750 (sse-poll-off B2): `subscriber_count` on the bus (it must stay
+#: top-level for the same no-cycle reason above) and the `trace_refresher`
+#: entry in the lifespan tuple of `app.py`. Owned by the sse-poll-off PR.
+MAX_LEGACY_LOC = 2750
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

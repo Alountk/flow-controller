@@ -230,6 +230,17 @@ describe('event → query invalidation', () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['trace'] }))
   })
 
+  it('invalidates the status query for a status event (B2)', async () => {
+    // `check_all` announces after every tick and every /api/status/refresh —
+    // this listener is what lets App's 5 s ['status'] poll sleep on the stream.
+    const { invalidate } = setup()
+    const source = await openStream()
+
+    source.emit('status', { kind: 'status', version: 1728000000 })
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['status'] }))
+  })
+
   it('ignores a downloads event: no query key exists for it (documented exclusion)', async () => {
     const { invalidate } = setup()
     const source = await openStream()

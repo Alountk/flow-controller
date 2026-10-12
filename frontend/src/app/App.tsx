@@ -79,27 +79,6 @@ function App() {
   const [authenticated, setAuthenticated] = useState(false)
   const [checkingStored, setCheckingStored] = useState(true)
 
-  const { data, error, isPending } = useQuery<StatusResponse>({
-    queryKey: ['status'],
-    queryFn: () => fetchJson('/api/status'),
-    refetchInterval: 5000,
-    enabled: authenticated,
-  })
-
-  const { data: traceData, isPending: traceLoading } = useQuery<TraceResponse>({
-    queryKey: ['trace'],
-    queryFn: () => fetchJson('/api/trace'),
-    refetchInterval: 15000,
-    enabled: authenticated,
-  })
-
-  const { data: actionsData } = useQuery<ActionsResponse>({
-    queryKey: ['actions'],
-    queryFn: () => fetchJson('/api/actions'),
-    refetchInterval: 60000,
-    enabled: authenticated,
-  })
-
   const { data: configData } = useQuery<ConfigResponse>({
     queryKey: ['config'],
     queryFn: () => fetchJson('/api/config'),
@@ -114,7 +93,36 @@ function App() {
   // auth-failure budget before the user ever reaches the key prompt.
   // B1: the returned status is what the provider below feeds to the task
   // polls — connected, they sleep; disconnected (the default), they stand.
+  // B2: it also feeds the status/trace queries below — the backend
+  // announces both surfaces (check_all publishes after every check; the
+  // trace refresher on the TTL), so connected they sleep too. Declared
+  // above them because they gate on `connected`.
   const eventStream = useEventStream(configData?.auth_required ?? true)
+
+  const { data, error, isPending } = useQuery<StatusResponse>({
+    queryKey: ['status'],
+    queryFn: () => fetchJson('/api/status'),
+    // B2: on the stream `kind:"status"` invalidates this query after every
+    // backend check — the 5 s poll is the fallback, not the cadence.
+    refetchInterval: eventStream.connected ? false : 5000,
+    enabled: authenticated,
+  })
+
+  const { data: traceData, isPending: traceLoading } = useQuery<TraceResponse>({
+    queryKey: ['trace'],
+    queryFn: () => fetchJson('/api/trace'),
+    // B2: `kind:"trace"` keeps flowing from the backend refresher even with
+    // no reader polling — the 15 s poll sleeps on the stream and stands off it.
+    refetchInterval: eventStream.connected ? false : 15000,
+    enabled: authenticated,
+  })
+
+  const { data: actionsData } = useQuery<ActionsResponse>({
+    queryKey: ['actions'],
+    queryFn: () => fetchJson('/api/actions'),
+    refetchInterval: 60000,
+    enabled: authenticated,
+  })
 
   // A fresh install has no key to authenticate with, so it gets the setup page
   // instead of the key prompt.
