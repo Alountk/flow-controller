@@ -118,7 +118,7 @@ para un segundo PR.
   `Ver en Seguimiento (N)`; `.incidents-*` en Dashboard.css; cableado tras las
   tarjetas (orden del diseño). RED→GREEN: 4 tests nuevos. Checks: vitest
   532/532 (67 files), tsc 0, eslint 0.
-- 2026-10-13: **T6 [x]** commit de este cambio (hash anotado en cierre) —
+- 2026-10-13: **T6 [x]** commit `320ddef` —
   `useEventStream.onDownloads` deja de ser no-op: invalida `['downloads']`
   (el consumidor existe desde T3); test de "documented exclusion" invertido.
   Checks: vitest 532/532, tsc 0, eslint 0.
