@@ -113,11 +113,15 @@ para un segundo PR.
   ['disk'] dashboard-only; .dash-foot; dash-value 24px/700). RED→GREEN: 10 tests
   nuevos; test C-11 re-punteado. Checks: vitest 528/528 (65→66 files), tsc 0,
   eslint 0.
-- 2026-10-13: **T4 [x]** commit de este cambio (hash anotado en T6) — IncidentsBand:
+- 2026-10-13: **T4 [x]** commit `c9b5282` — IncidentsBand:
   total = import_blocked + failed, singular/plural, oculta si N=0, CTA
   `Ver en Seguimiento (N)`; `.incidents-*` en Dashboard.css; cableado tras las
   tarjetas (orden del diseño). RED→GREEN: 4 tests nuevos. Checks: vitest
   532/532 (67 files), tsc 0, eslint 0.
+- 2026-10-13: **T6 [x]** commit de este cambio (hash anotado en cierre) —
+  `useEventStream.onDownloads` deja de ser no-op: invalida `['downloads']`
+  (el consumidor existe desde T3); test de "documented exclusion" invertido.
+  Checks: vitest 532/532, tsc 0, eslint 0.
 
 ## Log
 - L1 (2026-10-13, usuario): "podemos empezar a implementar el nuevo diseño hecho

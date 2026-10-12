@@ -133,7 +133,7 @@ function App() {
   })
 
   // Dashboard-only readers (Stitch 01): the downloads snapshot feeds the
-  // "Descargas atascadas" card (T6 wires the `kind:"downloads"` event to this
+  // "Descargas atascadas" card (the `kind:"downloads"` event invalidates this
   // key; the 10 s poll is the fallback), the disk volumes feed "Espacio en
   // disco" — the DiskSpace page shares the ['disk'] key when you open it.
   const { data: downloadsData } = useQuery<DownloadsResponse>({

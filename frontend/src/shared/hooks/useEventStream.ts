@@ -123,8 +123,10 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
     }
 
     const onDownloads = () => {
-      // Documented exclusion: nothing in the frontend polls /api/downloads
-      // yet, so there is no key to invalidate. Do not invent one here.
+      // The dashboard card reads ['downloads'] (Stitch 01), so the backend's
+      // downloads-snapshot event finally has a real key to accelerate — the
+      // 10 s poll in App stays as the fallback, like every covered query.
+      void queryClient.invalidateQueries({ queryKey: ['downloads'] })
     }
 
     source.addEventListener('open', onOpen)

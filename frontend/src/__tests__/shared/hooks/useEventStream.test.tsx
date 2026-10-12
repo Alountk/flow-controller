@@ -11,7 +11,8 @@ import { forgetApiKey, rememberApiKey } from '../../../shared/api/auth.ts'
  * is an accelerator on top, never a replacement. Four things are pinned:
  * the URL opens on `/api/events` carrying the same key `apiFetch` would; each
  * event kind invalidates the query key that surface ACTUALLY uses (grep-verified
- * keys only — `downloads` has no key and must not get an invented one); a
+ * keys; the dashboard's ['downloads'] card gave the downloads event its real
+ * consumer); a
  * environment without `EventSource` (jsdom, a blocked browser) must leave the
  * app running on polling alone instead of crashing; and the stream NEVER
  * opens while auth is required and no key is stored — a keyless 401 retry
@@ -241,15 +242,15 @@ describe('event → query invalidation', () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['status'] }))
   })
 
-  it('ignores a downloads event: no query key exists for it (documented exclusion)', async () => {
+  it('invalidates the downloads query for a downloads event', async () => {
+    // The dashboard card reads ['downloads'] now (Stitch 01), so the backend's
+    // downloads snapshot event has a real key to accelerate.
     const { invalidate } = setup()
     const source = await openStream()
 
     source.emit('downloads', { kind: 'downloads', version: 1728000000 })
 
-    // The handler runs synchronously inside emit; inventing a ['downloads']
-    // key here would make this assertion fail on purpose.
-    expect(invalidate).not.toHaveBeenCalled()
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['downloads'] }))
   })
 
   it('skips a channel with no query key instead of inventing one', async () => {
