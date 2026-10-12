@@ -60,6 +60,14 @@
   animation: pulse 2s infinite;
 }
 
+/* Lives here (not in the removed PipelineVisual.css): the topbar dot needs it
+   on every page. */
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 50%, transparent); }
+  70% { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 50%, transparent); }
+}
+
 .topbar-time {
   font-size: 12px;
   color: var(--text-dim);

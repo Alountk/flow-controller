@@ -4,8 +4,8 @@ import { AuthGate } from './AuthGate.tsx'
 import { SetupPage } from '../pages/SetupPage.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { Topbar } from './Topbar.tsx'
-import { PipelineVisual } from '../features/pipeline-visual/PipelineVisual.tsx'
 import { FileManager } from '../features/file-manager/FileManager.tsx'
+import './Dashboard.css'
 import { Prototypes } from '../pages/Prototypes.tsx'
 import { Settings } from '../features/settings/Settings.tsx'
 import { DiskSpace } from '../pages/DiskSpace.tsx'
@@ -220,9 +220,6 @@ function App() {
   // `every` on an empty list is true, which would report an empty pipeline as
   // healthy. Nothing configured is not the same as everything working.
   const nothingConfigured = servicesReady && services.length === 0
-  const allOnline = services.length > 0 && services.every((s) => s.state === 'online')
-  const anyOffline = services.some((s) => s.state === 'offline')
-  const broken = services.find((s) => s.state === 'offline')
 
   const downloading = traceData?.summary?.downloading ?? 0
   const importBlocked = traceData?.summary?.import_blocked ?? 0
@@ -289,33 +286,9 @@ function App() {
                       No hay ningún servicio configurado todavía. Ve a <strong>Configuración</strong> para
                       añadir la URL y la API key de Radarr, Sonarr o aMuTorrent.
                     </div>
-                  ) : (
-                    <PipelineVisual services={services} />
-                  )}
+                  ) : null}
 
                   {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
-
-                  {!nothingConfigured && (
-                  <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
-                    <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
-                    <div>
-                      <div className="flow-title">
-                        {allOnline
-                          ? 'Flujo operativo'
-                          : anyOffline
-                            ? `Flujo cortado en ${broken?.label ?? 'servicio'}`
-                            : 'Comprobando servicios…'}
-                      </div>
-                      <div className="flow-desc">
-                        {allOnline
-                          ? 'Los servicios configurados responden correctamente.'
-                          : anyOffline
-                            ? broken?.reason
-                            : 'Esperando la primera comprobación.'}
-                      </div>
-                    </div>
-                  </div>
-                  )}
 
                   <div className="dashboard-grid">
                   <div className="dash-card">
@@ -343,11 +316,6 @@ function App() {
                     <span className="dash-value ok">{completed}</span>
                     <span className="dash-sub">esta semana</span>
                   </div>
-                </div>
-
-                <div className="legend">
-                  <span><span className="dot" style={{ background: 'var(--ok)' }} /> Servicio online</span>
-                  <span><span className="dot" style={{ background: 'var(--bad)' }} /> Servicio offline / flujo cortado</span>
                 </div>
               </>
             )}

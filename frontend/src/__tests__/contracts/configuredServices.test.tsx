@@ -136,30 +136,37 @@ describe('the app reflects what is configured', () => {
 
   it('does not report an empty pipeline as healthy', async () => {
     // `every` on an empty list is true, which would have shown "flujo operativo"
-    // with nothing configured at all.
+    // with nothing configured at all — now: no chips and no banner at all.
     mockFetch([])
     renderApp()
 
     await waitFor(() =>
       expect(screen.getByText(/No hay ningún servicio configurado/)).toBeInTheDocument(),
     )
-    expect(screen.queryByText('Flujo operativo')).not.toBeInTheDocument()
+    expect(document.querySelector('.service-chips')).not.toBeInTheDocument()
+    expect(document.querySelector('.flow-banner')).not.toBeInTheDocument()
   })
 
-  it('shows the pipeline when services are configured', async () => {
+  it('shows the service chips when services are configured', async () => {
     mockFetch(['radarr', 'sonarr'])
     renderApp()
 
-    await waitFor(() => expect(screen.getByText(/Flujo operativo/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Radarr: Conectado')).toBeInTheDocument())
+    expect(screen.getByText('Sonarr: Conectado')).toBeInTheDocument()
     expect(screen.queryByText(/No hay ningún servicio configurado/)).not.toBeInTheDocument()
+    // Design 01: the health signal lives in the topbar chips only.
+    expect(document.querySelector('.flow-banner')).not.toBeInTheDocument()
+    expect(document.querySelector('.pipeline')).not.toBeInTheDocument()
+    expect(document.querySelector('.legend')).not.toBeInTheDocument()
   })
 
-  it('only lists configured services in the pipeline', async () => {
+  it('only lists service chips for configured services', async () => {
     mockFetch(['radarr'])
     renderApp()
 
-    await waitFor(() => expect(screen.getByText('Radarr')).toBeInTheDocument())
-    expect(screen.queryByText('AmuTorrent')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Radarr: Conectado')).toBeInTheDocument())
+    expect(screen.queryByText(/AmuTorrent:/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Sonarr:/)).not.toBeInTheDocument()
   })
 
   it('moves off a page whose service disappeared', async () => {
@@ -234,7 +241,7 @@ describe('unreadable credentials are announced', () => {
     mockFetch(['radarr'])
     renderApp()
 
-    await waitFor(() => expect(screen.getByText('Radarr')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Radarr: Conectado')).toBeInTheDocument())
     expect(screen.queryByText(/No se pudieron leer las credenciales/)).not.toBeInTheDocument()
   })
 })
