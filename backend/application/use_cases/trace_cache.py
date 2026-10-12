@@ -20,6 +20,7 @@ What bounds a bad cache is the TTL itself: at most 10 s of staleness.
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 import event_bus
@@ -58,3 +59,28 @@ async def get_traces() -> list[dict]:
     except Exception:  # noqa: BLE001 — a dropped event costs one poll
         pass
     return traces
+
+
+async def trace_refresher() -> None:
+    """Refresh the traces every `TRACE_TTL` while someone is listening.
+
+    Started once, from the lifespan — the `downloads_poller` pattern: B2.4
+    turns the frontend's 15 s poll off while the SSE stream is connected,
+    and this cache refreshes lazily (TTL + readers), so without a backend
+    tick the stream-fed dashboards would freeze on whatever was last built.
+    The gate is the bus itself: with no subscriber a build (nine outbound
+    HTTP calls plus a SQLite read) could not be observed by anyone, so the
+    tick sleeps and that is all; with at least one reader the TTL's own
+    budget applies — one build per window, shared by every open tab. The
+    event goes out inside `get_traces` on a real refresh, never twice from
+    here.
+    """
+    while True:
+        try:
+            if event_bus.subscriber_count() >= 1:
+                await get_traces()
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 — a failed tick must not kill the loop
+            pass  # the last cache (if any) keeps serving; next tick retries
+        await asyncio.sleep(TRACE_TTL)

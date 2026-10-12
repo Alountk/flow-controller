@@ -104,3 +104,52 @@ def test_a_subscriber_whose_loop_is_gone_cannot_break_publish():
         event_bus.publish({"kind": "task"})  # must not raise
     finally:
         event_bus.unsubscribe(queue)
+
+
+def test_subscriber_count_follows_the_sse_route_lifecycle():
+    """B2.1 — the count `trace_refresher` gates builds on.
+
+    The SSE route subscribes BEFORE its first yield and unsubscribes in
+    `finally`, so this lifecycle is exactly what an open dashboard tab looks
+    like: 0 with nobody listening, 1 while a stream holds a queue, 0 again
+    the moment the reader goes away.
+    """
+
+    async def scenario():
+        before = event_bus.subscriber_count()
+        queue = event_bus.subscribe()
+        during = event_bus.subscriber_count()
+        event_bus.unsubscribe(queue)
+        after = event_bus.subscriber_count()
+        return before, during, after
+
+    before, during, after = asyncio.run(scenario())
+    assert before == 0, "no reader is connected at the start of the scenario"
+    assert during == before + 1, "a subscribed queue must be visible to the count"
+    assert after == before, "an unsubscribed queue must leave no count behind"
+
+
+def test_a_subscriber_dropped_as_dead_leaves_no_count_behind():
+    """A dead reader costs the count exactly what it costs the registry.
+
+    `publish` drops a subscriber whose loop is gone (both the direct offer
+    and the thread-safe wake fail against a closed loop) — the count must
+    see that drop, or the refresher would build forever for a tab that
+    already closed. The waiter carries the wakeup callback a real consumer
+    would have scheduled: that callback is what makes the offer fail the
+    same way it does for a consumer blocked on `get()`.
+    """
+
+    async def scenario():
+        queue = event_bus.subscribe()
+        waiter = asyncio.get_running_loop().create_future()
+        waiter.add_done_callback(lambda _f: None)  # a consumer's wakeup path
+        queue._getters.append(waiter)
+        return queue
+
+    asyncio.run(scenario())  # the queue stays subscribed, its loop is closed
+    assert event_bus.subscriber_count() == 1, "the queue is subscribed for now"
+    event_bus.publish({"kind": "status"})  # offer fails, wake fails → dropped
+    assert event_bus.subscriber_count() == 0, (
+        "a dead subscriber must leave no count behind"
+    )

@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from application import gateways
-from application.use_cases import downloads_cache
+from application.use_cases import downloads_cache, trace_cache
 from infrastructure import arr_client, settings_store, sqlite_history, system_probe, wanted_scan
 from infrastructure import credentials as credentials_module, sqlite_history as history
 from config import FRONTEND_DIST
@@ -88,7 +88,11 @@ async def lifespan(_app: FastAPI):
     open_shared_session()
     tasks = [
         asyncio.create_task(coro)
-        for coro in (status_routes.background_checker(), downloads_cache.downloads_poller())
+        for coro in (
+            status_routes.background_checker(),
+            downloads_cache.downloads_poller(),
+            trace_cache.trace_refresher(),
+        )
     ]
     try:
         yield

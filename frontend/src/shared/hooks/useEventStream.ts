@@ -34,6 +34,11 @@
  * provider around it — every existing test, every early-return screen — keeps
  * today's polling exactly as it is. Consumers flip their task
  * `refetchInterval` to `false` only while `connected` is true.
+ *
+ * B2 — ambient events: `status` invalidates `['status']` the same way
+ * `trace` invalidates `['trace']`, so App's own 5 s/15 s polls can sleep on
+ * the stream too — the backend announces both (the health check publishes
+ * after every check, the trace refresher on the TTL).
  */
 
 import { createContext, useEffect, useMemo, useState } from 'react'
@@ -111,6 +116,12 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
       void queryClient.invalidateQueries({ queryKey: ['trace'] })
     }
 
+    const onStatus = () => {
+      // B2: `check_all` publishes after every tick and every refresh —
+      // this is what lets App's 5 s ['status'] poll sleep on the stream.
+      void queryClient.invalidateQueries({ queryKey: ['status'] })
+    }
+
     const onDownloads = () => {
       // Documented exclusion: nothing in the frontend polls /api/downloads
       // yet, so there is no key to invalidate. Do not invent one here.
@@ -120,6 +131,7 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
     source.addEventListener('error', onError)
     source.addEventListener('task', onTask)
     source.addEventListener('trace', onTrace)
+    source.addEventListener('status', onStatus)
     source.addEventListener('downloads', onDownloads)
 
     return () => {
@@ -127,6 +139,7 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
       source.removeEventListener('error', onError)
       source.removeEventListener('task', onTask)
       source.removeEventListener('trace', onTrace)
+      source.removeEventListener('status', onStatus)
       source.removeEventListener('downloads', onDownloads)
       source.close() // native EventSource retry only helps a connection it holds
       // This effect's stream is gone (logout, key change, unmount): nothing

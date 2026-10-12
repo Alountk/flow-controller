@@ -209,9 +209,11 @@ class TestThePayloadShapeIsUntouched:
 
 class TestThePollersLifecycle:
     def test_the_composition_root_starts_one_poller_and_stops_it_on_shutdown(self):
-        """One poller, born in the lifespan and cancelled by it: two instances
-        would double the upstream rate the study measured, and one outliving
-        the lifespan would keep polling over a closed session."""
+        """One poller each, born in the lifespan and cancelled by it: two
+        instances would double the upstream rate the study measured, and one
+        outliving the lifespan would keep polling over a closed session.
+        B2.3 added a third long-lived loop (`trace_refresher`) under the
+        same rule — started once, stopped on shutdown."""
         started: list[str] = []
         stopped: list[str] = []
 
@@ -226,6 +228,13 @@ class TestThePollersLifecycle:
             started.append("status")
             await asyncio.Event().wait()
 
+        async def fake_trace_refresher():
+            started.append("trace")
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.append("trace")
+
         async def run_lifespan():
             gen = app_module.lifespan(None)
             await gen.__anext__()
@@ -237,6 +246,8 @@ class TestThePollersLifecycle:
         ), patch.object(
             app_module.downloads_cache, "downloads_poller", fake_downloads_poller
         ), patch.object(
+            app_module.trace_cache, "trace_refresher", fake_trace_refresher
+        ), patch.object(
             app_module, "history"
         ), patch.object(
             app_module, "open_shared_session"
@@ -246,4 +257,7 @@ class TestThePollersLifecycle:
             asyncio.run(run_lifespan())
 
         assert started.count("downloads") == 1, "exactly one downloads poller"
-        assert stopped == ["downloads"], "the shutdown path must cancel it"
+        assert started.count("trace") == 1, "exactly one trace refresher"
+        assert stopped == ["downloads", "trace"], (
+            "the shutdown path must cancel every loop it started"
+        )

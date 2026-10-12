@@ -6,6 +6,7 @@ import { EventStreamContext, useEventStream } from '../../shared/hooks/useEventS
 import { ReleaseSearchModal } from '../../features/release-search/ReleaseSearchModal.tsx'
 import { TraceActions } from '../../features/trace-actions/TraceActions.tsx'
 import { MediaMixer } from '../../pages/MediaMixer.tsx'
+import App from '../../app/App.tsx'
 import type { ActionKey, ActionMeta, Trace } from '../../shared/types.ts'
 import type { Release } from '../../shared/api/releases.ts'
 import { clearToasts } from '../../shared/utils/toast.ts'
@@ -431,5 +432,83 @@ describe('SSE gates the task polls (B1)', () => {
       },
       15_000,
     )
+  })
+})
+
+/**
+ * B2 — the AMBIENT polls (App's own `['status']` 5 s and `['trace']` 15 s)
+ * sleep while the SSE stream is connected.
+ *
+ * Only App owns those two options, so these tests mount the REAL App: the
+ * backend now announces both surfaces (`check_all` publishes `kind:"status"`
+ * after every check, the trace refresher keeps `kind:"trace"` flowing even
+ * with no reader polling), which is what makes turning the polls off safe.
+ * `['actions']` (60 s) has no event covering it and must stay exactly as it
+ * is — the selectivity is part of the contract, not a side effect.
+ */
+describe('SSE gates the ambient polls (B2)', () => {
+  /** Everything App asks for on the dashboard; unknown URLs answer `{}`. */
+  function stubAppFetch() {
+    return stubFetch((url) => {
+      if (url.includes('/api/config')) {
+        return { auth_required: false, encryption_ok: true, encryption_error: null, developer: false }
+      }
+      if (url.includes('/api/setup')) return { needs_setup: false }
+      if (url.includes('/api/services')) return { services: [], configured: [] }
+      if (url.includes('/api/status')) return { flow: 'running', checking: false }
+      if (url.includes('/api/trace')) return { traces: [], summary: {}, updated_at: 1 }
+      if (url.includes('/api/actions')) return { actions: [] }
+      return {}
+    })
+  }
+
+  /** Mount the real App and wait until both gated queries carry options. */
+  async function mountApp(client: QueryClient) {
+    render(
+      <QueryClientProvider client={client}>
+        <App />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(intervalFor(client, ['status'])).toBe(5000))
+    await waitFor(() => expect(intervalFor(client, ['trace'])).toBe(15000))
+  }
+
+  it('turns the status and trace polls off while the stream is connected', async () => {
+    stubAppFetch()
+    vi.stubGlobal('EventSource', MockEventSource)
+    const client = makeClient()
+    await mountApp(client)
+
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0))
+    const source = MockEventSource.instances[MockEventSource.instances.length - 1]
+    act(() => source.dispatch('open'))
+
+    await waitFor(() => expect(intervalFor(client, ['status'])).toBe(false))
+    await waitFor(() => expect(intervalFor(client, ['trace'])).toBe(false))
+    // Triangulation: the uncovered poll must NOT be swept by the gate.
+    await waitFor(() => expect(intervalFor(client, ['actions'])).toBe(60000))
+  })
+
+  it('keeps 5000/15000 when the stream never reports open', async () => {
+    stubAppFetch()
+    vi.stubGlobal('EventSource', MockEventSource)
+    const client = makeClient()
+    await mountApp(client)
+
+    // The connection exists but no `open` arrived: disconnected → fallback.
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0))
+    expect(intervalFor(client, ['status'])).toBe(5000)
+    expect(intervalFor(client, ['trace'])).toBe(15000)
+  })
+
+  it('keeps 5000/15000 when the environment has no EventSource at all', async () => {
+    // jsdom defines none (blocked browser, non-browser): the hook no-ops and
+    // polling alone must cover both surfaces — today's behavior, unchanged.
+    stubAppFetch()
+    const client = makeClient()
+    await mountApp(client)
+
+    expect(intervalFor(client, ['status'])).toBe(5000)
+    expect(intervalFor(client, ['trace'])).toBe(15000)
   })
 })

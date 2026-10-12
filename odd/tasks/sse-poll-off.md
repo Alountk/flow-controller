@@ -52,3 +52,54 @@ Apagar sin B2 = riesgo de pantalla congelada; por eso el alcance es tasks-only.
   lifecycle test (onerror → polls resucitan). Checks: vitest 525 (+7),
   tsc 0, eslint 0. B2 (status publisher + trace refresher backend) queda
   documentado, sin empezar.
+
+---
+
+# B2 — Refrescadores backend + apagar los polls ambientales
+
+Evidencia de la exploración (2026-10-12):
+- `GET /api/status` sirve `status_cache` que solo cambia en el tick de
+  `background_checker` (**15s**, `intervals.check`) → el poll de 5s del
+  cliente solo relee datos sin cambiar; publicar al final de `check_all`
+  (cubre tick Y `/api/status/refresh`) da frescura ≥ actual con 0 requests
+  extra.
+- `build_traces` = **9 llamadas HTTP + 1 lectura SQLite** por build;
+  `TRACE_TTL = 10.0` (bajo el poll de 15s a propósito). Un refresher a 2s
+  multiplicaría ×5 la carga — prohibido; la cadencia es 10s (TTL).
+- `downloads_poller` (`downloads_cache.py:184-200`) = plantilla exacta:
+  tick con try/except, publish solo en refresh real.
+- `event_bus` no expone `subscriber_count()` → añadirlo (el SSE route
+  subscribe antes del primer yield y unsubscribe en finally → el conteo es
+  fiable).
+- ⚠️ El poll adaptativo 2s/10s de Seguimiento es `['queue']` → `/api/queue`
+  (**NO** es trace) y **queda como está** (SSE no lo cubre).
+- Frontend: `['status']` 5s y `['trace']` 15s en `App.tsx` → los que se
+  apagan. `['actions']` 60s y `DiskSpace` 30s siguen (sin cubrir).
+
+## Alcance (B2)
+- [x] B2.1 (backend): `event_bus.subscriber_count()`.
+- [x] B2.2 (backend): publish `{"kind":"status","version"}` al final de
+      `check_all` (status.py) — best-effort try igual que trace.
+- [x] B2.3 (backend): `trace_refresher` en `trace_cache.py` (clon de
+      downloads_poller): cada `TRACE_TTL` → `get_traces()` SOLO si
+      `subscriber_count() >= 1`; registrado en el lifespan de `app.py`.
+      Sin subs → 0 builds (nadie puede observar obsolescencia); con subs →
+      1 build/10s compartido por todos los tabs (≤ carga de hoy).
+- [x] B2.4 (frontend): listener `status` → invalidate `['status']`;
+      gate `['status']` (5000) y `['trace']` (15000) con `connected ? false :`
+      (mismo patrón que B1). `['queue']`, `['actions']`, `DiskSpace`: sin
+      cambios.
+
+## Checks
+- backend `pytest` (baseline 1105), frontend `vitest` (525), tsc, eslint.
+- e2e CI = GATE.
+
+## Progress B2
+- 2026-10-12: diseño cerrado por exploración; rama `feat/sse-b2-refreshers`.
+
+- 2026-10-12: **B2 [x]** — subscriber_count, publish en check_all (finally,
+  cubre tick+refresh+early-return), trace_refresher (0 subs → 0 builds;
+  ≥1 → 1 build/10s), App gate status/trace, listener status. Checks:
+  backend 1113 (+8), frontend 529 (+4), tsc/eslint 0. Ratchet
+  MAX_LEGACY_LOC 2730→2750 (owned en PR). `['queue']`/`['actions']`/
+  DiskSpace sin cambios (documentado).

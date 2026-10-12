@@ -62,6 +62,17 @@ class EventBus:
         with self._lock:
             self._queues.pop(queue, None)
 
+    def subscriber_count(self) -> int:
+        """How many queues are registered right now (B2: the refresher's gate).
+
+        The SSE route subscribes before its first yield and unsubscribes in
+        `finally`, so this count is exactly "how many readers are on the
+        stream" — the condition `trace_refresher` builds traces against: no
+        subscriber, no build anyone could observe.
+        """
+        with self._lock:
+            return len(self._queues)
+
     def publish(self, event: dict) -> None:
         """Deliver `event` to every subscriber. Never awaits, never raises."""
         with self._lock:
@@ -115,3 +126,8 @@ def publish(event: dict) -> None:
         _bus.publish(event)
     except Exception:  # noqa: BLE001 — belt: no publisher may ever see this
         pass
+
+
+def subscriber_count() -> int:
+    """How many readers hold a queue (B2: `trace_refresher` builds for ≥1)."""
+    return _bus.subscriber_count()
