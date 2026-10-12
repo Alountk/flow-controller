@@ -293,7 +293,7 @@ describe('first-run setup wizard', () => {
     expect(screen.getByText('Sin clave de la app')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
-    await screen.findByText('Resumen del sistema')
+    await screen.findByRole('heading', { level: 1, name: 'Dashboard' })
     expect(screen.queryByRole('heading', { name: 'Revisar y entrar' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
   })

@@ -262,6 +262,9 @@ function App() {
             loading={isPending}
             lastUpdated={data ? Date.now() : null}
             right={page === 'dashboard' ? <ServiceChips services={services} /> : undefined}
+            subtitle={
+              page === 'dashboard' ? 'Vista general del servidor multimedia' : undefined
+            }
           />
 
           <div className="content-and-queue">
@@ -281,11 +284,6 @@ function App() {
               )}
               {page === 'dashboard' && (
                 <>
-                  <div className="content-header">
-                    <h1>Resumen del sistema</h1>
-                    <p>Estado actual del pipeline de media y actividad reciente</p>
-                  </div>
-
                   {nothingConfigured ? (
                     <div className="wanted-empty" role="alert">
                       No hay ningún servicio configurado todavía. Ve a <strong>Configuración</strong> para

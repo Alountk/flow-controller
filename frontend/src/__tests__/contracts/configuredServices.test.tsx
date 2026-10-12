@@ -171,7 +171,9 @@ describe('the app reflects what is configured', () => {
     renderApp()
 
     // Hidden pages cannot be displayed, so the app falls back to the dashboard.
-    await waitFor(() => expect(screen.getByText('Resumen del sistema')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument(),
+    )
     window.history.pushState(null, '', '/dashboard')
   })
 })
