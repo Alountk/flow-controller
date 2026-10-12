@@ -108,12 +108,16 @@ para un segundo PR.
   `node-fs.d.ts` (shim ambiental `declare module 'node:fs'` — el paquete NO tiene
   @types/node) → TS2307 en 4 tests; recreado en `src/test/node-fs.d.ts` (causa
   raíz verificada con stash/probe). Checks: vitest 518/518, tsc 0, eslint 0.
-- 2026-10-13: **T3 [x]** commit de este mismo cambio (hash anotado en T4)
-  (DashboardCards: 4 tarjetas design-01
+- 2026-10-13: **T3 [x]** commit `cfc33cf` (DashboardCards: 4 tarjetas design-01
   con footers honestos, puerta C-11 → card1; queries ['downloads'] SSE-gated y
   ['disk'] dashboard-only; .dash-foot; dash-value 24px/700). RED→GREEN: 10 tests
   nuevos; test C-11 re-punteado. Checks: vitest 528/528 (65→66 files), tsc 0,
   eslint 0.
+- 2026-10-13: **T4 [x]** commit de este cambio (hash anotado en T6) — IncidentsBand:
+  total = import_blocked + failed, singular/plural, oculta si N=0, CTA
+  `Ver en Seguimiento (N)`; `.incidents-*` en Dashboard.css; cableado tras las
+  tarjetas (orden del diseño). RED→GREEN: 4 tests nuevos. Checks: vitest
+  532/532 (67 files), tsc 0, eslint 0.
 
 ## Log
 - L1 (2026-10-13, usuario): "podemos empezar a implementar el nuevo diseño hecho

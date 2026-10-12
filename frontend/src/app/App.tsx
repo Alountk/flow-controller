@@ -11,6 +11,7 @@ import { Settings } from '../features/settings/Settings.tsx'
 import { DiskSpace } from '../pages/DiskSpace.tsx'
 import { ServiceChips } from './ServiceChips.tsx'
 import { DashboardCards } from './DashboardCards.tsx'
+import { IncidentsBand } from './IncidentsBand.tsx'
 import { MediaMixer } from '../pages/MediaMixer.tsx'
 import { Peliculas } from '../pages/Peliculas.tsx'
 import { Series } from '../pages/Series.tsx'
@@ -313,6 +314,11 @@ function App() {
                     summary={traceData?.summary}
                     traces={traceData?.traces ?? []}
                     services={services}
+                    onOpenSeguimiento={() => setPage('seguimiento')}
+                  />
+
+                  <IncidentsBand
+                    summary={traceData?.summary}
                     onOpenSeguimiento={() => setPage('seguimiento')}
                   />
               </>

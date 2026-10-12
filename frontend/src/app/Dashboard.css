@@ -98,6 +98,56 @@ button.dash-card:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* ---- Incidents band (Stitch 01, section 2) ---- */
+
+.incidents-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bad) 25%, transparent);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.incidents-text {
+  min-width: 0;
+}
+
+.incidents-title {
+  margin: 0;
+  color: var(--bad-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.incidents-desc {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.incidents-cta {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bad-strong);
+  color: var(--on-fill);
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.incidents-cta:hover {
+  background: var(--bad-dim);
+}
+
 /* Shared: the dashboard fetch error and the Settings error boxes both use it.
    It lived in PipelineVisual.css; the import is app-wide, so it still styles
    every consumer. */
