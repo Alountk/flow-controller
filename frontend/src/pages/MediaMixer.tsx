@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useContext } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { EventStreamContext } from '../shared/hooks/useEventStream.ts'
 import type {
   ProbeResult,
   ProbeFile,
@@ -477,6 +478,9 @@ function TaskList({ tasks }: { tasks: MuxTask[] }) {
 
 export function MediaMixer() {
   const queryClient = useQueryClient()
+  // B1: while the SSE stream is connected, mixer task events replace the poll
+  // below (`refetchInterval` → false); a disconnect wakes it back up.
+  const { connected } = useContext(EventStreamContext)
   const [phase, setPhase] = useState<Phase>('idle')
   const [pathA, setPathA] = useState('')
   const [pathB, setPathB] = useState('')
@@ -493,7 +497,7 @@ export function MediaMixer() {
   const { data: tasksData } = useQuery({
     queryKey: ['mixer-tasks'],
     queryFn: listTasks,
-    refetchInterval: (query) => {
+    refetchInterval: connected ? false : (query) => {
       const tasks = query.state.data?.tasks ?? []
       const hasActive = tasks.some((t) => t.status === 'running' || t.status === 'paused')
       return hasActive ? 2000 : 10000

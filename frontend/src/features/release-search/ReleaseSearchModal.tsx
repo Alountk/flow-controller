@@ -1,6 +1,7 @@
-import { Fragment, useState, useRef, useCallback, useEffect } from 'react'
+import { Fragment, useState, useRef, useCallback, useEffect, useContext } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { addCalendarItem } from '../../shared/api/calendar.ts'
+import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
 import {
   startCalendarReleaseSearch,
   fetchReleaseSearchStatus,
@@ -249,6 +250,9 @@ export function ReleaseSearchModal({
   presentation = 'overlay',
 }: ReleaseSearchModalProps) {
   const inPanel = presentation === 'panel'
+  // B1: while the SSE stream is connected, task events deliver both job
+  // results as they happen and the two polls below sleep (`false`).
+  const { connected } = useContext(EventStreamContext)
   // The population the panel's 🔍 Buscar Releases button serves: a title
   // that still needs a file, and one already inside the library (id 0 must
   // be ADDED first — its ➕ button's job). The same gate guards the
@@ -453,7 +457,7 @@ export function ReleaseSearchModal({
     queryFn: () => fetchReleaseSearchStatus(releaseJob!.task_id),
     enabled: !!releaseJob && !TERMINAL_STATUSES.includes(releaseJob.status),
     retry: false,
-    refetchInterval: (query) => {
+    refetchInterval: connected ? false : (query) => {
       const data = query.state.data as ReleaseSearchTask | undefined
       if (data && TERMINAL_STATUSES.includes(data.status ?? '')) return false
       return 1500
@@ -471,7 +475,7 @@ export function ReleaseSearchModal({
     queryFn: () => fetchGrabStatus(grabJob!.task_id),
     enabled: !!grabJob && !TERMINAL_STATUSES.includes(grabJob.status),
     retry: false,
-    refetchInterval: (query) => {
+    refetchInterval: connected ? false : (query) => {
       const data = query.state.data as GrabTask | undefined
       if (data && data.status && TERMINAL_STATUSES.includes(data.status)) return false
       return 1500
