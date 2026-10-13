@@ -17,20 +17,6 @@
   padding-bottom: 32px;
 }
 
-/* ---- Header ---- */
-.sec-header h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.sec-header p {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
 /* ---- Sub-view tabs ---- */
 .sec-subtabs {
   display: flex;

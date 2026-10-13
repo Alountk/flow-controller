@@ -571,11 +571,6 @@ export function Peliculas() {
 
   return (
     <section className="section-shell sec-peliculas">
-      <header className="sec-header">
-        <h2>Películas</h2>
-        <p>Aquí viven tus películas: biblioteca, faltantes, estrenos y calidad en una sola vista.</p>
-      </header>
-
       <div className="sec-subtabs" role="tablist" aria-label="Sub-vistas de Películas">
         {SUB_VIEWS.map((s) => (
           <button

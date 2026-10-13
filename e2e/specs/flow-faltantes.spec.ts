@@ -30,7 +30,7 @@ test('the stub listing renders rows and the Biblioteca sub-view is reachable', a
 
   // Section heading — Peliculas.tsx, <h2>Películas</h2>. The Topbar's page
   // title is a span, so this is the only heading that matches.
-  await expect(app.getByRole('heading', { level: 2, name: 'Películas' })).toBeVisible({ timeout: 15000 });
+  await expect(app.getByRole('heading', { level: 1, name: 'Películas' })).toBeVisible({ timeout: 15000 });
   // Design-03 shell: the service chips ride this topbar too.
   await expect(app.locator('.service-chips')).toBeVisible();
 

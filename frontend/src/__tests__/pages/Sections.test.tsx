@@ -102,10 +102,15 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
       vi.unstubAllGlobals()
     })
 
-    it('renders the section heading', () => {
+    it('keeps the page title out of the content (S8: no content h2)', () => {
       renderSection(Component)
 
-      expect(screen.getByRole('heading', { level: 2, name: title })).toBeInTheDocument()
+      // The design's sticky header owns the title — this render is the page
+      // alone, so the topbar h1 itself is App's business (pageSubtitles.test
+      // and the e2e specs pin it); what must be gone HERE is the second
+      // heading with the same name that duplicated it.
+      expect(screen.queryByRole('heading', { level: 2, name: title })).toBeNull()
+      expect(screen.queryByRole('heading', { level: 1, name: title })).toBeNull()
     })
 
     /**
