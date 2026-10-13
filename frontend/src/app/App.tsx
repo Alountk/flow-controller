@@ -76,6 +76,14 @@ const PAGE_TITLES: Record<Page, string> = {
   prototypes: 'Prototipos',
 }
 
+/** Subtitle copy straight from the design screens whose HTML this repo has
+ *  read (01 Dashboard, 03 Películas). A page outside this map shows NO
+ *  subtitle: inventing copy the design never wrote would be a lie too. */
+const PAGE_SUBTITLES: Partial<Record<Page, string>> = {
+  dashboard: 'Vista general del servidor multimedia',
+  peliculas: 'Catálogo cinematográfico y gestión de indexación',
+}
+
 function App() {
   const queryClient = useQueryClient()
   const { ready: servicesReady, isConfigured, hasAnyArr } = useConfiguredServices()
@@ -276,10 +284,8 @@ function App() {
             title={PAGE_TITLES[page]}
             loading={isPending}
             lastUpdated={data ? Date.now() : null}
-            right={page === 'dashboard' ? <ServiceChips services={services} /> : undefined}
-            subtitle={
-              page === 'dashboard' ? 'Vista general del servidor multimedia' : undefined
-            }
+            right={<ServiceChips services={services} />}
+            subtitle={PAGE_SUBTITLES[page]}
           />
 
           <div className="content-and-queue">
