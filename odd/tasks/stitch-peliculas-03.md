@@ -120,6 +120,17 @@ Un solo PR.
   Biblioteca: `enabled: filter === 'missing'`); 21 matchers unit + 2 e2e
   actualizados; chips `Todas (8)` de la vista Calidad intactos. Checks:
   vitest 550/550, tsc 0, eslint 0.
+- 2026-10-13: **Cierre** — PR **#199** (6 commits: T1..T5 + docs `ad7888d`).
+  Checks finales: backend **1119/1119** · frontend **550/550** · tsc 0 ·
+  eslint 0. Assess nativo: riesgo **medium** (`slice_budget_reached`, 1124
+  líneas, 32 paths). START de la revisión → `consent-declined-this-candidate`
+  (`lineage_created=false`, sin linaje): revisión **declinada para este
+  candidato**; verificador independiente no disponible (routing de modelos:
+  `subagents.json`→openrouter sin provider) — decisión establecida del
+  usuario: entregar y retomar al arreglar el config. CI **VERDE** (e2e 2m24s
+  + backend + frontend-build + docker-verify + GitGuardian). Merge
+  `--merge --delete-branch` → main **`1b17f35`**; ramas local y remota
+  borradas.
 
 ## Log
 - L1 (2026-10-13, usuario): "ya puedo ver el dashboard, no es 1:1 porque me
