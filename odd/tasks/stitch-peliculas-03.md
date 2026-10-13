@@ -92,6 +92,34 @@ Un solo PR.
 ## Progress
 - 2026-10-13: doc creada antes de la primera escritura; decisiones registradas;
   id de pantalla 03 recuperado del historial de OpenCode.
+- 2026-10-13: **T1 [x]** commit `a0026e7` — `_movie_enrichment` en
+  `fetch_all_movies_detailed` (imdb_id/runtime/size_on_disk/directors, claves
+  omitidas si faltan, precedente season_count). RED→GREEN: 6 tests nuevos.
+  Suite backend **1119/1119**, tsc/eslint n/a (backend).
+- 2026-10-13: **T2 [x]** commit `9490d44` — SectionRow con props `director`/`size`
+  (línea `Dir: …` + tamaño mono a la derecha del pie), wiring en
+  `renderCatalogMovies` (`directors[0]`, `formatBytes` con `has_file`), CSS
+  `.sec-row-dir/.sec-row-size`. La fila seleccionada YA existía
+  (`aria-current` + `Sections.css:550`) — sin cambio. Checks: vitest 538/538,
+  tsc 0, eslint 0.
+- 2026-10-13: **T3 [x]** commit `5a5799a` — `PAGE_SUBTITLES` (dashboard +
+  Películas, solo pantallas con HTML leído), chips en todas las páginas
+  (antes solo dashboard), e2e `flow-faltantes` + aserción `.service-chips`.
+  Checks: vitest 541/541, tsc 0, eslint 0.
+- 2026-10-13: **T4 [x]** commit `90801fc` — cabecera del inspector: pill
+  `Monitoreada`/`Sin monitorear` con dot, línea `2024 • 166 min` (solo con
+  runtime), chip IMDb mono + `Radarr ID: #<id>`; `MediaDetail` gana campos
+  opcionales rellenados por `catalogMovieDetail`. Los tests seleccionan la
+  fila (la selección por defecto no rellena la cabecera). Checks: vitest
+  547/547, tsc 0, eslint 0.
+- 2026-10-13: **T5 [x]** commit `342f9b0` — decisión del usuario: **el contador
+  reemplaza los N de los botones**. Fila `.wanted-counter-row` (border-top,
+  BulkSearchFlow a la derecha) con `N películas|series catalogadas • M
+  pendientes`; botones `Faltantes`/`Todas` sin número; **ambas queries del
+  kind activo habilitadas** (el total de pendientes era 0 estructural en
+  Biblioteca: `enabled: filter === 'missing'`); 21 matchers unit + 2 e2e
+  actualizados; chips `Todas (8)` de la vista Calidad intactos. Checks:
+  vitest 550/550, tsc 0, eslint 0.
 
 ## Log
 - L1 (2026-10-13, usuario): "ya puedo ver el dashboard, no es 1:1 porque me
