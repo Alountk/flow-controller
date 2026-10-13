@@ -198,6 +198,74 @@
   letter-spacing: -0.01em;
 }
 
+/* Design-03 header: the title row carries the monitored pill at its right. */
+.sec-detail-titlerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sec-detail-titlerow h3 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sec-detail-mon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.sec-detail-mon-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.sec-detail-mon.on .sec-detail-mon-dot {
+  background: var(--ok);
+}
+
+/* Design-03: `2024 • 166 min` — rendered only when a runtime exists. */
+.sec-detail-sub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+/* Design-03: mono IMDb chip + the row's own Radarr id under the meta. */
+.sec-detail-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.sec-detail-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-2);
+}
+
+.sec-detail-id {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
 .sec-meta {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -414,6 +482,25 @@
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+}
+
+/* Design-03: the director line under the title — rendered only when the
+   payload carried a director (SectionRow renders nothing otherwise). */
+.sec-row-dir {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
+/* Design-03: on-disk size pinned to the right of the footer row, mono like
+   every other byte count the rows show. */
+.sec-row-size {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
 }
 
 /* The status pill — the prototype's `pill` shape, labelled only with what

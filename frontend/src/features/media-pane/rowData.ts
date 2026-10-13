@@ -53,7 +53,19 @@ export function catalogMovieDetail(movie: AllMovie): MediaDetail {
     label: 'Estado',
     value: catalogState(movie.has_file, movie.path_exists, movie.has_unimported_file),
   })
-  return { title: movie.title, poster: movie.remotePoster || undefined, meta, grab: grabOf(movie) }
+  return {
+    title: movie.title,
+    poster: movie.remotePoster || undefined,
+    meta,
+    grab: grabOf(movie),
+    // Design-03 header (stitch-peliculas-03): passed through only when the
+    // enrichment carried them — undefined keys render nothing on screen.
+    monitored: movie.monitored,
+    year: movie.year,
+    runtime: movie.runtime,
+    imdb_id: movie.imdb_id,
+    radarr_id: movie.id,
+  }
 }
 
 export function wantedEpisodeDetail(ep: WantedEpisode): MediaDetail {

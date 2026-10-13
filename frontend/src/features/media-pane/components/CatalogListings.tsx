@@ -1,5 +1,6 @@
 import type { WantedMovie, AllMovie, AllSeries } from '../../../shared/types.ts'
 import { formatGrabMark } from '../../../shared/utils/grabMark.ts'
+import { formatBytes } from '../../../shared/utils/text.ts'
 import { SectionRow, catalogRowStatus } from './SectionRow.tsx'
 import { ListingLoading, ListingError, ListingEmpty } from './ListingStates.tsx'
 import { catalogMovieDetail, catalogMovieRelease, catalogSeriesDetail, catalogSeriesRelease } from '../rowData.ts'
@@ -89,6 +90,14 @@ export function renderCatalogMovies({
                   // "" is unknown, never a guessed class: no chip at all.
                   chip={movie.quality || undefined}
                   monitored={movie.monitored}
+                  director={movie.directors?.[0]}
+                  // The size is a fact about the FILE: no file (or a 0 the
+                  // mapper passed through) renders no size, never "0 B".
+                  size={
+                    movie.has_file && movie.size_on_disk
+                      ? formatBytes(movie.size_on_disk)
+                      : undefined
+                  }
                   path={movie.path || undefined}
                   grabbed={grabbed}
                   grabbedDestination={movie.grabbed_destination}

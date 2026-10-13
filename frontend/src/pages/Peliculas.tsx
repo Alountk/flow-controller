@@ -658,7 +658,22 @@ export function Peliculas() {
               <span className="sec-poster" aria-hidden="true" />
             )}
             <div className="sec-detail-titles">
-              <h3>{selected ? selected.detail.title : 'Sin selección'}</h3>
+              <div className="sec-detail-titlerow">
+                <h3>{selected ? selected.detail.title : 'Sin selección'}</h3>
+                {selected?.detail.monitored != null && (
+                  <span
+                    className={`sec-detail-mon${selected.detail.monitored ? ' on' : ''}`}
+                  >
+                    <span className="sec-detail-mon-dot" aria-hidden="true" />
+                    {selected.detail.monitored ? 'Monitoreada' : 'Sin monitorear'}
+                  </span>
+                )}
+              </div>
+              {selected?.detail.year != null && selected.detail.runtime != null && (
+                <p className="sec-detail-sub">
+                  {selected.detail.year} • {selected.detail.runtime} min
+                </p>
+              )}
               <dl className="sec-meta">
                 {selected ? (
                   <>
@@ -688,6 +703,19 @@ export function Peliculas() {
                   </>
                 )}
               </dl>
+              {selected &&
+                (selected.detail.imdb_id || selected.detail.radarr_id != null) && (
+                  <div className="sec-detail-chips">
+                    {selected.detail.imdb_id && (
+                      <span className="sec-detail-chip">{selected.detail.imdb_id}</span>
+                    )}
+                    {selected.detail.radarr_id != null && (
+                      <span className="sec-detail-id">
+                        Radarr ID: #{selected.detail.radarr_id}
+                      </span>
+                    )}
+                  </div>
+                )}
             </div>
           </div>
 

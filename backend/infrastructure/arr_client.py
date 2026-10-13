@@ -1500,6 +1500,32 @@ def _folder_has_video(path: str) -> bool:
     return False
 
 
+def _movie_enrichment(m: dict) -> dict:
+    """Design-03 extras: IMDb id, runtime, on-disk size and directors.
+
+    Every value Radarr does not send — or sends unusable — is OMITTED from
+    the payload (the ``season_count`` precedent of PR #192): an absent key
+    means "unknown" on the frontend, never a placeholder the UI would pass
+    off as data (no ``Dir: `` line, no empty ``tt`` chip).
+    """
+    out: dict = {}
+    imdb = m.get("imdbId")
+    if isinstance(imdb, str) and imdb:
+        out["imdb_id"] = imdb
+    runtime = m.get("runtime")
+    if isinstance(runtime, int) and not isinstance(runtime, bool):
+        out["runtime"] = runtime
+    size = m.get("sizeOnDisk")
+    if isinstance(size, (int, float)) and not isinstance(size, bool):
+        out["size_on_disk"] = int(size)
+    directors = m.get("directors")
+    if isinstance(directors, list):
+        clean = [d for d in directors if isinstance(d, str) and d.strip()]
+        if clean:
+            out["directors"] = clean
+    return out
+
+
 async def fetch_all_movies_detailed(
     session: aiohttp.ClientSession, service: dict, page: int = 1, page_size: int = 50
 ) -> dict:
@@ -1569,6 +1595,9 @@ async def fetch_all_movies_detailed(
                     "languages": _movie_languages(m),
                     "path_exists": path_exists,
                     "monitored": m.get("monitored", False),
+                    # Design-03 extras: present only when Radarr sent a real
+                    # value for them (see _movie_enrichment).
+                    **_movie_enrichment(m),
                 })
             return {"items": items, "total": total, "page": page, "page_size": page_size}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:

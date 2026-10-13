@@ -33,6 +33,15 @@ export interface MediaDetail {
   meta: { label: string; value: string }[]
   /** The "descarga pedida" mark, when the row carries one. */
   grab?: string
+  /** Design-03 header extras (stitch-peliculas-03): every field optional and
+   *  rendered only when present — the panel shows no runtime line, no `tt`
+   *  chip and no ID the row's payload did not carry. `monitored` is the
+   *  catalogue flag itself; `radarr_id` is the row's own primary key. */
+  monitored?: boolean
+  year?: number | null
+  runtime?: number
+  imdb_id?: string
+  radarr_id?: number
 }
 
 /** A row the caller selected: its identity plus what the panel will show. */

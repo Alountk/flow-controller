@@ -361,6 +361,14 @@ export interface AllMovie {
    *  backend never lists an imported title's folder). Optional because a
    *  response written before this field existed has none. */
   has_unimported_file?: boolean
+  /** Design-03 enrichment (stitch-peliculas-03): serialized only when
+   *  Radarr sent a real value — the backend OMITS the key otherwise, so an
+   *  absent field reads as unknown and renders nothing (no `Dir: `, no
+   *  `tt` chip, no size standing in for a payload this app never got). */
+  imdb_id?: string
+  runtime?: number
+  size_on_disk?: number
+  directors?: string[]
   /** Unix seconds when this app asked to download the title, or null when it
    *  never did (or the grab is older than the backend's lookback window). */
   grabbed_at?: number | null

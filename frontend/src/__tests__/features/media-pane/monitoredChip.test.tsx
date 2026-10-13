@@ -170,7 +170,7 @@ describe('monitored chip · wiring through the sections', () => {
   it('the wanted queue (no field) shows no chip on any row', async () => {
     renderSection(Peliculas)
     await screen.findByText('Your Name.')
-    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Faltantes' }))
     await screen.findByText('Todo a la vez en todas partes')
     expect(document.querySelector('.sec-mon-tag')).toBeNull()
   })
