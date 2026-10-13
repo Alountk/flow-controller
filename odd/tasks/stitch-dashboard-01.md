@@ -122,6 +122,21 @@ para un segundo PR.
   `useEventStream.onDownloads` deja de ser no-op: invalida `['downloads']`
   (el consumidor existe desde T3); test de "documented exclusion" invertido.
   Checks: vitest 532/532, tsc 0, eslint 0.
+- 2026-10-13: **Cierre** — PR **#198** (single PR, 9 commits: T1..T6 + 2 docs +
+  fix e2e). Primer CI rojo en e2e: `span→h1` del Topbar duplicó el nombre
+  accesible `Películas` (h1 topbar + h2 contenido) → strict mode, y los
+  reintentos llenaron el budget de auth (401→429, C-05) colateralizando
+  kanban-fit. Fix `609ce0c` (solo specs): `level:1` para `Dashboard`, `level:2`
+  para `Películas`. Segundo CI **VERDE** (e2e 2m36s + backend + frontend-build +
+  docker-verify + GitGuardian). Mergeado `--merge --delete-branch` → main
+  `0172ccf`.
+- **Pendiente conocido**: la revisión nativa quedó abierta — lineage
+  `review-9f16a553871eb4bb` en `reviewing` (medium, 4 lentes, budget 200),
+  bloqueada por `reviewer-config-invalid`: `~/.pi/agent/subagents.json`
+  enruta a `openrouter/*` y `models.json` solo tiene providers `claude`
+  (con key y rol `review`) y `ollama-local`. Decisión del usuario (2026-10-13):
+  "Entregar sin revisión aún" — retomar con STATUS fresco tras arreglar el
+  routing. Segundo PR pendiente: tabla "Actividad reciente" (sección 3).
 
 ## Log
 - L1 (2026-10-13, usuario): "podemos empezar a implementar el nuevo diseño hecho
