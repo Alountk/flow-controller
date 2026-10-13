@@ -46,7 +46,7 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // the starting point this spec has always used.
   // Faltantes is a filter button now, not a tab (the tab duplicated it
   // and the choice moved beside the name search).
-  await app.getByRole('button', { name: /Faltantes \(/ }).click();
+  await app.getByRole('button', { name: 'Faltantes' }).click();
 
   // The movie row keeps the page's own action — MediaPane.tsx,
   // button "🔍 Buscar" (sectionsPanel.test's routing test proves this exact

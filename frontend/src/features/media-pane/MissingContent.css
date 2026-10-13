@@ -108,6 +108,34 @@
   flex-wrap: wrap;
 }
 
+/* Design-03 counter row (stitch-peliculas-03): each total is stated exactly
+   once here — the Faltantes/Todas buttons only switch views. The mass-search
+   trigger rides the right side of the same row. */
+.wanted-counter-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.wanted-counter {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.wanted-counter-total {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.wanted-counter-pending {
+  color: var(--bad-text);
+  font-weight: 600;
+}
+
 .wanted-search {
   flex: 1;
   min-width: 180px;

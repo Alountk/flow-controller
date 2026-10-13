@@ -17,8 +17,9 @@ interface FilterBarProps {
 
 /** The pane's action bar: the Faltantes/Todas buttons (when the caller wants
  *  them), the debounced search input, and — over the missing list only — the
- *  bulk-search trigger with its C-09 confirmation flow. Labels speak for the
- *  pane's own kind/filter — nothing else in the bar needs them. */
+ *  bulk-search trigger with its C-09 confirmation flow. The totals live in
+ *  the design's counter row (stitch-peliculas-03), stated once: the buttons
+ *  keep switching views but no longer repeat the numbers. */
 export function FilterBar({
   kind,
   filter,
@@ -41,7 +42,7 @@ export function FilterBar({
             className={`wanted-filter-btn ${filter === 'missing' ? 'active' : ''}`}
             onClick={() => onFilterChange?.('missing')}
           >
-            Faltantes ({wantedTotal})
+            Faltantes
           </button>
         )}
         {showFilterButtons && (
@@ -49,7 +50,7 @@ export function FilterBar({
             className={`wanted-filter-btn ${filter === 'all' ? 'active' : ''}`}
             onClick={() => onFilterChange?.('all')}
           >
-            Todas ({allTotal || '...'})
+            Todas
           </button>
         )}
         <input
@@ -61,12 +62,20 @@ export function FilterBar({
           aria-label={searchLabel}
         />
       </div>
-      {/* The mass search sweeps the missing queue: the trigger lives beside
-          the list it acts on, and the dialog's count IS this list's total.
-          "Todas" shows the catalogue instead — no count of its own to state. */}
-      {filter === 'missing' && (
-        <BulkSearchFlow kind={kind} count={wantedTotal} filtered={Boolean(query.trim())} />
-      )}
+      {/* Design-03 row: each total stated exactly once — the buttons above
+          only switch views. The mass search rides the right side of the
+          same row, over the list it acts on (the "Todas" catalogue shows
+          no count of its own to trigger against). */}
+      <div className="wanted-counter-row">
+        <div className="wanted-counter">
+          <strong className="wanted-counter-total">{allTotal}</strong>{' '}
+          {isMovies ? 'películas' : 'series'} catalogadas •{' '}
+          <strong className="wanted-counter-pending">{wantedTotal}</strong> pendientes
+        </div>
+        {filter === 'missing' && (
+          <BulkSearchFlow kind={kind} count={wantedTotal} filtered={Boolean(query.trim())} />
+        )}
+      </div>
     </div>
   )
 }

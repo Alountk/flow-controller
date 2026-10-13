@@ -136,7 +136,7 @@ describe('the operator initiates · selection searches nothing', () => {
     renderSection(Peliculas)
     await screen.findByText('Your Name.')
 
-    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Faltantes' }))
     await screen.findByText('Todo a la vez en todas partes')
 
     // Trigger 1 — SELECTION. It lands the panel on the initial step with the
@@ -334,7 +334,7 @@ describe('the faltantes/todas buttons sit beside the name filter', () => {
     // tab to contradict it any more, so the control's own state is what proves
     // it is on duty: the button carries `.active` for the view in play.
     expect(
-      (screen.getByRole('button', { name: /Faltantes \(/ }) as HTMLElement).className,
+      (screen.getByRole('button', { name: 'Faltantes' }) as HTMLElement).className,
     ).toContain('active')
   })
 

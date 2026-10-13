@@ -95,7 +95,7 @@ function renderFaltantes() {
       <Peliculas />
     </QueryClientProvider>,
   )
-  fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Faltantes' }))
 }
 
 describe('bulk wanted search asks for confirmation with the count', () => {

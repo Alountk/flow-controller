@@ -14,8 +14,10 @@ const PAGE_SIZE = 50
  * The pane's query wiring: four infinite queries (two lists × two filters),
  * the one active for the current kind/filter, and everything derived from
  * it — flattened items, the tab totals, the error the backend explained,
- * and the paging controls the sentinel observer drives. Exactly one query
- * is enabled at a time; the other three idle with their own cache.
+ * and the paging controls the sentinel observer drives. BOTH queries of the
+ * active kind stay enabled (stitch-peliculas-03): the design's counter row
+ * states "N catalogadas • M pendientes" together, and the pending total is
+ * only knowable if its query ran. The other kind idles with its own cache.
  */
 export function useMediaQueries({
   kind,
@@ -37,7 +39,7 @@ export function useMediaQueries({
       const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
       return currentFetched < lastPage.total ? (lastPage.page ?? 1) + 1 : undefined
     },
-    enabled: kind === 'movies' && filter === 'missing',
+    enabled: kind === 'movies',
   })
 
   // 2. All Movies Infinite Query
@@ -49,7 +51,7 @@ export function useMediaQueries({
       const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
       return currentFetched < lastPage.total ? (lastPage.page ?? 1) + 1 : undefined
     },
-    enabled: kind === 'movies' && filter === 'all',
+    enabled: kind === 'movies',
   })
 
   // 3. Wanted Episodes Infinite Query
@@ -61,7 +63,7 @@ export function useMediaQueries({
       const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
       return currentFetched < lastPage.total ? (lastPage.page ?? 1) + 1 : undefined
     },
-    enabled: kind === 'episodes' && filter === 'missing',
+    enabled: kind === 'episodes',
   })
 
   // 4. All Series Infinite Query
@@ -73,7 +75,7 @@ export function useMediaQueries({
       const currentFetched = (lastPage.page ?? 1) * PAGE_SIZE
       return currentFetched < lastPage.total ? (lastPage.page ?? 1) + 1 : undefined
     },
-    enabled: kind === 'episodes' && filter === 'all',
+    enabled: kind === 'episodes',
   })
 
   // Active query based on current view

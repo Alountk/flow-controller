@@ -38,7 +38,7 @@ test('the stub listing renders rows and the Biblioteca sub-view is reachable', a
   // sub-view — the old page's default tab, now one click away.
   // Faltantes is a filter button now, not a tab (the tab duplicated it
   // and the choice moved beside the name search).
-  await app.getByRole('button', { name: /Faltantes \(/ }).click();
+  await app.getByRole('button', { name: 'Faltantes' }).click();
 
   // The missing list is the one showing: the Faltantes button is the one on
   // duty, which Sections.test.tsx proves alongside the row assertions here. The

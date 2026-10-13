@@ -115,7 +115,7 @@ SECTION_CASES.forEach(({ title, Component, detailTabs, catalogEmpty }) => {
  */
 function clickSubView(label: string) {
   if (label === 'Faltantes') {
-    fireEvent.click(screen.getByRole('button', { name: /Faltantes \(/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Faltantes' }))
     return
   }
   fireEvent.click(screen.getByRole('tab', { name: label }))
