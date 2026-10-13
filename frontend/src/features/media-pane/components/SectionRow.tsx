@@ -69,6 +69,12 @@ interface SectionRowProps {
   /** The listing's monitored flag, when the payload carries it. Absent →
    *  no chip at all: unknown must never read as "Sin monitorear". */
   monitored?: boolean
+  /** Design-03: the director line under the title. Absent → no line at all,
+   *  never a bare `Dir: `. */
+  director?: string
+  /** Design-03: the on-disk size at the right of the footer row, already
+   *  formatted by the caller (absent → nothing, never "0 B" for unknown). */
+  size?: string
   path?: string
   grabbed?: string | null
   grabbedDestination?: string | null
@@ -93,6 +99,8 @@ export function SectionRow({
   poster,
   chip,
   monitored,
+  director,
+  size,
   path,
   grabbed,
   grabbedDestination,
@@ -132,6 +140,7 @@ export function SectionRow({
             <span className={`sec-pill sec-pill-${status.tone}`}>{status.label}</span>
           </span>
         </span>
+        {director && <span className="sec-row-dir">Dir: {director}</span>}
         <span className="sec-row-bottom">
           {chip && <span className="sec-q-tag">{chip}</span>}
           {/* Only when the field exists: `null`/`undefined` is unknown, and
@@ -147,6 +156,7 @@ export function SectionRow({
               {grabbed}
             </span>
           )}
+          {size && <span className="sec-row-size">{size}</span>}
         </span>
         {/* Its own line under the bottom one: the body is a column, so the
             verdict reads below the counts, never beside them. */}

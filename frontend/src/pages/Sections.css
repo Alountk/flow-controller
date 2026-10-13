@@ -416,6 +416,25 @@
   min-width: 0;
 }
 
+/* Design-03: the director line under the title — rendered only when the
+   payload carried a director (SectionRow renders nothing otherwise). */
+.sec-row-dir {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
+/* Design-03: on-disk size pinned to the right of the footer row, mono like
+   every other byte count the rows show. */
+.sec-row-size {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
 /* The status pill — the prototype's `pill` shape, labelled only with what
    the row's own data can back. */
 .sec-pill {
