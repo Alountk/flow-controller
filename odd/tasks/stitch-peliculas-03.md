@@ -27,6 +27,22 @@ Un solo PR.
   (chocan con las sub-vistas aprobadas en F-08).
 
 ## Specs
+- **S7 — Rediseño de tarjetas** (decisión 2026-10-13: "Rediseño de tarjetas
+  (recomendado)"): la fila pasa a la escala del diseño — póster **64×96px**,
+  título grande (~18px bold), **pill de estado arriba a la derecha** de la
+  tarjeta, filete y pie como el diseño, **borde accent de 2px en la
+  seleccionada** (`aria-current`, hoy background+barra izquierda).
+  - Conservas a propósito (desviaciones documentadas): ruta en la fila (aprobada
+    en F-08), marca de descarga pedida (F-07), botones de fila `Buscar`/
+    `En carpeta` (el diseño no los muestra), chip fuente NO (sería la constante
+    `Radarr` en toda la página — decoración, no dato), `Dir:` sigue condicional
+    (Radarr no manda `directors` — verificado en producción).
+  - Los pills mantienen las etiquetas honestas actuales (En biblioteca /…);
+    los estados de pipeline quedan pendientes (join traza).
+- **S8 — Sin h2 duplicado**: se retira el header de contenido (`h2` +
+  descripción) de las secciones — el diseño lleva el título solo en el topbar
+  (shell idéntico en todas las pantallas). Los tests y specs que pinnean el
+  `h2` pasan al `h1` del topbar.
 - **S1** — Topbar: subtítulo `Catálogo cinematográfico y gestión de indexación`
   en Películas (el subtítulo del Dashboard ya existe) y chips de servicios en
   **todas** las páginas (hoy solo dashboard). Páginas sin subtítulo de diseño
@@ -62,6 +78,10 @@ Un solo PR.
   footer indexador; tabla "Actividad reciente" (ya diferida del port 01).
 
 ## Tasks
+- [ ] T6 (RED→GREEN): tarjetas grandes — póster 64×96, título ~18px, pill
+      arriba a la derecha, seleccionada con borde accent 2px (S7).
+- [ ] T7 (RED→GREEN): retirar el h2 de contenido de Películas/Series y
+      re-puntar tests/e2e al h1 del topbar (S8).
 - [ ] T1 (backend, RED→GREEN): serializar `imdb_id`/`runtime`/`size_on_disk`/
       `directors` en `fetch_all_movies_detailed` + test nuevo
       `backend/tests/infrastructure/tests_movie_enrichment.py`.
@@ -138,6 +158,16 @@ Un solo PR.
   implementar más adelante. Podemos seguir con peliculas?"
 - L2 (2026-10-13, usuario, decisiones): alcance "Frontend + mapper
   (recomendado)" · "Mantener \"Archivos\"" · "No añadir selects".
+- L3 (2026-10-13, usuario): "no estoy viendo la vista nueva de peliculas" →
+  revisado con Playwright en producción: el port 03 SÍ está desplegado
+  (subtítulo, chips, contador 992/107, header, tamaños).
+- L4 (2026-10-13, usuario): "has revisado que peliculas se parezca a la
+  version de stitch?" → paridad completa diseño-vs-producción con capturas
+  lado a lado (1600×1000, panel abierto): deltas restantes = tarjetas densas,
+  panel de releases, acciones inspector, contadores de pestañas, sidebar,
+  h2 duplicado.
+- L5 (2026-10-13, usuario, decisión): **"Rediseño de tarjetas (recomendado)"**
+  — S7/S8 de este doc; pills de pipeline y acciones quedan para después.
 
 ## Anexo — inventario de pantallas (recuperado de opencode.db)
 | # | Título | id |

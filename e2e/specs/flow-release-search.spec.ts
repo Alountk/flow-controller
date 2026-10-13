@@ -39,7 +39,7 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // Nav link (Sidebar.tsx NAV_ITEMS, label "Películas"), then the section
   // heading (Peliculas.tsx, <h2>Películas</h2>).
   await app.getByRole('link', { name: /Películas/ }).click();
-  await expect(app.getByRole('heading', { level: 2, name: 'Películas' })).toBeVisible({ timeout: 15000 });
+  await expect(app.getByRole('heading', { level: 1, name: 'Películas' })).toBeVisible({ timeout: 15000 });
 
   // The wanted card lives in the Faltantes sub-view: the old page opened on
   // its missing tab, the section opens on Biblioteca — one click restores

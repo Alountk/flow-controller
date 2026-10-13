@@ -904,11 +904,6 @@ export function Series() {
 
   return (
     <section className="section-shell sec-series">
-      <header className="sec-header">
-        <h2>Series</h2>
-        <p>Aquí viven tus series: biblioteca, faltantes, estrenos y calidad en una sola vista.</p>
-      </header>
-
       <div className="sec-subtabs" role="tablist" aria-label="Sub-vistas de Series">
         {SUB_VIEWS.map((s) => (
           <button
