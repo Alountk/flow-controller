@@ -79,7 +79,6 @@ const errorChipSites: Array<[file: string, selector: string]> = [
   ['pages/Sections.css', '.sec-pill-bad'],
   ['pages/Seguimiento.css', '.sg-pill-failed'],
   ['pages/MediaMixer.css', '.mixer-status-error'],
-  ['features/pipeline-visual/PipelineVisual.css', '.node-state.offline'],
   ['features/auto-copy/AutoCopyPanel.css', '.auto-copy-badge.failed'],
   ['pages/Prototypes.css', '.proto-badge.discarded'],
 ]
@@ -99,7 +98,6 @@ const dimChipSites: Array<[file: string, selector: string]> = [
   ['pages/MediaMixer.css', '.mixer-status-cancelled'],
   ['pages/MediaMixer.css', '.mixer-status-pending'],
   ['features/auto-copy/AutoCopyPanel.css', '.auto-copy-badge.skip'],
-  ['features/pipeline-visual/PipelineVisual.css', '.node-state.unknown'],
 ]
 
 describe('T3 — dim chips over dim tints use 70% --text color-mix', () => {

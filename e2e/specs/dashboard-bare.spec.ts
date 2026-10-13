@@ -13,7 +13,7 @@ test('shows the honest empty state and gates the arr-dependent pages', async ({ 
   await login(app, 'test-key');
 
   // Dashboard rendered (config loaded, key accepted).
-  await expect(app.getByRole('heading', { name: 'Resumen del sistema' })).toBeVisible();
+  await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
 
   // /api/services answered "nothing configured" — the same answer that
   // gates the nav. Presence first, so the absence check below is meaningful.

@@ -30,6 +30,21 @@ describe('Topbar', () => {
     expect(container.querySelector('.topbar-time')).not.toBeInTheDocument()
   })
 
+  it('renders the design subtitle when provided and omits it otherwise', () => {
+    const { rerender, container } = render(
+      <Topbar
+        title="Dashboard"
+        subtitle="Vista general del servidor multimedia"
+        loading={false}
+        lastUpdated={null}
+      />,
+    )
+
+    expect(screen.getByText('Vista general del servidor multimedia')).toBeInTheDocument()
+    rerender(<Topbar title="Películas" loading={false} lastUpdated={null} />)
+    expect(container.querySelector('.topbar-subtitle')).not.toBeInTheDocument()
+  })
+
   it('renders the right slot content', () => {
     render(
       <Topbar

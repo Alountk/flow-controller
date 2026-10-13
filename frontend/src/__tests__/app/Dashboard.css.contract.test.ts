@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs'
 
 // Vitest runs from the frontend package root (cwd); jsdom rewrites
 // import.meta.url to a non-file URL, so resolve the real file via cwd.
-const css = readFileSync('src/features/pipeline-visual/PipelineVisual.css', 'utf8')
+// The rules moved here from features/pipeline-visual/PipelineVisual.css when
+// the flow graph was removed (design 01).
+const css = readFileSync('src/app/Dashboard.css', 'utf8')
 
 /** Drop comments so commented-out CSS cannot satisfy the contract. */
 function stripComments(source: string): string {
@@ -91,7 +93,7 @@ function blockAt(maxWidth: number): MediaBlock | undefined {
   return blocks.find((b) => new RegExp(`max-width:\\s*${maxWidth}px`).test(b.condition))
 }
 
-describe('PipelineVisual.css responsive dashboard contract', () => {
+describe('Dashboard.css responsive contract', () => {
   it('defaults the dashboard grid to four columns', () => {
     expect(countColumns(gridColumns(topLevelRuleBody('.dashboard-grid')))).toBe(4)
   })

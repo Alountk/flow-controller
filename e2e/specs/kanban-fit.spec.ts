@@ -79,7 +79,7 @@ test('the Seguimiento cards fit their columns', async ({ app }) => {
   // login() returns the moment the button is clicked, but the key is only
   // stored after the async verification answers. Navigating before that
   // reloads the app with no key and drops us back on the AuthGate.
-  await expect(app.getByRole('heading', { name: 'Resumen del sistema' })).toBeVisible();
+  await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
 
   await app.goto('/seguimiento');
 
@@ -106,7 +106,7 @@ test('the Seguimiento cards fit their columns', async ({ app }) => {
 
 test('the view is the board and the tail — and the board alone scrolls', async ({ app }) => {
   await login(app, 'test-key');
-  await expect(app.getByRole('heading', { name: 'Resumen del sistema' })).toBeVisible();
+  await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
 
   await app.goto('/seguimiento');
   await expect(app.locator('.sg-ops')).toBeVisible();
@@ -152,7 +152,7 @@ test('the view is the board and the tail — and the board alone scrolls', async
 
 test('the board and the tail hold a fixed 70/30 split', async ({ app }) => {
   await login(app, 'test-key');
-  await expect(app.getByRole('heading', { name: 'Resumen del sistema' })).toBeVisible();
+  await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
 
   await app.goto('/seguimiento');
   await expect(app.locator('.sg-ops')).toBeVisible();

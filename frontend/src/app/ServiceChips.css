@@ -1,0 +1,43 @@
+/* ---- Service chips (Stitch 01: topbar service status) ---- */
+
+.service-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  white-space: nowrap;
+}
+
+.service-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* Same tint recipe as the Seguimiento pills (verified contrast, #191). */
+.service-chip.ok {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+}
+
+.service-chip.bad {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  color: var(--bad-text);
+}
+
+.service-chip.unknown {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+}

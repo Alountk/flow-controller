@@ -11,7 +11,7 @@ import { test, expect, login } from '../fixtures/app';
 test('a correct key unlocks the dashboard', async ({ app }) => {
   await login(app, 'test-key');
 
-  await expect(app.getByRole('heading', { name: 'Resumen del sistema' })).toBeVisible();
+  await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
 });
 
 test('a wrong key is rejected with an alert', async ({ app }) => {
@@ -19,5 +19,5 @@ test('a wrong key is rejected with an alert', async ({ app }) => {
 
   await expect(app.getByRole('alert')).toContainText('API key incorrecta');
   // The rejection must not leak through to the app.
-  await expect(app.getByRole('heading', { name: 'Resumen del sistema' })).toHaveCount(0);
+  await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toHaveCount(0);
 });

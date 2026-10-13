@@ -4,11 +4,14 @@ import { AuthGate } from './AuthGate.tsx'
 import { SetupPage } from '../pages/SetupPage.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { Topbar } from './Topbar.tsx'
-import { PipelineVisual } from '../features/pipeline-visual/PipelineVisual.tsx'
 import { FileManager } from '../features/file-manager/FileManager.tsx'
+import './Dashboard.css'
 import { Prototypes } from '../pages/Prototypes.tsx'
 import { Settings } from '../features/settings/Settings.tsx'
 import { DiskSpace } from '../pages/DiskSpace.tsx'
+import { ServiceChips } from './ServiceChips.tsx'
+import { DashboardCards } from './DashboardCards.tsx'
+import { IncidentsBand } from './IncidentsBand.tsx'
 import { MediaMixer } from '../pages/MediaMixer.tsx'
 import { Peliculas } from '../pages/Peliculas.tsx'
 import { Series } from '../pages/Series.tsx'
@@ -34,6 +37,8 @@ import {
   type ServiceKey,
   type TraceResponse,
   type ConfigResponse,
+  type DownloadsResponse,
+  type DiskResponse,
 } from '../shared/types.ts'
 import type { Page } from './Sidebar.tsx'
 
@@ -99,6 +104,9 @@ function App() {
   // above them because they gate on `connected`.
   const eventStream = useEventStream(configData?.auth_required ?? true)
 
+  // Hoisted with the queries: the dashboard-only readers below gate on it.
+  const [page, setPage] = usePageRoute()
+
   const { data, error, isPending } = useQuery<StatusResponse>({
     queryKey: ['status'],
     queryFn: () => fetchJson('/api/status'),
@@ -122,6 +130,24 @@ function App() {
     queryFn: () => fetchJson('/api/actions'),
     refetchInterval: 60000,
     enabled: authenticated,
+  })
+
+  // Dashboard-only readers (Stitch 01): the downloads snapshot feeds the
+  // "Descargas atascadas" card (the `kind:"downloads"` event invalidates this
+  // key; the 10 s poll is the fallback), the disk volumes feed "Espacio en
+  // disco" — the DiskSpace page shares the ['disk'] key when you open it.
+  const { data: downloadsData } = useQuery<DownloadsResponse>({
+    queryKey: ['downloads'],
+    queryFn: () => fetchJson('/api/downloads'),
+    refetchInterval: eventStream.connected ? false : 10000,
+    enabled: authenticated && page === 'dashboard',
+  })
+
+  const { data: diskData } = useQuery<DiskResponse>({
+    queryKey: ['disk'],
+    queryFn: () => fetchJson('/api/disk'),
+    refetchInterval: 30000,
+    enabled: authenticated && page === 'dashboard',
   })
 
   // A fresh install has no key to authenticate with, so it gets the setup page
@@ -181,8 +207,6 @@ function App() {
     return () => setUnauthorizedHandler(null)
   }, [])
 
-  const [page, setPage] = usePageRoute()
-
   const developer = configData?.developer ?? false
 
   const handleActionDone = useCallback(() => {
@@ -219,14 +243,6 @@ function App() {
   // `every` on an empty list is true, which would report an empty pipeline as
   // healthy. Nothing configured is not the same as everything working.
   const nothingConfigured = servicesReady && services.length === 0
-  const allOnline = services.length > 0 && services.every((s) => s.state === 'online')
-  const anyOffline = services.some((s) => s.state === 'offline')
-  const broken = services.find((s) => s.state === 'offline')
-
-  const downloading = traceData?.summary?.downloading ?? 0
-  const importBlocked = traceData?.summary?.import_blocked ?? 0
-  const failed = traceData?.summary?.failed ?? 0
-  const completed = traceData?.summary?.downloaded ?? 0
 
   // Waiting on /api/config, or validating a remembered key.
   if (checkingStored) {
@@ -260,6 +276,10 @@ function App() {
             title={PAGE_TITLES[page]}
             loading={isPending}
             lastUpdated={data ? Date.now() : null}
+            right={page === 'dashboard' ? <ServiceChips services={services} /> : undefined}
+            subtitle={
+              page === 'dashboard' ? 'Vista general del servidor multimedia' : undefined
+            }
           />
 
           <div className="content-and-queue">
@@ -279,76 +299,28 @@ function App() {
               )}
               {page === 'dashboard' && (
                 <>
-                  <div className="content-header">
-                    <h1>Resumen del sistema</h1>
-                    <p>Estado actual del pipeline de media y actividad reciente</p>
-                  </div>
-
                   {nothingConfigured ? (
                     <div className="wanted-empty" role="alert">
                       No hay ningún servicio configurado todavía. Ve a <strong>Configuración</strong> para
                       añadir la URL y la API key de Radarr, Sonarr o aMuTorrent.
                     </div>
-                  ) : (
-                    <PipelineVisual services={services} />
-                  )}
+                  ) : null}
 
                   {error && <div className="error-box">Error de conexión con el backend: {error.message}</div>}
 
-                  {!nothingConfigured && (
-                  <div className={`flow-banner ${allOnline ? 'ok' : anyOffline ? 'broken' : ''}`}>
-                    <span className={`flow-big-dot ${allOnline ? 'ok' : 'broken'}`} />
-                    <div>
-                      <div className="flow-title">
-                        {allOnline
-                          ? 'Flujo operativo'
-                          : anyOffline
-                            ? `Flujo cortado en ${broken?.label ?? 'servicio'}`
-                            : 'Comprobando servicios…'}
-                      </div>
-                      <div className="flow-desc">
-                        {allOnline
-                          ? 'Los servicios configurados responden correctamente.'
-                          : anyOffline
-                            ? broken?.reason
-                            : 'Esperando la primera comprobación.'}
-                      </div>
-                    </div>
-                  </div>
-                  )}
+                  <DashboardCards
+                    downloads={downloadsData?.downloads ?? []}
+                    disk={diskData}
+                    summary={traceData?.summary}
+                    traces={traceData?.traces ?? []}
+                    services={services}
+                    onOpenSeguimiento={() => setPage('seguimiento')}
+                  />
 
-                  <div className="dashboard-grid">
-                  <div className="dash-card">
-                    <span className="dash-label">Descargando</span>
-                    <span className="dash-value accent">{downloading}</span>
-                    <span className="dash-sub">activas</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="dash-card"
-                    onClick={() => setPage('seguimiento')}
-                    title="Ver el seguimiento de las descargas"
-                  >
-                    <span className="dash-label">Stuck</span>
-                    <span className="dash-value warn">{importBlocked}</span>
-                    <span className="dash-sub">atención</span>
-                  </button>
-                  <div className="dash-card">
-                    <span className="dash-label">Fallidas</span>
-                    <span className="dash-value bad">{failed}</span>
-                    <span className="dash-sub">últimas 24h</span>
-                  </div>
-                  <div className="dash-card">
-                    <span className="dash-label">Completadas</span>
-                    <span className="dash-value ok">{completed}</span>
-                    <span className="dash-sub">esta semana</span>
-                  </div>
-                </div>
-
-                <div className="legend">
-                  <span><span className="dot" style={{ background: 'var(--ok)' }} /> Servicio online</span>
-                  <span><span className="dot" style={{ background: 'var(--bad)' }} /> Servicio offline / flujo cortado</span>
-                </div>
+                  <IncidentsBand
+                    summary={traceData?.summary}
+                    onOpenSeguimiento={() => setPage('seguimiento')}
+                  />
               </>
             )}
 

@@ -30,7 +30,7 @@ test('the stub listing renders rows and the Biblioteca sub-view is reachable', a
 
   // Section heading — Peliculas.tsx, <h2>Películas</h2>. The Topbar's page
   // title is a span, so this is the only heading that matches.
-  await expect(app.getByRole('heading', { name: 'Películas' })).toBeVisible({ timeout: 15000 });
+  await expect(app.getByRole('heading', { level: 2, name: 'Películas' })).toBeVisible({ timeout: 15000 });
 
   // The section opens on Biblioteca; the missing list is the Faltantes
   // sub-view — the old page's default tab, now one click away.
