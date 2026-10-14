@@ -76,6 +76,22 @@ usuario eligió "Diseño sin tabla primero" en el port 01.
 - 2026-10-14: doc creada antes de la primera escritura; exploración de fuentes
   completada (operations schema sqlite_history.py:30-52, recent_operations:318,
   downloads_cache, queue/status como referencia de vocabulario).
+- 2026-10-14: **T1 [x]** commit `8d58eaf` — `GET /api/activity` (use case
+  activity.py: merge operations+downloads, at DESC, límite 1-50 default 10,
+  degradación independiente por fuente, service solo si ∈ {radarr,sonarr,
+  amutorrent}; ruta thin + registro en app.py) + ratchet MAX_LEGACY_LOC
+  2750→2751 con comentario dated/owned (+1 = la línea de import). RED 8→GREEN
+  8; **suite backend 1128/1128**. Lección de harness: `return_value` para
+  listas en mocks de patch (`side_effect=[ops]` devolvía por llamada).
+- 2026-10-14: **T2 [x]** commit `39a688c` — `ActivityTable` (columnas del
+  diseño, vocabulario con precedencia de Seguimiento, desconocidos→crudo,
+  filtro client-side, pie S4) + tipos ActivityItem/ActivityResponse + CSS
+  `.act-*`. RED 1→GREEN 10 tests; suite frontend 566/566, tsc 0, eslint 0.
+- 2026-10-14: **T3 [x]** commit `0e86005` — wiring: query `['activity']`
+  dashboard-only (SSE-gated, fallback 10s) tras la banda, invalidaciones SSE
+  (downloads y task-conocidos) preservando el contrato de canal desconocido,
+  gate 10000/false. RED 5→GREEN; **suite frontend 570/570**, tsc 0, eslint 0.
+  Lección: `screen` sin importar cae en `window.screen` del navegador.
 
 ## Log
 - L1 (2026-10-14, usuario): "continua" → pregunta de siguiente hito → eligió
