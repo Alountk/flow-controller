@@ -109,6 +109,8 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
       if (!payload?.channel) return
       const keyOf = CHANNEL_KEYS[payload.channel]
       if (!keyOf) return // no query key exists for this channel
+      // The activity table follows operations, which move with tasks (S6).
+      void queryClient.invalidateQueries({ queryKey: ['activity'] })
       void queryClient.invalidateQueries({ queryKey: keyOf(payload) })
     }
 
@@ -123,10 +125,10 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
     }
 
     const onDownloads = () => {
-      // The dashboard card reads ['downloads'] (Stitch 01), so the backend's
-      // downloads-snapshot event finally has a real key to accelerate — the
-      // 10 s poll in App stays as the fallback, like every covered query.
+      // The dashboard card reads ['downloads'] and the activity table follows
+      // the same snapshot (S6) — both keys accelerate, the polls are fallback.
       void queryClient.invalidateQueries({ queryKey: ['downloads'] })
+      void queryClient.invalidateQueries({ queryKey: ['activity'] })
     }
 
     source.addEventListener('open', onOpen)

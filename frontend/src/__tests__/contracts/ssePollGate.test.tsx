@@ -499,6 +499,20 @@ describe('SSE gates the ambient polls (B2)', () => {
     await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0))
     expect(intervalFor(client, ['status'])).toBe(5000)
     expect(intervalFor(client, ['trace'])).toBe(15000)
+    expect(intervalFor(client, ['activity'])).toBe(10000)
+  })
+
+  it('turns the activity poll off while the stream is connected (S6)', async () => {
+    stubAppFetch()
+    vi.stubGlobal('EventSource', MockEventSource)
+    const client = makeClient()
+    await mountApp(client)
+
+    await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0))
+    const source = MockEventSource.instances[MockEventSource.instances.length - 1]
+    act(() => source.dispatch('open'))
+
+    await waitFor(() => expect(intervalFor(client, ['activity'])).toBe(false))
   })
 
   it('keeps 5000/15000 when the environment has no EventSource at all', async () => {

@@ -626,6 +626,28 @@ export interface DownloadsResponse {
   updated_at: number
 }
 
+/** Mirrors GET /api/activity (the dashboard's recent-activity table,
+ *  Stitch 01 §3). `kind` selects which optional fields carry meaning:
+ *  operations own `op_type`/`import_status`, downloads own `problem`; the
+ *  frontend owns the labels (states arrive raw). */
+export interface ActivityItem {
+  kind: 'operation' | 'download'
+  at: number
+  service: string | null
+  name: string
+  destination: string | null
+  size_bytes: number
+  status: string
+  import_status: string
+  op_type: string
+  problem?: boolean
+}
+
+export interface ActivityResponse {
+  items: ActivityItem[]
+  updated_at: number
+}
+
 export interface DiskVolume {
   name: string
   path: string

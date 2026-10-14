@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../../app/App.tsx'
 import { setUnauthorizedHandler } from '../../shared/api/auth.ts'
@@ -58,6 +58,22 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('dashboard wiring', () => {
+  it('renders the recent-activity table on the dashboard', async () => {
+    renderApp()
+
+    // Wiring, not the component itself (activityTable.test pins the cells):
+    // the dashboard mounts the table after the incidents band.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', {
+          name: 'Actividad reciente de transferencias e indexación',
+        }),
+      ).toBeInTheDocument(),
+    )
+  })
 })
 
 describe('topbar shell (design 01 + 03)', () => {
