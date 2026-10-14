@@ -58,7 +58,10 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 2730 -> 2750 (sse-poll-off B2): `subscriber_count` on the bus (it must stay
 #: top-level for the same no-cycle reason above) and the `trace_refresher`
 #: entry in the lifespan tuple of `app.py`. Owned by the sse-poll-off PR.
-MAX_LEGACY_LOC = 2750
+#: 2750 -> 2751 (stitch-actividad T1): the `activity_router` registration in
+#: `app.py` — its import line (+1; the tuple entry fit on the existing line).
+#: Router wiring, not migration debt. Owned by the stitch-actividad PR.
+MAX_LEGACY_LOC = 2751
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:
