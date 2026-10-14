@@ -253,6 +253,25 @@ describe('event → query invalidation', () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['downloads'] }))
   })
 
+  it('also invalidates the activity table for a downloads event (S6)', async () => {
+    const { invalidate } = setup()
+    const source = await openStream()
+
+    source.emit('downloads', { kind: 'downloads', version: 1728000000 })
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['activity'] }))
+  })
+
+  it('invalidates the activity table for any task event (S6)', async () => {
+    // Operations move when tasks move: the activity table follows both feeds.
+    const { invalidate } = setup()
+    const source = await openStream()
+
+    source.emit('task', { kind: 'task', channel: 'copy', task_id: 't-1', status: 'done' })
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['activity'] }))
+  })
+
   it('skips a channel with no query key instead of inventing one', async () => {
     const { invalidate } = setup()
     const source = await openStream()

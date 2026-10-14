@@ -12,6 +12,7 @@ import { DiskSpace } from '../pages/DiskSpace.tsx'
 import { ServiceChips } from './ServiceChips.tsx'
 import { DashboardCards } from './DashboardCards.tsx'
 import { IncidentsBand } from './IncidentsBand.tsx'
+import { ActivityTable } from './ActivityTable.tsx'
 import { MediaMixer } from '../pages/MediaMixer.tsx'
 import { Peliculas } from '../pages/Peliculas.tsx'
 import { Series } from '../pages/Series.tsx'
@@ -39,6 +40,7 @@ import {
   type ConfigResponse,
   type DownloadsResponse,
   type DiskResponse,
+  type ActivityResponse,
 } from '../shared/types.ts'
 import type { Page } from './Sidebar.tsx'
 
@@ -155,6 +157,16 @@ function App() {
     queryKey: ['disk'],
     queryFn: () => fetchJson('/api/disk'),
     refetchInterval: 30000,
+    enabled: authenticated && page === 'dashboard',
+  })
+
+  // Dashboard-only: the recent-activity table (Stitch 01 §3). The backend's
+  // downloads and task events invalidate this key (S6); the 10 s poll sleeps
+  // on the stream like every other covered query.
+  const { data: activityData } = useQuery<ActivityResponse>({
+    queryKey: ['activity'],
+    queryFn: () => fetchJson('/api/activity'),
+    refetchInterval: eventStream.connected ? false : 10000,
     enabled: authenticated && page === 'dashboard',
   })
 
@@ -325,6 +337,15 @@ function App() {
 
                   <IncidentsBand
                     summary={traceData?.summary}
+                    onOpenSeguimiento={() => setPage('seguimiento')}
+                  />
+
+                  <ActivityTable
+                    items={activityData?.items ?? []}
+                    updatedAt={activityData?.updated_at ?? Date.now() / 1000}
+                    onRefresh={() =>
+                      queryClient.invalidateQueries({ queryKey: ['activity'] })
+                    }
                     onOpenSeguimiento={() => setPage('seguimiento')}
                   />
               </>
