@@ -79,6 +79,43 @@ export function wantedEpisodeDetail(ep: WantedEpisode): MediaDetail {
   return { title: ep.series_title, meta, grab: grabOf(ep) }
 }
 
+/**
+ * The two claims a series row may add around its episode counts, derived
+ * ONLY from what the payload carries (the handoff's honesty rule):
+ *
+ * - `seasonSuffix` — " · N temporadas" when Sonarr reported a season count
+ *   (≥1); an absent or unusable value keeps the legacy line, word for word;
+ * - `completeness` — the verdict about `missing = episode_count −
+ *   episode_file_count`: counts that differ warn how many episodes are
+ *   missing, equal counts read complete, and no total at all (0/absent)
+ *   means NO verdict — with no total there is nothing to be complete about,
+ *   so no line is drawn and no number is invented.
+ *
+ * Shared by the section tree (SeriesTree) and the card fallback
+ * (CatalogListings) so the two row shapes can never disagree.
+ */
+export function seriesSummary(series: AllSeries): {
+  seasonSuffix: string
+  completeness: { text: string; tone: 'ok' | 'warn' } | null
+} {
+  const seasons = series.season_count
+  const seasonSuffix =
+    typeof seasons === 'number' && seasons >= 1 ? ` · ${seasons} temporadas` : ''
+  if (!(series.episode_count > 0) || typeof series.episode_file_count !== 'number') {
+    return { seasonSuffix, completeness: null }
+  }
+  // missing < 0 (more files than the count reports) still means nothing is
+  // missing — only a positive remainder is a "Faltan N…".
+  const missing = series.episode_count - series.episode_file_count
+  return {
+    seasonSuffix,
+    completeness:
+      missing > 0
+        ? { text: `Faltan ${missing} episodios para completar la serie`, tone: 'warn' }
+        : { text: 'Todos los episodios descargados', tone: 'ok' },
+  }
+}
+
 export function catalogSeriesDetail(series: AllSeries): MediaDetail {
   const meta: { label: string; value: string }[] = []
   pushYear(meta, series.year)

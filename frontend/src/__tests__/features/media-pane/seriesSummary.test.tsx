@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ComponentType } from 'react'
 import { Series } from '../../../pages/Series.tsx'
-import { renderCatalogSeries } from '../../../features/media-pane/components/CatalogListings.tsx'
 import type { AllSeries } from '../../../shared/types.ts'
 
 /**
@@ -17,8 +16,10 @@ import type { AllSeries } from '../../../shared/types.ts'
  * - "· N temporadas" appended to the episodes line ONLY when the payload
  *   carries `season_count` — absent means the legacy line, word for word.
  *
- * Both row variants are pinned: the sections' SectionRow path and the card
- * fallback `renderCatalogSeries` draws with `isSection: false`.
+ * The section-row path only: the card fallback (`renderCatalogSeries`,
+ * `isSection: false`) left the codebase with the cards (S2 — the Series view
+ * is the tree now), so the summary lines are pinned where the app draws
+ * them: through the Series page's SectionRow rows.
  */
 
 const baseSeries: AllSeries = {
@@ -69,25 +70,6 @@ function renderSection(Component: ComponentType) {
     <QueryClientProvider client={client}>
       <Component />
     </QueryClientProvider>,
-  )
-}
-
-/** The card fallback: the same branch MediaPane draws with variant 'page'. */
-function renderCard(series: AllSeries) {
-  return render(
-    renderCatalogSeries({
-      items: [series],
-      onScan: vi.fn(),
-      isPending: false,
-      isFetchingNextPage: false,
-      activeError: null,
-      serviceName: 'Sonarr',
-      loadMoreRef: { current: null },
-      rowProps: () => ({}),
-      selectableClass: '',
-      isSection: false,
-      openReleases: vi.fn(),
-    }),
   )
 }
 
@@ -169,43 +151,5 @@ describe('series summary · completeness line (SectionRow)', () => {
 
     expect(screen.getByText('Todos los episodios descargados')).toBeInTheDocument()
     expect(screen.queryByText(/episodios para completar/)).toBeNull()
-  })
-})
-
-describe('series summary · completeness line (card fallback)', () => {
-  it('warns under the episodes line when the counts differ', () => {
-    renderCard(baseSeries)
-
-    const line = screen.getByText('Faltan 6 episodios para completar la serie')
-    expect(line.className).toContain('wanted-complete-warn')
-    expect(document.querySelector('.wanted-ep-count')).not.toBeNull()
-  })
-
-  it('reads complete when every counted episode has its file', () => {
-    renderCard({ ...baseSeries, episode_file_count: 10 })
-
-    const line = screen.getByText('Todos los episodios descargados')
-    expect(line.className).toContain('wanted-complete-ok')
-  })
-
-  it('draws no completeness line when the total is 0', () => {
-    renderCard({ ...baseSeries, episode_count: 0, episode_file_count: 0 })
-
-    expect(document.querySelector('.wanted-complete')).toBeNull()
-    expect(screen.queryByText(/episodios para completar/)).toBeNull()
-    expect(screen.queryByText('Todos los episodios descargados')).toBeNull()
-  })
-
-  it('appends · N temporadas to the episodes line when the payload carries season_count', () => {
-    renderCard({ ...baseSeries, season_count: 3 })
-
-    expect(screen.getByText('4/10 episodios · 3 temporadas')).toBeInTheDocument()
-  })
-
-  it('keeps the legacy episodes line exactly when season_count is absent', () => {
-    renderCard(baseSeries)
-
-    expect(screen.getByText('4/10 episodios')).toBeInTheDocument()
-    expect(screen.queryByText(/temporadas/)).toBeNull()
   })
 })

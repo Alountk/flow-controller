@@ -12,8 +12,9 @@ import { Series } from '../../pages/Series.tsx'
  * - a row whose data carries a poster layers the real <img> over the
  *   CSS-drawn initials (alt="" — the title beside the box already names it,
  *   lazy — these lists paginate),
- * - a row whose data carries none (a series with "", an episode payload with
- *   no field at all) keeps the initials: no data, no image, never a guess,
+ * - the compact series node (S2) carries NO poster box at all — the card
+ *   left the Series view and the poster lives in the detail panel; the
+ *   initials path for "no data" stays pinned on the episode payload below,
  * - a URL that fails to load drops the image and leaves the gradient +
  *   initials underneath: no poster ever degrades to a blank box.
  */
@@ -133,13 +134,14 @@ describe('section rows · the mini-poster', () => {
     expect(img).toHaveAttribute('loading', 'lazy')
   })
 
-  it('keeps the initials on a row whose data carries no poster', async () => {
+  it('carries no poster box at all on the compact series node (S2)', async () => {
     renderSection(Series)
     await screen.findByText('Some Show')
 
-    const poster = posterBox()
-    expect(poster.querySelector('img')).toBeNull()
-    expect(poster.textContent).toBe('SS')
+    // S2 (user decision): the card leaves the Series view — no box, no
+    // initials, no image on the node. The old contract ("no poster data →
+    // initials, never a guess") stays pinned on the episode payload row.
+    expect(document.querySelector('.sec-row-poster')).toBeNull()
   })
 
   it('renders no image on an episode row: the payload carries none', async () => {

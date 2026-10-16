@@ -75,6 +75,11 @@ interface SectionRowProps {
   /** Design-03: the on-disk size at the right of the footer row, already
    *  formatted by the caller (absent → nothing, never "0 B" for unknown). */
   size?: string
+  /** S2 (stitch-series-tree): the compact series node of the tree carries NO
+   *  poster box at all — neither initials nor image (the poster lives in the
+   *  detail panel). Default false keeps movies, Faltantes and every pinned
+   *  row drawing their box. */
+  hidePoster?: boolean
   path?: string
   grabbed?: string | null
   grabbedDestination?: string | null
@@ -101,6 +106,7 @@ export function SectionRow({
   monitored,
   director,
   size,
+  hidePoster = false,
   path,
   grabbed,
   grabbedDestination,
@@ -114,24 +120,28 @@ export function SectionRow({
   const [posterFailed, setPosterFailed] = useState(false)
   return (
     <div className={`sec-row ${className}`} {...wiring}>
-      <span
-        className="sec-row-poster"
-        aria-hidden="true"
-        style={{ background: `linear-gradient(160deg, hsl(${hue} 46% 54%), hsl(${hue} 52% 14%))` }}
-      >
-        {posterInitials(title)}
-        {poster && !posterFailed && (
-          <img
-            className="sec-row-poster-img"
-            src={poster}
-            // The title sits right beside the box: the image adds nothing a
-            // screen reader should hear twice.
-            alt=""
-            loading="lazy"
-            onError={() => setPosterFailed(true)}
-          />
-        )}
-      </span>
+      {/* hidePoster (S2): the compact node draws no box at all. The hook
+          above stays unconditional; only the span is skipped. */}
+      {!hidePoster && (
+        <span
+          className="sec-row-poster"
+          aria-hidden="true"
+          style={{ background: `linear-gradient(160deg, hsl(${hue} 46% 54%), hsl(${hue} 52% 14%))` }}
+        >
+          {posterInitials(title)}
+          {poster && !posterFailed && (
+            <img
+              className="sec-row-poster-img"
+              src={poster}
+              // The title sits right beside the box: the image adds nothing a
+              // screen reader should hear twice.
+              alt=""
+              loading="lazy"
+              onError={() => setPosterFailed(true)}
+            />
+          )}
+        </span>
+      )}
       <span className="sec-row-body">
         <span className="sec-row-top">
           <span className="sec-row-name">{title}</span>

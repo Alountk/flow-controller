@@ -1,18 +1,18 @@
-import type { WantedMovie, AllMovie, AllSeries } from '../../../shared/types.ts'
+import type { WantedMovie, AllMovie } from '../../../shared/types.ts'
 import { formatGrabMark } from '../../../shared/utils/grabMark.ts'
 import { formatBytes } from '../../../shared/utils/text.ts'
 import { SectionRow, catalogRowStatus } from './SectionRow.tsx'
 import { ListingLoading, ListingError, ListingEmpty } from './ListingStates.tsx'
-import { catalogMovieDetail, catalogMovieRelease, catalogSeriesDetail, catalogSeriesRelease } from '../rowData.ts'
-import type { ListingViewProps, ScanSeriesInput } from '../types.ts'
+import { catalogMovieDetail, catalogMovieRelease } from '../rowData.ts'
+import type { ListingViewProps } from '../types.ts'
 
 /**
- * The "all" branch of the pane — the whole catalogue, as movie cards or
- * series cards. Called as plain render functions, not JSX components, on
- * purpose: the four branches sit in ONE slot of the pane's tree, so a
- * component boundary would remount the keyed rows (and drop their state)
- * whenever the filter flips. A function call splices the exact same
- * elements into that slot — zero drift from the monolith.
+ * The "all" branch of the pane — the movie catalogue, as cards. (Series left
+ * this file with the S2 tree: see `SeriesTree.tsx`.) Called as plain render
+ * functions, not JSX components, on purpose: the branches sit in ONE slot of
+ * the pane's tree, so a component boundary would remount the keyed rows (and
+ * drop their state) whenever the filter flips. A function call splices the
+ * exact same elements into that slot — zero drift from the monolith.
  */
 
 interface CatalogMoviesProps extends ListingViewProps {
@@ -171,186 +171,4 @@ export function renderCatalogMovies({
     return <ListingError serviceName={serviceName} error={activeError} />
   }
   return <ListingEmpty message="No hay películas en el catálogo" />
-}
-
-interface CatalogSeriesProps extends ListingViewProps {
-  items: AllSeries[]
-  onScan: (series: ScanSeriesInput) => void
-}
-
-/**
- * The two claims a series row may add around its episode counts, derived
- * ONLY from what the payload carries (the handoff's honesty rule):
- *
- * - `seasonSuffix` — " · N temporadas" when Sonarr reported a season count
- *   (≥1); an absent or unusable value keeps the legacy line, word for word;
- * - `completeness` — the verdict about `missing = episode_count −
- *   episode_file_count`: counts that differ warn how many episodes are
- *   missing, equal counts read complete, and no total at all (0/absent)
- *   means NO verdict — with no total there is nothing to be complete about,
- *   so no line is drawn and no number is invented.
- */
-function seriesSummary(series: AllSeries): {
-  seasonSuffix: string
-  completeness: { text: string; tone: 'ok' | 'warn' } | null
-} {
-  const seasons = series.season_count
-  const seasonSuffix =
-    typeof seasons === 'number' && seasons >= 1 ? ` · ${seasons} temporadas` : ''
-  if (!(series.episode_count > 0) || typeof series.episode_file_count !== 'number') {
-    return { seasonSuffix, completeness: null }
-  }
-  // missing < 0 (more files than the count reports) still means nothing is
-  // missing — only a positive remainder is a "Faltan N…".
-  const missing = series.episode_count - series.episode_file_count
-  return {
-    seasonSuffix,
-    completeness:
-      missing > 0
-        ? { text: `Faltan ${missing} episodios para completar la serie`, tone: 'warn' }
-        : { text: 'Todos los episodios descargados', tone: 'ok' },
-  }
-}
-
-export function renderCatalogSeries({
-  items,
-  onScan,
-  isPending,
-  isFetchingNextPage,
-  activeError,
-  serviceName,
-  loadMoreRef,
-  rowProps,
-  selectableClass,
-  isSection,
-  openReleases,
-}: CatalogSeriesProps) {
-  if (isPending) {
-    return <ListingLoading message="Cargando catálogo de series..." />
-  }
-  if (items.length > 0) {
-    return (
-      <>
-        <div className="wanted-grid">
-          {items.map((series) => {
-            const grabbed = formatGrabMark(series.grabbed_at, series.grabbed_destination)
-            const summary = seriesSummary(series)
-            const actions = (
-              <>
-                <button
-                  className="action-btn search-item"
-                  onClick={() => openReleases(catalogSeriesRelease(series))}
-                >
-                  🔍 Buscar
-                </button>
-                <button
-                  className="action-btn scan-folder-btn"
-                  onClick={() => onScan({ id: series.id, title: series.title })}
-                >
-                  📁 En carpeta
-                </button>
-              </>
-            )
-            if (isSection) {
-              return (
-                <SectionRow
-                  key={series.id}
-                  className={`wanted-card${selectableClass}`}
-                  wiring={rowProps(
-                    series.id,
-                    () => catalogSeriesDetail(series),
-                    () => catalogSeriesRelease(series),
-                  )}
-                  title={series.title}
-                  year={series.year}
-                  status={catalogRowStatus(series.has_file, series.path_exists)}
-                  poster={series.remotePoster || undefined}
-                  // Sonarr's list carries no quality: no chip, never a
-                  // guessed one (the Calidad view says so on screen).
-                  monitored={series.monitored}
-                  path={series.path || undefined}
-                  grabbed={grabbed}
-                  grabbedDestination={series.grabbed_destination}
-                  extra={
-                    series.episode_count > 0 ? (
-                      <span className="sec-row-ep-count">
-                        {series.episode_file_count}/{series.episode_count} episodios{summary.seasonSuffix}
-                      </span>
-                    ) : undefined
-                  }
-                  extraLine={
-                    summary.completeness && (
-                      <span
-                        className={`sec-row-complete sec-row-complete-${summary.completeness.tone}`}
-                      >
-                        {summary.completeness.text}
-                      </span>
-                    )
-                  }
-                >
-                  {actions}
-                </SectionRow>
-              )
-            }
-            return (
-              <div
-                key={series.id}
-                {...rowProps(
-                  series.id,
-                  () => catalogSeriesDetail(series),
-                  () => catalogSeriesRelease(series),
-                )}
-                className={`wanted-card ${series.has_file && series.path_exists ? 'status-ok' : 'status-error'}${grabbed ? ' status-grabbed' : ''}${selectableClass}`}
-              >
-                {series.remotePoster && (
-                  <img className="wanted-poster" src={series.remotePoster} alt={series.title} />
-                )}
-                <div className="wanted-info">
-                  <div className="wanted-title">
-                    {series.title} {series.year && <span className="wanted-year">({series.year})</span>}
-                  </div>
-                  <div className="wanted-status-badge">
-                    {series.has_file && series.path_exists ? (
-                      <span className="badge-ok">✓ Configurada</span>
-                    ) : !series.has_file ? (
-                      <span className="badge-error">✗ Sin archivos</span>
-                    ) : (
-                      <span className="badge-error">✗ Ruta no encontrada</span>
-                    )}
-                  </div>
-                  {series.episode_count > 0 && (
-                    <div className="wanted-ep-count">
-                      {series.episode_file_count}/{series.episode_count} episodios{summary.seasonSuffix}
-                    </div>
-                  )}
-                  {summary.completeness && (
-                    <div className={`wanted-complete wanted-complete-${summary.completeness.tone}`}>
-                      {summary.completeness.text}
-                    </div>
-                  )}
-                  {/* A series card is marked by a grab of ANY of its
-                      episodes: "we asked for something from this series". */}
-                  {grabbed && (
-                    <div className="wanted-grabbed" title={series.grabbed_destination ?? undefined}>
-                      {grabbed}
-                    </div>
-                  )}
-                  <div className="wanted-card-actions">
-                    {actions}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        <div ref={loadMoreRef} className="wanted-infinite-sentinel">
-          {isFetchingNextPage && <div className="wanted-loading-more">Cargando más series...</div>}
-        </div>
-      </>
-    )
-  }
-  if (activeError) {
-    return <ListingError serviceName={serviceName} error={activeError} />
-  }
-  return <ListingEmpty message="No hay series en el catálogo" />
 }

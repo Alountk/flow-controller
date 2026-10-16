@@ -7,7 +7,16 @@ import { apiFetch } from '../shared/api/auth.ts'
 import { browsePath } from '../shared/api/files.ts'
 import { fetchSeriesEpisodes } from '../shared/api/wanted.ts'
 import { episodeTagKey } from '../shared/utils/episodeTag.ts'
+import {
+  episodeFileState,
+  episodeIdentity,
+  episodeState,
+  groupBySeason,
+  qualityBadge,
+  seasonLabel,
+} from '../shared/utils/episodeView.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
+import { errorMessage } from '../shared/utils/text.ts'
 import type { AllSeries, BrowseResponse, CalendarItem, PaginatedResponse, SeriesEpisode } from '../shared/types.ts'
 import './Sections.css'
 
@@ -98,10 +107,6 @@ function seriesClass(series: AllSeries, folders: RoutingFolders): QualityClass {
   if (inFolder(series.path, folders.path4k)) return '4K'
   if (inFolder(series.path, folders.path3d)) return '3D'
   return 'en biblioteca'
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'error desconocido'
 }
 
 /** The two routing folders, from GET /api/settings — the same document
@@ -626,57 +631,14 @@ function PanelEpisodes({
   return <EpisodesList seriesId={facts.seriesId} marked={marked} onMark={onMark} />
 }
 
-/** Identity of an episode row: its own id when the payload carries one, the
- *  S##E## pair otherwise — never the array position, which shifts with the
- *  season filter. */
-function episodeIdentity(ep: SeriesEpisode): string {
-  return ep.id != null ? `ep:${ep.id}` : `ep:${ep.season_number ?? 0}x${ep.episode_number ?? 0}`
-}
-
-function seasonLabel(season: number): string {
-  return `Season ${String(season).padStart(2, '0')}`
-}
-
-/** The row's own state, exactly as far as the payload states it: only an
- *  explicit `has_file` says anything. A file that exists but could not be
- *  read stays "En biblioteca"; a payload without the flag renders unknown —
- *  never a state nobody reported. */
-function episodeState(ep: SeriesEpisode): string {
-  if (ep.has_file === true) return 'En biblioteca'
-  if (ep.has_file === false) return 'Falta'
-  return '—'
-}
-
-/** The pill's tone: only an explicit `has_file` may colour it. Unknown stays
- *  untinted — a dash is not a state and must not be painted like one. */
+/** The pill's tone: only an explicit `has_file` may colour it, through the
+ *  one honest derivation the tree shares. Unknown stays untinted — a dash is
+ *  not a state and must not be painted like one. */
 function pillTone(ep: SeriesEpisode): string {
-  if (ep.has_file === true) return ' is-ok'
-  if (ep.has_file === false) return ' is-missing'
+  const state = episodeFileState(ep.has_file)
+  if (state === 'in-library') return ' is-ok'
+  if (state === 'missing') return ' is-missing'
   return ''
-}
-
-/** A quality badge, only when the payload states a quality. 4K is the one
- *  class Sonarr's name carries that we can trust: an episode has no `is3d`, so
- *  no 3D tag is ever invented here. */
-function qualityBadge(quality: string | null): { label: string; tone: string } | null {
-  if (!quality) return null
-  return { label: quality, tone: quality.toLowerCase().endsWith('2160p') ? ' is-4k' : '' }
-}
-
-/** Seasons in ascending order, each with the episodes that belong to it. */
-function groupBySeason(
-  episodes: SeriesEpisode[],
-): { season: number; episodes: SeriesEpisode[] }[] {
-  const bySeason = new Map<number, SeriesEpisode[]>()
-  for (const ep of episodes) {
-    const season = ep.season_number ?? 0
-    const group = bySeason.get(season)
-    if (group) group.push(ep)
-    else bySeason.set(season, [ep])
-  }
-  return [...bySeason.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([season, list]) => ({ season, episodes: list }))
 }
 
 /** One season header: its name, the year its episodes aired in (omitted when
@@ -709,7 +671,7 @@ function EpisodesList({
 }) {
   const [season, setSeason] = useState<number | 'todas'>('todas')
   const query = useQuery({
-    queryKey: ['panel-series-episodes', seriesId],
+    queryKey: ['series-episodes', seriesId],
     queryFn: () => fetchSeriesEpisodes(seriesId),
   })
   if (query.isPending) return <p className="sec-tab-note">Cargando episodios…</p>
