@@ -154,3 +154,14 @@ describe('ActivityTable · toolbar and footer (S3/S4)', () => {
     expect(onOpenSeguimiento).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('refresh guard (B-12)', () => {
+  it('shows "Actualizando…" disabled and refuses clicks while a refresh is in flight', () => {
+    const { onRefresh } = renderTable([operation], { isFetching: true })
+
+    const button = screen.getByRole('button', { name: 'Actualizando…' })
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(onRefresh).not.toHaveBeenCalled()
+  })
+})

@@ -52,10 +52,11 @@ import type { Page } from './Sidebar.tsx'
  * nobody noticed; the moment those routes started requiring the key, every
  * dashboard call failed with 401 for anyone who had one configured.
  *
- * It goes through `apiFetch` so a rejected key also re-prompts.
- */
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await apiFetch(url)
+ * It goes through `apiFetch` so a rejected key also re-prompts. `init` rides
+ * along so callers can pass an AbortSignal (B-12: the activity query hands
+ * React Query's signal to fetch through here). */
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await apiFetch(url, init)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json() as Promise<T>
 }
@@ -163,9 +164,11 @@ function App() {
   // Dashboard-only: the recent-activity table (Stitch 01 §3). The backend's
   // downloads and task events invalidate this key (S6); the 10 s poll sleeps
   // on the stream like every other covered query.
-  const { data: activityData } = useQuery<ActivityResponse>({
+  const { data: activityData, isFetching: activityFetching } = useQuery<ActivityResponse>({
     queryKey: ['activity'],
-    queryFn: () => fetchJson('/api/activity'),
+    // B-12: hand React Query's abort signal to the request, so cancelling a
+    // refetch aborts the stale GET instead of letting it run to completion.
+    queryFn: ({ signal }) => fetchJson('/api/activity', { signal }),
     refetchInterval: eventStream.connected ? false : 10000,
     enabled: authenticated && page === 'dashboard',
   })
@@ -343,6 +346,7 @@ function App() {
                   <ActivityTable
                     items={activityData?.items ?? []}
                     updatedAt={activityData?.updated_at ?? Date.now() / 1000}
+                    isFetching={activityFetching}
                     onRefresh={() =>
                       queryClient.invalidateQueries({ queryKey: ['activity'] })
                     }

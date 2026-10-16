@@ -8,6 +8,11 @@ interface ActivityTableProps {
   updatedAt: number
   onRefresh: () => void
   onOpenSeguimiento: () => void
+  /** B-12: in-flight refresh guard. While true the refresh button shows
+   *  "Actualizando…", stays disabled and its handler is detached — jsdom (and
+   *  a fast double-click) can fire a click on a disabled button, so the guard
+   *  lives in the handler wiring, not only in the attribute. */
+  isFetching?: boolean
 }
 
 type State = { label: string; tone: 'ok' | 'warn' | 'bad' | 'raw' }
@@ -65,6 +70,7 @@ export function ActivityTable({
   updatedAt,
   onRefresh,
   onOpenSeguimiento,
+  isFetching = false,
 }: ActivityTableProps) {
   const [filter, setFilter] = useState('')
   const needle = filter.trim().toLowerCase()
@@ -83,8 +89,13 @@ export function ActivityTable({
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
           />
-          <button type="button" className="act-refresh" onClick={onRefresh}>
-            Actualizar
+          <button
+            type="button"
+            className="act-refresh"
+            disabled={isFetching}
+            onClick={isFetching ? undefined : onRefresh}
+          >
+            {isFetching ? 'Actualizando…' : 'Actualizar'}
           </button>
         </div>
       </div>
