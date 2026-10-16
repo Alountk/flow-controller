@@ -224,6 +224,12 @@ button.dash-card:focus-visible {
   background: var(--bg);
 }
 
+/* B-12: a refresh in flight — no pointer affordance, visibly muted. */
+.act-refresh:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .act-scroll {
   overflow-x: auto;
 }
