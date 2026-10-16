@@ -233,3 +233,21 @@ def test_build_download_carries_status_messages():
 
     assert download["messages"] == ["algo"]
     assert download["source"] == "radarr"
+
+
+def test_build_download_carries_series_and_episode_ids():
+    """The episode tree crosses the queue per episode: Sonarr queue records
+    carry `seriesId`/`episodeId` and they must survive the mapping."""
+    download = _build_download("sonarr", _queue_item(seriesId=7, episodeId=42), None)
+
+    assert download["series_id"] == 7
+    assert download["episode_id"] == 42
+
+
+def test_build_download_omits_episode_ids_when_absent():
+    """Radarr records have no episode ids: omit the keys rather than serve
+    null — the `season_count` precedent (tests_series_season_count.py)."""
+    download = _build_download("radarr", _queue_item(), None)
+
+    assert "series_id" not in download
+    assert "episode_id" not in download

@@ -81,7 +81,7 @@ def _build_download(service_key: str, queue_item: dict, torrent: dict | None) ->
     for entry in queue_item.get("statusMessages") or []:
         messages.extend(entry.get("messages") or [])
 
-    return {
+    download = {
         "id": str(queue_item.get("id", "")),
         "source": service_key,
         "title": queue_item.get("title", ""),
@@ -104,6 +104,15 @@ def _build_download(service_key: str, queue_item: dict, torrent: dict | None) ->
         "leechers": torrent.get("num_leechs") if torrent else None,
         "torrent_state": torrent.get("state") if torrent else None,
     }
+    # Sonarr queue records carry the episode these ids belong to; Radarr
+    # records do not. Omit rather than null them — the `season_count`
+    # precedent (tests_series_season_count.py) — the episode tree crosses
+    # the queue by `episode_id` and absence must stay distinguishable.
+    if queue_item.get("seriesId") is not None:
+        download["series_id"] = queue_item["seriesId"]
+    if queue_item.get("episodeId") is not None:
+        download["episode_id"] = queue_item["episodeId"]
+    return download
 
 
 async def collect_downloads() -> dict:
