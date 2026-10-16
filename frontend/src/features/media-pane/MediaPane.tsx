@@ -7,7 +7,8 @@ import { useLoadMoreObserver } from './hooks/useLoadMoreObserver.ts'
 import { FilterBar } from './components/FilterBar.tsx'
 import { ScanModal, type ScanItem } from './components/ScanModal.tsx'
 import { renderMissingMovies, renderMissingEpisodes } from './components/MissingListings.tsx'
-import { renderCatalogMovies, renderCatalogSeries } from './components/CatalogListings.tsx'
+import { renderCatalogMovies } from './components/CatalogListings.tsx'
+import { SeriesTree } from './components/SeriesTree.tsx'
 import type {
   MediaKind,
   MediaFilter,
@@ -212,7 +213,9 @@ export function MediaPane({
         ) : isMovies ? (
           renderCatalogMovies({ ...view, items: catalogMovies, onScan: handleScanForMovie })
         ) : (
-          renderCatalogSeries({ ...view, items: catalogSeries, onScan: handleScanForSeries })
+          // Series' left list is the tree now (stitch-series-tree, S2): the
+          // same rows, each wearing its disclosure and its lazy episodes.
+          <SeriesTree {...view} items={catalogSeries} onScan={handleScanForSeries} />
         )}
       </div>
 

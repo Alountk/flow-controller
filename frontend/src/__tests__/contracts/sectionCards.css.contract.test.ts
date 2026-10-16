@@ -77,3 +77,30 @@ describe('Section cards (design 03, S7)', () => {
     expect(body).toMatch(/border-top:\s*1px solid/)
   })
 })
+
+/**
+ * S2 (user decision, stitch-series-tree): the cards leave the Series view —
+ * the series node inside the tree is FLAT (no frame, no fill, no radius) and
+ * its title shrinks to the prototype's summary-line size. The card rules
+ * above stay untouched (movies still wear them); these read the TREE-scoped
+ * rules only, so a flat node cannot be reintroduced as a card by accident,
+ * and the selected node keeps its accent frame (master–detail stays visible).
+ */
+describe('Series tree node (stitch-series-tree, S2)', () => {
+  it('flattens the node: no card frame, no fill, no radius', () => {
+    const body = topLevelRuleBody('.st-tree .sec-row')
+    expect(body).toMatch(/border:\s*none/)
+    expect(body).toMatch(/background:\s*transparent/)
+    expect(body).toMatch(/border-radius:\s*0/)
+  })
+
+  it('still frames the selected node with the accent border', () => {
+    const body = topLevelRuleBody(".st-tree .sec-row[aria-current='true']")
+    expect(body).toMatch(/border:\s*2px solid var\(--accent\)/)
+  })
+
+  it('sizes the title like the prototype summary line (13.5px)', () => {
+    const body = topLevelRuleBody('.st-tree .sec-row-name')
+    expect(body).toMatch(/font-size:\s*13\.5px/)
+  })
+})

@@ -1,3 +1,12 @@
+/**
+ * One human sentence for a failed fetch, shared by the detail panel, the
+ * Calidad views and the series tree: an Error carries its own message and
+ * anything else is honestly "error desconocido", never a guessed reason.
+ */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'error desconocido'
+}
+
 /** Case- and accent-insensitive compare, so "Seu Nome" matches "seu nome". */
 export function normalizeForFilter(value: string): string {
   return value

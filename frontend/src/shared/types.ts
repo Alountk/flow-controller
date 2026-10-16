@@ -617,6 +617,12 @@ export interface DownloadEntry {
   seeders: number | null
   leechers: number | null
   torrent_state: string | null
+  /** Sonarr queue records carry the episode these ids belong to (Radarr's
+   *  do not — key omitted, never null; backend
+   *  `downloads_cache._build_download`). The episode tree crosses the
+   *  active queue by `episode_id`. */
+  series_id?: number
+  episode_id?: number
 }
 
 /** Mirrors GET /api/downloads (snapshot behind `downloads_cache`). */

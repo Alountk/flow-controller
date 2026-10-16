@@ -528,6 +528,13 @@
   border-color: color-mix(in srgb, var(--bad) 35%, transparent);
 }
 
+/* "Colocado" (S4): a factual state, never coloured like a verdict. */
+.sec-pill-neutral {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text-dim) 35%, transparent);
+}
+
 /* The quality chip: the file's own quality name, or nothing — never a guess. */
 .sec-q-tag {
   font-size: 10px;
@@ -1096,4 +1103,183 @@
   .sec-series .sec-split {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* ---- Series tree (stitch-series-tree, S2) ---- */
+/* The left list of the Series section is a tree now: each series node is a
+   compact row beside its disclosure caret, and its lazily loaded episodes sit
+   under it in an indented column. New selectors only — the flat node (S2:
+   "the tree wins") lives in its own block at the END of this file. */
+.st-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.st-node {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.st-head {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* The row takes the rest of the head line. Placed after the card rule so it
+   wins the flex sizing by order. (The flat-node block at the end of this file
+   supersedes the card's border, radius and padding for tree rows.) */
+.st-head .sec-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The disclosure: a small square beside the row, never inside it. */
+.st-caret {
+  width: 22px;
+  height: 22px;
+  /* Centers on the node's first line (the flat node wears 10px padding). */
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.st-caret[aria-expanded='true'] {
+  transform: rotate(90deg);
+}
+
+/* The episodes block: indented under its series behind a hairline. */
+.st-children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 11px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  min-width: 0;
+}
+
+.st-season-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 4px;
+}
+
+.st-season-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.st-season-counts {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* One episode: code · name · pill · date · quality · path, wrapping when the
+   column is narrow. */
+.st-ep {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  min-width: 0;
+}
+
+.st-ep-code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.st-ep-name {
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.st-ep-date {
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.st-ep-qual {
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.st-ep-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ---- Flat series node (stitch-series-tree, S2: "the tree wins") --------
+ * The PR #200 cards leave the Series view: inside the tree the row sheds its
+ * card frame, fill and radius and reads as the prototype's summary line
+ * (13.5px title; the poster box and the path are gone — both live in the
+ * detail panel). Movies and every other section keep the card rules above
+ * untouched: these selectors win by specificity (.sec-master .st-tree …),
+ * never by fighting the order of the rules above. The selected node keeps
+ * its accent frame — master–detail stays visible — with the padding
+ * compensated so the node never jumps. */
+.sec-master .st-tree .sec-row {
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 10px;
+}
+
+/* The base is transparent now, so the card's hover fill needs its own
+   tree-scoped twin or hovering a node reads dead. */
+.sec-master .st-tree .sec-row:hover {
+  background: var(--bg-elev-2);
+}
+
+/* AFTER the base on purpose: the accent frame is the only border the flat
+   node ever wears. 2px border + 8px padding = the base's 10px inset, so
+   selecting never moves the node's content. */
+.sec-master .st-tree .sec-row[aria-current='true'] {
+  border: 2px solid var(--accent);
+  padding: 8px;
+}
+
+/* The prototype's summary line: smaller than the card headline (which the
+   rule far above keeps at 18px for movies). */
+.sec-master .st-tree .sec-row-name {
+  font-size: 13.5px;
+  font-weight: 600;
 }
