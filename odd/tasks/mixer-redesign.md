@@ -69,14 +69,38 @@ secciones de la app.
     `fa62f3d03f614ff8b0a278aa190d0491` (10 Media Mixer — Cotejo compatible),
     `526b9df4e93d42f9ac4f28c2bed0afdb` (11 Media Mixer — No compatible),
     `185f57cb95904a85a000c93138f910f6` (12 Media Mixer — Idioma ausente). Ver L13.
-- [ ] **T2 [S3]** — backend: `check_compatibility()` devuelve `ok:false` cuando fps no
+- [x] **T2 [S3]** — backend: `check_compatibility()` devuelve `ok:false` cuando fps no
   coincide o duración difiere >2%; `/api/mixer/mux` rechaza la mezcla incompatible (409)
   además del badge. Tests RED→GREEN. Ruta: `backend/media_mixer.py`,
   `backend/interfaces/http/routes_mixer.py`, `backend/tests/interfaces/routes/tests_mixer_api.py`.
   Commit: —.
-- [ ] **T3 [S4]** — backend: selección de vídeo por calidad+compresión (codec >
-  resolución > bitrate) evaluando A y B, y el mux acepta vídeo de cualquiera de los dos.
-  Tests RED→GREEN. Ruta: `backend/media_mixer.py` + tests. Commit: —.
+  - Evidencia (2026-10-17): RED observado **8 failed / 47 passed** (fps→ok:false+reasons,
+    duración umbral 5%→2% con test 4.2% que bloquea, pin reasons==[] en resolución,
+    409 con `probe_file` parcheado). Implementado: `reasons` (fps_mismatch |
+    duration_mismatch) + gate en `/mux` que re-probea los ficheros distintos con
+    `asyncio.to_thread`/`gather` y devuelve 409 `{error, reasons, compatibility}` antes
+    de `start_mux`; un solo fichero ⇒ sin probe. **GREEN 55/55 tocados; suite completa
+    1133/1133** (base 1130 + 3 tests nuevos); techo legacy `MAX_LEGACY_LOC=2751`
+    intacto (docstring compactado en vez de subir el techo). Asserts cambiados por
+    spec (vieja spec "solo warnings"): test_fps_mismatch, test_duration_mismatch_(over_2),
+    test_duration_under_2 (antes under_5), test_all_mismatches — ahora exigen ok:false
+    y reasons; ningún test borrado ni debilitado.
+- [ ] **T3 [S4]** — backend: selección de vídeo por calidad+compresión
+  (resolución > codec eficiente > bitrate) evaluando A y B, y el mux acepta vídeo de
+  cualquiera de los dos. Tests RED→GREEN. Ruta: `backend/media_mixer.py` + tests.
+  Commit: —.
+  - [x] Evidencia (2026-10-17): RED observado (ImportError de `select_best_video_pair`,
+    tests de ranking con la vieja regla «primer track gana», `best_video` KeyError en
+    probe). Implementado: `_video_rank_key` (área > eficiencia de codec > bitrate),
+    `select_best_video` reescrito, `select_best_video_pair` ({file, path, track_index
+    ordinal para `-map v:N`, codec, width, height, fps, bitrate}; A gana en empate
+    total), `best_video` en la respuesta de `/probe`. `test_mux_video_from_file_b_starts`
+    fija que el mux acepta vídeo de B. **GREEN 63/63 tocados; suite completa 1141/1141**.
+    El test de «empate» se recolocó con fixture real de empate (el viejo era 4K vs
+    1080p: codificaba la spec vieja de solo-codec). **Deuda legacy: techo 2751 → 2782**
+    (+31 líneas de ranking nuevo en `media_mixer.py`) con comentario `#:` de ownership en
+    `tests/contracts/tests_architecture.py` y disclosure obligada en la descripción del
+    PR de cierre.
 - [ ] **T4 [S2]** — backend+settings: orden de audio ca→en→ru→cat con normalización
   ISO 639-2 (`spa`/`es`, `eng`/`en`, `rus`/`ru`, `cat`/`ca`), check de idiomas exigidos
   sobre la unión A+B, clave `mixer.languages` en settings (de fábrica: castellano
@@ -145,6 +169,16 @@ secciones de la app.
   copian a la salida → S8.
 - **L11 (2026-10-17, usuario, ask 2.4)**: **"Ronda Stich primero"** → S9: mockups antes
   de implementar.
+- **L15 (2026-10-17, T2 completada inline)**: como los gate de writer exigen el literal
+  `Spec: odd/tasks/…` en la tarea, T2+T3 se ejecutan inline (parent). T2 GREEN 1133/1133
+  con RED observado (8 failed). Aclaración del orden de T3: en el doc figuraba
+  "codec > resolución > bitrate"; se corrige a **resolución > codec > bitrate** — S4 pide
+  «mejor calidad y compresión», la calidad (píxeles) es primaria y el ejemplo del mockup
+  10 (HEVC vs H.264 a misma resolución) no distingue entre ambos órdenes.
+- **L16 (2026-10-17, T3 completada inline)**: RED observado → GREEN **1141/1141**
+  (base 1130 + 11 tests nuevos de T2+T3). Deuda legacy 2751 → 2782 subida con
+  comentario `#:` en el propio contrato («subir el techo es deuda a propósito — own it
+  en la PR description») y disclosure quedará en la descripción del PR de cierre (T9).
 - **L12 (2026-10-17, supuestos del parent, no objetados)**: umbrales del cotejo — fps
   debe coincidir exacto (tol. 0.001) y duración incompatible si difiere >2% (~2.4 min en
   2 h; corta cambios de montaje reales); idiomas con tags ISO 639-2 (`spa/eng/rus/cat`)

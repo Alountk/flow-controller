@@ -111,43 +111,72 @@ def parse_probe_data(data: dict, path: str) -> dict:
     }
 
 
-def select_best_video(video_tracks: list[dict]) -> list[dict]:
-    """Mark the highest-quality video track as selected.
+def _video_rank_key(track: dict) -> tuple[int, int, int]:
+    """Rank key for S4 «mejor calidad y compresión»: bigger is better.
 
-    Priority: hevc/h265 > h264/avc > others.
-    If multiple tracks have same priority, first one wins.
+    (pixel area, -codec priority, bitrate): quality first, then codec
+    efficiency (hevc > h264 > others), bitrate as tiebreak.
+    """
+    codec = track.get("codec", "").lower()
+    area = int(track.get("width", 0) or 0) * int(track.get("height", 0) or 0)
+    return (area, -CODEC_PRIORITY.get(codec, 2), int(track.get("bitrate", 0) or 0))
+
+
+def select_best_video(video_tracks: list[dict]) -> list[dict]:
+    """Mark the highest-quality video track as selected (S4).
+
+    Ranks by (resolution, codec efficiency, bitrate); full ties keep the
+    first track.
     """
     if not video_tracks:
         return video_tracks
 
-    best_idx = 0
-    best_priority = 999
-
-    for i, track in enumerate(video_tracks):
-        codec = track.get("codec", "").lower()
-        priority = CODEC_PRIORITY.get(codec, 2)
-        if priority < best_priority:
-            best_priority = priority
-            best_idx = i
-
-    for i, track in enumerate(video_tracks):
-        track["selected"] = i == best_idx
-
+    best = max(video_tracks, key=_video_rank_key)
+    for track in video_tracks:
+        track["selected"] = track is best
     return video_tracks
 
 
-def check_compatibility(probe_a: dict, probe_b: dict) -> dict:
-    """Compare two probed files for compatibility.
+def select_best_video_pair(probe_a: dict, probe_b: dict) -> dict | None:
+    """Best video track across BOTH files (S4); file A wins full ties.
 
-    Returns:
-        {
-            "ok": True,  # always True (warnings don't block)
-            "warnings": [...]
-        }
+    Returns {"file": "a"|"b", "path", "track_index" (video-stream ordinal
+    for ffmpeg -map v:N), codec, width, height, fps, bitrate}, or None when
+    neither file has a video track.
+    """
+    best: tuple[str, dict, int, dict] | None = None
+    best_key: tuple[int, int, int] | None = None
+    for label, probe in (("a", probe_a), ("b", probe_b)):
+        for ordinal, track in enumerate(probe.get("video_tracks", [])):
+            key = _video_rank_key(track)
+            if best_key is None or key > best_key:
+                best_key = key
+                best = (label, probe, ordinal, track)
+    if best is None:
+        return None
+    label, probe, ordinal, track = best
+    return {
+        "file": label,
+        "path": probe.get("path", ""),
+        "track_index": ordinal,
+        "codec": track.get("codec", "unknown"),
+        "width": track.get("width", 0),
+        "height": track.get("height", 0),
+        "fps": track.get("fps", 0),
+        "bitrate": track.get("bitrate", 0),
+    }
+
+
+def check_compatibility(probe_a: dict, probe_b: dict) -> dict:
+    """Compare two probed files (S3): ok=False ⇒ the mux must be blocked.
+
+    Returns {"ok", "reasons", "warnings"}: reasons = machine blockers
+    (fps_mismatch | duration_mismatch); warnings = UI detail (all mismatches).
     """
     warnings = []
+    reasons = []
 
-    # FPS comparison
+    # FPS comparison — blocker (exact match, tolerance 0.001; L12 supuesto)
     fps_a = _get_primary_fps(probe_a)
     fps_b = _get_primary_fps(probe_b)
     if fps_a and fps_b and abs(fps_a - fps_b) > 0.001:
@@ -157,8 +186,9 @@ def check_compatibility(probe_a: dict, probe_b: dict) -> dict:
             "file_a_value": fps_a,
             "file_b_value": fps_b,
         })
+        reasons.append("fps_mismatch")
 
-    # Resolution comparison
+    # Resolution comparison — warning only (never blocks; S3 only names fps/duration)
     res_a = _get_primary_resolution(probe_a)
     res_b = _get_primary_resolution(probe_b)
     if res_a and res_b and res_a != res_b:
@@ -169,20 +199,21 @@ def check_compatibility(probe_a: dict, probe_b: dict) -> dict:
             "file_b_value": f"{res_b[0]}x{res_b[1]}",
         })
 
-    # Duration comparison (>5% difference)
+    # Duration comparison (>2% relative difference blocks — L12 supuesto)
     dur_a = probe_a.get("duration", 0)
     dur_b = probe_b.get("duration", 0)
     if dur_a > 0 and dur_b > 0:
         diff_pct = abs(dur_a - dur_b) / max(dur_a, dur_b) * 100
-        if diff_pct > 5.0:
+        if diff_pct > 2.0:
             warnings.append({
                 "type": "duration_mismatch",
                 "message": f"Duration differs by {diff_pct:.1f}%: {dur_a:.1f}s vs {dur_b:.1f}s",
                 "file_a_value": dur_a,
                 "file_b_value": dur_b,
             })
+            reasons.append("duration_mismatch")
 
-    return {"ok": True, "warnings": warnings}
+    return {"ok": not reasons, "reasons": reasons, "warnings": warnings}
 
 
 def _get_primary_fps(probe: dict) -> float | None:

@@ -7,6 +7,7 @@ os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
 from media_mixer import (
     parse_probe_data,
     select_best_video,
+    select_best_video_pair,
     check_compatibility,
     build_mux_command,
     _cleanup_partial,
@@ -191,14 +192,82 @@ class TestSelectBestVideo:
         assert result[0]["selected"] is False
         assert result[1]["selected"] is True
 
-    def test_first_track_wins_ties(self):
+    def test_first_track_wins_true_tie(self):
+        # Same resolution, codec and bitrate: first track wins deterministically.
+        tracks = [
+            {"index": 0, "codec": "hevc", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 3000000, "selected": False},
+            {"index": 1, "codec": "hevc", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 3000000, "selected": False},
+        ]
+        result = select_best_video(tracks)
+        assert result[0]["selected"] is True
+        assert result[1]["selected"] is False
+
+    def test_higher_resolution_wins_same_codec(self):
+        # S4 «mejor calidad»: pixels first, even when the 4K track is second.
         tracks = [
             {"index": 0, "codec": "hevc", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 3000000, "selected": False},
             {"index": 1, "codec": "hevc", "width": 3840, "height": 2160, "fps": 23.976, "bitrate": 5000000, "selected": False},
         ]
         result = select_best_video(tracks)
-        assert result[0]["selected"] is True
-        assert result[1]["selected"] is False
+        assert result[0]["selected"] is False
+        assert result[1]["selected"] is True
+
+    def test_higher_bitrate_wins_same_codec_and_resolution(self):
+        # Same area + codec: higher bitrate = fewer compression artifacts.
+        tracks = [
+            {"index": 0, "codec": "hevc", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 3000000, "selected": False},
+            {"index": 1, "codec": "hevc", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 8000000, "selected": False},
+        ]
+        result = select_best_video(tracks)
+        assert result[0]["selected"] is False
+        assert result[1]["selected"] is True
+
+
+# ── select_best_video_pair ──────────────────────────────────────────────
+
+class TestSelectBestVideoPair:
+    def _probe(self, path, tracks):
+        return {"path": path, "filename": path.rsplit("/", 1)[-1],
+                "video_tracks": tracks, "audio_tracks": [], "duration": 7200}
+
+    def test_b_file_wins_when_better(self):
+        a = self._probe("/mnt/storage/a.mkv", [
+            {"index": 0, "codec": "h264", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 12400000, "selected": False},
+        ])
+        b = self._probe("/mnt/storage/b.mkv", [
+            {"index": 0, "codec": "hevc", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 5800000, "selected": False},
+        ])
+        best = select_best_video_pair(a, b)
+        assert best["file"] == "b"
+        assert best["path"] == "/mnt/storage/b.mkv"
+        assert best["track_index"] == 0
+        assert best["codec"] == "hevc"
+
+    def test_second_track_of_b_wins(self):
+        a = self._probe("/mnt/storage/a.mkv", [
+            {"index": 0, "codec": "h264", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 12400000, "selected": False},
+        ])
+        b = self._probe("/mnt/storage/b.mkv", [
+            {"index": 2, "codec": "h264", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 4000000, "selected": False},
+            {"index": 3, "codec": "hevc", "width": 3840, "height": 2160, "fps": 23.976, "bitrate": 5800000, "selected": False},
+        ])
+        best = select_best_video_pair(a, b)
+        assert best["file"] == "b"
+        # track_index is the video-stream ordinal used by ffmpeg -map v:N.
+        assert best["track_index"] == 1
+        assert best["width"] == 3840
+
+    def test_a_wins_full_tie(self):
+        track = {"index": 0, "codec": "hevc", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 5000000, "selected": False}
+        a = self._probe("/mnt/storage/a.mkv", [dict(track)])
+        b = self._probe("/mnt/storage/b.mkv", [dict(track)])
+        best = select_best_video_pair(a, b)
+        assert best["file"] == "a"
+
+    def test_none_when_neither_has_video(self):
+        a = self._probe("/mnt/storage/a.mkv", [])
+        b = self._probe("/mnt/storage/b.mkv", [])
+        assert select_best_video_pair(a, b) is None
 
 
 # ── check_compatibility ─────────────────────────────────────────────────────
@@ -209,13 +278,15 @@ class TestCheckCompatibility:
         b = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7190}
         result = check_compatibility(a, b)
         assert result["ok"] is True
+        assert result["reasons"] == []
         assert len(result["warnings"]) == 0
 
     def test_fps_mismatch(self):
         a = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7200}
         b = {"video_tracks": [{"fps": 29.970, "width": 1920, "height": 1080}], "duration": 7200}
         result = check_compatibility(a, b)
-        assert result["ok"] is True
+        assert result["ok"] is False
+        assert result["reasons"] == ["fps_mismatch"]
         assert len(result["warnings"]) == 1
         assert result["warnings"][0]["type"] == "fps_mismatch"
         assert result["warnings"][0]["file_a_value"] == 23.976
@@ -225,30 +296,45 @@ class TestCheckCompatibility:
         a = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7200}
         b = {"video_tracks": [{"fps": 23.976, "width": 3840, "height": 2160}], "duration": 7200}
         result = check_compatibility(a, b)
+        # Resolution never blocks (S3 blocks only on fps/duration): warning only.
         assert result["ok"] is True
+        assert result["reasons"] == []
         assert len(result["warnings"]) == 1
         assert result["warnings"][0]["type"] == "resolution_mismatch"
 
-    def test_duration_mismatch_over_5_percent(self):
+    def test_duration_mismatch_over_2_percent(self):
         a = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7200}
         b = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 6800}
         result = check_compatibility(a, b)
-        assert result["ok"] is True
+        assert result["ok"] is False
+        assert result["reasons"] == ["duration_mismatch"]
         assert len(result["warnings"]) == 1
         assert result["warnings"][0]["type"] == "duration_mismatch"
 
-    def test_duration_under_5_percent_ok(self):
+    def test_duration_between_2_and_5_percent_blocks(self):
+        # Old spec (>5%): only a warning. New spec (S3, >2%): blocks the mux.
         a = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7200}
-        b = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7100}
+        b = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 6900}
+        result = check_compatibility(a, b)
+        assert result["ok"] is False
+        assert result["reasons"] == ["duration_mismatch"]
+        assert len(result["warnings"]) == 1
+
+    def test_duration_under_2_percent_ok(self):
+        a = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7200}
+        b = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7060}
         result = check_compatibility(a, b)
         assert result["ok"] is True
+        assert result["reasons"] == []
         assert len(result["warnings"]) == 0
 
     def test_all_mismatches(self):
         a = {"video_tracks": [{"fps": 23.976, "width": 1920, "height": 1080}], "duration": 7200}
         b = {"video_tracks": [{"fps": 29.970, "width": 3840, "height": 2160}], "duration": 6000}
         result = check_compatibility(a, b)
-        assert result["ok"] is True
+        assert result["ok"] is False
+        # Resolution stays a warning; only fps + duration are blockers.
+        assert set(result["reasons"]) == {"fps_mismatch", "duration_mismatch"}
         assert len(result["warnings"]) == 3
         types = {w["type"] for w in result["warnings"]}
         assert types == {"fps_mismatch", "resolution_mismatch", "duration_mismatch"}

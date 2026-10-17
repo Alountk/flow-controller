@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from media_mixer import (
     probe_file,
     check_compatibility,
+    select_best_video_pair,
     start_mux,
     cancel_task,
     pause_task,
@@ -98,6 +99,7 @@ async def mixer_probe(req: ProbeRequest, _key: str = Depends(verify_api_key)):
         "file_a": probe_a,
         "file_b": probe_b,
         "compatibility": compatibility,
+        "best_video": select_best_video_pair(probe_a, probe_b),
     }
 
 
@@ -135,6 +137,32 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
             raise HTTPException(status_code=400, detail=str(exc))
         if not os.path.isfile(validated_audio_path):
             raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
+
+    # S3 compatibility gate: the client's badge is UI sugar — the backend
+    # re-probes every distinct file involved and blocks an incompatible mux
+    # with 409 BEFORE any ffmpeg process starts.
+    unique_files = list(dict.fromkeys(
+        [validated_video_path]
+        + [os.path.realpath(a["path"]) for a in req.audio_sources]
+    ))
+    if len(unique_files) > 1:
+        try:
+            probes = await asyncio.gather(
+                *(asyncio.to_thread(probe_file, f) for f in unique_files)
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        anchor = probes[0]
+        for other in probes[1:]:
+            compatibility = check_compatibility(anchor, other)
+            if not compatibility["ok"]:
+                raise HTTPException(status_code=409, detail={
+                    "error": "incompatible",
+                    "reasons": compatibility["reasons"],
+                    "compatibility": compatibility,
+                })
 
     # Determine output directory
     from application.gateways import get_setting

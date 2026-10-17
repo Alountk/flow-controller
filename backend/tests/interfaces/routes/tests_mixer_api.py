@@ -13,6 +13,22 @@ from task_manager import mux_tasks
 client = TestClient(app, raise_server_exceptions=False)
 
 
+def _probe_fixture(path, fps=23.976, duration=7200.0, width=1920, height=1080):
+    """Minimal probe_file() result as parse_probe_data would produce it."""
+    return {
+        "filename": os.path.basename(path),
+        "path": path,
+        "format": "matroska,webm",
+        "duration": duration,
+        "size_bytes": 1_000_000,
+        "video_tracks": [{
+            "index": 0, "codec": "hevc", "width": width, "height": height,
+            "fps": fps, "bitrate": 5_000_000, "selected": False,
+        }],
+        "audio_tracks": [],
+    }
+
+
 # ── Probe Endpoint ──────────────────────────────────────────────────────────
 
 class TestProbeEndpoint:
@@ -95,11 +111,48 @@ class TestProbeEndpoint:
 
 # ── Mux Endpoint ────────────────────────────────────────────────────────────
 
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.check_compatibility")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_returns_best_video_across_files(self, mock_probe, mock_compat, mock_isfile):
+        mock_probe.side_effect = [
+            {
+                "filename": "a.mkv", "path": "/mnt/storage/a.mkv", "format": "matroska",
+                "duration": 7200.0, "size_bytes": 1000000,
+                "video_tracks": [{"index": 0, "codec": "h264", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 12400000, "selected": False}],
+                "audio_tracks": [],
+            },
+            {
+                "filename": "b.mkv", "path": "/mnt/storage/b.mkv", "format": "matroska",
+                "duration": 7200.0, "size_bytes": 1000000,
+                "video_tracks": [{"index": 0, "codec": "hevc", "width": 1920, "height": 1080, "fps": 23.976, "bitrate": 5800000, "selected": False}],
+                "audio_tracks": [],
+            },
+        ]
+        mock_compat.return_value = {"ok": True, "reasons": [], "warnings": []}
+
+        resp = client.post(
+            "/api/mixer/probe",
+            json={"path_a": "/mnt/storage/a.mkv", "path_b": "/mnt/storage/b.mkv"},
+        )
+        assert resp.status_code == 200
+        best = resp.json()["best_video"]
+        # Mockup 10: 1080p HEVC (B) beats 1080p H.264 (A) — «Auto · mejor compresión».
+        assert best["file"] == "b"
+        assert best["path"] == "/mnt/storage/b.mkv"
+        assert best["track_index"] == 0
+
+
 class TestMuxEndpoint:
     @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
     @patch("interfaces.http.routes_mixer.start_mux")
-    def test_mux_starts_task(self, mock_start, mock_isfile):
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_starts_task(self, mock_probe, mock_start, mock_isfile):
         mock_start.return_value = "test-task-id-123"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
 
         resp = client.post(
             "/api/mixer/mux",
@@ -113,6 +166,70 @@ class TestMuxEndpoint:
         assert data["ok"] is True
         assert data["task_id"] == "test-task-id-123"
         mock_start.assert_called_once()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_rejects_incompatible_pair_409(self, mock_probe, mock_start, mock_isfile):
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", fps=23.976),
+            _probe_fixture("/mnt/storage/audio.mkv", fps=25.0),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+            },
+        )
+        assert resp.status_code == 409
+        detail = resp.json()["detail"]
+        assert detail["error"] == "incompatible"
+        assert "fps_mismatch" in detail["reasons"]
+        # The mux must never spawn ffmpeg for an incompatible pair (S3).
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_single_file_skips_compatibility_probe(self, mock_probe, mock_start, mock_isfile):
+        # Video + audio from one single file: nothing to compare, no ffprobe call.
+        mock_start.return_value = "test-task-id-single"
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/movie.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/movie.mkv", "track_index": 1}],
+            },
+        )
+        assert resp.status_code == 200
+        mock_probe.assert_not_called()
+        mock_start.assert_called_once()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_video_from_file_b_starts(self, mock_probe, mock_start, mock_isfile):
+        # S4: the mux accepts the video stream from either file (B here).
+        mock_start.return_value = "test-task-from-b"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/fileB.mkv"),
+            _probe_fixture("/mnt/storage/fileA.mkv"),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/fileB.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/fileA.mkv", "track_index": 1}],
+            },
+        )
+        assert resp.status_code == 200
+        mock_start.assert_called_once()
+        started_video = mock_start.call_args[0][0]
+        assert started_video["path"] == "/mnt/storage/fileB.mkv"
 
     def test_mux_missing_video_path(self):
         resp = client.post(
