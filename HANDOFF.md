@@ -1,6 +1,6 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-16 · main = `6e2643a` · RDD **on** (global) · specs: 1130 backend / 582 frontend
+> Última actualización: 2026-10-17 · main = `ad9380e` · RDD **on** (global) · specs: 1130 backend / 582 frontend
 > Público: el agente de la próxima sesión + Raul. Artefactos en español, código/UI en inglés.
 
 ## Estado actual
@@ -8,10 +8,15 @@
 **Desplegado en producción**: la instancia del usuario corre hasta `56bd09d` (6 PRs del
 2026-10-11/12: #193 timeout · #194 async grab · #195 SSE · #196 B1 · #197 B2) con NPM
 proxyando `/api/events` (bloque location copiado en `routes/events.py` docstring). Usuario
-validó en vivo: eventos llegan y disparan la UI. **8 PRs fusionados después quedan sin
-desplegar** (#198–#205, ver Pendientes) — deploy = decisión del usuario.
+validó en vivo: eventos llegan y disparan la UI.
 
-**Verde**: `main` en `6e2643a`, CI (GitGuardian/backend/frontend/e2e/docker) pass, sin PRs
+**Deploy = automático**: cada merge a main publica `ghcr.io/alountk/flow-controller:latest`
+(+ tag `sha-XXXX`) en el job `docker-push` y notifica a Portainer por webhook (HTTP 204);
+el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre los cambios
+recientes sin intervención. Si un deploy se pierde: `docker compose -f
+docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
+
+**Verde**: `main` en `ad9380e`, CI (GitGuardian/backend/frontend/e2e/docker) pass, sin PRs
 abiertos, working tree limpia (refs remotas obsoletas pruned 2026-10-16).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
@@ -89,22 +94,20 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
 
 ## Pendientes (orden sugerido)
 
-1. **Deploy producción** — `56bd09d` → `6e2643a`: 8 PRs (#198–#205: ports design-01/03,
-   actividad, árbol Series, audit, B-12). Decisión del usuario.
-2. **Bloque 🟡 de diseño — resto** — ya hecho: árbol Series + estados de cola (S1–S5, PR
+1. **Bloque 🟡 de diseño — resto** — ya hecho: árbol Series + estados de cola (S1–S5, PR
    #203). Quedan, con decisión de usuario antes de tocar: tabla densa Archivos (choca con
    dual-pane), secciones Calidad/Avisos (no existen en backend = feature nueva), redesign
    del Mixer (feature grande), y 3 namings donde la recomendación es NO cambiar
    ("Archivos"≠"Ficheros", chips F-07 backend-owned, 8 dots de Setup).
 3. **C-06 revisión visual humana** — #191 ajustó `--text-dim/--text-dim2` dark a `#8b8b93`
    (pendiente de su aprobación visual).
-4. Backlog menores: C-01 canal de avisos, dedupe `formatBytes` (3 copias), dark/light toggle,
+3. Backlog menores: C-01 canal de avisos, dedupe `formatBytes` (3 copias), dark/light toggle,
    un-ack `Descartar bloqueo`, knobs rate limit, fila C-08, F-06(b) GPL. (B-12 y audit:
    cerrados 2026-10-16.)
-5. Posibles B3: publishers para `/api/queue` y `/api/actions` (apagar 2/10s y 60s);
+4. Posibles B3: publishers para `/api/queue` y `/api/actions` (apagar 2/10s y 60s);
    query key de `/api/downloads` si la vista de descargas vuelve (hoy: 0 consumidores
    frontend — decisión de producto del BACKLOG:737).
-6. Operaciones: health de Radarr sigue con `RemotePathMappingCheck` (qBittorrent-novpn) y
+5. Operaciones: health de Radarr sigue con `RemotePathMappingCheck` (qBittorrent-novpn) y
    carpeta de colección ausente — no es del código, revisar en su Radarr.
 
 ## Gotchas que costaron esta sesión
