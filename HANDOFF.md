@@ -99,15 +99,14 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
    dual-pane), secciones Calidad/Avisos (no existen en backend = feature nueva), redesign
    del Mixer (feature grande), y 3 namings donde la recomendación es NO cambiar
    ("Archivos"≠"Ficheros", chips F-07 backend-owned, 8 dots de Setup).
-3. **C-06 revisión visual humana** — #191 ajustó `--text-dim/--text-dim2` dark a `#8b8b93`
-   (pendiente de su aprobación visual).
-3. Backlog menores: C-01 canal de avisos, dedupe `formatBytes` (3 copias), dark/light toggle,
+2. Backlog menores: C-01 canal de avisos, dedupe `formatBytes` (3 copias), dark/light toggle,
    un-ack `Descartar bloqueo`, knobs rate limit, fila C-08, F-06(b) GPL. (B-12 y audit:
-   cerrados 2026-10-16.)
-4. Posibles B3: publishers para `/api/queue` y `/api/actions` (apagar 2/10s y 60s);
+   cerrados 2026-10-16; **C-06 cerrado 2026-10-17** — revisión visual del dark de #191
+   aprobada, verificada con Playwright: `--text-dim` 5.24–5.58:1 en 34 elementos, AA.)
+3. Posibles B3: publishers para `/api/queue` y `/api/actions` (apagar 2/10s y 60s);
    query key de `/api/downloads` si la vista de descargas vuelve (hoy: 0 consumidores
    frontend — decisión de producto del BACKLOG:737).
-5. Operaciones: health de Radarr sigue con `RemotePathMappingCheck` (qBittorrent-novpn) y
+4. Operaciones: health de Radarr sigue con `RemotePathMappingCheck` (qBittorrent-novpn) y
    carpeta de colección ausente — no es del código, revisar en su Radarr.
 
 ## Gotchas que costaron esta sesión
