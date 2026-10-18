@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-18 · **PR #210 (enmienda L24 und→castellano)** · RDD **on** (global)
-> · specs: 1228 backend / 615 frontend · main pre-#210 = `89b1e2d` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-18 · **PR #211 (S10 descarga de alternativa)** · RDD **on** (global)
+> · specs: 1261 backend / 626 frontend · main pre-#211 = `430e718` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,10 +16,10 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `89b1e2d` (pre-#210), CI (GitGuardian/backend/frontend/e2e/docker)
-pass. Tras #210: specs 1228 backend / 615 frontend, working tree limpia.
+**Verde**: `main` en `430e718` (pre-#211), CI (GitGuardian/backend/frontend/e2e/docker)
+pass. Tras #211: specs 1261 backend / 626 frontend, working tree limpia.
 
-**Tanda 2026-10-17/18 (PRs #206–#210)**:
+**Tanda 2026-10-17/18 (PRs #206–#211)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
 - #207 — corrección del HANDOFF sobre deploy: **es automático** (webhook Portainer 204
   verificado en vivo).
@@ -39,6 +39,15 @@ pass. Tras #210: specs 1228 backend / 615 frontend, working tree limpia.
   de exigidos: `MuxRequest.language_overrides` con validación fail-closed (solo targets
   `und`, idiomas ordenados, rutas cotejadas, ordinales en rango → si no, 400
   `invalid_language_override`) aplicado al gate y al plan de subtítulos. Specs 1228/615.
+- #211 — **S10/T11 descarga de alternativa**: el slot vacío (con el otro slot lleno)
+  busca en los indexadores una alternativa del archivo del otro slot y la auto-coloca al
+  terminar: `POST /api/mixer/alternatives/lookup` (título T7 + `audio_languages`) +
+  `GET /api/mixer/alternatives/status` (`ready|downloading|unknown`; gateway
+  `arr_movie_file`, fila de downloads con `normalize_title` en ambos lados,
+  `path_is_allowed`), prop aditivo `onGrabStarted` del `ReleaseSearchModal`, espera con
+  poll ~5 s, aviso si la ruta no está en allowed_roots (L27), «Dejar de esperar» sin
+  endpoint destructivo (L27), `item.languages` → chips de idioma existentes (L28).
+  Specs 1261/626.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,

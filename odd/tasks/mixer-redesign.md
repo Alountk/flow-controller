@@ -299,7 +299,7 @@ secciones de la app **salvo el prop opcional `onGrabStarted` del `ReleaseSearchM
     eslint 0. Rama `feat/mixer-und-spanish-mark` → **PR #210** (448 líneas, 1 commit:
     frontera de slice registrada aquí — T10 completo en un solo work unit). Merge
     `430e718` (CI verde, docker-push → deploy).
-- [ ] **T11 [S10]** — descarga de alternativa desde los slots A/B (RED→GREEN en ambos
+- [x] **T11 [S10]** — descarga de alternativa desde los slots A/B (RED→GREEN en ambos
   stacks; los workers NO hacen git — los commits son del padre). Contrato exacto:
   **Backend** (nuevo; `/api/mixer/lookup` de T7 NO se toca):
   - `POST /api/mixer/alternatives/lookup {path}` → `200 {ok, title, movie|null,
@@ -316,7 +316,8 @@ secciones de la app **salvo el prop opcional `onGrabStarted` del `ReleaseSearchM
     existentes); `path` = ruta absoluta, `allowed = config.path_is_allowed(path)`,
     `progress = null`;
     2) **downloading** — `application.use_cases.downloads_cache.get_downloads()` sin
-    fichero aún: fila cuyo título casefold contenga el `title` normalizado → `progress`
+    fichero aún: fila cuyo título normalizado con `normalize_title` en **ambos lados**
+    (filas puntuadas de release incluidas) contenga el `title` normalizado → `progress`
     de esa fila (null si no se puede saber), `path = null`, `allowed = false`;
     3) **unknown** — sin file ni fila. `movie_id <= 0` o `title` vacío → 400.
   **Frontend**:
@@ -337,7 +338,19 @@ secciones de la app **salvo el prop opcional `onGrabStarted` del `ReleaseSearchM
   ready/downloading/unknown/400) y frontend (botón solo con otro slot lleno y slot
   vacío; espera con `onGrabStarted`; auto-colocado; aviso allowed_roots; «Dejar de
   esperar»; `item.languages` enviado). Suites verdes al final (backend ≥1228+6, vitest
-  ≥615+6, `tsc -b` 0, eslint 0). Commit: — (padre).
+  ≥615+6, `tsc -b` 0, eslint 0). Commit: C2 `8091846` (backend), C3 `3923f3e` (frontend),
+  C4 (docs de cierre).
+  - Evidencia (2026-10-18): dos workers `gentle-ai-worker` en paralelo (superficies
+    disjuntas) con RED observado por cada uno — backend 31 tests (10 lookup + 11 status
+    + 10 `arr_movie_file`), frontend 11 (8 flujo de slots + 3 `onGrabStarted`; RED 10) —
+    más el fix del padre con su propio RED (fila de release punteada → `normalize_title`
+    en **ambos** lados; contrato T11 enmendado aquí). Suites: backend **1261/1261**
+    (base 1228 + 31 propios + 1 fix + 1 del sweep GET preexistente que ya parametriza
+    `/alternatives/status`), frontend **626/626**, `tsc -b` 0, eslint 0.
+    Interpretaciones registradas en el PR body: `movie_id` = id interno de Radarr
+    (acepta también tmdbId); probe→400 (manda el contrato); `ready && !allowed` mantiene
+    la espera; `progress` 0–100. **PR #211** — slices C2 ~650 / C3 ~600 líneas
+    (frontera de slice registrada aquí: backend y frontend por separado).
 
 ## Log
 
