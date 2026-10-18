@@ -182,6 +182,11 @@ def arr_movie_exists(*args, **kwargs):
     return _arr.arr_movie_exists(*args, **kwargs)
 
 
+def arr_movie_file(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _arr.arr_movie_file(*args, **kwargs)
+
+
 def arr_movie_lookup(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.arr_movie_lookup(*args, **kwargs)

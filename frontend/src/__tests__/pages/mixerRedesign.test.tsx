@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MediaMixer } from '../../pages/MediaMixer.tsx'
 import type { ReleaseSearchItem } from '../../features/release-search/ReleaseSearchModal.tsx'
@@ -13,8 +13,20 @@ import type { ReleaseSearchItem } from '../../features/release-search/ReleaseSea
  */
 
 vi.mock('../../features/release-search/ReleaseSearchModal.tsx', () => ({
-  ReleaseSearchModal: ({ item }: { item: ReleaseSearchItem }) => (
-    <div data-testid="release-search-modal">{item.title}</div>
+  ReleaseSearchModal: ({
+    item,
+    onGrabStarted,
+  }: {
+    item: ReleaseSearchItem
+    onGrabStarted?: (taskId: string) => void
+  }) => (
+    <div data-testid="release-search-modal">
+      <span>{item.title}</span>
+      <span data-testid="modal-languages">{(item.languages ?? []).join(',')}</span>
+      <button type="button" onClick={() => onGrabStarted?.('grab-1')}>
+        Simular grab
+      </button>
+    </div>
   ),
 }))
 
@@ -473,5 +485,196 @@ describe('mixer — audio ordenado (S2/S5, L18)', () => {
         { path: PATH_A, track_index: 2 },
       ],
     })
+  })
+})
+
+/* ── S10/T11 — descarga de alternativa desde los slots ───────────────────── */
+
+describe('mixer — descarga de alternativa (S10/T11)', () => {
+  const ALT_TITLE = 'Dune Parte Dos 2024'
+  const ALT_PATH = '/mnt/dl/Dune.Parte.Dos.2024.mkv'
+  const ALT_BASENAME = 'Dune.Parte.Dos.2024.mkv'
+
+  /** The exact JSON shapes of T11's contract. */
+  function lookupBody(over: Obj = {}): Obj {
+    return {
+      ok: true,
+      title: ALT_TITLE,
+      movie: { id: 7, title: 'Dune: Part Two', year: 2024, source: 'radarr' },
+      audio_languages: ['spa', 'eng'],
+      ...over,
+    }
+  }
+
+  function statusBody(over: Obj = {}): Obj {
+    return { state: 'unknown', progress: null, path: null, allowed: false, ...over }
+  }
+
+  function altRoutes(lookup: Obj, status: Obj): Route[] {
+    return [
+      ['/api/mixer/alternatives/lookup', () => ({ body: lookup })],
+      ['/api/mixer/alternatives/status', () => ({ body: status })],
+    ]
+  }
+
+  const altButtons = () =>
+    screen.queryAllByRole('button', { name: 'Buscar y descargar alternativa' })
+
+  /** Fill ONE slot and leave the pickers on screen — the other stays empty. */
+  async function driveToOneSlot(filled: 'a' | 'b', routes: Route[] = []) {
+    const calls = mockFetch([
+      ...pickerHandlers(),
+      ...routes,
+      ['/api/mixer/tasks', () => ({ body: { tasks: [] } })],
+    ])
+    renderMixer()
+    await selectFile(filled === 'a' ? 0 : 1, filled === 'a' ? FILE_A : FILE_B)
+    return calls
+  }
+
+  /** Click the slot button → wait for the modal → fire its grab. */
+  async function startGrab() {
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
+    await screen.findByTestId('release-search-modal')
+    fireEvent.click(screen.getByRole('button', { name: 'Simular grab' }))
+  }
+
+  it('offers «Buscar y descargar alternativa» only on the empty slot when the other holds a file', async () => {
+    await driveToOneSlot('a')
+
+    expect(altButtons()).toHaveLength(1)
+    const card = altButtons()[0].closest('.mixer-file-input') as HTMLElement
+    expect(within(card).getByText('Archivo B')).toBeInTheDocument()
+
+    // Both slots hold a file → there is nothing to replace.
+    await selectFile(1, FILE_B)
+    expect(altButtons()).toHaveLength(0)
+  })
+
+  it('mirrors the button to slot A when only slot B holds a file, and hides it while both are empty', async () => {
+    mockFetch([...pickerHandlers(), ['/api/mixer/tasks', () => ({ body: { tasks: [] } })]])
+    renderMixer()
+    await screen.findAllByRole('button', { name: 'Examinar…' })
+    expect(altButtons()).toHaveLength(0)
+
+    await selectFile(1, FILE_B)
+    expect(altButtons()).toHaveLength(1)
+    const card = altButtons()[0].closest('.mixer-file-input') as HTMLElement
+    expect(within(card).getByText('Archivo A')).toBeInTheDocument()
+  })
+
+  it('puts the slot in the wait state when the grab starts, polling only while waiting', async () => {
+    const calls = await driveToOneSlot(
+      'a',
+      altRoutes(lookupBody(), statusBody({ state: 'downloading', progress: 37 })),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
+
+    // The lookup takes the OTHER slot's path — the title comes from that file.
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.includes('/api/mixer/alternatives/lookup'))).toBe(true),
+    )
+    expect(calls.find((c) => c.url.includes('/api/mixer/alternatives/lookup'))?.body).toEqual({
+      path: PATH_A,
+    })
+
+    await screen.findByTestId('release-search-modal')
+    // Honesty: no status poll before the wait starts.
+    expect(calls.some((c) => c.url.includes('/api/mixer/alternatives/status'))).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Simular grab' }))
+
+    expect(await screen.findByText(`Descargando… ${ALT_TITLE}`)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dejar de esperar' })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.includes('/api/mixer/alternatives/status'))).toBe(true),
+    )
+    expect(await screen.findByText('37%')).toBeInTheDocument()
+  })
+
+  it('auto-places the ready file in the waiting slot with the «Colocado automáticamente» notice', async () => {
+    await driveToOneSlot(
+      'a',
+      altRoutes(
+        lookupBody(),
+        statusBody({ state: 'ready', progress: null, path: ALT_PATH, allowed: true }),
+      ),
+    )
+
+    await startGrab()
+
+    expect(
+      await screen.findByText(`Colocado automáticamente: ${ALT_BASENAME}`),
+    ).toBeInTheDocument()
+    // The slot took the path (its onSelect) and the wait is over.
+    expect(screen.getByTitle(ALT_PATH)).toBeInTheDocument()
+    expect(screen.queryByText(/Descargando…/)).toBeNull()
+  })
+
+  it('warns without placing when the ready file is outside allowed_roots', async () => {
+    await driveToOneSlot(
+      'a',
+      altRoutes(
+        lookupBody(),
+        statusBody({ state: 'ready', progress: null, path: ALT_PATH, allowed: false }),
+      ),
+    )
+
+    await startGrab()
+
+    expect(
+      await screen.findByText(
+        `El fichero quedó en ${ALT_PATH} — añade esa carpeta a allowed_roots`,
+      ),
+    ).toBeInTheDocument()
+    // Nothing was placed and nothing else was touched.
+    expect(screen.queryByText(/Colocado automáticamente/)).toBeNull()
+    expect(screen.getByText('Sin seleccionar')).toBeInTheDocument()
+    expect(screen.getByTitle(PATH_A)).toBeInTheDocument()
+  })
+
+  it('«Dejar de esperar» returns to the initial button and touches nothing else', async () => {
+    await driveToOneSlot(
+      'a',
+      altRoutes(lookupBody(), statusBody({ state: 'downloading', progress: 10 })),
+    )
+
+    await startGrab()
+    await screen.findByText(/Descargando…/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dejar de esperar' }))
+
+    expect(screen.queryByText(/Descargando…/)).toBeNull()
+    expect(altButtons()).toHaveLength(1)
+    expect(screen.getByTitle(PATH_A)).toBeInTheDocument()
+    expect(screen.getByText('Sin seleccionar')).toBeInTheDocument()
+  })
+
+  it('opens the modal with the lookup movie and item.languages from audio_languages', async () => {
+    const calls = await driveToOneSlot(
+      'a',
+      altRoutes(lookupBody({ audio_languages: ['spa', 'eng', 'rus'] }), statusBody()),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
+
+    const modal = await screen.findByTestId('release-search-modal')
+    expect(within(modal).getByText('Dune: Part Two')).toBeInTheDocument()
+    expect(screen.getByTestId('modal-languages').textContent).toBe('spa,eng,rus')
+    expect(calls.find((c) => c.url.includes('/api/mixer/alternatives/lookup'))?.body).toEqual({
+      path: PATH_A,
+    })
+  })
+
+  it('keeps the T7 «añádela primero en Radarr» notice when the lookup finds no library movie', async () => {
+    await driveToOneSlot('a', altRoutes(lookupBody({ movie: null }), statusBody()))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
+
+    expect(
+      await screen.findByText(`${ALT_TITLE} no está en la librería — añádela primero en Radarr`),
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('release-search-modal')).toBeNull()
   })
 })

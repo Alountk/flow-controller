@@ -32,12 +32,15 @@ from media_mixer import (
 from task_manager import mux_tasks
 from application.gateways import (
     arr_movie_exists,
+    arr_movie_file,
     arr_movie_lookup,
     download_subtitle,
     get_setting,
     search_subtitles,
 )
 from application.ports import OpenSubtitlesError
+from application.use_cases import downloads_cache
+from application.use_cases.scan_wanted import normalize_title
 from config import find_service, service_unavailable_reason
 from interfaces.http.deps import verify_api_key
 from state import http_session
@@ -70,6 +73,10 @@ class SubtitleSearchRequest(BaseModel):
 
 class LookupRequest(BaseModel):
     filename: str = ""
+
+
+class AlternativeLookupRequest(BaseModel):
+    path: str = ""
 
 
 # ── Path validation ──────────────────────────────────────────────────────────
@@ -260,6 +267,26 @@ def _title_from_filename(filename: str) -> str:
     return re.sub(r"\s+", " ", stem).strip(" -")
 
 
+def _ordered_audio_languages(probe: dict) -> list[str]:
+    """Audio language codes of one probe: normalized, deduped, ordered (S10).
+
+    «el modal recibe los idiomas de audio del otro archivo» (L28): the four
+    ordered languages first (ca→en→ru→cat), anything else after in code
+    order — the `_build_subtitle_plan` rank, for one file instead of a pair.
+    """
+    codes = {
+        normalize_language(track.get("language") or "und")
+        for track in probe.get("audio_tracks", [])
+    }
+
+    def _rank(code: str) -> tuple[int, int | str]:
+        if code in ORDERED_AUDIO_LANGUAGES:
+            return (0, ORDERED_AUDIO_LANGUAGES.index(code))
+        return (1, code)
+
+    return sorted(codes, key=_rank)
+
+
 def _fetch_sidecar(api_key: str, query: str, language_code: str, output_path: str) -> dict:
     """Search + download one `.srt` into the output sidecar (S6/T6).
 
@@ -363,6 +390,126 @@ async def mixer_lookup(req: LookupRequest, _key: str = Depends(verify_api_key)):
         raise HTTPException(status_code=502, detail=f"Radarr lookup failed: {exc}")
 
     return {"ok": True, "title": title, "movie": movie}
+
+
+@router.post("/alternatives/lookup")
+async def mixer_alternatives_lookup(
+    req: AlternativeLookupRequest, _key: str = Depends(verify_api_key)
+):
+    """S10: file path → title + Radarr movie + the file's audio languages.
+
+    The T7 lookup with the other slot's real file attached: the title still
+    comes from `_title_from_filename` and `movie` is still non-null only when
+    Radarr's library owns it. What the file itself adds is `audio_languages`
+    (L28: search by the languages the slot already covers) — the probe runs
+    through `asyncio.to_thread` because ffprobe is a 30 s subprocess and there
+    is one event loop. A path ffprobe cannot read is 400 (the picker handed us
+    bad input); Radarr being unusable is 502, never a silent "not in library".
+    """
+    path = (req.path or "").strip()
+    if not path:
+        raise HTTPException(status_code=400, detail="path is required")
+
+    title = _title_from_filename(path)
+    if not title:
+        raise HTTPException(status_code=400, detail=f"Cannot derive a title from: {path}")
+
+    try:
+        probe = await asyncio.to_thread(probe_file, path)
+    except (FileNotFoundError, RuntimeError) as exc:
+        # T11 maps a failed probe to 400 here: for THIS endpoint an unreadable
+        # file is bad input (the /probe route maps RuntimeError to 500; the
+        # alternatives contract enumerates 400 for «ffprobe falla»).
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    audio_languages = _ordered_audio_languages(probe)
+
+    service = find_service("radarr", "arr")
+    if not service:
+        raise HTTPException(status_code=502, detail=service_unavailable_reason("radarr", "arr"))
+
+    try:
+        async with http_session() as session:
+            lookup = await arr_movie_lookup(session, service, title)
+            movie = None
+            tmdb_id = (lookup or {}).get("tmdbId", 0)
+            if tmdb_id:
+                existing_id = await arr_movie_exists(session, service, tmdb_id)
+                if existing_id:
+                    movie = {
+                        "id": existing_id,
+                        "title": (lookup or {}).get("title") or title,
+                        "year": (lookup or {}).get("year"),
+                        "source": "radarr",
+                    }
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Radarr lookup failed: {exc}")
+
+    return {"ok": True, "title": title, "movie": movie, "audio_languages": audio_languages}
+
+
+@router.get("/alternatives/status")
+async def mixer_alternatives_status(
+    movie_id: int = 0, title: str = "", _key: str = Depends(verify_api_key)
+):
+    """S10: where the alternative stands — `ready` | `downloading` | `unknown`.
+
+    1. `ready` — Radarr already holds the file (`arr_movie_file`); `path` is
+       its absolute location and `allowed` says whether the app may place it
+       (`config.path_is_allowed`), `progress` is null.
+    2. `downloading` — no file yet, but a downloads row whose normalized title
+       (`normalize_title` on BOTH sides, so dotted release names match too)
+       contains the normalized title: its `progress`, null when unknowable.
+    3. `unknown` — no file and no row. The UI keeps waiting; nothing times out.
+
+    Radarr being unconfigured or unreachable is NOT an error here: without an
+    answer there is simply no file to report, and the row check decides. The
+    only 400s are the contract's own: `movie_id <= 0` or an empty `title`.
+    """
+    if movie_id <= 0:
+        raise HTTPException(status_code=400, detail="movie_id must be a positive integer")
+    if not (title or "").strip():
+        raise HTTPException(status_code=400, detail="title is required")
+
+    path = None
+    service = find_service("radarr", "arr")
+    if service:
+        try:
+            async with http_session() as session:
+                path = await arr_movie_file(session, service, movie_id)
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            path = None
+    if path:
+        return {
+            "state": "ready",
+            "progress": None,
+            "path": path,
+            "allowed": config.path_is_allowed(path),
+        }
+
+    needle = normalize_title(title)
+    try:
+        snapshot = await downloads_cache.get_downloads()
+    except Exception:  # noqa: BLE001 — no snapshot to serve reads as "no row": unknown
+        snapshot = {}
+    rows = (snapshot or {}).get("downloads") or []
+    row = next(
+        (
+            item
+            for item in rows
+            if needle and needle in normalize_title(str(item.get("title") or ""))
+        ),
+        None,
+    )
+    if row is not None:
+        progress = row.get("progress")
+        return {
+            "state": "downloading",
+            "progress": progress if isinstance(progress, (int, float)) else None,
+            "path": None,
+            "allowed": False,
+        }
+    return {"state": "unknown", "progress": None, "path": None, "allowed": False}
 
 
 @router.post("/mux")

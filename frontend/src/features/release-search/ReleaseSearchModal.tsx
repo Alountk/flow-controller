@@ -239,7 +239,13 @@ function baseName(path: string): string {
  * dialog to end, so it takes no `onClose` at all — the type makes that
  * impossible to get wrong.
  */
-export type ReleaseSearchModalProps = { item: ReleaseSearchItem } & (
+export type ReleaseSearchModalProps = {
+  item: ReleaseSearchItem
+  /** T11/S10: fired ONCE when a grab becomes a job — the POST returned a
+   *  `task_id` and the status poll owns the rest. Purely additive: nothing
+   *  about the modal's own flow changes when the prop is absent. */
+  onGrabStarted?: (taskId: string) => void
+} & (
   | { presentation?: 'overlay'; onClose: () => void }
   | { presentation: 'panel'; onClose?: undefined }
 )
@@ -247,6 +253,7 @@ export type ReleaseSearchModalProps = { item: ReleaseSearchItem } & (
 export function ReleaseSearchModal({
   item,
   onClose,
+  onGrabStarted,
   presentation = 'overlay',
 }: ReleaseSearchModalProps) {
   const inPanel = presentation === 'panel'
@@ -716,6 +723,9 @@ export function ReleaseSearchModal({
       release?.size || undefined,
     )
     if (result.task_id) {
+      // T11/S10: the grab is now a job — tell the caller ONCE, here and never
+      // again from the settle effect below (a poll is not a new grab).
+      onGrabStarted?.(result.task_id)
       // async-grab: the POST only starts the job. The outcome arrives
       // through the status poll above and is applied by the effect — the
       // step stays 'grabbing' (busy, re-click blocked) until it does.

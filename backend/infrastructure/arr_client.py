@@ -1946,6 +1946,54 @@ async def arr_movie_exists(session: aiohttp.ClientSession, service: dict, tmdb_i
         return None
 
 
+async def arr_movie_file(session: aiohttp.ClientSession, service: dict, tmdb_id: int) -> str | None:
+    """Absolute path of the file Radarr holds for this movie, or None.
+
+    The `arr_movie_exists` twin for the mixer's alternative flow (S10/T11):
+    one GET /api/v3/movie and a client-side match, then Radarr's own movie
+    folder + the `movieFile.relativePath` it chose. `None` covers "not in the
+    library", "no file yet" and "could not ask" alike — the caller degrades
+    all three to "keep waiting", never to a fabricated location, so a partial
+    payload answers None rather than a guessed name.
+
+    `tmdb_id` matches the Radarr `id` FIRST and the `tmdbId` second: the
+    status query hands over `movie.id` (the Radarr id the T7 lookup gives the
+    UI, what `movie_id` means everywhere else in this app) while this
+    parameter is named for a tmdb id. Accepting both keeps either reading
+    working; the internal id wins on a collision because that is the value
+    the caller actually holds.
+    """
+    if not tmdb_id:
+        return None
+    headers = arr_headers(service["api_key"])
+    try:
+        async with session.get(
+            f"{service['url']}/api/v3/movie",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
+        ) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json(content_type=None)
+    except (asyncio.TimeoutError, aiohttp.ClientError):
+        return None
+    movie = next(
+        (m for m in data if isinstance(m, dict) and m.get("id") == tmdb_id), None
+    )
+    if movie is None:
+        movie = next(
+            (m for m in data if isinstance(m, dict) and m.get("tmdbId") == tmdb_id), None
+        )
+    if movie is None:
+        return None
+    movie_file = movie.get("movieFile") or {}
+    relative = movie_file.get("relativePath") or ""
+    folder = movie.get("path") or ""
+    if not relative or not folder:
+        return None
+    return os.path.normpath(os.path.join(folder, relative))
+
+
 async def arr_series_exists(session: aiohttp.ClientSession, service: dict, tvdb_id: int) -> int | None:
     """Verifica si una serie ya existe en Sonarr por tvdbId. Retorna el ID de Sonarr o None."""
     headers = arr_headers(service["api_key"])

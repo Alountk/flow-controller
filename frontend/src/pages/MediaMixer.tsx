@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useContext } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { EventStreamContext } from '../shared/hooks/useEventStream.ts'
-import type {
-  ProbeResult,
-  ProbeFile,
-  AudioOrderedTrack,
-  MuxTask,
-  MuxConflict,
-  MuxError,
-  SubtitleTrack,
-  TaskSubtitle,
-} from '../shared/api/mixer.ts'
 import {
   probeFiles,
   startMux,
@@ -20,6 +10,19 @@ import {
   cancelTask,
   pauseTask,
   resumeTask,
+  alternativeLookup,
+  alternativeStatus,
+} from '../shared/api/mixer.ts'
+import type {
+  ProbeResult,
+  ProbeFile,
+  AudioOrderedTrack,
+  MuxTask,
+  MuxConflict,
+  MuxError,
+  SubtitleTrack,
+  TaskSubtitle,
+  AlternativeLookupResponse,
 } from '../shared/api/mixer.ts'
 import { browsePath, fetchRoots } from '../shared/api/files.ts'
 import { apiFetch } from '../shared/api/auth.ts'
@@ -165,6 +168,42 @@ const STATUS_LABELS: Record<string, string> = {
 
 type Phase = 'idle' | 'results'
 
+/* ── S10/T11 — alternative download per slot ─────────────────────────────── */
+
+type AltSlot = 'a' | 'b'
+
+/** What `FilePicker` needs to render its slot's «Buscar y descargar
+ *  alternativa» button / wait state (S10: per-slot, empty slot only). */
+interface SlotAlternative {
+  /** The OTHER slot holds a file — the only case the button makes sense. */
+  enabled: boolean
+  /** The lookup POST is in flight. */
+  busy: boolean
+  /** Non-null while this slot waits for the alternative download. */
+  waiting: { title: string; progress: number | null } | null
+  onSearch: () => void
+  onStopWaiting: () => void
+}
+
+/** The modal the alternative lookup opened: the item carries the languages
+ *  (L28) and the wait it starts hangs on `onGrabStarted`. */
+interface AltModalState {
+  slot: AltSlot
+  item: ReleaseSearchItem
+  /** The lookup's derived title (L26 — it comes from the other slot's file):
+   *  the wait copy and the status endpoint's `title`. */
+  title: string
+  /** `movie.id` — the status endpoint's `movie_id`. */
+  movieId: number
+}
+
+/** The ESPERA: this slot is waiting for its alternative download. */
+interface AltWait {
+  slot: AltSlot
+  title: string
+  movieId: number
+}
+
 /* ── File picker (reusable for both panes) ─────────────────────────────────── */
 
 interface FilePickerProps {
@@ -172,9 +211,10 @@ interface FilePickerProps {
   value: string
   onSelect: (path: string) => void
   roots: { path: string; name: string }[]
+  alternative?: SlotAlternative
 }
 
-function FilePicker({ label, value, onSelect, roots }: FilePickerProps) {
+function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerProps) {
   const [open, setOpen] = useState(false)
   const [selectedVolume, setSelectedVolume] = useState(roots[0]?.path || '')
   const [currentPath, setCurrentPath] = useState(roots[0]?.path || '')
@@ -251,6 +291,33 @@ function FilePicker({ label, value, onSelect, roots }: FilePickerProps) {
             {value || 'Sin seleccionar'}
           </span>
         </div>
+        {/* S10/T11 — the alternative download lives in the SLOT: the button
+            only on an empty slot whose sibling holds the file the title is
+            derived from (L26); the wait state while that download runs. */}
+        {alternative?.waiting ? (
+          <div className="mixer-alt-wait">
+            <span className="mixer-alt-wait-text">Descargando… {alternative.waiting.title}</span>
+            {alternative.waiting.progress != null && (
+              <span className="mixer-alt-progress">{Math.round(alternative.waiting.progress)}%</span>
+            )}
+            <button type="button" className="mixer-btn-secondary" onClick={alternative.onStopWaiting}>
+              Dejar de esperar
+            </button>
+          </div>
+        ) : (
+          alternative &&
+          !value &&
+          alternative.enabled && (
+            <button
+              type="button"
+              className="mixer-btn-indexer"
+              disabled={alternative.busy}
+              onClick={alternative.onSearch}
+            >
+              Buscar y descargar alternativa
+            </button>
+          )
+        )}
       </div>
 
       {open && (
@@ -631,6 +698,10 @@ export function MediaMixer() {
   const [muxConflict, setMuxConflict] = useState<MuxConflict | null>(null)
   const [lookupNotice, setLookupNotice] = useState<string | null>(null)
   const [releaseSearchItem, setReleaseSearchItem] = useState<ReleaseSearchItem | null>(null)
+  // S10/T11 — the alternative download per empty slot: the modal the lookup
+  // opened, and the wait itself once its grab becomes a job.
+  const [altModal, setAltModal] = useState<AltModalState | null>(null)
+  const [altWait, setAltWait] = useState<AltWait | null>(null)
 
   // Selection state: video = row key (`file:ordinal`), audio = row keys
   // (L18 — ordinals, never the absolute ffprobe `index`).
@@ -844,6 +915,67 @@ export function MediaMixer() {
     },
   })
 
+  // S10/T11 — «Buscar y descargar alternativa» (L26): the title and the
+  // audio languages come from the OTHER slot's file; an in-library movie
+  // opens the modal with them, anything else is the same «añádela primero»
+  // notice (T7), and a failure lands on the same error surface.
+  const altLookupMut = useMutation({
+    mutationFn: (slot: AltSlot): Promise<AlternativeLookupResponse> =>
+      alternativeLookup(slot === 'a' ? pathB : pathA),
+    onSuccess: (data, slot) => {
+      setError(null)
+      if (data.movie) {
+        setLookupNotice(null)
+        setAltModal({
+          slot,
+          item: {
+            type: 'movie',
+            id: data.movie.id,
+            title: data.movie.title,
+            year: data.movie.year,
+            source: data.movie.source,
+            languages: data.audio_languages,
+            idKind: 'movie',
+          },
+          title: data.title,
+          movieId: data.movie.id,
+        })
+      } else {
+        setLookupNotice(`${data.title} no está en la librería — añádela primero en Radarr`)
+      }
+    },
+    onError: (err: Error) => {
+      setError(err.message)
+    },
+  })
+
+  // S10/T11 — the alternative download's status, polled ~5 s and ONLY while
+  // a slot waits (the `enabled` flag is the honesty gate). `downloading` and
+  // `unknown` just keep the wait alive — no automatic timeout (L27).
+  const { data: altStatus } = useQuery({
+    queryKey: ['mixer-alt-status', altWait?.movieId, altWait?.title],
+    queryFn: () => alternativeStatus(altWait!.movieId, altWait!.title),
+    enabled: !!altWait,
+    refetchInterval: 5000,
+  })
+
+  // S10/L27 — `ready && allowed` auto-places through the slot's own setter
+  // (the `onSelect` its picker got); `ready && !allowed` warns with the path
+  // and places NOTHING.
+  useEffect(() => {
+    if (!altWait || !altStatus || altStatus.state !== 'ready') return
+    const { slot } = altWait
+    const path = altStatus.path
+    if (altStatus.allowed && path) {
+      setAltWait(null)
+      setLookupNotice(`Colocado automáticamente: ${baseName(path)}`)
+      if (slot === 'a') setPathA(path)
+      else setPathB(path)
+    } else {
+      setLookupNotice(`El fichero quedó en ${path ?? ''} — añade esa carpeta a allowed_roots`)
+    }
+  }, [altWait, altStatus])
+
   // S6 — «Buscar subtítulos»: only the entries extraction could not give,
   // narrowed to their three-letter codes; the task refresh flips the chips.
   const searchMut = useMutation({
@@ -872,6 +1004,8 @@ export function MediaMixer() {
     setMuxConflict(null)
     setLookupNotice(null)
     setReleaseSearchItem(null)
+    setAltModal(null)
+    setAltWait(null)
     setSelectedVideoKey(null)
     setCheckedAudio(new Set())
     setMarkedSpanish(new Set())
@@ -931,12 +1065,32 @@ export function MediaMixer() {
               value={pathA}
               onSelect={setPathA}
               roots={roots}
+              alternative={{
+                enabled: pathB !== '',
+                busy: altLookupMut.isPending,
+                waiting:
+                  altWait?.slot === 'a'
+                    ? { title: altWait.title, progress: altStatus?.progress ?? null }
+                    : null,
+                onSearch: () => altLookupMut.mutate('a'),
+                onStopWaiting: () => setAltWait(null),
+              }}
             />
             <FilePicker
               label="Archivo B"
               value={pathB}
               onSelect={setPathB}
               roots={roots}
+              alternative={{
+                enabled: pathA !== '',
+                busy: altLookupMut.isPending,
+                waiting:
+                  altWait?.slot === 'b'
+                    ? { title: altWait.title, progress: altStatus?.progress ?? null }
+                    : null,
+                onSearch: () => altLookupMut.mutate('b'),
+                onStopWaiting: () => setAltWait(null),
+              }}
             />
           </div>
 
@@ -949,6 +1103,8 @@ export function MediaMixer() {
               {probeMut.isPending ? 'Cotejando…' : 'Cotejar archivos'}
             </button>
           </div>
+
+          {lookupNotice && <div className="mixer-lookup-notice">{lookupNotice}</div>}
 
           {error && <div className="fm-error">{error}</div>}
         </div>
@@ -1244,6 +1400,19 @@ export function MediaMixer() {
       {/* ── Releases of the movie the indexer lookup found (S7) ───────── */}
       {releaseSearchItem && (
         <ReleaseSearchModal item={releaseSearchItem} onClose={() => setReleaseSearchItem(null)} />
+      )}
+
+      {/* ── Releases of the alternative lookup (S10/T11) ──────────────── */}
+      {altModal && (
+        <ReleaseSearchModal
+          item={altModal.item}
+          onClose={() => setAltModal(null)}
+          onGrabStarted={() => {
+            // The grab became a job: this slot goes into ESPERA. The modal
+            // keeps its own UX — this prop is a notification, never a close.
+            setAltWait({ slot: altModal.slot, title: altModal.title, movieId: altModal.movieId })
+          }}
+        />
       )}
     </section>
   )

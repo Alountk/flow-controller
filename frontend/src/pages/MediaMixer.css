@@ -997,3 +997,30 @@
   color: var(--ok);
   border-color: color-mix(in srgb, var(--ok) 40%, transparent);
 }
+
+/* ── Alternative download wait (S10/T11) ──────────────────────────────────── */
+
+.mixer-alt-wait {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.mixer-alt-wait-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.mixer-alt-progress {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}

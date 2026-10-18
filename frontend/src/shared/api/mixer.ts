@@ -289,3 +289,61 @@ export async function searchTaskSubtitles(
   }
   return res.json() as Promise<{ ok: boolean; results: SubtitleSearchResult[] }>
 }
+
+/** T11/S10: the movie `POST /api/mixer/alternatives/lookup` resolved —
+ *  non-null only when Radarr already owns it (the T7 pattern). */
+export interface AlternativeLookupMovie {
+  id: number
+  title: string
+  year?: number | null
+  source: string
+}
+
+/** `POST /api/mixer/alternatives/lookup {path}` — the title and the audio
+ *  languages both come from the OTHER slot's file (L26/L28). */
+export interface AlternativeLookupResponse {
+  ok: boolean
+  /** Title derived from the filename (L26: it comes from that file). */
+  title: string
+  movie: AlternativeLookupMovie | null
+  /** Three-letter audio codes, normalized, in the S2 order, deduped. */
+  audio_languages: string[]
+}
+
+/** `GET /api/mixer/alternatives/status` — where the alternative download
+ *  stands: `ready` (Radarr owns the file), `downloading` (a queue row matches
+ *  the title), `unknown` (neither). */
+export interface AlternativeStatusResponse {
+  state: 'ready' | 'downloading' | 'unknown'
+  /** Downloads-row percent (0–100) or null when it cannot be known. */
+  progress: number | null
+  path: string | null
+  allowed: boolean
+}
+
+export async function alternativeLookup(path: string): Promise<AlternativeLookupResponse> {
+  const res = await apiFetch('/api/mixer/alternatives/lookup', {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return res.json() as Promise<AlternativeLookupResponse>
+}
+
+export async function alternativeStatus(
+  movieId: number,
+  title: string,
+): Promise<AlternativeStatusResponse> {
+  const params = new URLSearchParams({ movie_id: String(movieId), title })
+  const res = await apiFetch(`/api/mixer/alternatives/status?${params.toString()}`, {})
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return res.json() as Promise<AlternativeStatusResponse>
+}

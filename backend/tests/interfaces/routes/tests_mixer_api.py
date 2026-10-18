@@ -1245,3 +1245,323 @@ class TestLookupEndpoint:
         assert resp.status_code == 502
         assert resp.json() == {"detail": "radarr no está configurado (faltan la URL o la API key)"}
         mock_lookup.assert_not_awaited()
+
+
+# ── Alternatives (S10/T11) ──────────────────────────────────────────────────
+
+_ALT_PATH = "/media/dune/Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv"
+
+
+class TestAlternativesLookupEndpoint:
+    """POST /api/mixer/alternatives/lookup — path → title + movie + audio langs.
+
+    The T7 lookup with a real file attached: `_title_from_filename` + Radarr
+    (`movie` non-null only when the library owns it) plus `audio_languages` —
+    the normalized, deduped codes of the file's audio tracks in the
+    ca→en→ru→cat order. A path ffprobe cannot read is 400 (bad input);
+    Radarr being unusable is 502, never a silent "not in library".
+    """
+
+    def test_missing_path_is_400(self):
+        resp = client.post("/api/mixer/alternatives/lookup", json={})
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "path is required"}
+
+    def test_blank_path_is_400(self):
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": "   "})
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "path is required"}
+
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_unparsable_path_is_400(self, mock_probe):
+        mock_probe.return_value = _probe_fixture("1080p.mkv")
+
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": "1080p.mkv"})
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "Cannot derive a title from: 1080p.mkv"}
+
+    @patch(
+        "interfaces.http.routes_mixer.probe_file",
+        side_effect=RuntimeError("ffprobe failed: boom"),
+    )
+    def test_a_failed_probe_is_400(self, _probe):
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "ffprobe failed: boom"}
+
+    @patch(
+        "interfaces.http.routes_mixer.probe_file",
+        side_effect=FileNotFoundError(f"File not found: {_ALT_PATH}"),
+    )
+    def test_a_missing_file_is_400(self, _probe):
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": f"File not found: {_ALT_PATH}"}
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_in_library_movie_answers_the_modal_item(
+        self, mock_probe, mock_lookup, mock_exists, _find
+    ):
+        mock_probe.return_value = _probe_fixture(_ALT_PATH, languages=("cat", "en", "spa", "rus"))
+        mock_lookup.return_value = {"tmdbId": 550, "title": "Dune Parte Dos", "year": 2024}
+        mock_exists.return_value = 42
+
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "ok": True,
+            "title": "Dune Parte Dos 2024",
+            "movie": {"id": 42, "title": "Dune Parte Dos", "year": 2024, "source": "radarr"},
+            "audio_languages": ["spa", "eng", "rus", "cat"],
+        }
+        mock_probe.assert_called_once_with(_ALT_PATH)
+        mock_lookup.assert_awaited_once_with(ANY, _RADARR_SERVICE, "Dune Parte Dos 2024")
+        mock_exists.assert_awaited_once_with(ANY, _RADARR_SERVICE, 550)
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock, return_value={})
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_audio_languages_are_normalized_deduped_and_ordered(
+        self, mock_probe, _lookup, _find
+    ):
+        # es→spa, en→eng; cat twice collapses to one; the four ordered codes
+        # come first (spa→eng→rus→cat) and the rest follow in code order.
+        mock_probe.return_value = _probe_fixture(
+            _ALT_PATH, languages=("cat", "cat", "es", "fra", "und", "en")
+        )
+
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 200
+        assert resp.json()["audio_languages"] == ["spa", "eng", "cat", "fra", "und"]
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_exists", new_callable=AsyncMock, return_value=None)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_movie_not_in_the_library_answers_null(
+        self, mock_probe, mock_lookup, _exists, _find
+    ):
+        mock_probe.return_value = _probe_fixture(_ALT_PATH)
+        mock_lookup.return_value = {"tmdbId": 550, "title": "Dune Parte Dos", "year": 2024}
+
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["movie"] is None
+        assert body["audio_languages"] == ["spa"]
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_radarr_failure_is_502(self, mock_probe, mock_lookup, _find):
+        mock_probe.return_value = _probe_fixture(_ALT_PATH)
+        mock_lookup.side_effect = aiohttp.ClientError("connection refused")
+
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 502
+        assert resp.json() == {"detail": "Radarr lookup failed: connection refused"}
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=None)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_unconfigured_radarr_is_502(self, mock_probe, _find):
+        mock_probe.return_value = _probe_fixture(_ALT_PATH)
+
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 502
+        assert resp.json() == {
+            "detail": "radarr no está configurado (faltan la URL o la API key)"
+        }
+
+
+class TestAlternativesStatusEndpoint:
+    """GET /api/mixer/alternatives/status — ready | downloading | unknown.
+
+    1) the file Radarr holds → `ready` (`allowed` from `config.path_is_allowed`);
+    2) else a downloads row whose casefolded title contains the normalized
+       title → `downloading` (its `progress`, null when it cannot be known);
+    3) else `unknown`. `movie_id <= 0` or an empty `title` is 400.
+    """
+
+    def test_missing_query_is_400(self):
+        resp = client.get("/api/mixer/alternatives/status")
+        assert resp.status_code == 400
+
+    def test_zero_movie_id_is_400(self):
+        resp = client.get(
+            "/api/mixer/alternatives/status", params={"movie_id": 0, "title": "Dune"}
+        )
+        assert resp.status_code == 400
+
+    def test_negative_movie_id_is_400(self):
+        resp = client.get(
+            "/api/mixer/alternatives/status", params={"movie_id": -3, "title": "Dune"}
+        )
+        assert resp.status_code == 400
+
+    def test_empty_title_is_400(self):
+        resp = client.get(
+            "/api/mixer/alternatives/status", params={"movie_id": 42, "title": "  "}
+        )
+        assert resp.status_code == 400
+
+    @patch("config.path_is_allowed", return_value=True)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_file", new_callable=AsyncMock)
+    def test_ready_when_radarr_has_the_file(self, mock_file, _find, mock_allowed):
+        mock_file.return_value = "/movies/Dune Parte Dos (2024)/Dune.mkv"
+
+        resp = client.get(
+            "/api/mixer/alternatives/status",
+            params={"movie_id": 42, "title": "Dune Parte Dos 2024"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "state": "ready",
+            "progress": None,
+            "path": "/movies/Dune Parte Dos (2024)/Dune.mkv",
+            "allowed": True,
+        }
+        mock_file.assert_awaited_once_with(ANY, _RADARR_SERVICE, 42)
+        mock_allowed.assert_called_once_with("/movies/Dune Parte Dos (2024)/Dune.mkv")
+
+    @patch("config.path_is_allowed", return_value=False)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_file", new_callable=AsyncMock)
+    def test_ready_outside_allowed_roots_reports_not_allowed(self, mock_file, _find, _allowed):
+        mock_file.return_value = "/elsewhere/Dune.mkv"
+
+        resp = client.get(
+            "/api/mixer/alternatives/status",
+            params={"movie_id": 42, "title": "Dune Parte Dos 2024"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "state": "ready",
+            "progress": None,
+            "path": "/elsewhere/Dune.mkv",
+            "allowed": False,
+        }
+
+    @patch("application.use_cases.downloads_cache.get_downloads", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_file", new_callable=AsyncMock, return_value=None)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    def test_downloading_matches_the_casefolded_title(self, _find, _file, mock_downloads):
+        mock_downloads.return_value = {
+            "downloads": [
+                {"title": "Otra Cosa (2020).mkv", "progress": 10.0},
+                {"title": "Dune Parte Dos 2024 1080p WEB-DL x264-GRP", "progress": 31.5},
+            ]
+        }
+
+        resp = client.get(
+            "/api/mixer/alternatives/status",
+            params={"movie_id": 42, "title": "Dune Parte Dos 2024"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "state": "downloading",
+            "progress": 31.5,
+            "path": None,
+            "allowed": False,
+        }
+
+    @patch("application.use_cases.downloads_cache.get_downloads", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_file", new_callable=AsyncMock, return_value=None)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    def test_downloading_matches_a_dotted_release_name(self, _find, _file, mock_downloads):
+        # L25 flow: real torrent rows are dotted release names — the needle
+        # and the row title must BOTH be normalized, or the wait never shows
+        # progress (parent amendment to worker interpretation 8).
+        mock_downloads.return_value = {
+            "downloads": [
+                {"title": "Dune.Parte.Dos.2024.1080p.WEB-DL.x264-GRP", "progress": 42.0},
+            ]
+        }
+
+        resp = client.get(
+            "/api/mixer/alternatives/status",
+            params={"movie_id": 42, "title": "Dune Parte Dos 2024"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] == "downloading"
+        assert body["progress"] == 42.0
+
+    @patch("application.use_cases.downloads_cache.get_downloads", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_file", new_callable=AsyncMock, return_value=None)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    def test_downloading_without_knowable_progress_is_null(self, _find, _file, mock_downloads):
+        mock_downloads.return_value = {
+            "downloads": [{"title": "Dune Parte Dos 2024 1080p WEB-DL x264-GRP"}]
+        }
+
+        resp = client.get(
+            "/api/mixer/alternatives/status",
+            params={"movie_id": 42, "title": "Dune Parte Dos 2024"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "state": "downloading",
+            "progress": None,
+            "path": None,
+            "allowed": False,
+        }
+
+    @patch("application.use_cases.downloads_cache.get_downloads", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_file", new_callable=AsyncMock, return_value=None)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    def test_a_row_for_another_title_does_not_match(self, _find, _file, mock_downloads):
+        mock_downloads.return_value = {
+            "downloads": [{"title": "Dune 1984 REMASTERED 1080p.mkv", "progress": 50.0}]
+        }
+
+        resp = client.get(
+            "/api/mixer/alternatives/status",
+            params={"movie_id": 42, "title": "Dune Parte Dos 2024"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "state": "unknown",
+            "progress": None,
+            "path": None,
+            "allowed": False,
+        }
+
+    @patch("application.use_cases.downloads_cache.get_downloads", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_file", new_callable=AsyncMock, return_value=None)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    def test_unknown_without_file_or_row(self, _find, _file, mock_downloads):
+        mock_downloads.return_value = {"downloads": []}
+
+        resp = client.get(
+            "/api/mixer/alternatives/status",
+            params={"movie_id": 42, "title": "Dune Parte Dos 2024"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "state": "unknown",
+            "progress": None,
+            "path": None,
+            "allowed": False,
+        }
+
+    @patch("config.path_is_allowed", return_value=True)
+    @patch("application.use_cases.downloads_cache.get_downloads", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_file", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    def test_the_file_wins_over_a_download_row(self, _find, mock_file, mock_downloads, _allowed):
+        mock_file.return_value = "/movies/Dune Parte Dos (2024)/Dune.mkv"
+        mock_downloads.return_value = {
+            "downloads": [{"title": "Dune Parte Dos 2024 1080p WEB-DL x264-GRP"}]
+        }
+
+        resp = client.get(
+            "/api/mixer/alternatives/status",
+            params={"movie_id": 42, "title": "Dune Parte Dos 2024"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "ready"
+        mock_downloads.assert_not_awaited()
