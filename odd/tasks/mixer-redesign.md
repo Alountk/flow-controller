@@ -279,7 +279,8 @@ secciones de la app.
     idioma desconocido / ruta desconocida / ordinal fuera de rango, y plan con `spa`),
     GREEN frontend **615/615** (4 tests: botón+desbloqueo, payload `language_overrides`
     exacto, ausencia del botón en filas no-und, re-bloqueo al desmarcar), `tsc -b` 0,
-    eslint 0. Rama `feat/mixer-und-spanish-mark`, PR en el comentario de cierre.
+    eslint 0. Rama `feat/mixer-und-spanish-mark` → **PR #210** (448 líneas, 1 commit:
+    frontera de slice registrada aquí — T10 completo en un solo work unit).
 
 ## Log
 

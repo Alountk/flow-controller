@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-18 · **PR #209 (mixer redesign)** · RDD **on** (global)
-> · specs: 1223 backend / 611 frontend · main pre-#209 = `29ec2e7` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-18 · **PR #210 (enmienda L24 und→castellano)** · RDD **on** (global)
+> · specs: 1228 backend / 615 frontend · main pre-#210 = `89b1e2d` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,10 +16,10 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `29ec2e7` (pre-#209), CI (GitGuardian/backend/frontend/e2e/docker)
-pass. Tras #209: specs 1223 backend / 611 frontend, working tree limpia.
+**Verde**: `main` en `89b1e2d` (pre-#210), CI (GitGuardian/backend/frontend/e2e/docker)
+pass. Tras #210: specs 1228 backend / 615 frontend, working tree limpia.
 
-**Tanda 2026-10-17/18 (PRs #206–#209)**:
+**Tanda 2026-10-17/18 (PRs #206–#210)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
 - #207 — corrección del HANDOFF sobre deploy: **es automático** (webhook Portainer 204
   verificado en vivo).
@@ -34,6 +34,11 @@ pass. Tras #209: specs 1223 backend / 611 frontend, working tree limpia.
   lookup al indexador con `ReleaseSearchModal`; port de las pantallas Stitch 10/11/12 a
   `MediaMixer` con badge bloqueante y panel de subtítulos. Deuda legacy 2751→3017
   (`MAX_LEGACY_LOC`, disclosure en el PR). Feature doc: `odd/tasks/mixer-redesign.md`.
+- #210 — **enmienda L24/T10**: las pistas de audio `und` reales pueden **marcarse como
+  castellano** en la lista («Marcar como castellano»/«Quitar marca») para pasar el flag
+  de exigidos: `MuxRequest.language_overrides` con validación fail-closed (solo targets
+  `und`, idiomas ordenados, rutas cotejadas, ordinales en rango → si no, 400
+  `invalid_language_override`) aplicado al gate y al plan de subtítulos. Specs 1228/615.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
