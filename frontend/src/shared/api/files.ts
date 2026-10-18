@@ -113,3 +113,12 @@ export async function queueCancel(opId: string): Promise<{ ok: boolean; detail: 
   })
   return handleResponse(res)
 }
+
+/** T1/S3 — manual override for an op that finished behind the scenes but
+ * still shows as pending/running (dead consumer, stale history row). */
+export async function completeQueueOp(opId: string): Promise<{ ok: boolean; detail: string }> {
+  const res = await apiFetch(`/api/files/queue/complete/${opId}`, {
+    method: 'POST',
+  })
+  return handleResponse(res)
+}

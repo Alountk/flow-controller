@@ -9,7 +9,7 @@ import {
   type TraceResponse,
   type TraceStage,
 } from '../shared/types.ts'
-import { queueCancel, queueStatus, type QueueOp } from '../shared/api/files.ts'
+import { completeQueueOp, queueCancel, queueStatus, type QueueOp } from '../shared/api/files.ts'
 import { listTasks, cancelTask, pauseTask, resumeTask } from '../shared/api/mixer.ts'
 import { formatBytes } from '../shared/utils/text.ts'
 import { relativeTime } from '../shared/utils/time.ts'
@@ -342,6 +342,16 @@ function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }
     },
   })
 
+  // T1/S3 — the human's override: the copy may be done on disk while the state
+  // stayed blocked (dead consumer, stale row after a restart). Flipping it
+  // writes BOTH sources of truth server-side; we only refetch the view.
+  const completeMutation = useMutation({
+    mutationFn: completeQueueOp,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['queue'] })
+    },
+  })
+
   // Moved from the retired QueueSidebar: once OUR operation reports that the
   // arr imported (or failed to import) what it placed, the grabbed-marks the
   // Faltantes/Biblioteca lists draw are stale. Coverage is honest: this runs
@@ -394,14 +404,25 @@ function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }
               </span>
               <span className={`sg-op-status ${op.status}`}>{opStatusLabel(op)}</span>
               {(op.status === 'running' || op.status === 'pending') && (
-                <button
-                  type="button"
-                  className="sg-op-cancel"
-                  onClick={() => cancelMutation.mutate(op.id)}
-                  title="Cancelar operación"
-                >
-                  ×
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="sg-op-cancel"
+                    onClick={() => cancelMutation.mutate(op.id)}
+                    title="Cancelar operación"
+                  >
+                    ×
+                  </button>
+                  <button
+                    type="button"
+                    className="sg-op-ok"
+                    onClick={() => completeMutation.mutate(op.id)}
+                    title="Marcar como completada"
+                    aria-label="Marcar como completada"
+                  >
+                    ✓
+                  </button>
+                </>
               )}
             </div>
           ))}
@@ -413,6 +434,17 @@ function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }
               </span>
               <span className="sg-op-progress" />
               <span className={`sg-op-status ${op.status}`}>{opStatusLabel(op)}</span>
+              {(op.status === 'running' || op.status === 'pending') && (
+                <button
+                  type="button"
+                  className="sg-op-ok"
+                  onClick={() => completeMutation.mutate(op.id)}
+                  title="Marcar como completada"
+                  aria-label="Marcar como completada"
+                >
+                  ✓
+                </button>
+              )}
             </div>
           ))}
         </>

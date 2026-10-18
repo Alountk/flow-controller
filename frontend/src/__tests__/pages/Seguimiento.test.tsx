@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Seguimiento } from '../../pages/Seguimiento.tsx'
-import { queueCancel, queueStatus } from '../../shared/api/files.ts'
+import { completeQueueOp, queueCancel, queueStatus } from '../../shared/api/files.ts'
 import type { MuxTask } from '../../shared/api/mixer.ts'
 import type { ActionsResponse, Trace, TraceResponse } from '../../shared/types.ts'
 
@@ -18,10 +18,15 @@ import type { ActionsResponse, Trace, TraceResponse } from '../../shared/types.t
  * carried live on the card — retiring the old page loses none of them.
  */
 
-vi.mock('../../shared/api/files', () => ({ queueStatus: vi.fn(), queueCancel: vi.fn() }))
+vi.mock('../../shared/api/files', () => ({
+  queueStatus: vi.fn(),
+  queueCancel: vi.fn(),
+  completeQueueOp: vi.fn(),
+}))
 
 const queueStatusMock = vi.mocked(queueStatus)
 const queueCancelMock = vi.mocked(queueCancel)
+const completeQueueOpMock = vi.mocked(completeQueueOp)
 
 const OPEN_ACTIONS: ActionsResponse = { actions: [], safe_mode: false, available: [] }
 
@@ -835,5 +840,67 @@ describe('the Mezclas band (S11)', () => {
         calls.some((c) => c.url === '/api/mixer/tasks/m-pa/resume' && c.method === 'POST'),
       ).toBe(true),
     )
+  })
+})
+
+describe('marking a blocked operation as completed (T1/S3)', () => {
+  const stuckOp = {
+    id: 'op-7',
+    type: 'copy',
+    name: 'Blade Runner (1982)',
+    src: '/downloads/Blade Runner',
+    dst: '/mnt/storage/movies/Blade Runner',
+    status: 'running',
+    detail: null,
+    progress: 100,
+    copied_bytes: 100,
+    total_bytes: 100,
+    files_done: 1,
+    files_total: 1,
+    import_status: '',
+  }
+
+  it('offers the manual completion on an active row and calls the endpoint', async () => {
+    queueStatusMock.mockResolvedValue({ queue: [stuckOp], completed: [], running: false })
+    completeQueueOpMock.mockResolvedValue({ ok: true, detail: 'Operación marcada como completada' })
+
+    renderView(resp([trace()]))
+
+    const button = await screen.findByRole('button', { name: 'Marcar como completada' })
+    fireEvent.click(button)
+
+    // react-query appends its mutation context as a second argument — assert
+    // the first one, same as the cancel test above (mock.calls[0][0]).
+    await waitFor(() => expect(completeQueueOpMock.mock.calls[0][0]).toBe('op-7'))
+  })
+
+  it('also offers it on a stuck archived row whose status never settled', async () => {
+    queueStatusMock.mockResolvedValue({ queue: [], completed: [stuckOp], running: false })
+
+    renderView(resp([trace()]))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Marcar como completada' }),
+      ).toBeInTheDocument(),
+    )
+  })
+
+  it('does not offer it on rows that already settled', async () => {
+    queueStatusMock.mockResolvedValue({
+      queue: [],
+      completed: [
+        { ...stuckOp, id: 'd1', status: 'done' },
+        { ...stuckOp, id: 'f1', status: 'failed' },
+      ],
+      running: false,
+    })
+
+    renderView(resp([trace()]))
+
+    await waitFor(() => expect(screen.getByText('hecha')).toBeInTheDocument())
+    expect(
+      screen.queryByRole('button', { name: 'Marcar como completada' }),
+    ).toBeNull()
   })
 })

@@ -615,6 +615,32 @@
   outline-offset: 1px;
 }
 
+/* T1/S3 — manual completion: same compact action as cancel, but the "it IS
+   done" tone; mirrors .sg-op-cancel so both live on one row without layout
+   surprises. */
+.sg-op-ok {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.sg-op-ok:hover {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.sg-op-ok:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* S11/T13 — «Mezclas» band: the mixer's task state, beside the copy queue.
    The status chips and the progress bar are the mixer display primitives
    (`.mixer-task-status` / `.mixer-progress-*` live in MediaMixer.css — the
