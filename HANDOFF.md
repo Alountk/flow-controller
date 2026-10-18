@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-18 · **PR #212 (S11 cola/progreso/destino)** · RDD **on** (global)
-> · specs: 1282 backend / 636 frontend · main pre-#212 = `ce08db5` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-18 · **PR #213 (seguimiento-unificado T1-T3)** · RDD **on** (global)
+> · specs: 1288 backend / 653 frontend · main pre-#213 = `4b82be2` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,10 +16,10 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `ce08db5` (pre-#212), CI (GitGuardian/backend/frontend/e2e/docker)
-pass. Tras #212: specs 1282 backend / 636 frontend, working tree limpia.
+**Verde**: `main` en `4b82be2` (pre-#213), CI (GitGuardian/backend/frontend/e2e/docker)
+pass. Tras #213: specs 1288 backend / 653 frontend, working tree limpia.
 
-**Tanda 2026-10-17/18 (PRs #206–#212)**:
+**Tanda 2026-10-17/18 (PRs #206–#213)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
 - #207 — corrección del HANDOFF sobre deploy: **es automático** (webhook Portainer 204
   verificado en vivo).
@@ -58,6 +58,16 @@ pass. Tras #212: specs 1282 backend / 636 frontend, working tree limpia.
   «Mezclas» en **Seguimiento** (`.sg-ops`). Ratchet **3017→3218** (`#:` disclosure).
   Verificador independiente no disponible (gate: sin Risk en la tarea; self-
   verification inline: spot-check + focused 188 + suite 1282). Specs 1282/636.
+- #213 — **`seguimiento-unificado` T1-T3** (feedback L33 de #212; decisiones L34-L36):
+  **(T1)** `POST /api/files/queue/complete/{op_id}` marca `pending/running`→`done` en memoria
+  Y fila SQLite (nuevo `history.get_operation`) + botón «Marcar como completada» en filas
+  activas y atascadas; **(T2)** Seguimiento pasa de `[sg-board, sg-ops]` 70/30 a **UNA lista**
+  con pestañas «Activas (n)»/«Completadas»/«Errores» + contador (trazas+copias+mezclas,
+  mapping pinneado por test, contratos DOM/e2e reescritos, keys/polls intactos por `ssePollGate`);
+  **(T3)** «Mezclar» aceptado → salto automático a Seguimiento con la fila hoisted + borde de
+  acento (`#/seguimiento?highlight=<id>`, lifetime one-shot por visita). RED 6/15/5 observados;
+  e2e `kanban-fit` 4/4 **observado en local** con shim nuevo `e2e/docker-compose.local.yml`
+  (disclosed + disclosures de flake/rate-limit). Specs 1288/653.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
