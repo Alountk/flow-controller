@@ -157,6 +157,12 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
 - **Gate de writers**: la tarea delegada DEBE empezar con el literal
   `Spec: odd/tasks/<feature>.md, T<n>`; sin él el runtime rechaza el lanzamiento (y sin
   feature doc, ejecutar inline). T2–T3 de mixer cayeron así a inline.
+- **CI corre `tsc -b` (build mode, incluye `__tests__`)** — el `tsc` plano local pasa sin
+  type-checkear los tests y `vitest`/`eslint` tampoco lo hacen → un error de tipos en un
+  test solo revienta en `frontend-build`. Chequear local con `./node_modules/.bin/tsc -b`.
+  Caso #209: captura `let x: F|null = null` asignada solo en un closure ⇒ CFA la estrecha
+  a `null` en el guard y el call queda `never` (TS2349) → holder de objeto
+  (`const armed: {fire?: () => void}`).
 - zsh se come backticks en `gh pr create --body` → siempre `--body-file`.
 - Engram: si `mem_save` falla con "multiple active runtime sessions" → `engram doctor
   --json` y `mem_session_end` de la sesión runtime zombie (funcionó: `ses_ee284984...`).

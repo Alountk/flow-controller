@@ -304,11 +304,11 @@ describe('mixer — «Buscar subtítulos» (S6/T6)', () => {
       taskSubtitle({ language_code: 'cat', language: 'ca', status: 'not_extractable', detail: 'bitmap: hdmv_pgs_subtitle' }),
     ])
 
-    let releaseSearch: (() => void) | null = null
+    const armed: { fire?: () => void } = {}
     const calls = mockFetch([
       ...pickerHandlers(),
       ['/api/mixer/tasks/t1/subtitles/search', () => new Promise<HandlerResult>((resolve) => {
-        releaseSearch = () => {
+        armed.fire = () => {
           taskState = {
             ...taskState,
             subtitles: [
@@ -344,8 +344,8 @@ describe('mixer — «Buscar subtítulos» (S6/T6)', () => {
     expect(post?.body).toEqual({ languages: ['rus', 'cat'] })
 
     // Resolve the POST → the task refresh flips rus to «OpenSubtitles».
-    if (!releaseSearch) throw new Error('search promise not armed')
-    releaseSearch()
+    if (!armed.fire) throw new Error('search promise not armed')
+    armed.fire()
 
     expect(await screen.findByText('Dune.ru.srt')).toBeInTheDocument()
     expect(screen.getByText('OpenSubtitles')).toBeInTheDocument()
