@@ -245,9 +245,25 @@ secciones de la app.
     de no inventar datos), chips «Pendiente»/«Sin pista embebida»/«Extraíble»/
     «Omitida» para estados que el mockup no define, y fps/duración en rojo en
     ambas columnas del header (el mockup solo marca B).
-- [ ] **T9 [S1–S9]** — docs y cierre: BACKLOG (fila del mixer/bloque 🟡) + HANDOFF
+- [x] **T9 [S1–S9]** — docs y cierre: BACKLOG (fila del mixer/bloque 🟡) + HANDOFF
   (pendiente 1) + este doc (tasks/espejo); checks finales backend/frontend/tsc/eslint.
-  Commit: —.
+  Commit: C8 (docs de cierre, dentro del PR #209).
+  - Evidencia (2026-10-18): **BACKLOG no contiene fila propia del mixer** (solo referencias
+    incidentales) → sin cambios allí. HANDOFF actualizado: header (specs 1223/611, PR
+    #209), bloque «Verde» + tanda #206–#209, pendiente 1 del bloque 🟡 marca el mixer
+    como hecho, gotchas nuevos (ratchet hasta 3017, contrato ordinal `track_index`, gate
+    de writers `Spec:`), mapa de docs con este feature doc. **PR #209 abierto** con body
+    completo: disclosure de deuda 2751→3017, tabla de slices C1–C8, checks (backend
+    **1223/1223**, vitest **611/611**, tsc 0, eslint 0), limitaciones conocidas y
+    `Risk: item 4` (fase de extracción y búsqueda OpenSubtitles mutan `task["subtitles"]`
+    desde corutina y ruta; orden secuencial + escrituras por entrada, sin test de
+    concurrencia). Merge `--merge --delete-branch` al estar CI verde (regla del usuario).
+- **L23 (2026-10-18, T9/cierre)**: PR **#209** creado desde `feat/mixer-redesign`
+  (8 commits, ~6006+ líneas): docs → T2+T3 → T4 → T5 → T6 → T7 → T8 → cierre. Toda la
+  feature verificada por spot-check del padre en cada tarea: RED observado siempre, suites
+  completas en verde en ambos stacks, espejo de Engram `odd/mixer-redesign/tasks`
+  actualizado por task transition. Cerrado el bloque 🟡 del Mixer (S9 gate: mockups 10/11/12
+  aprobados antes de implementar, L14).
 
 ## Log
 

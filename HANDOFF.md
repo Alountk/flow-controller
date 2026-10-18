@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-17 · main = `ad9380e` · RDD **on** (global) · specs: 1130 backend / 582 frontend
-> Público: el agente de la próxima sesión + Raul. Artefactos en español, código/UI en inglés.
+> Última actualización: 2026-10-18 · **PR #209 (mixer redesign)** · RDD **on** (global)
+> · specs: 1223 backend / 611 frontend · main pre-#209 = `29ec2e7` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,8 +16,24 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `ad9380e`, CI (GitGuardian/backend/frontend/e2e/docker) pass, sin PRs
-abiertos, working tree limpia (refs remotas obsoletas pruned 2026-10-16).
+**Verde**: `main` en `29ec2e7` (pre-#209), CI (GitGuardian/backend/frontend/e2e/docker)
+pass. Tras #209: specs 1223 backend / 611 frontend, working tree limpia.
+
+**Tanda 2026-10-17/18 (PRs #206–#209)**:
+- #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
+- #207 — corrección del HANDOFF sobre deploy: **es automático** (webhook Portainer 204
+  verificado en vivo).
+- #208 — **C-06 cerrado**: revisión visual del dark mode aprobada (mediciones Playwright
+  AA: `--text-dim` 5.24–5.58:1).
+- #209 — **redesign del Mixer** (feat/mixer-redesign, specs S1–S9 + gate de mockups S9
+  aprobado): cotejo fps/duración con `ok:false` + **409** antes de ffmpeg; ranking de
+  vídeo A/B (`resolución > codec > bitrate`, `best_video` en el probe); audio fusionado
+  ca→en→ru→cat con «4 automáticas» e idiomas exigidos (`mixer.required_languages`, de
+  fábrica solo castellano, unión A+B); subtítulos `.srt` extraídos a sidecars tras el mux
+  + OpenSubtitles (`POST /tasks/{id}/subtitles/search`, API key **cifrada en reposo**);
+  lookup al indexador con `ReleaseSearchModal`; port de las pantallas Stitch 10/11/12 a
+  `MediaMixer` con badge bloqueante y panel de subtítulos. Deuda legacy 2751→3017
+  (`MAX_LEGACY_LOC`, disclosure en el PR). Feature doc: `odd/tasks/mixer-redesign.md`.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -95,9 +111,11 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
 ## Pendientes (orden sugerido)
 
 1. **Bloque 🟡 de diseño — resto** — ya hecho: árbol Series + estados de cola (S1–S5, PR
-   #203). Quedan, con decisión de usuario antes de tocar: tabla densa Archivos (choca con
-   dual-pane), secciones Calidad/Avisos (no existen en backend = feature nueva), redesign
-   del Mixer (feature grande), y 3 namings donde la recomendación es NO cambiar
+   #203) y el **redesign del Mixer** (S1–S9, PR #209 — cotejo bloqueante, audio por
+   idiomas, subtítulos externos + OpenSubtitles, lookup al indexador, port Stitch 10/11/12).
+   Quedan, con decisión de usuario antes de tocar: tabla densa Archivos (choca con
+   dual-pane), secciones Calidad/Avisos (no existen en backend = feature nueva), y
+   3 namings donde la recomendación es NO cambiar
    ("Archivos"≠"Ficheros", chips F-07 backend-owned, 8 dots de Setup).
 2. Backlog menores: C-01 canal de avisos, dedupe `formatBytes` (3 copias), dark/light toggle,
    un-ack `Descartar bloqueo`, knobs rate limit, fila C-08, F-06(b) GPL. (B-12 y audit:
@@ -129,8 +147,16 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
 - **TestClient de Starlette mata workers fire-and-forget** → `post_grab_and_settle`
   (`backend/tests/_stubs.py`, httpx ASGITransport en un loop).
 - **Ratchet `MAX_LEGACY_LOC`** (`tests/contracts/tests_architecture.py`): event_bus/app.py
-  son legacy; cualquier línea nueva exige subir el máximo CON comentario dated y owned en
-  el PR (2578→2730→2750 hecho).
+  y `media_mixer.py` son legacy; cualquier línea nueva exige subir el máximo CON comentario
+  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017 hecho; entradas `#:`).
+- **`track_index` del mux = ORDINAL** (posición en `video_tracks`/`audio_tracks` para
+  `-map 0:v:N/a:N`), NO `track.index` (índice absoluto de ffprobe). El frontend viejo
+  enviaba el absoluto ⇒ off-by-one preexistente en audio; corregido y fijado con asserts
+  de payload en #209 (feature doc L18). `POST /tasks/{id}/subtitles/search` filtra por
+  `language_code` de 3 letras ("spa"), no por código corto ("es").
+- **Gate de writers**: la tarea delegada DEBE empezar con el literal
+  `Spec: odd/tasks/<feature>.md, T<n>`; sin él el runtime rechaza el lanzamiento (y sin
+  feature doc, ejecutar inline). T2–T3 de mixer cayeron así a inline.
 - zsh se come backticks en `gh pr create --body` → siempre `--body-file`.
 - Engram: si `mem_save` falla con "multiple active runtime sessions" → `engram doctor
   --json` y `mem_session_end` de la sesión runtime zombie (funcionó: `ses_ee284984...`).
@@ -146,4 +172,7 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
 - `odd/tasks/async-grab.md`, `sse-events.md` — contratos del grab async y del bus.
 - `odd/tasks/stitch-*.md` (9) — puertos de diseño con evidencia; `stitch-series-tree.md`
   incluye specs S1–S5 y el Log de entrega (T1–T5).
+- `odd/tasks/mixer-redesign.md` — **redesign del Mixer completo**: specs S1–S9, tareas
+  T1–T9, Log L1–L23 (decisiones verbatim, aprobación de mockups L14, contrato ordinal L18,
+  evidencia por tarea y fronteras de slice C1–C8).
 - `prototypes/DESIGN.md` — handoff original de Stitch (tokens C-06 + briefs).
