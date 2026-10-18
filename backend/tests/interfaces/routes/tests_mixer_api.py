@@ -394,6 +394,132 @@ class TestMuxEndpoint:
         assert resp.status_code == 200
         mock_start.assert_called_once()
 
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_language_override_marks_und_track_as_spa(self, mock_probe, mock_start, mock_isfile):
+        # L24: a pista `und` marcada por el usuario como castellano satisface
+        # el gate de exigidos vía `language_overrides`, y alimenta el plan de
+        # subtítulos (spa cuenta en la unión; `und` no aparece como código).
+        mock_start.return_value = "test-task-und-mark"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("eng", "und")),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=("rus",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "language_overrides": [
+                    {"path": "/mnt/storage/video.mkv", "track_index": 1, "language": "spa"}
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        mock_start.assert_called_once()
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [e["language_code"] for e in plan] == ["spa", "eng", "rus"]
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_language_override_rejects_non_und_target(self, mock_probe, mock_start, mock_isfile):
+        # L24: solo las pistas `und` admiten la marca — un eng etiquetado no
+        # se puede renombrar (400, fail closed, nunca un mux silencioso).
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("eng",)),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=("rus",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "language_overrides": [
+                    {"path": "/mnt/storage/video.mkv", "track_index": 0, "language": "spa"}
+                ],
+            },
+        )
+        assert resp.status_code == 400
+        assert "invalid_language_override" in resp.json()["detail"]
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_language_override_rejects_unknown_language(self, mock_probe, mock_start, mock_isfile):
+        # L24: el idioma destino debe normalizarse a uno de los ordenados.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("und",)),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=("rus",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "language_overrides": [
+                    {"path": "/mnt/storage/video.mkv", "track_index": 0, "language": "zzz"}
+                ],
+            },
+        )
+        assert resp.status_code == 400
+        assert "invalid_language_override" in resp.json()["detail"]
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_language_override_rejects_unknown_path(self, mock_probe, mock_start, mock_isfile):
+        # L24: la marca solo apunta a ficheros cotejados en este mux.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("und",)),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=("rus",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "language_overrides": [
+                    {"path": "/mnt/storage/other.mkv", "track_index": 0, "language": "spa"}
+                ],
+            },
+        )
+        assert resp.status_code == 400
+        assert "invalid_language_override" in resp.json()["detail"]
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_language_override_rejects_out_of_range_track(self, mock_probe, mock_start, mock_isfile):
+        # L24: ordinal inexistente dentro del fichero → 400, nunca un mapa
+        # que apunte a una pista que ffprobe no reportó.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("und",)),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=("rus",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "language_overrides": [
+                    {"path": "/mnt/storage/video.mkv", "track_index": 9, "language": "spa"}
+                ],
+            },
+        )
+        assert resp.status_code == 400
+        assert "invalid_language_override" in resp.json()["detail"]
+        mock_start.assert_not_called()
+
     def test_mux_missing_video_path(self):
         resp = client.post(
             "/api/mixer/mux",

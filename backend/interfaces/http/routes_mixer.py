@@ -59,6 +59,9 @@ class MuxRequest(BaseModel):
     video_source: dict
     audio_sources: list[dict]
     output_path: str = ""
+    # L24: [{path, track_index, language}] — pistas `und` que el usuario marcó
+    # como castellano (u otro idioma ordenado) para pasar el gate de exigidos.
+    language_overrides: list[dict] = []
 
 
 class SubtitleSearchRequest(BaseModel):
@@ -103,7 +106,56 @@ def _required_languages() -> list[str]:
     return result
 
 
-def _build_subtitle_plan(probes: list[dict]) -> list[dict]:
+def _resolve_language_overrides(
+    probes: list[dict], overrides: list[dict] | None
+) -> dict[tuple[str, int], str]:
+    """L24: user-marked `und` tracks → effective language for this mux.
+
+    «deberiamos poder marcar las pista und si son las castellanas para poder
+    pasar el flag» — each override is `{path, track_index, language}`: the path
+    must be one of the probed files, the ordinal must exist inside it, the
+    track must probe as `und`, and the target language must normalize to one
+    of `ORDERED_AUDIO_LANGUAGES`. Anything else raises 400
+    `invalid_language_override` — the gate never guesses. Only the multi-file
+    gate path resolves them (a single-file mux runs no gate and no plan).
+    """
+    if not overrides:
+        return {}
+    by_path = {os.path.realpath(p.get("path", "")): p for p in probes}
+    resolved: dict[tuple[str, int], str] = {}
+    for item in overrides:
+        code = normalize_language(str(item.get("language", "")))
+        if code not in ORDERED_AUDIO_LANGUAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid_language_override: unknown language {item.get('language')!r}",
+            )
+        path = os.path.realpath(str(item.get("path", "")))
+        probe = by_path.get(path)
+        if probe is None:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_language_override: path is not one of the probed files",
+            )
+        ordinal = item.get("track_index")
+        tracks = probe.get("audio_tracks", [])
+        if not isinstance(ordinal, int) or not 0 <= ordinal < len(tracks):
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_language_override: track_index out of range",
+            )
+        if normalize_language(tracks[ordinal].get("language", "und")) != "und":
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_language_override: target track is not und",
+            )
+        resolved[(path, ordinal)] = code
+    return resolved
+
+
+def _build_subtitle_plan(
+    probes: list[dict], overrides: dict[tuple[str, int], str] | None = None
+) -> list[dict]:
     """S6: one `.srt` sidecar plan entry per audio language of the files.
 
     «los mismos idiomas de audio» — the union of all audio languages. For
@@ -111,16 +163,24 @@ def _build_subtitle_plan(probes: list[dict]) -> list[dict]:
     bitmap/unknown across files, then first file, first track); languages
     with no track still get an entry (T6 fills those via OpenSubtitles).
     Entries start `pending`; the background run resolves them.
+
+    L24: `overrides` swaps a marked `und` audio track for its declared
+    language (spa counts in the union; the plan entry is then `spa`).
     """
+    overrides = overrides or {}
+
     def _rank(code: str) -> tuple[int, int | str]:
         if code in ORDERED_AUDIO_LANGUAGES:
             return (0, ORDERED_AUDIO_LANGUAGES.index(code))
         return (1, code)
 
     audio_langs = {
-        normalize_language(track.get("language", "und"))
+        overrides.get(
+            (os.path.realpath(probe.get("path", "")), ordinal),
+            normalize_language(track.get("language", "und")),
+        )
         for probe in probes
-        for track in probe.get("audio_tracks", [])
+        for ordinal, track in enumerate(probe.get("audio_tracks", []))
     }
 
     plan: list[dict] = []
@@ -370,12 +430,17 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         # S2/L14 required-language gate — after the fps/duration check (S3
         # «el primer check») and still BEFORE any ffmpeg starts. Availability
         # is checked over the UNION of the probed files (L3: one of the two
-        # files carrying the language is enough).
+        # files carrying the language is enough). L24: `language_overrides`
+        # counts a user-marked `und` track as its declared language.
+        overrides_map = _resolve_language_overrides(list(probes), req.language_overrides)
         required = _required_languages()
         available = {
-            normalize_language(track.get("language", "und"))
+            overrides_map.get(
+                (os.path.realpath(probe.get("path", "")), ordinal),
+                normalize_language(track.get("language", "und")),
+            )
             for probe in probes
-            for track in probe.get("audio_tracks", [])
+            for ordinal, track in enumerate(probe.get("audio_tracks", []))
         }
         missing = [code for code in required if code not in available]
         if missing:
@@ -388,7 +453,7 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         # S6: .srt sidecar plan derived server-side from the probes (the
         # client's languages are never trusted) — one entry per audio
         # language of the A+B union.
-        subtitle_plan = _build_subtitle_plan(list(probes))
+        subtitle_plan = _build_subtitle_plan(list(probes), overrides_map)
 
     # Determine output directory
     from application.gateways import get_setting

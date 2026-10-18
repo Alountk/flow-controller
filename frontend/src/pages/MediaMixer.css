@@ -959,3 +959,41 @@
   background: color-mix(in srgb, var(--bad) 12%, transparent);
   border-color: var(--bad);
 }
+
+/* L24/T10 — mark an und audio track as castellano (and undo it) */
+.mixer-chip-marked {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  flex-shrink: 0;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+}
+
+.mixer-btn-mark-lang {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.mixer-btn-mark-lang:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.mixer-btn-mark-lang--on {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+}
