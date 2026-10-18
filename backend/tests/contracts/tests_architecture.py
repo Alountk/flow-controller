@@ -61,7 +61,14 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 2750 -> 2751 (stitch-actividad T1): the `activity_router` registration in
 #: `app.py` — its import line (+1; the tuple entry fit on the existing line).
 #: Router wiring, not migration debt. Owned by the stitch-actividad PR.
-MAX_LEGACY_LOC = 2751
+#: 2751 -> 2782 (mixer-redesign T3 / S4): the cross-file best-video ranking
+#: (`_video_rank_key`, rewritten `select_best_video`, `select_best_video_pair`)
+#: in `media_mixer.py` — the mixer still lives in the legacy module. New
+#: feature code, disclosed as debt in the mixer-redesign PR description.
+#: 2782 -> 2869 (mixer-redesign T4 / S2): language normalization, audio ordering and required-language check in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
+#: 2869 -> 3016 (mixer-redesign T5 / S6): subtitle stream parsing and .srt sidecar extraction in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
+#: 3016 -> 3017 (mixer-redesign T6 / S6): the `opensubtitles=opensubtitles_client` binding line in `app.py` — composition-root wiring, like every router registration (the import name fit on the existing line). Disclosed as debt in the mixer-redesign PR.
+MAX_LEGACY_LOC = 3017
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

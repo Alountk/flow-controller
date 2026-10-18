@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 
 from application import gateways
 from application.use_cases import downloads_cache, trace_cache
-from infrastructure import arr_client, settings_store, sqlite_history, system_probe, wanted_scan
+from infrastructure import arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
 from infrastructure import credentials as credentials_module, sqlite_history as history
 from config import FRONTEND_DIST
 from state import _LOG_BUFFER, buf_handler, _load_log_file, close_shared_session, open_shared_session
@@ -41,6 +41,7 @@ gateways.bind(
     credentials_module=credentials_module,
     system=system_probe,
     scan=wanted_scan.walk,
+    opensubtitles=opensubtitles_client,
 )
 
 from interfaces.http.routes import status as status_routes

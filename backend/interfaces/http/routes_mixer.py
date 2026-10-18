@@ -6,22 +6,41 @@ and managing mux tasks (list, status, cancel, pause, resume).
 import asyncio
 import logging
 import os
+import re
 
+import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from media_mixer import (
     probe_file,
     check_compatibility,
+    check_required_languages,
+    normalize_language,
+    order_and_mark_audio,
+    select_best_video_pair,
     start_mux,
     cancel_task,
     pause_task,
     resume_task,
     get_task,
     cleanup_tasks,
+    subtitle_sidecar_path,
+    ORDERED_AUDIO_LANGUAGES,
+    SHORT_LANGUAGE_SUFFIXES,
 )
 from task_manager import mux_tasks
+from application.gateways import (
+    arr_movie_exists,
+    arr_movie_lookup,
+    download_subtitle,
+    get_setting,
+    search_subtitles,
+)
+from application.ports import OpenSubtitlesError
+from config import find_service, service_unavailable_reason
 from interfaces.http.deps import verify_api_key
+from state import http_session
 import config
 
 log = logging.getLogger("flow-controller")
@@ -42,6 +61,14 @@ class MuxRequest(BaseModel):
     output_path: str = ""
 
 
+class SubtitleSearchRequest(BaseModel):
+    languages: list[str] | None = None
+
+
+class LookupRequest(BaseModel):
+    filename: str = ""
+
+
 # ── Path validation ──────────────────────────────────────────────────────────
 
 ALLOWED_ROOTS = config.ALLOWED_ROOTS
@@ -56,6 +83,138 @@ def _validate_mixer_path(path: str) -> str:
         if resolved == root or resolved.startswith(root + "/"):
             return resolved
     raise HTTPException(status_code=403, detail=f"Path not allowed: {path}")
+
+
+def _required_languages() -> list[str]:
+    """Required languages from settings, normalized, with `spa` forced first.
+
+    L3: «Castellano tiene que estar siempre, es el minimo» — whatever the
+    user configures (default «Solo castellano», L9), castellano can never
+    be dropped. Deduped, configured order preserved after `spa`.
+    """
+    from application.gateways import get_setting
+
+    configured = get_setting("mixer", "required_languages", default=["spa"]) or []
+    result: list[str] = []
+    for tag in ["spa", *(t for t in configured if isinstance(t, str))]:
+        code = normalize_language(tag)
+        if code not in result:
+            result.append(code)
+    return result
+
+
+def _build_subtitle_plan(probes: list[dict]) -> list[dict]:
+    """S6: one `.srt` sidecar plan entry per audio language of the files.
+
+    «los mismos idiomas de audio» — the union of all audio languages. For
+    each language at most ONE subtitle track is picked (extractable beats
+    bitmap/unknown across files, then first file, first track); languages
+    with no track still get an entry (T6 fills those via OpenSubtitles).
+    Entries start `pending`; the background run resolves them.
+    """
+    def _rank(code: str) -> tuple[int, int | str]:
+        if code in ORDERED_AUDIO_LANGUAGES:
+            return (0, ORDERED_AUDIO_LANGUAGES.index(code))
+        return (1, code)
+
+    audio_langs = {
+        normalize_language(track.get("language", "und"))
+        for probe in probes
+        for track in probe.get("audio_tracks", [])
+    }
+
+    plan: list[dict] = []
+    for code in sorted(audio_langs, key=_rank):
+        candidates = [
+            (probe, track)
+            for probe in probes
+            for track in probe.get("subtitle_tracks", [])
+            if track.get("language_code") == code
+        ]
+        chosen = next(((p, t) for p, t in candidates if t.get("extractable")), None)
+        if chosen is None and candidates:
+            chosen = candidates[0]
+
+        entry = {
+            "language_code": code,
+            "language": SHORT_LANGUAGE_SUFFIXES.get(code, code),
+            "path": None,
+            "track_index": None,
+            "codec": None,
+            "extractable": False,
+            "status": "pending",
+            "detail": "",
+            "sidecar": None,
+        }
+        if chosen:
+            probe, track = chosen
+            entry["path"] = probe.get("path", "")
+            entry["track_index"] = track.get("track_index")
+            entry["codec"] = track.get("codec", "unknown")
+            entry["extractable"] = bool(track.get("extractable"))
+        plan.append(entry)
+    return plan
+
+
+#: Plan entries T6 can fill by searching: the extraction could not give these.
+#: `extracted`/`downloaded` are never re-searched.
+_SEARCHABLE_STATUSES = {"missing", "not_extractable", "failed"}
+
+
+def _title_from_output_path(output_path: str) -> str:
+    """Search title: the output stem minus `_mixed` and the timestamp.
+
+    `_generate_output_path` names the output `<stem>_<YYYYMMDDTHHMMSS>_mixed<ext>`;
+    the search query is the original stem (S6: find subtitles for the same
+    audio languages).
+    """
+    stem = os.path.splitext(os.path.basename(output_path))[0]
+    stem = re.sub(r"_mixed$", "", stem)
+    return re.sub(r"_\d{8}T\d{6}$", "", stem)
+
+
+#: S7 release tags: everything from the first one on is scene noise. Word-ish
+#: boundaries so `aac` never cuts a title like "Aachen"; the `.` before the
+#: `1` of `DD5.1` may already be a space (dots become spaces below), hence
+#: `[.\s]?` rather than a bare `\.?`.
+_RELEASE_TAG_RE = re.compile(
+    r"\b(?:2160p|1080p|720p|x26[45]|h26[45]|hevc|web-?dl|webrip|bluray|bdrip|hdtv|dts|aac|ddp?5?[.\s]?1)\b",
+    re.IGNORECASE,
+)
+
+
+def _title_from_filename(filename: str) -> str:
+    """Lookup title parsed from a file name (S7).
+
+    `Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv` → `Dune Parte Dos 2024`:
+    extension gone, dots/underscores as spaces, cut at the first release tag.
+    A trailing year survives — `(YYYY)` or ` YYYY ` — because Radarr matches
+    on it (unlike `normalize_title`, which drops years for fuzzy scoring).
+    """
+    stem = os.path.splitext(os.path.basename(filename))[0]
+    stem = re.sub(r"[._]", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip()
+    match = _RELEASE_TAG_RE.search(stem)
+    if match:
+        stem = stem[: match.start()]
+    return re.sub(r"\s+", " ", stem).strip(" -")
+
+
+def _fetch_sidecar(api_key: str, query: str, language_code: str, output_path: str) -> dict:
+    """Search + download one `.srt` into the output sidecar (S6/T6).
+
+    Blocking (HTTP + file write): the route runs it through
+    `asyncio.to_thread` — one event loop, and it does not preempt. Raises
+    `OpenSubtitlesError`; the route annotates that entry and continues.
+    """
+    candidates = search_subtitles(api_key, query, languages=language_code)
+    if not candidates:
+        return {"detail": "not_found"}
+    text = download_subtitle(api_key, candidates[0]["file_id"])
+    sidecar = subtitle_sidecar_path(output_path, language_code)
+    with open(sidecar, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return {"status": "downloaded", "sidecar": sidecar, "detail": ""}
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -98,7 +257,52 @@ async def mixer_probe(req: ProbeRequest, _key: str = Depends(verify_api_key)):
         "file_a": probe_a,
         "file_b": probe_b,
         "compatibility": compatibility,
+        "best_video": select_best_video_pair(probe_a, probe_b),
+        "language_check": check_required_languages(probe_a, probe_b, _required_languages()),
+        "audio_ordered": order_and_mark_audio(probe_a, probe_b),
     }
+
+
+@router.post("/lookup")
+async def mixer_lookup(req: LookupRequest, _key: str = Depends(verify_api_key)):
+    """S7: filename → title → Radarr lookup → the modal-ready movie (or not).
+
+    `movie` is non-null ONLY when the lookup resolves a movie that is already
+    IN the Radarr library — the id `ReleaseSearchModal` needs to search its
+    releases. A lookup with no hit (or a hit Radarr does not own) answers
+    `movie: null`, which the UI turns into «añádela primero en Radarr».
+    Radarr being unusable is a 502, never a silent "not in library".
+    """
+    filename = (req.filename or "").strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="filename is required")
+
+    title = _title_from_filename(filename)
+    if not title:
+        raise HTTPException(status_code=400, detail=f"Cannot derive a title from: {filename}")
+
+    service = find_service("radarr", "arr")
+    if not service:
+        raise HTTPException(status_code=502, detail=service_unavailable_reason("radarr", "arr"))
+
+    try:
+        async with http_session() as session:
+            lookup = await arr_movie_lookup(session, service, title)
+            movie = None
+            tmdb_id = (lookup or {}).get("tmdbId", 0)
+            if tmdb_id:
+                existing_id = await arr_movie_exists(session, service, tmdb_id)
+                if existing_id:
+                    movie = {
+                        "id": existing_id,
+                        "title": (lookup or {}).get("title") or title,
+                        "year": (lookup or {}).get("year"),
+                        "source": "radarr",
+                    }
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Radarr lookup failed: {exc}")
+
+    return {"ok": True, "title": title, "movie": movie}
 
 
 @router.post("/mux")
@@ -136,6 +340,56 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         if not os.path.isfile(validated_audio_path):
             raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
 
+    # S3 compatibility gate: the client's badge is UI sugar — the backend
+    # re-probes every distinct file involved and blocks an incompatible mux
+    # with 409 BEFORE any ffmpeg process starts.
+    unique_files = list(dict.fromkeys(
+        [validated_video_path]
+        + [os.path.realpath(a["path"]) for a in req.audio_sources]
+    ))
+    subtitle_plan: list[dict] = []
+    if len(unique_files) > 1:
+        try:
+            probes = await asyncio.gather(
+                *(asyncio.to_thread(probe_file, f) for f in unique_files)
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        anchor = probes[0]
+        for other in probes[1:]:
+            compatibility = check_compatibility(anchor, other)
+            if not compatibility["ok"]:
+                raise HTTPException(status_code=409, detail={
+                    "error": "incompatible",
+                    "reasons": compatibility["reasons"],
+                    "compatibility": compatibility,
+                })
+
+        # S2/L14 required-language gate — after the fps/duration check (S3
+        # «el primer check») and still BEFORE any ffmpeg starts. Availability
+        # is checked over the UNION of the probed files (L3: one of the two
+        # files carrying the language is enough).
+        required = _required_languages()
+        available = {
+            normalize_language(track.get("language", "und"))
+            for probe in probes
+            for track in probe.get("audio_tracks", [])
+        }
+        missing = [code for code in required if code not in available]
+        if missing:
+            raise HTTPException(status_code=409, detail={
+                "error": "missing_required_language",
+                "missing": missing,
+                "required": required,
+            })
+
+        # S6: .srt sidecar plan derived server-side from the probes (the
+        # client's languages are never trusted) — one entry per audio
+        # language of the A+B union.
+        subtitle_plan = _build_subtitle_plan(list(probes))
+
     # Determine output directory
     from application.gateways import get_setting
     output_dir = req.output_path or get_setting("paths", "output_mixed", default="/mnt/storage/mixed")
@@ -155,7 +409,7 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         })
 
     try:
-        task_id = start_mux(video_source, audio_sources, output_dir)
+        task_id = start_mux(video_source, audio_sources, output_dir, subtitle_plan=subtitle_plan)
     except Exception as exc:
         log.exception("mux start failed")
         raise HTTPException(status_code=500, detail=f"Failed to start mux: {exc}")
@@ -232,3 +486,65 @@ async def mixer_resume_task(task_id: str, _key: str = Depends(verify_api_key)):
     # Return updated task status
     task = get_task(task_id)
     return {"ok": True, **(task or {}), "detail": result.get("detail", "Task resumed")}
+
+
+@router.post("/tasks/{task_id}/subtitles/search")
+async def mixer_search_subtitles(
+    task_id: str,
+    req: SubtitleSearchRequest | None = None,
+    _key: str = Depends(verify_api_key),
+):
+    """S6/T6: search OpenSubtitles for the `.srt` extraction could not give.
+
+    Targets are the plan entries still `missing`/`not_extractable`/`failed`
+    (optionally narrowed by `languages`); each one is searched on its own and
+    the FIRST candidate is downloaded into the same sidecar naming the mux
+    output would produce, flipping the entry to `downloaded`. Without an API
+    key configured this answers 400 BEFORE any search. Entries are mutated in
+    place on the live task (the cancel/pause pattern), so GET /tasks/:id shows
+    the new statuses.
+    """
+    task = get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    api_key = get_setting("services", "opensubtitles", "api_key") or ""
+    if not api_key:
+        raise HTTPException(status_code=400, detail={"error": "opensubtitles_not_configured"})
+
+    wanted = set(req.languages) if req and req.languages else None
+    live = mux_tasks.get(task_id) or task
+    targets = [
+        entry
+        for entry in (live.get("subtitles") or [])
+        if entry.get("status") in _SEARCHABLE_STATUSES
+        and (wanted is None or entry.get("language_code") in wanted)
+    ]
+
+    output_path = task.get("output_path") or ""
+    query = _title_from_output_path(output_path) if output_path else ""
+    results: list[dict] = []
+    for entry in targets:
+        if not output_path:
+            entry["detail"] = "no_output_path"
+        else:
+            try:
+                entry.update(await asyncio.to_thread(
+                    _fetch_sidecar, api_key, query, entry["language_code"], output_path,
+                ))
+            except OpenSubtitlesError as exc:
+                # One entry's failure never stops the rest (S6: los mismos
+                # idiomas de audio — cada idioma se busca por separado).
+                entry["detail"] = str(exc)[:200]
+        result = {
+            "language": entry["language"],
+            "language_code": entry["language_code"],
+            "status": entry["status"],
+        }
+        if entry.get("sidecar"):
+            result["sidecar"] = entry["sidecar"]
+        if entry.get("detail"):
+            result["detail"] = entry["detail"]
+        results.append(result)
+
+    return {"ok": True, "results": results}

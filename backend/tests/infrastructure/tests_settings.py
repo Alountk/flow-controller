@@ -88,6 +88,76 @@ class TestTheFileWinsAfterwards:
         assert settings.get_setting("intervals", "check") == 15
 
 
+class TestMixerRequiredLanguages:
+    def test_default_is_solo_castellano(self, cfg):
+        (cfg / "settings.json").write_text(json.dumps({"developer": False}))
+
+        settings.load_settings()
+
+        # L9: «Solo castellano» by default.
+        assert settings.get_setting("mixer", "required_languages") == ["spa"]
+
+    def test_stored_value_overrides_the_default(self, cfg):
+        (cfg / "settings.json").write_text(
+            json.dumps({"mixer": {"required_languages": ["spa", "eng", "cat"]}})
+        )
+
+        settings.load_settings()
+
+        assert settings.get_setting("mixer", "required_languages") == ["spa", "eng", "cat"]
+
+
+class TestOpenSubtitlesApiKey:
+    def test_default_is_empty(self, cfg):
+        (cfg / "settings.json").write_text(json.dumps({"developer": False}))
+
+        settings.load_settings()
+
+        # S6: sin clave no hay búsqueda; la clave vive en Configuración → Servicios.
+        assert settings.get_setting("services", "opensubtitles", "api_key") == ""
+
+    def test_the_environment_seeds_the_key_on_first_run(self, cfg, monkeypatch):
+        monkeypatch.setenv("OPENSUBTITLES_API_KEY", "seeded-opensubtitles-key")
+
+        assert settings.migrate_env_vars() is True
+        settings.load_settings()
+
+        assert settings.get_setting("services", "opensubtitles", "api_key") == "seeded-opensubtitles-key"
+        assert _file(cfg)["services"]["opensubtitles"]["api_key"] == "seeded-opensubtitles-key"
+
+    def test_stored_value_overrides_the_default(self, cfg):
+        (cfg / "settings.json").write_text(
+            json.dumps({"services": {"opensubtitles": {"api_key": "from-ui"}}})
+        )
+
+        settings.load_settings()
+
+        assert settings.get_setting("services", "opensubtitles", "api_key") == "from-ui"
+
+
+class TestOpenSubtitlesKeyEncryptedAtRest:
+    def test_the_key_is_stored_as_ciphertext(self, cfg, monkeypatch):
+        # Al lado de radarr/sonarr/amutorrent: la clave vive cifrada en el
+        # fichero y en claro solo en memoria (lo que la app debe enviar).
+        monkeypatch.setenv("FC_SECRET", "test-fc-secret")
+
+        settings.save_settings({"services": {"opensubtitles": {"api_key": "plain-os-key"}}})
+
+        stored = _file(cfg)["services"]["opensubtitles"]["api_key"]
+        assert stored.startswith("enc:")
+        assert "plain-os-key" not in stored
+        assert settings.get_setting("services", "opensubtitles", "api_key") == "plain-os-key"
+
+    def test_the_key_reads_back_after_reload(self, cfg, monkeypatch):
+        monkeypatch.setenv("FC_SECRET", "test-fc-secret")
+        settings.save_settings({"services": {"opensubtitles": {"api_key": "plain-os-key"}}})
+        monkeypatch.setattr(settings, "_settings", {})
+
+        settings.load_settings()
+
+        assert settings.get_setting("services", "opensubtitles", "api_key") == "plain-os-key"
+
+
 class TestUnwritableConfigDirectory:
     def test_seeded_values_survive_when_they_cannot_be_persisted(self, cfg, monkeypatch):
         """A read-only config directory must not silently drop the seed."""

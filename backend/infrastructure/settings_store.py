@@ -18,6 +18,7 @@ DEFAULTS: dict[str, Any] = {
         "radarr": {"url": "http://localhost:7878", "api_key": ""},
         "sonarr": {"url": "http://localhost:8989", "api_key": ""},
         "amutorrent": {"url": "http://localhost:4000", "api_key": "", "user": "admin", "password": ""},
+        "opensubtitles": {"api_key": ""},
     },
     "security": {"api_key_hash": "", "api_key_salt": "", "safe_mode": True},
     "developer": False,
@@ -43,6 +44,10 @@ DEFAULTS: dict[str, Any] = {
     # How long a downloaded file stays before the UI may offer deleting it.
     # Deletion itself is always manual — see the retention feature.
     "retention": {"amule_days": 7},
+    # Mixer (S2/L9): «Solo castellano» required by default. `spa` is always
+    # required regardless of this list (L3: «es el minimo») — the route forces
+    # it back in, so the config can only ADD required languages, not drop spa.
+    "mixer": {"required_languages": ["spa"]},
     "server": {"port": 8000},
 }
 
@@ -55,6 +60,7 @@ _env_to_settings: dict[str, tuple[str, ...]] = {
     "AMUTORRENT_API_KEY": ("services", "amutorrent", "api_key"),
     "AMUTORRENT_USER": ("services", "amutorrent", "user"),
     "AMUTORRENT_PASSWORD": ("services", "amutorrent", "password"),
+    "OPENSUBTITLES_API_KEY": ("services", "opensubtitles", "api_key"),
     "API_KEY": ("security", "api_key"),
     "SAFE_MODE": ("security", "safe_mode"),
     "DEVELOPER": ("developer",),

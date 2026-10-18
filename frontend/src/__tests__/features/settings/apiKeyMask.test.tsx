@@ -18,6 +18,7 @@ const settings = {
     radarr: { url: 'http://localhost:7878', api_key: 'radarr-key' },
     sonarr: { url: 'http://localhost:8989', api_key: 'sonarr-key' },
     amutorrent: { url: 'http://localhost:4000', api_key: 'amule-key', user: 'admin', password: 'p' },
+    opensubtitles: { api_key: 'os-key' },
   },
   security: { api_key: 'own-key', safe_mode: true },
   developer: false,
@@ -71,10 +72,10 @@ describe('settings API key masking', () => {
     mockFetch()
     renderSettings()
 
-    // The three services share the label "API Key"; the app's own key is
-    // "API Key propia". All four must be masked.
+    // The four services share the label "API Key"; the app's own key is
+    // "API Key propia". All five must be masked.
     const serviceKeys = await screen.findAllByLabelText('API Key')
-    expect(serviceKeys).toHaveLength(3)
+    expect(serviceKeys).toHaveLength(4)
     for (const key of serviceKeys) {
       expect(key).toHaveAttribute('type', 'password')
     }

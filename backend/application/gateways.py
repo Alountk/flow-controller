@@ -34,6 +34,7 @@ from application.ports import (
     ArrClient,
     CredentialsStore,
     HistoryStore,
+    OpenSubtitlesClient,
     ScanWalk,
     SettingsStore,
     SystemProbe,
@@ -48,6 +49,7 @@ history: HistoryStore | None = None
 credentials: CredentialsStore | None = None
 system: SystemProbe | None = None
 scan: ScanWalk | None = None
+_opensubtitles: OpenSubtitlesClient | None = None
 
 
 def _require(adapter: object, port: type, slot: str) -> None:
@@ -69,6 +71,7 @@ def bind(
     credentials_module: CredentialsStore,
     system: SystemProbe,
     scan: ScanWalk,
+    opensubtitles: OpenSubtitlesClient | None = None,
 ) -> None:
     """Hand delivery its adapters. Called once, by `app.py`, at startup.
 
@@ -77,6 +80,12 @@ def bind(
     on the first request. The `globals().update` exists because the `settings`
     parameter shadows the module attribute it is about to set; `scan` is
     validated as a plain callable because a one-function port is a callable.
+
+    `opensubtitles` is optional at the signature so older compositions without
+    it keep binding (they simply cannot serve subtitle search); `app.py` binds
+    it like every other adapter, and a provided adapter is validated the same
+    way. Omitted means "leave that slot as it is" — a partial composition
+    cannot disable an adapter an earlier bind installed.
     """
     _require(arr, ArrClient, "arr")
     _require(settings, SettingsStore, "settings")
@@ -85,6 +94,9 @@ def bind(
     _require(system, SystemProbe, "system")
     if not callable(scan):
         raise TypeError(f"gateways.bind(scan=...) must be callable, got {type(scan).__name__}")
+    if opensubtitles is not None:
+        _require(opensubtitles, OpenSubtitlesClient, "opensubtitles")
+        globals().update(_opensubtitles=opensubtitles)
     globals().update(
         _arr=arr,
         settings=settings,
@@ -328,3 +340,13 @@ def blocked_acks(*args, **kwargs):
 def test_service_connection(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.test_service_connection(*args, **kwargs)
+
+
+def search_subtitles(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _opensubtitles.search_subtitles(*args, **kwargs)
+
+
+def download_subtitle(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _opensubtitles.download_subtitle(*args, **kwargs)
