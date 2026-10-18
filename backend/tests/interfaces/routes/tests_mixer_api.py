@@ -1,7 +1,9 @@
 """Tests para las rutas API de media_mixer."""
 import os
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
+
+import aiohttp
 
 # Configurar env vars antes de importar
 os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
@@ -9,6 +11,7 @@ os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
 from fastapi.testclient import TestClient
 from app import app
 import media_mixer
+from interfaces.http import routes_mixer
 from task_manager import mux_tasks
 
 client = TestClient(app, raise_server_exceptions=False)
@@ -975,3 +978,144 @@ class TestSubtitleSearchEndpoint:
             mock_download.assert_not_called()
         finally:
             mux_tasks._tasks.clear()
+
+
+# ── Indexer Lookup (S7/T7) ─────────────────────────────────────────────────
+
+class TestTitleFromFilename:
+    """`_title_from_filename` — the S7 lookup query parsed from a file name.
+
+    Cut at the first release tag, dots/underscores as spaces, trailing year
+    kept (Radarr matches on it): `Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv`
+    → `Dune Parte Dos 2024`.
+    """
+
+    def test_cuts_at_the_first_release_tag_and_keeps_the_year(self):
+        assert routes_mixer._title_from_filename(
+            "Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv"
+        ) == "Dune Parte Dos 2024"
+
+    def test_underscores_become_spaces(self):
+        assert routes_mixer._title_from_filename(
+            "The_Matrix_1999_720p_x265.mkv"
+        ) == "The Matrix 1999"
+
+    def test_a_parenthesised_year_is_kept(self):
+        assert routes_mixer._title_from_filename(
+            "Dune Parte Dos (2024).mkv"
+        ) == "Dune Parte Dos (2024)"
+
+    def test_the_audio_tag_ends_the_title_too(self):
+        assert routes_mixer._title_from_filename(
+            "La.La.Land.2016.DTS.1080p.mkv"
+        ) == "La La Land 2016"
+
+    def test_ddp_5_1_counts_as_a_tag(self):
+        assert routes_mixer._title_from_filename(
+            "Movie.Name.DDP5.1.1080p.mkv"
+        ) == "Movie Name"
+
+    def test_a_name_without_tags_survives(self):
+        assert routes_mixer._title_from_filename(
+            "pelicula rusa 2023.mkv"
+        ) == "pelicula rusa 2023"
+
+
+_RADARR_SERVICE = {"key": "radarr", "kind": "arr", "url": "http://localhost:7878", "api_key": "k"}
+
+
+class TestLookupEndpoint:
+    """POST /api/mixer/lookup — filename → title → Radarr (S7).
+
+    `movie` is non-null only when the lookup resolves a movie that is IN the
+    Radarr library (the `ReleaseSearchModal` item); an empty lookup is a 200
+    with `movie: null`, and Radarr being unusable is a 502.
+    """
+
+    def test_missing_filename_is_400(self):
+        resp = client.post("/api/mixer/lookup", json={})
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "filename is required"}
+
+    def test_blank_filename_is_400(self):
+        resp = client.post("/api/mixer/lookup", json={"filename": "   "})
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "filename is required"}
+
+    def test_unparsable_filename_is_400(self):
+        resp = client.post("/api/mixer/lookup", json={"filename": "1080p.mkv"})
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "Cannot derive a title from: 1080p.mkv"}
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    def test_in_library_movie_answers_the_modal_item(self, mock_lookup, mock_exists, _find):
+        mock_lookup.return_value = {"tmdbId": 550, "title": "Dune Parte Dos", "year": 2024}
+        mock_exists.return_value = 42
+
+        resp = client.post(
+            "/api/mixer/lookup",
+            json={"filename": "Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "ok": True,
+            "title": "Dune Parte Dos 2024",
+            "movie": {"id": 42, "title": "Dune Parte Dos", "year": 2024, "source": "radarr"},
+        }
+        mock_lookup.assert_awaited_once_with(ANY, _RADARR_SERVICE, "Dune Parte Dos 2024")
+        mock_exists.assert_awaited_once_with(ANY, _RADARR_SERVICE, 550)
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_exists", new_callable=AsyncMock, return_value=None)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    def test_movie_not_in_the_library_answers_null(self, mock_lookup, _exists, _find):
+        # Lookup resolves the movie but Radarr does not own it: the UI answers
+        # «añádela primero» instead of opening the modal.
+        mock_lookup.return_value = {"tmdbId": 550, "title": "Dune Parte Dos", "year": 2024}
+
+        resp = client.post(
+            "/api/mixer/lookup",
+            json={"filename": "Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True, "title": "Dune Parte Dos 2024", "movie": None}
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock, return_value={})
+    def test_empty_lookup_answers_null(self, _lookup, mock_exists, _find):
+        # Radarr answered and had nothing: 200 with `movie: null`, never a 502.
+        resp = client.post(
+            "/api/mixer/lookup",
+            json={"filename": "Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True, "title": "Dune Parte Dos 2024", "movie": None}
+        mock_exists.assert_not_awaited()
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_exists", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    def test_radarr_failure_is_502(self, mock_lookup, mock_exists, _find):
+        mock_lookup.side_effect = aiohttp.ClientError("connection refused")
+
+        resp = client.post(
+            "/api/mixer/lookup",
+            json={"filename": "Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv"},
+        )
+        assert resp.status_code == 502
+        assert resp.json() == {"detail": "Radarr lookup failed: connection refused"}
+        mock_exists.assert_not_awaited()
+
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.find_service", return_value=None)
+    def test_unconfigured_radarr_is_502(self, _find, mock_lookup):
+        resp = client.post(
+            "/api/mixer/lookup",
+            json={"filename": "Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv"},
+        )
+        assert resp.status_code == 502
+        assert resp.json() == {"detail": "radarr no está configurado (faltan la URL o la API key)"}
+        mock_lookup.assert_not_awaited()

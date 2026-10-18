@@ -17,7 +17,30 @@ import {
   resumeTask,
 } from '../shared/api/mixer.ts'
 import { browsePath, fetchRoots } from '../shared/api/files.ts'
+import { apiFetch } from '../shared/api/auth.ts'
+import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
+import type { MixerLanguageCheck, MixerLookupResponse } from '../shared/types.ts'
 import './MediaMixer.css'
+
+/** `/api/mixer/probe` grew `language_check` (T4) after the first frontend
+ *  contract, which lives in `shared/api/mixer.ts` — the extra keys ride as an
+ *  additive intersection (their own types live in `shared/types.ts`). */
+type ProbeResultWithChecks = ProbeResult & { language_check?: MixerLanguageCheck }
+
+/** S7 — the lookup behind «Buscar en el indexador»: the backend parses the
+ *  title from the filename and answers with the in-library movie, if any. */
+async function lookupIndexerMovie(filename: string): Promise<MixerLookupResponse> {
+  const res = await apiFetch('/api/mixer/lookup', {
+    method: 'POST',
+    body: JSON.stringify({ filename }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return res.json() as Promise<MixerLookupResponse>
+}
 
 /* ── Helpers ───────────────────────────────────────────────────────────────── */
 
@@ -484,8 +507,10 @@ export function MediaMixer() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [pathA, setPathA] = useState('')
   const [pathB, setPathB] = useState('')
-  const [probeResult, setProbeResult] = useState<ProbeResult | null>(null)
+  const [probeResult, setProbeResult] = useState<ProbeResultWithChecks | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [lookupNotice, setLookupNotice] = useState<string | null>(null)
+  const [releaseSearchItem, setReleaseSearchItem] = useState<ReleaseSearchItem | null>(null)
 
   // Track selection state
   const [selectedVideoA, setSelectedVideoA] = useState<number | null>(null)
@@ -515,6 +540,7 @@ export function MediaMixer() {
     mutationFn: () => probeFiles(pathA, pathB),
     onSuccess: (result) => {
       setProbeResult(result)
+      setLookupNotice(null)
       // Auto-select best video track for each file
       const bestVideoA = selectBestVideo(result.file_a.video_tracks)
       const bestVideoB = selectBestVideo(result.file_b.video_tracks)
@@ -564,6 +590,36 @@ export function MediaMixer() {
     },
   })
 
+  // S7/L8 — «Botón con lookup automático»: the title comes from the filename
+  // (file A first); an in-library movie opens `ReleaseSearchModal`, anything
+  // else becomes the «añádela primero» notice, and a Radarr failure lands on
+  // the same error surface as every other call in this page.
+  const lookupMut = useMutation({
+    mutationFn: (): Promise<MixerLookupResponse> => {
+      const filename = probeResult?.file_a.filename || probeResult?.file_b.filename || ''
+      return lookupIndexerMovie(filename)
+    },
+    onSuccess: (data) => {
+      setError(null)
+      if (data.movie) {
+        setLookupNotice(null)
+        setReleaseSearchItem({
+          type: 'movie',
+          id: data.movie.id,
+          title: data.movie.title,
+          year: data.movie.year,
+          source: data.movie.source,
+          idKind: 'movie',
+        })
+      } else {
+        setLookupNotice(`${data.title} no está en la librería — añádela primero en Radarr`)
+      }
+    },
+    onError: (err: Error) => {
+      setError(err.message)
+    },
+  })
+
   function selectBestVideo(tracks: VideoTrack[]): number | null {
     if (!tracks.length) return null
     const CODEC_PRIORITY: Record<string, number> = { hevc: 0, h265: 0, h264: 1, avc: 1 }
@@ -606,6 +662,8 @@ export function MediaMixer() {
     setPathB('')
     setProbeResult(null)
     setError(null)
+    setLookupNotice(null)
+    setReleaseSearchItem(null)
     setSelectedVideoA(null)
     setSelectedVideoB(null)
     setSelectedAudioA([])
@@ -668,6 +726,22 @@ export function MediaMixer() {
         <div className="mixer-section">
           <WarningsPanel warnings={probeResult.compatibility.warnings} />
 
+          {probeResult.language_check?.ok === false && (
+            <div className="mixer-warning">
+              <span className="mixer-warning-icon error">⚠</span>
+              <span>Falta castellano (exigido) en los dos archivos</span>
+              <button
+                className="action-btn"
+                disabled={lookupMut.isPending}
+                onClick={() => lookupMut.mutate()}
+              >
+                Buscar en el indexador
+              </button>
+            </div>
+          )}
+
+          {lookupNotice && <div className="mixer-warning">{lookupNotice}</div>}
+
           <div className="mixer-track-selectors">
             <TrackSelector
               file={probeResult.file_a}
@@ -727,6 +801,11 @@ export function MediaMixer() {
         <div className="mixer-section">
           <TaskList tasks={tasksData.tasks} />
         </div>
+      )}
+
+      {/* ── Releases of the movie the indexer lookup found (S7) ───────── */}
+      {releaseSearchItem && (
+        <ReleaseSearchModal item={releaseSearchItem} onClose={() => setReleaseSearchItem(null)} />
       )}
     </section>
   )

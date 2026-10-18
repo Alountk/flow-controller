@@ -8,6 +8,7 @@ import logging
 import os
 import re
 
+import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -29,9 +30,17 @@ from media_mixer import (
     SHORT_LANGUAGE_SUFFIXES,
 )
 from task_manager import mux_tasks
-from application.gateways import download_subtitle, get_setting, search_subtitles
+from application.gateways import (
+    arr_movie_exists,
+    arr_movie_lookup,
+    download_subtitle,
+    get_setting,
+    search_subtitles,
+)
 from application.ports import OpenSubtitlesError
+from config import find_service, service_unavailable_reason
 from interfaces.http.deps import verify_api_key
+from state import http_session
 import config
 
 log = logging.getLogger("flow-controller")
@@ -54,6 +63,10 @@ class MuxRequest(BaseModel):
 
 class SubtitleSearchRequest(BaseModel):
     languages: list[str] | None = None
+
+
+class LookupRequest(BaseModel):
+    filename: str = ""
 
 
 # ── Path validation ──────────────────────────────────────────────────────────
@@ -160,6 +173,33 @@ def _title_from_output_path(output_path: str) -> str:
     return re.sub(r"_\d{8}T\d{6}$", "", stem)
 
 
+#: S7 release tags: everything from the first one on is scene noise. Word-ish
+#: boundaries so `aac` never cuts a title like "Aachen"; the `.` before the
+#: `1` of `DD5.1` may already be a space (dots become spaces below), hence
+#: `[.\s]?` rather than a bare `\.?`.
+_RELEASE_TAG_RE = re.compile(
+    r"\b(?:2160p|1080p|720p|x26[45]|h26[45]|hevc|web-?dl|webrip|bluray|bdrip|hdtv|dts|aac|ddp?5?[.\s]?1)\b",
+    re.IGNORECASE,
+)
+
+
+def _title_from_filename(filename: str) -> str:
+    """Lookup title parsed from a file name (S7).
+
+    `Dune.Parte.Dos.2024.1080p.WEB-DL.x264.mkv` → `Dune Parte Dos 2024`:
+    extension gone, dots/underscores as spaces, cut at the first release tag.
+    A trailing year survives — `(YYYY)` or ` YYYY ` — because Radarr matches
+    on it (unlike `normalize_title`, which drops years for fuzzy scoring).
+    """
+    stem = os.path.splitext(os.path.basename(filename))[0]
+    stem = re.sub(r"[._]", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip()
+    match = _RELEASE_TAG_RE.search(stem)
+    if match:
+        stem = stem[: match.start()]
+    return re.sub(r"\s+", " ", stem).strip(" -")
+
+
 def _fetch_sidecar(api_key: str, query: str, language_code: str, output_path: str) -> dict:
     """Search + download one `.srt` into the output sidecar (S6/T6).
 
@@ -221,6 +261,48 @@ async def mixer_probe(req: ProbeRequest, _key: str = Depends(verify_api_key)):
         "language_check": check_required_languages(probe_a, probe_b, _required_languages()),
         "audio_ordered": order_and_mark_audio(probe_a, probe_b),
     }
+
+
+@router.post("/lookup")
+async def mixer_lookup(req: LookupRequest, _key: str = Depends(verify_api_key)):
+    """S7: filename → title → Radarr lookup → the modal-ready movie (or not).
+
+    `movie` is non-null ONLY when the lookup resolves a movie that is already
+    IN the Radarr library — the id `ReleaseSearchModal` needs to search its
+    releases. A lookup with no hit (or a hit Radarr does not own) answers
+    `movie: null`, which the UI turns into «añádela primero en Radarr».
+    Radarr being unusable is a 502, never a silent "not in library".
+    """
+    filename = (req.filename or "").strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="filename is required")
+
+    title = _title_from_filename(filename)
+    if not title:
+        raise HTTPException(status_code=400, detail=f"Cannot derive a title from: {filename}")
+
+    service = find_service("radarr", "arr")
+    if not service:
+        raise HTTPException(status_code=502, detail=service_unavailable_reason("radarr", "arr"))
+
+    try:
+        async with http_session() as session:
+            lookup = await arr_movie_lookup(session, service, title)
+            movie = None
+            tmdb_id = (lookup or {}).get("tmdbId", 0)
+            if tmdb_id:
+                existing_id = await arr_movie_exists(session, service, tmdb_id)
+                if existing_id:
+                    movie = {
+                        "id": existing_id,
+                        "title": (lookup or {}).get("title") or title,
+                        "year": (lookup or {}).get("year"),
+                        "source": "radarr",
+                    }
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Radarr lookup failed: {exc}")
+
+    return {"ok": True, "title": title, "movie": movie}
 
 
 @router.post("/mux")

@@ -669,3 +669,30 @@ export interface DiskVolume {
 export interface DiskResponse {
   volumes: DiskVolume[]
 }
+
+/* ── Media Mixer — probe extras and indexer lookup (S7/T7) ─────────────────── */
+
+/** One required language's availability over the A+B union — the
+ *  `language_check` `/api/mixer/probe` returns. `ok: false` blocks the mux
+ *  (T4) and asks for the indexer (S7). */
+export interface MixerLanguageCheck {
+  ok: boolean
+  missing: string[]
+  required: string[]
+}
+
+/** The movie `POST /api/mixer/lookup` resolved — non-null only when Radarr
+ *  already owns it, i.e. exactly what `ReleaseSearchModal` opens with. */
+export interface MixerLookupMovie {
+  id: number
+  title: string
+  year?: number | null
+  source: string
+}
+
+export interface MixerLookupResponse {
+  ok: boolean
+  /** The title parsed from the filename — the «añádela primero» copy names it. */
+  title: string
+  movie: MixerLookupMovie | null
+}

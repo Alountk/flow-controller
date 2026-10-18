@@ -59,8 +59,8 @@ secciones de la app.
 
 > **Delivery**: single PR a cierre de T9 (regla del usuario). Slices ya en la rama:
 > C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339), C3 `b5eeeb1` T4 (460),
-> C4 `761e0e0` T5 (788), C5 T6 — 1788+ líneas acumuladas, frontera de slice
-> registrada aquí según avisa el commit; T7 y T8 cierran cada uno en su slice.
+> C4 `761e0e0` T5 (788), C5 `6f26951` T6 (969) — 2757 líneas acumuladas, frontera de
+> slice registrada aquí según avisa el commit; T7 y T8 cierran cada uno en su slice.
 
 ## Tasks
 
@@ -185,6 +185,29 @@ secciones de la app.
   falta un idioma exigido: filename → `arr_movie_lookup` → `ReleaseSearchModal` si está
   en librería, si no aviso con el título. Tests. Ruta: backend (route) +
   `frontend/src/pages/MediaMixer.tsx` + tests. Commit: —.
+  - Evidencia (2026-10-18): RED observado backend **14 failed / 42 passed** (56
+    tocados) — 6 de `TestTitleFromFilename` (`AttributeError: _title_from_filename`)
+    + 8 de `TestLookupEndpoint` (la ruta no existía: `404 Not Found` en vez de
+    400/200/502); vitest **4 failed / 1 passed** (5 tocados; el negativo «sin aviso ni
+    botón cuando `ok: true`» ya pasaba en RED). Implementado: `_title_from_filename`
+    (extensión fuera, `.`/`_` → espacios, corte en el primer tag de release, año
+    final `(YYYY)`/` YYYY ` conservado) + `POST /api/mixer/lookup`
+    `{"filename": …}` → `{"ok": true, "title": "<derivado>", "movie": {"id",
+    "title", "year", "source": "radarr"} | null}` (movie solo si está en la
+    librería de Radarr); 400 `"filename is required"` / `"Cannot derive a title
+    from: …"`; 502 `"radarr no está configurado (…)"` y `"Radarr lookup failed:
+    …"`. **Sin puerto nuevo**: se reutiliza `arr_movie_lookup` + `arr_movie_exists`
+    del puerto `ArrClient`/`gateways` (el mismo que `/api/calendar/add`); stubs en
+    `interfaces.http.routes_mixer.*` (precedente calendar). Frontend: aviso «Falta
+    castellano (exigido) en los dos archivos» + botón «Buscar en el indexador» iff
+    `language_check.ok === false`; in-library → `ReleaseSearchModal` sin tocar;
+    `movie: null` → «`<title>` no está en la librería — añádela primero en Radarr»;
+    502 → la `fm-error` de siempre. **GREEN 1223/1223 backend** (base 1209 + 14) y
+    **589/589 vitest** (base 584 + 5), tsc 0, eslint 0; `MAX_LEGACY_LOC=3017`
+    intacto (sin tocar `ports.py`/`gateways.py`/`app.py`). Desviación menor: el
+    `ProbeResult` del frontend vive en `shared/api/mixer.ts` (fuera de superficie) ⇒
+    `MixerLanguageCheck`/`MixerLookup*` en `shared/types.ts` + intersección aditiva
+    en `MediaMixer.tsx`; la llamada fetch del lookup va inline en `MediaMixer.tsx`.
 - [ ] **T8 [S1–S8,S9]** — frontend: port del mockup Stich a `MediaMixer.tsx`/`MediaMixer.css`
   (badge que bloquea `canMux`, lista de audio ordenada con automático+manual, panel de
   subtítulos con estado extraído/buscado/no-extraíble, botón indexador). Tests
@@ -344,3 +367,26 @@ secciones de la app.
   al CDN del `link` de descarga ni aparece en mensajes de error. Guarda `no_output_path`
   cuando la tarea no tiene salida que nombre el sidecar (detalle, no estado). Deuda
   legacy 3016 → **3017** (línea `opensubtitles=` del bind en `app.py`) con `#:`;
+- **L21 (2026-10-18, T7 completada subagent)**: RED observado (14 failed backend + 4
+  vitest) → GREEN **1223/1223** backend y **589/589** vitest (tsc 0, eslint 0).
+  `POST /api/mixer/lookup` con `{"filename": …}` (el frontend manda el filename del
+  archivo A, con fallback al B): `_title_from_filename` deriva el título (corte en
+  el primer tag de release — `1080p|2160p|720p|x26[45]|h26[45]|hevc|web-?dl|
+  webrip|bluray|bdrip|hdtv|dts|aac|ddp?5?[.\s]?1`, micro-adaptación `[.\s]?` porque
+  los `.` ya son espacios cuando se busca el tag — y año final conservado) →
+  `arr_movie_lookup` → `arr_movie_exists` por `tmdbId`; `movie` solo con la
+  película YA en la librería (shape del item de `ReleaseSearchModal`:
+  `{id, title, year, source: "radarr"}`), `movie: null` si no (o si el lookup viene
+  vacío), 502 si Radarr no está configurado o el puerto lanza. **Sin puerto nuevo**
+  (S7 se engancha al `ArrClient` existente del flujo wanted/calendar) ⇒ sin tocar
+  `ports.py`/`gateways.py`/`app.py` ni mover `MAX_LEGACY_LOC=3017`. Frontend:
+  `language_check` tipado aditivamente (`MixerLanguageCheck` en `shared/types.ts` —
+  el `ProbeResult` vive en `shared/api/mixer.ts`, fuera de superficie de T7 — y
+  intersección opcional en `MediaMixer.tsx`), aviso exacto del mockup 12 + botón
+  «Buscar en el indexador» que abre `ReleaseSearchModal` sin modificarla, aviso
+  inline «<title> no está en la librería — añádela primero en Radarr» con el título
+  devuelto por el backend, y errores Radarr en la `fm-error` existente. Riesgo
+  conocido: `arr_movie_lookup` (arr_client.py, fuera de superficie) se traga los
+  errores de red y devuelve `{}` ⇒ un Radarr caído pero configurado degrada a
+  `movie: null` en vez de 502 (el 502 cubre no-configurado y excepciones que suban
+  del puerto); corregirlo requiere tocar el adapter en un task futuro.
