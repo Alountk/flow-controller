@@ -384,7 +384,7 @@ estado visible desde cualquier consola en **Seguimiento**:
     (acepta también tmdbId); probe→400 (manda el contrato); `ready && !allowed` mantiene
     la espera; `progress` 0–100. **PR #211** — slices C2 ~650 / C3 ~600 líneas
     (frontera de slice registrada aquí: backend y frontend por separado).
-- [ ] **T12 [S11]** — backend: cola serie (encolado FIFO con estado `queued`,
+- [x] **T12 [S11]** — backend: cola serie (encolado FIFO con estado `queued`,
   una mezcla a la vez, cancel de `queued` sin ejecutar), progreso real (el
   parser de ffmpeg lee la salida por la que emite de verdad — RED primero,
   con el test existente de stderr como regresión que hay que mover), destino
@@ -392,13 +392,37 @@ estado visible desde cualquier consola en **Seguimiento**:
   atómica (temporal en la misma carpeta → rename solo tras éxito, último paso
   tras subtítulos). RED→GREEN; los workers NO hacen git — los commits son del
   padre. Criterios S11-1,3,4,5.
-- [ ] **T13 [S11]** — frontend: selector obligatorio «Carpeta de A»/«Carpeta
+  - Evidencia (2026-10-18): worker `gentle-ai-worker` con **STOP inicial** correcto
+    (ratchet `MAX_LEGACY_LOC=3017` a headroom 0; desbloqueo del padre = opción 1:
+    surfaces + techo al mínimo medido con `#:`) — RED observado **17 failed / 1265
+    passed** (bug vivo `assert 0.5 in [1.0]`, TypeError `destination_path`, cola
+    `running×3`, orden de lista, cancel de `queued`) → GREEN **1282/1282** (base
+    1261 + 21, cero regresiones); techo final **3218** (media_mixer 760→957,
+    task_manager 133→137, disclosure en PR #212). Interpretación de pausa aprobada
+    (pausa conserva el slot, reanudar relanza, cancelar pausada libera el slot).
+    `assess` con `escalate item 1` → plan self-verification + verificador
+    independiente; el lanzamiento del verificador fue **rechazado por gate** (tarea
+    sin línea `Risk:` → orden de verificar inline, sin reintentar) → **verificador
+    no disponible** reportado; self-verification del padre = spot-check de los hunks
+    (validación fail-closed previa a los 409, temporal same-dir, `os.replace` solo
+    con salida verificable y tras extraer subtítulos) + focused **188 passed** +
+    suite completa **1282**. Commits: C1 `442d213` (spec), C2 `c3563aa` (backend,
+    slice con Risk item 1 aislado), C4 (docs de cierre). **PR #212**.
+- [x] **T13 [S11]** — frontend: selector obligatorio «Carpeta de A»/«Carpeta
   de B» en la barra de acciones («Mezclar» desactivado sin destino; informe de
   la ruta que se sustituye; envía `destination_path`), toast «Enviado a la
   cola», **eliminación** de la sección «Tareas» del mixer, y banda de mezclas
   en **Seguimiento** (junto a `OpsBand`) con orden de cola `queued`, progreso
   real y pausar/cancelar/reanudar. RED→GREEN; los workers NO hacen git — los
   commits son del padre. Criterios S11-1,2,3.
+  - Evidencia (2026-10-18): worker `gentle-ai-worker` — RED observado **21 failed /
+    43 passed** (selector ausente, «Tareas» presente, toast vacío, banda «Mezclas»
+    inexistente) → GREEN **636/636** (base 626 + 10; `tsc -b` 0, `eslint` 0). Copy
+    nueva llevada al español por el padre («Sustituirá `<basename>` (carpeta …)»,
+    «Aún no hay mezclas») con sus asserts re-pinados, y verificación completa
+    re-ejecutada: **636/636 + tsc 0 + eslint 0**. Contrato `destination_path`
+    coherente con T12 (ruta exacta del input elegido en el body). Commit: C3
+    `bdffa97`.
 
 ## Log
 
