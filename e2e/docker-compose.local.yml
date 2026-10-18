@@ -1,0 +1,29 @@
+# Local runner shim — reproduces docker-compose.ci.yml for Docker Compose
+# versions that reject its `network_mode: null` line ("must be a string"),
+# which blocks `up`/`build` locally while CI's runner accepts the file.
+#
+# It is byte-for-byte the CI override MINUS that one line, plus same-target
+# volume overrides. Those are needed because `volumes: []` does NOT clear the
+# base file's bind mounts in Compose merge semantics — CI never notices (the
+# Linux daemon silently creates the missing /mnt/storage host paths), while
+# Docker Desktop on macOS refuses to start the container at all. The
+# overrides point the three mount targets at empty scratch dirs, which is
+# what CI ends up running with anyway.
+#
+# Usage (the stub phase of e2e/README.md, with this file in place of ci.yml):
+#   mkdir -p /tmp/fc-e2e/config /tmp/fc-e2e/storage /tmp/fc-e2e/storage-6tb
+#   docker-compose -f docker-compose.yml -f e2e/docker-compose.local.yml \
+#     -f docker-compose.e2e.yml up -d --build
+services:
+  flow-controller:
+    image: ghcr.io/alountk/flow-controller:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - /tmp/fc-e2e/config:/app/config
+      - /tmp/fc-e2e/storage:/mnt/storage
+      - /tmp/fc-e2e/storage-6tb:/mnt/storage-6tb
+    environment:
+      - SAFE_MODE=true
+      - DEVELOPER=false
+      - API_KEY=test-key

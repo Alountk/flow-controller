@@ -1,10 +1,12 @@
-/* Seguimiento — the kanban chosen in F-09 phase 0 (seguimiento-02-kanban). */
+/* Seguimiento — S2's unified task list (decision L3: «Vista única con
+   filtros»). ONE column of rows — traces + copy operations + mix tasks —
+   under filter tabs, with the sweep below it. The board+tail stacking
+   (and its 70/30 split) is gone on purpose: less panels, one reading. */
 
 /* The frame around `.sg` is the positioned box for the detail overlay
    (F-09 phase 2). It contributes NO geometry of its own: 100% of the same
-   content `.sg` took directly from `.content`, so the two-child DOM
-   contract, the 70/30 split and the board-only scroll the e2e measures
-   (kanban-fit.spec.ts) hold identically with the panel closed OR open. */
+   content `.sg` takes directly from `.content`, so the list, the tabs and
+   the sweep hold identically with the panel closed OR open. */
 .sg-frame {
   position: relative;
   height: 100%;
@@ -13,79 +15,52 @@
 .sg {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  /* Fill the visible content area EXACTLY: a floor (min-height) would let
-     the board's content grow the page — the tail would push the board out
-     and the page would scroll again. With a fixed height the children are
-     sized against this box, which already excludes the topbar and the page
-     padding — the operator's calc(70vh − topbar), done by the layout. */
+  gap: 12px;
+  /* Fill the visible content area EXACTLY: a floor (min-height) would let a
+     long list grow the page. With a fixed height the children are sized
+     against this box — the list owns the overflow, the page never scrolls. */
   height: 100%;
 }
 
-/* ── El tablero ── */
+/* ── Filtros ── */
 
-.sg-board {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  /* Stretch (the default): every column is FULL height of the board — the
-     box is drawn first and the cards fill it, until the column's own body
-     starts scrolling. The board itself never scrolls: each column does.
-     The 70/30 split (operator's calc): the basis eats half the gap so the
-     two halves + gap total exactly 100% — no page scroll, ever. */
-  flex: 0 0 calc(70% - 7px);
-  min-height: 0;
-}
-
-.sg-col {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  /* The column IS the box: it takes the whole row and lets its body scroll. */
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.sg-col-head {
+.sg-tabs {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
-.sg-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.sg-dot-accent {
-  background: var(--accent);
-}
-
-.sg-dot-warn {
-  background: var(--warn);
-}
-
-.sg-dot-ok {
-  background: var(--ok);
-}
-
-.sg-col-name {
+.sg-tab {
+  font: inherit;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
-  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
 }
 
-.sg-col[data-col='blocked'] .sg-col-name {
-  color: var(--warn);
+.sg-tab:hover {
+  color: var(--text);
 }
 
-.sg-col-count {
+.sg-tab-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.sg-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The one global counter: every row of every source, whatever its state. */
+.sg-total {
   margin-left: auto;
   font-size: 11px;
   font-weight: 700;
@@ -95,55 +70,70 @@
   padding: 2px 8px;
 }
 
-.sg-col-body {
-  padding: 10px;
-  display: grid;
-  /* The track must not be pushed by a card's min-content: a nowrap path
-     inside a card used to widen the whole column past its box. */
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  /* The column's own scroll: the box keeps its full height and the cards
-     fill it until THEY decide to scroll — one column at a time, never the
-     board. */
+/* ── La lista ── */
+
+.sg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* The list is the scroll box: it fills everything between the tabs and the
+     sweep and scrolls its own rows — one long list never drags the sweep off
+     screen, and the page never scrolls. */
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.sg-col-empty {
-  font-size: 12px;
-  color: var(--text-dim);
-  text-align: center;
-  padding: 16px 8px;
-}
+/* ── Fila (traza | copia | mezcla) ── */
 
-/* ── Tarjeta ── */
-
-.sg-card {
+/* One shell for every source — the row fits the LIST, not the longest line
+   inside it (the ellipsis on .sg-op-name/.sg-mix-detail finishes the job). */
+.sg-row {
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: 9px;
-  padding: 11px 12px;
-  /* Grid item: disable the automatic minimum so the card fits the track,
-     not the longest line inside it — the ellipsis on .sg-path finishes the
-     job inside the card. */
+  padding: 10px 12px;
   min-width: 0;
+  flex-shrink: 0;
 }
 
-.sg-card.sg-blocked {
-  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
-}
-
-.sg-card.sg-done {
+.sg-row.sg-done {
   border-color: color-mix(in srgb, var(--ok) 30%, transparent);
 }
 
-.sg-card-top {
+.sg-row.sg-error {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.sg-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sg-row-prog {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
+  flex: 1 1 160px;
+  min-width: 120px;
+  max-width: 280px;
+}
+
+.sg-row-prog .sg-bar {
+  flex: 1;
+  margin-top: 0;
+}
+
+.sg-row-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .sg-svc {
@@ -177,14 +167,6 @@
   font-size: 10.5px;
   color: var(--text-dim);
   flex-shrink: 0;
-}
-
-.sg-card-state {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 7px;
 }
 
 .sg-pill {
@@ -233,7 +215,6 @@
   border-radius: 999px;
   background: var(--bg);
   overflow: hidden;
-  margin-top: 9px;
 }
 
 .sg-bar > i {
@@ -244,10 +225,10 @@
 }
 
 .sg-pct {
-  margin-top: 5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10.5px;
   color: var(--text-dim);
+  flex-shrink: 0;
 }
 
 .sg-why {
@@ -259,11 +240,11 @@
   border-radius: 6px;
   padding: 7px 8px;
   /* Queue messages carry unbroken paths — without this a long one blows the
-     card sideways instead of wrapping. */
+     row sideways instead of wrapping. */
   overflow-wrap: anywhere;
 }
 
-.sg-card.sg-blocked:has(.sg-pill-failed) .sg-why {
+.sg-row.sg-error:has(.sg-pill-failed) .sg-why {
   color: var(--bad);
   background: color-mix(in srgb, var(--bad) 10%, transparent);
 }
@@ -278,14 +259,8 @@
   white-space: nowrap;
 }
 
-/* The door to the detail overlay: its own row so it never crowds the
+/* The door to the detail overlay: its own control so it never crowds the
    action bar, and pill-shaped like the chips above it. */
-.sg-card-foot {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
-}
-
 .sg-detail-btn {
   font: inherit;
   font-size: 11px;
@@ -308,11 +283,183 @@
   outline-offset: 1px;
 }
 
+/* ── Fila de copia ── */
+
+.sg-op-kind {
+  font-weight: 700;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  min-width: 58px;
+  flex-shrink: 0;
+}
+
+.sg-op-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-op-progress {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text);
+  min-width: 110px;
+  text-align: right;
+}
+
+.sg-op-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  min-width: 70px;
+  text-align: right;
+}
+
+.sg-op-status.running {
+  color: var(--accent);
+}
+
+.sg-op-status.failed {
+  color: var(--bad);
+}
+
+.sg-op-status.done {
+  color: var(--ok);
+}
+
+/* The × the retired QueueSidebar carried: only a live-queue operation can be
+   cancelled, and only from the row that shows it running. */
+.sg-op-cancel {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.sg-op-cancel:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.sg-op-cancel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* T1/S3 — manual completion: same compact action as cancel, but the "it IS
+   done" tone; mirrors .sg-op-cancel so both live on one row without layout
+   surprises. */
+.sg-op-ok {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.sg-op-ok:hover {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.sg-op-ok:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── Fila de mezcla (S11/T13) ── */
+
+/* The status chip and the progress bar are the mixer display primitives
+   (`.mixer-task-status` / `.mixer-progress-*` live in MediaMixer.css — the
+   darkModePolish contract pins them there); this is only row layout. */
+
+.sg-mix-detail {
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-mix-output {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.sg-mix-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sg-mix-btn {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.sg-mix-btn:hover:not(:disabled) {
+  background: var(--hover, var(--bg));
+}
+
+.sg-mix-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sg-mix-btn-cancel {
+  color: var(--bad-text);
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+}
+
+.sg-mix-btn-cancel:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  border-color: var(--bad);
+}
+
+/* ── Barrido automático (bajo la lista) ── */
+
+.sg-sweep {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.sg-sweep .auto-copy {
+  margin-top: 0;
+}
+
 /* ── Panel de detalle (F-09 fase 2) ── */
 
-/* The overlay sits ON the operations tail's 30% zone — absolute, inside the
-   frame, OUTSIDE `.sg` — so it never participates in the flex split: the
-   tail keeps polling underneath and is revealed again on close. */
+/* The overlay sits ON the right edge of the frame — absolute, inside the
+   frame, OUTSIDE `.sg` — so it never participates in the list: the rows keep
+   polling underneath and are revealed again on close. */
 .sg-det {
   position: absolute;
   top: 0;
@@ -445,9 +592,9 @@
   color: var(--text-dim);
 }
 
-/* The block reason, exactly as the card tints it (warn for a block, bad for
+/* The block reason, exactly as the row tints it (warn for a block, bad for
    a failure) — but carrying EVERY message the queue reported, not only the
-   first one the card had room for. */
+   first one the row had room for. */
 .sg-det-why {
   font-size: 11.5px;
   line-height: 1.45;
@@ -479,266 +626,9 @@
   background: color-mix(in srgb, var(--bad) 10%, transparent);
 }
 
-/* ── Banda de operaciones ── */
-
-.sg-ops {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 16px;
-  /* The tail is a fixed 30% of the content area (the operator's calc: roughly
-     double the ~16% it showed content-driven, without starving the board).
-     Its lists scroll INSIDE the share; they never resize the split. */
-  flex: 0 0 calc(30% - 7px);
-  overflow-y: auto;
-}
-
-/* The sweep rides inside the tail — separated from the queue rows, and its
-   history is capped so a long log cannot swallow the board's space. */
-.sg-ops-rule {
-  border-top: 1px solid var(--border);
-  margin-top: 10px;
-}
-
-.sg-ops .auto-copy {
-  margin-top: 12px;
-}
-
-
-.sg-ops-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin: 0 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sg-ops-count {
-  font-size: 11px;
-  background: var(--bg-elev-2);
-  border-radius: 999px;
-  padding: 2px 8px;
-}
-
-.sg-op {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-}
-
-.sg-op:first-of-type {
-  border-top: 0;
-}
-
-.sg-op-done {
-  opacity: 0.7;
-}
-
-.sg-op-kind {
-  font-weight: 700;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  min-width: 58px;
-  flex-shrink: 0;
-}
-
-.sg-op-name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  color: var(--text-dim);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sg-op-progress {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  color: var(--text);
-  min-width: 110px;
-  text-align: right;
-}
-
-.sg-op-status {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--text-dim);
-  min-width: 70px;
-  text-align: right;
-}
-
-.sg-op-status.running {
-  color: var(--accent);
-}
-
-.sg-op-status.failed {
-  color: var(--bad);
-}
-
-.sg-op-status.done {
-  color: var(--ok);
-}
-
-/* The × the retired QueueSidebar carried: only an active operation can be
-   cancelled, and only from the row that shows it running. */
-.sg-op-cancel {
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--text-dim);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px 8px;
-  cursor: pointer;
-}
-
-.sg-op-cancel:hover {
-  color: var(--bad);
-  border-color: var(--bad);
-}
-
-.sg-op-cancel:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* T1/S3 — manual completion: same compact action as cancel, but the "it IS
-   done" tone; mirrors .sg-op-cancel so both live on one row without layout
-   surprises. */
-.sg-op-ok {
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--text-dim);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px 8px;
-  cursor: pointer;
-}
-
-.sg-op-ok:hover {
-  color: var(--ok);
-  border-color: var(--ok);
-}
-
-.sg-op-ok:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* S11/T13 — «Mezclas» band: the mixer's task state, beside the copy queue.
-   The status chips and the progress bar are the mixer display primitives
-   (`.mixer-task-status` / `.mixer-progress-*` live in MediaMixer.css — the
-   darkModePolish contract pins them there); this is only band layout. */
-
-.sg-mix {
-  margin-top: 14px;
-}
-
-.sg-mix-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin: 0 0 10px;
-}
-
-.sg-mix-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.sg-mix-detail {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sg-mix-output {
-  font-family: var(--mono, monospace);
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.sg-mix-progress {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.sg-mix-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.sg-mix-btn {
-  font: inherit;
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev-2);
-  color: var(--text-2);
-  cursor: pointer;
-}
-
-.sg-mix-btn:hover:not(:disabled) {
-  background: var(--hover, var(--bg));
-}
-
-.sg-mix-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.sg-mix-btn-cancel {
-  color: var(--bad-text);
-  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
-}
-
-.sg-mix-btn-cancel:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bad) 12%, transparent);
-  border-color: var(--bad);
-}
-
 /* ── Estados ── */
 
 .sg-empty {
-  /* The empty state takes the BOARD's 70% share: grow fills exactly what the
-     fixed 30% tail leaves, so the split holds with or without cards. */
-  flex: 1 0 auto;
   font-size: 13px;
   color: var(--text-dim);
   background: var(--bg-elev);
@@ -748,27 +638,16 @@
   text-align: center;
 }
 
-/* ── Responsive: 4 → 2 → 1 ── */
-
-@media (max-width: 1280px) {
-  .sg-board {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
+/* ── Responsive ── */
 
 @media (max-width: 768px) {
-  .sg-board {
-    grid-template-columns: 1fr;
-  }
-
   /* The stacked view has no spare right edge: the panel takes the whole
      frame while open, the same overlay-without-re-layout deal as desktop. */
   .sg-det {
     width: 100%;
   }
 
-  .sg-op {
-    flex-wrap: wrap;
+  .sg-row-main {
     gap: 6px;
   }
 
