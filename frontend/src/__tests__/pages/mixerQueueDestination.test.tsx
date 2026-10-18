@@ -15,6 +15,10 @@ import { clearToasts, getToasts } from '../../shared/utils/toast.ts'
  *   matches an existing input re-disables the button.
  * - L31: a successful submit toasts «Enviado a la cola», and the «Tareas»
  *   section leaves the mixer (mix state now lives in Seguimiento).
+ * - T3/S1 (decision L4): the accepted submit hands the NEW MIX TASK ID up to
+ *   the app shell — the one door through which «Al pulsar Mezclar →
+ *   /seguimiento con «mezcla X» destacada» can happen without the mixer
+ *   knowing anything about the router.
  */
 
 vi.mock('../../features/release-search/ReleaseSearchModal.tsx', () => ({
@@ -157,11 +161,11 @@ function pickerHandlers(): Route[] {
   ]
 }
 
-function renderMixer() {
+function renderMixer(onSubmitted?: (taskId: string) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <MediaMixer />
+      <MediaMixer onSubmitted={onSubmitted} />
     </QueryClientProvider>,
   )
 }
@@ -176,7 +180,7 @@ async function selectFile(pickerIndex: number, fileName: string) {
 }
 
 /** Pick both files and probe — lands in the results workspace. */
-async function driveToResults(probe: Obj, extra: Route[] = []) {
+async function driveToResults(probe: Obj, extra: Route[] = [], onSubmitted?: (taskId: string) => void) {
   const calls = mockFetch([
     ...pickerHandlers(),
     ...extra,
@@ -185,7 +189,7 @@ async function driveToResults(probe: Obj, extra: Route[] = []) {
     ['/api/mixer/probe', () => ({ body: probe })],
     ['/api/mixer/tasks', () => ({ body: { tasks: [] } })],
   ])
-  renderMixer()
+  renderMixer(onSubmitted)
   await selectFile(0, FILE_A)
   await selectFile(1, FILE_B)
   fireEvent.click(await screen.findByRole('button', { name: 'Cotejar archivos' }))
@@ -295,6 +299,42 @@ describe('mixer — «Enviado a la cola» (S11-2/L31)', () => {
         getToasts().some((t) => t.message === 'Enviado a la cola' && t.tone === 'ok'),
       ).toBe(true),
     )
+  })
+})
+
+/* ── T3/S1 — el id de la mezcla aceptada sube al shell ──────────────────── */
+
+describe('mixer — salto a Seguimiento (T3/S1)', () => {
+  it("hands the accepted submit's new task id to the owner for the Seguimiento jump", async () => {
+    const onSubmitted = vi.fn()
+    await driveToResults(probeBody(), [], onSubmitted)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Carpeta de A' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
+
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledWith('t1'))
+
+    // L31 stands beside the navigation — it never replaces the toast.
+    expect(
+      getToasts().some((t) => t.message === 'Enviado a la cola' && t.tone === 'ok'),
+    ).toBe(true)
+  })
+
+  it('hands over nothing when the submit is rejected', async () => {
+    const onSubmitted = vi.fn()
+    await driveToResults(
+      probeBody(),
+      [['/api/mixer/mux', () => ({ status: 500, body: { detail: 'ffmpeg explotó' } })]],
+      onSubmitted,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Carpeta de A' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
+
+    // The rejection reaches the page's error surface — that is the anchor
+    // proving the submit failed before asserting no hand-over happened.
+    await screen.findByText('ffmpeg explotó')
+    expect(onSubmitted).not.toHaveBeenCalled()
   })
 })
 

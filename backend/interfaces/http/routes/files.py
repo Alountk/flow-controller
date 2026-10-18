@@ -521,3 +521,38 @@ async def queue_cancel(op_id: str, _key: str = Depends(verify_api_key)):
                 else:
                     return {"ok": False, "detail": f"Operación en estado: {op['status']}"}
     return {"ok": False, "detail": "Operación no encontrada"}
+
+
+@router.post("/api/files/queue/complete/{op_id}")
+async def queue_complete(op_id: str, _key: str = Depends(verify_api_key)):
+    """T1/S3 — marca manualmente como completada una operación bloqueada.
+
+    Override humano para ops que ya terminaron por detrás pero siguen
+    `pending`/`running` en la UI (consumidor muerto, reinicio que deja la fila
+    SQLite atascada, import nunca re-comprobado). Igual contrato que cancel:
+    200 siempre con `{ok, detail}`; solo estados activos aceptan el cambio, y
+    la escritura toca AMBAS fuentes: el `file_queue` en memoria y su fila
+    durable (si existe) vía `record_operation`, que rellena `finished_at`.
+    """
+    async with queue_lock:
+        for op in file_queue:
+            if op["id"] == op_id:
+                if op["status"] not in ("pending", "running"):
+                    return {"ok": False, "detail": f"Operación en estado: {op['status']}"}
+                op["status"] = "done"
+                op["detail"] = "Completada manualmente"
+                op["progress"] = 100
+                await asyncio.to_thread(history.record_operation, op)
+                return {"ok": True, "detail": "Operación marcada como completada"}
+
+    # Not in memory: a restart wipes the queue but the SQLite row survives,
+    # and /status keeps surfacing it through recent_operations (no filter).
+    row = await asyncio.to_thread(history.get_operation, op_id)
+    if row is None:
+        return {"ok": False, "detail": "Operación no encontrada"}
+    if row["status"] not in ("pending", "running"):
+        return {"ok": False, "detail": f"Operación en estado: {row['status']}"}
+    row["status"] = "done"
+    row["detail"] = "Completada manualmente"
+    await asyncio.to_thread(history.record_operation, row)
+    return {"ok": True, "detail": "Operación marcada como completada"}

@@ -658,3 +658,20 @@ estado visible desde cualquier consola en **Seguimiento**:
   pausar/cancelar / Mixer: (sin sección Tareas; toast «Enviado a la cola»)").
 - **L32 (2026-10-18, ask → semántica de cola)**: respuesta: **"Serie (1 a la
   vez)"** (preview elegido: "cola: [Dune running] → [Blade Runner queued] → …")."
+- **L33 (2026-10-18, usuario → feedback sobre PR #212, origen de la feature
+  `seguimiento-unificado`)**: "una vez le doy al mezclar pierdo la tarea, no se donde
+  visualizarla, además creo que el nuevo diseño del seguimiento es muy malo, crea mucho
+  ruido y no puedo ver nada, tendriamos que darle una vuelta. Y habria que permitir marcar
+  como completadas de manera manual algunas tareas (estas por detras se han hecho pero se
+  quedan bloqueadas)." → nueva feature doc `odd/tasks/seguimiento-unificado.md` (S1–S3 /
+  T1–T3); no reabre T12/T13 (S11 cumplida; PR #212 mergeado `4b82be2` con CI de main
+  verde, specs 1282/636, ratchet 3218 disclosed).
+- **L34 (2026-10-18, ask → dónde están las bloqueadas)**: respuesta:
+  **"Operaciones de la derecha"**.
+- **L35 (2026-10-18, ask → diseño de Seguimiento)**: respuesta: **"Vista única con
+  filtros"** (preview elegido: "Activas (3)  Completadas  Errores / ───── / ● Dune
+  Parte Dos 67% [cancelar] / ● mezcla X en cola [pausar] / ● copia Y en curso /
+  (completadas ocultas bajo su pestaña)").
+- **L36 (2026-10-18, ask → trazabilidad tras Mezclar)**: respuesta: **"Saltar a
+  Seguimiento"** (preview elegido: "Al pulsar Mezclar → /seguimiento con «mezcla X»
+  destacada en la lista (borde de acento)").

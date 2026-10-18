@@ -334,6 +334,22 @@ def recent_operations(limit: int = 10, offset: int = 0, status: str | None = Non
             return []
 
 
+def get_operation(op_id: str) -> dict | None:
+    """One operation by id, or None. How the complete-route reaches a row whose
+    in-memory queue died with the process."""
+    with _lock:
+        if _conn is None:
+            return None
+        try:
+            row = _conn.execute(
+                "SELECT * FROM operations WHERE id = ?", (str(op_id),)
+            ).fetchone()
+            return dict(row) if row else None
+        except sqlite3.Error as exc:
+            log.warning("Could not read operation %s: %s", op_id, exc)
+            return None
+
+
 # ── Auto-copy idempotency markers ────────────────────────────────────────────
 #
 # One row per candidate the app evaluated. The key is `auto_copy_key`'s output.
