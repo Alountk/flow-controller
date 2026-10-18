@@ -312,6 +312,63 @@ describe('mixer — idioma exigido ausente (S2/L14, mockup 12)', () => {
   })
 })
 
+/* ── L24/T10 — marcar pista und como castellano ─────────────────────────── */
+
+describe('mixer — marcar und como castellano (L24/T10)', () => {
+  const undMissingProbe = () =>
+    probeBody({
+      language_check: { ok: false, missing: ['spa'], required: ['spa'] },
+      audio_ordered: [
+        audioEntry({ language: 'und', language_code: 'und', selected: false, default: false }),
+        ...defaultAudioOrdered().slice(1),
+      ],
+    })
+
+  it('offers «Marcar como castellano» on und rows and clears the block when marked', async () => {
+    await driveToResults(undMissingProbe())
+
+    expect(screen.getByText('Falta castellano (exigido) en los dos archivos')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Marcar como castellano' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mezclar' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como castellano' }))
+
+    expect(screen.queryByText('Falta castellano (exigido) en los dos archivos')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Mezclar' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Quitar marca' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Marcar como castellano' })).toBeNull()
+  })
+
+  it('sends language_overrides for the marked und track in the mux payload', async () => {
+    const calls = await driveToResults(undMissingProbe())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como castellano' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/api/mixer/mux'))).toBe(true))
+
+    const muxCall = calls.find((c) => c.url.includes('/api/mixer/mux'))
+    expect(muxCall?.body?.language_overrides).toEqual([
+      { path: PATH_A, track_index: 0, language: 'spa' },
+    ])
+  })
+
+  it('does not offer the mark on non-und rows', async () => {
+    await driveToResults(probeBody())
+
+    expect(screen.queryByRole('button', { name: 'Marcar como castellano' })).toBeNull()
+  })
+
+  it('re-blocks when the mark is removed', async () => {
+    await driveToResults(undMissingProbe())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como castellano' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar marca' }))
+
+    expect(screen.getByText('Falta castellano (exigido) en los dos archivos')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mezclar' })).toBeDisabled()
+  })
+})
+
 /* ── S4/L18 — vídeo por mejor compresión ──────────────────────────────────── */
 
 describe('mixer — vídeo por mejor compresión (S4, L18)', () => {

@@ -18,6 +18,13 @@
   todos configurables). El check de exigidos se hace sobre la **unión de A+B** (basta
   que uno de los dos archivos tenga el idioma). **Ausencia de un idioma exigido ⇒ BLOQUEA
   el mezclado** (igual que S3: badge + Mezclar deshabilitado + 409), decisión L14.
+  + enmienda L24: *"pero pasa una cosa hay a veces que los idiomas castellano no vienen
+  como spa y vienen como und, deberiamos poder marcar las pista und si son las castellanas
+  para poder pasar el flag"* → cada pista de audio `und` puede **marcarse como castellano**
+  desde la lista; el mux lo lleva en `language_overrides` y el backend lo acepta solo si
+  la pista apuntada es `und` y el idioma destino es válido (si no, 400
+  `invalid_language_override`), contándolo como `spa` en el gate de exigidos y en el plan
+  de subtítulos (S6). La marca vive en la sesión de la selección (se limpia al re-cotejar).
 - **S3** (cotejo que bloquea): *"Creo que el primer check deberia ser mirar los dos
   archivos, cotejar si son los mismos fps y la duracion y si no lo son marcar en algun
   lado que no son compatibles."* + decisión ask: **"Bloquear el mezclado"** → fps o
@@ -65,7 +72,7 @@ secciones de la app.
 
 ## Tasks
 
-- [ ] **T1 [S9]** — Ronda Stich: mockup(s) del mixer nuevo en el proyecto Stitch
+- [x] **T1 [S9]** — Ronda Stich: mockup(s) del mixer nuevo en el proyecto Stitch
   `4305330220058954866` (badge no-compatible que bloquea, audio ca→en→ru→cat con 4
   automáticas + resto a elegir, panel de subtítulos, botón de indexador) → aprobación
   del usuario. Ruta: Stitch (sin repo). Commit: —.
@@ -91,7 +98,7 @@ secciones de la app.
     spec (vieja spec "solo warnings"): test_fps_mismatch, test_duration_mismatch_(over_2),
     test_duration_under_2 (antes under_5), test_all_mismatches — ahora exigen ok:false
     y reasons; ningún test borrado ni debilitado.
-- [ ] **T3 [S4]** — backend: selección de vídeo por calidad+compresión
+- [x] **T3 [S4]** — backend: selección de vídeo por calidad+compresión
   (resolución > codec eficiente > bitrate) evaluando A y B, y el mux acepta vídeo de
   cualquiera de los dos. Tests RED→GREEN. Ruta: `backend/media_mixer.py` + tests.
   Commit: —.
@@ -107,7 +114,7 @@ secciones de la app.
     (+31 líneas de ranking nuevo en `media_mixer.py`) con comentario `#:` de ownership en
     `tests/contracts/tests_architecture.py` y disclosure obligada en la descripción del
     PR de cierre.
-- [ ] **T4 [S2]** — backend+settings: orden de audio ca→en→ru→cat con normalización
+- [x] **T4 [S2]** — backend+settings: orden de audio ca→en→ru→cat con normalización
   ISO 639-2 (`spa`/`es`, `eng`/`en`, `rus`/`ru`, `cat`/`ca`), check de idiomas exigidos
   sobre la unión A+B, clave `mixer.languages` en settings (de fábrica: castellano
   exigido). Tests RED→GREEN. Ruta: `backend/media_mixer.py`, settings, tests backend.
@@ -131,7 +138,7 @@ secciones de la app.
     (base 1141 + 21 tests nuevos; nada borrado ni debilitado). **Deuda legacy:
     techo 2782 → 2869** (+87 en `media_mixer.py`) con comentario `#:` de ownership
     en `tests/contracts/tests_architecture.py` y disclosure en la PR de cierre.
-- [ ] **T5 [S6,S8]** — backend: probe parsea streams de subtítulo (codec, idioma,
+- [x] **T5 [S6,S8]** — backend: probe parsea streams de subtítulo (codec, idioma,
   texto vs bitmap); extracción a `.srt` sidecar junto a la salida para texto
   (subrip/ass/webvtt); bitmap (PGS/VobSub) marcado «no extraíble sin OCR»; el mux sigue
   sin mapear subtítulos al contenedor (S8). Tests RED→GREEN. Ruta: `backend/media_mixer.py`,
@@ -151,7 +158,7 @@ secciones de la app.
     suite completa 1180/1180** (base 1162 + 18 tests nuevos). Deuda legacy:
     techo **2869 → 3016** con `#:` en `tests/contracts/tests_architecture.py`.
     `task_manager.py` sin cambios. Tareas de un solo fichero: sin probe ⇒ plan vacío.
-- [ ] **T6 [S6]** — backend+frontend: cliente OpenSubtitles + campo API key en
+- [x] **T6 [S6]** — backend+frontend: cliente OpenSubtitles + campo API key en
   Configuración; búsqueda/descarga de `.srt` por idioma de audio hacia el sidecar de la
   salida; tests con stub (sin red real). Ruta: backend (infra) + `frontend/src/features/settings/Settings.tsx`
   + tests. Commit: —.
@@ -182,7 +189,7 @@ secciones de la app.
     `media_mixer.py` intacto: la tarea ya lleva `output_path` cuando hay objetivos
     (se fija al terminar el mux). Deuda legacy: techo **3016 → 3017** (la línea
     `opensubtitles=` del bind en `app.py`) con `#:` en el contrato; disclosure en la PR.
-- [ ] **T7 [S7]** — backend+frontend: botón «buscar en indexador» en el mixer cuando
+- [x] **T7 [S7]** — backend+frontend: botón «buscar en indexador» en el mixer cuando
   falta un idioma exigido: filename → `arr_movie_lookup` → `ReleaseSearchModal` si está
   en librería, si no aviso con el título. Tests. Ruta: backend (route) +
   `frontend/src/pages/MediaMixer.tsx` + tests. Commit: —.
@@ -209,7 +216,7 @@ secciones de la app.
     `ProbeResult` del frontend vive en `shared/api/mixer.ts` (fuera de superficie) ⇒
     `MixerLanguageCheck`/`MixerLookup*` en `shared/types.ts` + intersección aditiva
     en `MediaMixer.tsx`; la llamada fetch del lookup va inline en `MediaMixer.tsx`.
-- [ ] **T8 [S1–S8,S9]** — frontend: port del mockup Stich a `MediaMixer.tsx`/`MediaMixer.css`
+- [x] **T8 [S1–S8,S9]** — frontend: port del mockup Stich a `MediaMixer.tsx`/`MediaMixer.css`
   (badge que bloquea `canMux`, lista de audio ordenada con automático+manual, panel de
   subtítulos con estado extraído/buscado/no-extraíble, botón indexador). Tests
   RED→GREEN + checks. Commit: —.
@@ -258,12 +265,21 @@ secciones de la app.
     `Risk: item 4` (fase de extracción y búsqueda OpenSubtitles mutan `task["subtitles"]`
     desde corutina y ruta; orden secuencial + escrituras por entrada, sin test de
     concurrencia). Merge `--merge --delete-branch` al estar CI verde (regla del usuario).
-- **L23 (2026-10-18, T9/cierre)**: PR **#209** creado desde `feat/mixer-redesign`
-  (8 commits, ~6006+ líneas): docs → T2+T3 → T4 → T5 → T6 → T7 → T8 → cierre. Toda la
-  feature verificada por spot-check del padre en cada tarea: RED observado siempre, suites
-  completas en verde en ambos stacks, espejo de Engram `odd/mixer-redesign/tasks`
-  actualizado por task transition. Cerrado el bloque 🟡 del Mixer (S9 gate: mockups 10/11/12
-  aprobados antes de implementar, L14).
+- [ ] **T10 [S2]** — enmienda L24 (amarra a L23): marcar pistas `und` como castellano
+  para pasar el flag de exigidos. Backend: `MuxRequest.language_overrides`
+  (`[{path, track_index, language}]`), validación solo-pista-`und` + idioma en
+  `ORDERED_AUDIO_LANGUAGES` (si no → 400 `invalid_language_override`), aplicado al gate
+  de exigidos del mux y al `_build_subtitle_plan` (spa cuenta en la unión y genera
+  entrada de sidecar). Frontend: botón «Marcar como castellano» (y deshacer) en las
+  filas `und`, efectivo en banner/`canMux`/etiquetas de fila y `language_overrides` en el
+  payload de mux; la marca se limpia al re-cotejar o reiniciar. RED→GREEN en ambos
+  stacks. Commit: —.
+  - Evidencia (2026-10-18): RED backend 5/5 (`-k language_override`) y RED frontend 3/16;
+    GREEN backend **1228/1228** (5 tests nuevos: gate con override, 400 en no-und /
+    idioma desconocido / ruta desconocida / ordinal fuera de rango, y plan con `spa`),
+    GREEN frontend **615/615** (4 tests: botón+desbloqueo, payload `language_overrides`
+    exacto, ausencia del botón en filas no-und, re-bloqueo al desmarcar), `tsc -b` 0,
+    eslint 0. Rama `feat/mixer-und-spanish-mark`, PR en el comentario de cierre.
 
 ## Log
 
@@ -459,3 +475,14 @@ secciones de la app.
   Desviaciones del mockup documentadas en la evidencia de T8 (orden de ranking
   L15, «Destino:» solo con dato real, chips de estados no maquetados, rojo en
   ambas columnas del header).
+- **L23 (2026-10-18, T9/cierre)**: PR **#209** creado desde `feat/mixer-redesign`
+  (8 commits, ~6006+ líneas): docs → T2+T3 → T4 → T5 → T6 → T7 → T8 → cierre. Toda la
+  feature verificada por spot-check del padre en cada tarea: RED observado siempre, suites
+  completas en verde en ambos stacks, espejo de Engram `odd/mixer-redesign/tasks`
+  actualizado por task transition. Cerrado el bloque 🟡 del Mixer (S9 gate: mockups 10/11/12
+  aprobados antes de implementar, L14). Merge: `89b1e2d` (CI completo verde, docker-push
+  success → deploy automático; fix intermedio de paridad `tsc -b` en `d1103e3`).
+- **L24 (2026-10-18, usuario, enmienda S2 → T10)**: "ok estoy testeando, cuando no
+  encuentra el idioma castellano me bloquea eso es bien, pero pasa una cosa hay a veces
+  que los idiomas castellano no vienen como spa y vienen como und, deberiamos poder
+  marcar las pista und si son las castellanas para poder pasar el flag"

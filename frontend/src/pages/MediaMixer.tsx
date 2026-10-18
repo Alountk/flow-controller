@@ -636,6 +636,8 @@ export function MediaMixer() {
   // (L18 — ordinals, never the absolute ffprobe `index`).
   const [selectedVideoKey, setSelectedVideoKey] = useState<string | null>(null)
   const [checkedAudio, setCheckedAudio] = useState<Set<string>>(new Set())
+  // L24/T10: `und` rows the user marked as castellano (row keys, this selection only).
+  const [markedSpanish, setMarkedSpanish] = useState<Set<string>>(new Set())
 
   // Poll tasks while any are active
   const { data: tasksData } = useQuery({
@@ -694,9 +696,14 @@ export function MediaMixer() {
     track_index: entry.track_index,
   }))
 
+  // L24/T10: a marked `und` row reads as castellano everywhere it is consumed —
+  // group headers, subtitle languages, the gate below and the mux payload.
+  const effectiveCode = (row: { key: string; entry: AudioOrderedTrack }) =>
+    markedSpanish.has(row.key) ? 'spa' : row.entry.language_code
+
   const audioCheckedCount = audioRows.filter((r) => checkedAudio.has(r.key)).length
   const otherAudioCount = audioRows.filter(
-    (r) => !ORDERED_LANGUAGES.includes(r.entry.language_code),
+    (r) => !ORDERED_LANGUAGES.includes(effectiveCode(r)),
   ).length
 
   // Subtitle rows: one per audio language, in the same delivered order.
@@ -709,7 +716,7 @@ export function MediaMixer() {
       searchable: boolean
     }[] = []
     for (const row of audioRows) {
-      const code = row.entry.language_code
+      const code = effectiveCode(row)
       if (!code || seen.has(code)) continue
       seen.add(code)
       const tracks: SubtitleTrack[] = [
@@ -740,6 +747,7 @@ export function MediaMixer() {
       setLookupNotice(null)
       setError(null)
       setMuxConflict(null)
+      setMarkedSpanish(new Set())
       // S4: auto-select the best video across A and B (`best_video` may name B).
       const best = result.best_video
       const firstRow = result.file_a.video_tracks[0]
@@ -777,7 +785,23 @@ export function MediaMixer() {
         throw new Error('Selecciona al menos una pista de audio')
       }
 
-      return startMux({ path: videoRow.path, track_index: videoRow.track_index }, audioSources)
+      // L24: marked und tracks travel with the mux — the backend re-applies
+      // them in its own gate and subtitle plan (the badge is never trusted).
+      const languageOverrides = [...markedSpanish].map((key) => {
+        const [file, ordinal] = key.split(':')
+        return {
+          path: file === 'a' ? probeResult.file_a.path : probeResult.file_b.path,
+          track_index: Number(ordinal),
+          language: 'spa',
+        }
+      })
+
+      return startMux(
+        { path: videoRow.path, track_index: videoRow.track_index },
+        audioSources,
+        undefined,
+        languageOverrides,
+      )
     },
     onSuccess: () => {
       setError(null)
@@ -850,6 +874,7 @@ export function MediaMixer() {
     setReleaseSearchItem(null)
     setSelectedVideoKey(null)
     setCheckedAudio(new Set())
+    setMarkedSpanish(new Set())
   }
 
   function toggleAudio(key: string) {
@@ -861,13 +886,18 @@ export function MediaMixer() {
     })
   }
 
-  // S3/L14 — `canMux` needs compatibility.ok AND language_check.ok plus real
-  // selections; the mockup-11 «Mezclar» carries a real `disabled` attribute.
+  // S3/L14 + L24 — `canMux` needs compatibility.ok AND the EFFECTIVE language
+  // gate (a marked und track satisfies `spa` locally; the mux re-derives it
+  // from language_overrides) plus real selections; the mockup-11 «Mezclar»
+  // carries a real `disabled` attribute.
   const compatOk =
     probeResult != null &&
     probeResult.compatibility.ok &&
     muxConflict?.error !== 'incompatible'
-  const langOk = probeResult?.language_check?.ok === true
+  const stillMissing = (probeResult?.language_check?.missing ?? []).filter(
+    (code) => !(code === 'spa' && markedSpanish.size > 0),
+  )
+  const langOk = probeResult?.language_check != null && stillMissing.length === 0
   const canProbe = pathA !== '' && pathB !== '' && phase === 'idle'
   const canMux =
     phase === 'results' &&
@@ -1005,7 +1035,7 @@ export function MediaMixer() {
             </div>
 
             {/* S2/L14 + mockup 12 — missing required language banner */}
-            {probeResult.language_check?.ok === false && (
+            {probeResult.language_check?.ok === false && !langOk && (
               <div className="mixer-lang-notice">
                 <span className="mixer-lang-notice-icon" aria-hidden="true">⚠</span>
                 <div className="mixer-lang-notice-body">
@@ -1040,8 +1070,10 @@ export function MediaMixer() {
 
             <div className="mixer-audio-list">
               {audioRows.map((row, i) => {
-                const isOther = !ORDERED_LANGUAGES.includes(row.entry.language_code)
-                const prevOther = i > 0 && !ORDERED_LANGUAGES.includes(audioRows[i - 1].entry.language_code)
+                const marked = markedSpanish.has(row.key)
+                const effCode = effectiveCode(row)
+                const isOther = !ORDERED_LANGUAGES.includes(effCode)
+                const prevOther = i > 0 && !ORDERED_LANGUAGES.includes(effectiveCode(audioRows[i - 1]))
                 const showGroup = isOther && !prevOther
                 const checked = checkedAudio.has(row.key)
                 const orderNum = audioRows
@@ -1062,8 +1094,8 @@ export function MediaMixer() {
                         checked={checked}
                         onChange={() => toggleAudio(row.key)}
                       />
-                      <span className="mixer-lang-name">{langName(row.entry.language_code)}</span>
-                      <span className="mixer-lang-chip">{row.entry.language_code}</span>
+                      <span className="mixer-lang-name">{langName(effCode)}</span>
+                      <span className="mixer-lang-chip">{effCode}</span>
                       <span className="mixer-audio-spec">
                         <span className="mixer-meta-label">·</span>
                         <span className="mixer-row-main">{codecLabel(row.entry.codec)}</span>
@@ -1074,6 +1106,37 @@ export function MediaMixer() {
                       </span>
                       <span className={`mixer-row-file mixer-row-file-${row.file}`}>Archivo {row.file.toUpperCase()}</span>
                       {row.entry.selected && <span className="mixer-chip-auto">Auto</span>}
+                      {marked && <span className="mixer-chip-marked">Marcada</span>}
+                      {row.entry.language_code === 'und' && !marked && (
+                        <button
+                          type="button"
+                          className="mixer-btn-mark-lang"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setMarkedSpanish((prev) => new Set(prev).add(row.key))
+                          }}
+                        >
+                          Marcar como castellano
+                        </button>
+                      )}
+                      {marked && (
+                        <button
+                          type="button"
+                          className="mixer-btn-mark-lang mixer-btn-mark-lang--on"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setMarkedSpanish((prev) => {
+                              const next = new Set(prev)
+                              next.delete(row.key)
+                              return next
+                            })
+                          }}
+                        >
+                          Quitar marca
+                        </button>
+                      )}
                     </label>
                   </div>
                 )

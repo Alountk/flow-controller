@@ -170,16 +170,26 @@ export async function probeFiles(pathA: string, pathB: string): Promise<ProbeRes
   return res.json() as Promise<ProbeResult>
 }
 
+/** L24/T10: a user-marked `und` audio track travelling with the mux. */
+export interface MuxLanguageOverride {
+  path: string
+  track_index: number
+  language: string
+}
+
 export async function startMux(
   videoSource: { path: string; track_index: number },
   audioSources: { path: string; track_index: number }[],
   outputPath?: string,
+  languageOverrides: MuxLanguageOverride[] = [],
 ): Promise<MuxResponse> {
   const body: Record<string, unknown> = {
     video_source: videoSource,
     audio_sources: audioSources,
   }
   if (outputPath) body.output_path = outputPath
+  // L24: omitted when empty so the wire keeps its old shape.
+  if (languageOverrides.length > 0) body.language_overrides = languageOverrides
 
   const res = await apiFetch('/api/mixer/mux', {
     method: 'POST',
