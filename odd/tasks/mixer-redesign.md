@@ -59,9 +59,9 @@ secciones de la app.
 
 > **Delivery**: single PR a cierre de T9 (regla del usuario). Slices ya en la rama:
 > C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339), C3 `b5eeeb1` T4 (460),
-> C4 `761e0e0` T5 (788), C5 `6f26951` T6 (969), C6 `c811282` T7 (603) — 3359
-> líneas acumuladas, frontera de slice registrada aquí según avisa el commit; T8 cierra
-> en su slice y T9 es el cierre documental.
+> C4 `761e0e0` T5 (788), C5 `6f26951` T6 (969), C6 `c811282` T7 (603),
+> C7 `b5a16cc` T8 (2300) — 6006 líneas acumuladas, frontera de slice registrada aquí
+> según avisa el commit; T9 cierra con los docs en un último commit dentro del PR.
 
 ## Tasks
 
