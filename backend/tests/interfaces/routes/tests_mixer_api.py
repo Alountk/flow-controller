@@ -8,17 +8,19 @@ os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
 
 from fastapi.testclient import TestClient
 from app import app
+import media_mixer
 from task_manager import mux_tasks
 
 client = TestClient(app, raise_server_exceptions=False)
 
 
-def _probe_fixture(path, fps=23.976, duration=7200.0, width=1920, height=1080, languages=("spa",)):
+def _probe_fixture(path, fps=23.976, duration=7200.0, width=1920, height=1080, languages=("spa",), subtitle_tracks=()):
     """Minimal probe_file() result as parse_probe_data would produce it.
 
     One audio track per entry of `languages` (tag as the file reports it).
     `languages=()` builds a video-only probe — a file with no audio tracks
-    contributes an empty language set to the A+B union.
+    contributes an empty language set to the A+B union. `subtitle_tracks`
+    entries are already in the parsed S6 shape.
     """
     return {
         "filename": os.path.basename(path),
@@ -27,17 +29,44 @@ def _probe_fixture(path, fps=23.976, duration=7200.0, width=1920, height=1080, l
         "duration": duration,
         "size_bytes": 1_000_000,
         "video_tracks": [{
-            "index": 0, "codec": "hevc", "width": width, "height": height,
+            "index": 0, "track_index": 0, "codec": "hevc", "width": width, "height": height,
             "fps": fps, "bitrate": 5_000_000, "selected": False,
         }],
         "audio_tracks": [
             {
-                "index": i + 1, "codec": "aac", "language": lang,
+                "index": i + 1, "track_index": i, "codec": "aac", "language": lang,
                 "channels": 6, "bitrate": 128_000, "default": i == 0,
             }
             for i, lang in enumerate(languages)
         ],
+        "subtitle_tracks": [dict(t) for t in subtitle_tracks],
     }
+
+
+def _sub_track(language, codec="subrip", index=5, track_index=0, extractable=True,
+               title="", forced=False, default=False):
+    """subtitle_tracks entry as parse_probe_data produces it (S6)."""
+    return {
+        "index": index, "track_index": track_index, "codec": codec,
+        "language": language, "language_code": media_mixer.normalize_language(language),
+        "title": title, "forced": forced, "default": default,
+        "kind": "text" if extractable else "bitmap", "extractable": extractable,
+    }
+
+
+#: Real ffprobe JSON (subtitle stream included) for the parser-boundary test.
+_FFPROBE_MKV_WITH_SUBS = {
+    "format": {"format_name": "matroska,webm", "duration": "7200.0", "size": "1000000"},
+    "streams": [
+        {"index": 0, "codec_type": "video", "codec_name": "hevc", "width": 1920,
+         "height": 1080, "r_frame_rate": "24000/1001", "bit_rate": "5000000"},
+        {"index": 1, "codec_type": "audio", "codec_name": "aac", "channels": 6,
+         "bit_rate": "192000", "tags": {"language": "spa"}, "disposition": {"default": 1}},
+        {"index": 2, "codec_type": "subtitle", "codec_name": "subrip",
+         "tags": {"language": "spa", "title": "Forzados"},
+         "disposition": {"forced": 1, "default": 0}},
+    ],
+}
 
 
 # ── Probe Endpoint ──────────────────────────────────────────────────────────
@@ -199,6 +228,29 @@ class TestProbeEndpoint:
         check = resp.json()["language_check"]
         assert check["ok"] is False
         assert check["missing"] == ["spa"]
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_exposes_parsed_subtitle_tracks(self, mock_probe, mock_isfile):
+        # S6: the probe response carries subtitle streams in the parsed shape.
+        # Only the probe_file boundary is mocked — the real parser runs.
+        mock_probe.side_effect = lambda path: media_mixer.parse_probe_data(_FFPROBE_MKV_WITH_SUBS, path)
+
+        resp = client.post(
+            "/api/mixer/probe",
+            json={"path_a": "/mnt/storage/a.mkv", "path_b": "/mnt/storage/b.mkv"},
+        )
+        assert resp.status_code == 200
+        subs = resp.json()["file_a"]["subtitle_tracks"]
+        assert len(subs) == 1
+        s0 = subs[0]
+        assert s0["track_index"] == 0
+        assert s0["codec"] == "subrip"
+        assert s0["language"] == "spa"
+        assert s0["language_code"] == "spa"
+        assert s0["kind"] == "text"
+        assert s0["extractable"] is True
+        assert s0["forced"] is True
 
 
 class TestMuxEndpoint:
@@ -390,6 +442,120 @@ class TestMuxEndpoint:
         assert data["ok"] is True
 
 
+# ── Subtitle sidecar plan (S6/S8) ─────────────────────────────────────────
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_builds_subtitle_plan_from_audio_languages(self, mock_probe, mock_start, mock_isfile):
+        # S6 «los mismos idiomas de audio»: one entry per AUDIO language of
+        # the A+B union (rus subs without rus audio stay out), extractable
+        # preferred, bitmap-only languages still get their entry.
+        mock_start.return_value = "test-task-plan"
+        mock_probe.side_effect = [
+            _probe_fixture(
+                "/mnt/storage/a.mkv", languages=("spa", "eng"),
+                subtitle_tracks=(_sub_track("spa", "subrip", index=3, track_index=0, title="Forzados", forced=True),),
+            ),
+            _probe_fixture(
+                "/mnt/storage/b.mkv", languages=("spa",),
+                subtitle_tracks=(
+                    _sub_track("rus", "subrip", index=3, track_index=0),
+                    _sub_track("eng", "hdmv_pgs_subtitle", index=4, track_index=1, extractable=False),
+                ),
+            ),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 1}],
+            },
+        )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [e["language_code"] for e in plan] == ["spa", "eng"]
+
+        for entry in plan:
+            # sidecar-oriented fields on every entry, statuses start pending.
+            assert {"language_code", "language", "path", "track_index", "codec", "status"} <= set(entry)
+            assert entry["status"] == "pending"
+
+        spa, eng = plan
+        assert spa["language"] == "es"
+        assert spa["path"] == "/mnt/storage/a.mkv"
+        assert spa["track_index"] == 0
+        assert spa["codec"] == "subrip"
+        assert spa["extractable"] is True
+
+        # eng: only a PGS bitmap in B — «no extraíble» (L12), T6 fills it.
+        assert eng["language"] == "en"
+        assert eng["path"] == "/mnt/storage/b.mkv"
+        assert eng["track_index"] == 1
+        assert eng["codec"] == "hdmv_pgs_subtitle"
+        assert eng["extractable"] is False
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_plan_prefers_extractable_track_across_files(self, mock_probe, mock_start, mock_isfile):
+        # A only has a PGS eng track, B has subrip eng: extraction wins (S6).
+        mock_start.return_value = "test-task-prefer"
+        mock_probe.side_effect = [
+            _probe_fixture(
+                "/mnt/storage/a.mkv", languages=("spa", "eng"),
+                subtitle_tracks=(_sub_track("eng", "hdmv_pgs_subtitle", index=2, track_index=0, extractable=False),),
+            ),
+            _probe_fixture(
+                "/mnt/storage/b.mkv", languages=(),
+                subtitle_tracks=(_sub_track("eng", "subrip", index=2, track_index=0),),
+            ),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+            },
+        )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        eng = next(e for e in plan if e["language_code"] == "eng")
+        assert eng["extractable"] is True
+        assert eng["codec"] == "subrip"
+        assert eng["path"] == "/mnt/storage/b.mkv"
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_plan_keeps_pending_entries_when_no_subtitles_at_all(self, mock_probe, mock_start, mock_isfile):
+        # No embedded subs anywhere: one pending entry per audio language so
+        # the T6 OpenSubtitles search has something to fill.
+        mock_start.return_value = "test-task-nosubs"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("spa",)),
+            _probe_fixture("/mnt/storage/b.mkv", languages=("eng",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+            },
+        )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [e["language_code"] for e in plan] == ["spa", "eng"]
+        for entry in plan:
+            assert entry["status"] == "pending"
+            assert entry["path"] is None
+            assert entry["track_index"] is None
+            assert entry["codec"] is None
+
+
 # ── Tasks List Endpoint ─────────────────────────────────────────────────────
 
 class TestTasksListEndpoint:
@@ -449,6 +615,33 @@ class TestSingleTaskEndpoint:
         assert data["task_id"] == "test-task-abc"
         assert data["status"] == "running"
         assert data["progress"] == 0.75
+        mux_tasks._tasks.clear()
+
+    def test_get_task_exposes_subtitles(self):
+        # S6: GET /api/mixer/tasks/:id surfaces the sidecar plan from creation.
+        mux_tasks._tasks.clear()
+        mux_tasks._tasks["test-task-subs"] = {
+            "status": "running",
+            "progress": 0.5,
+            "detail": "Muxing...",
+            "output_path": None,
+            "created_at": time.time(),
+            "cancelled": False,
+            "paused": False,
+            "subtitles": [{
+                "language_code": "spa", "language": "es",
+                "path": "/mnt/storage/a.mkv", "track_index": 0, "codec": "subrip",
+                "extractable": True, "status": "pending", "detail": "", "sidecar": None,
+            }],
+        }
+        resp = client.get("/api/mixer/tasks/test-task-subs")
+        assert resp.status_code == 200
+        data = resp.json()
+        subs = data["subtitles"]
+        assert len(subs) == 1
+        assert subs[0]["language_code"] == "spa"
+        assert subs[0]["language"] == "es"
+        assert subs[0]["status"] == "pending"
         mux_tasks._tasks.clear()
 
 

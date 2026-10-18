@@ -66,7 +66,8 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: in `media_mixer.py` — the mixer still lives in the legacy module. New
 #: feature code, disclosed as debt in the mixer-redesign PR description.
 #: 2782 -> 2869 (mixer-redesign T4 / S2): language normalization, audio ordering and required-language check in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
-MAX_LEGACY_LOC = 2869
+#: 2869 -> 3016 (mixer-redesign T5 / S6): subtitle stream parsing and .srt sidecar extraction in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
+MAX_LEGACY_LOC = 3016
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

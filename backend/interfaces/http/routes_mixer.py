@@ -23,6 +23,8 @@ from media_mixer import (
     resume_task,
     get_task,
     cleanup_tasks,
+    ORDERED_AUDIO_LANGUAGES,
+    SHORT_LANGUAGE_SUFFIXES,
 )
 from task_manager import mux_tasks
 from interfaces.http.deps import verify_api_key
@@ -78,6 +80,59 @@ def _required_languages() -> list[str]:
         if code not in result:
             result.append(code)
     return result
+
+
+def _build_subtitle_plan(probes: list[dict]) -> list[dict]:
+    """S6: one `.srt` sidecar plan entry per audio language of the files.
+
+    «los mismos idiomas de audio» — the union of all audio languages. For
+    each language at most ONE subtitle track is picked (extractable beats
+    bitmap/unknown across files, then first file, first track); languages
+    with no track still get an entry (T6 fills those via OpenSubtitles).
+    Entries start `pending`; the background run resolves them.
+    """
+    def _rank(code: str) -> tuple[int, int | str]:
+        if code in ORDERED_AUDIO_LANGUAGES:
+            return (0, ORDERED_AUDIO_LANGUAGES.index(code))
+        return (1, code)
+
+    audio_langs = {
+        normalize_language(track.get("language", "und"))
+        for probe in probes
+        for track in probe.get("audio_tracks", [])
+    }
+
+    plan: list[dict] = []
+    for code in sorted(audio_langs, key=_rank):
+        candidates = [
+            (probe, track)
+            for probe in probes
+            for track in probe.get("subtitle_tracks", [])
+            if track.get("language_code") == code
+        ]
+        chosen = next(((p, t) for p, t in candidates if t.get("extractable")), None)
+        if chosen is None and candidates:
+            chosen = candidates[0]
+
+        entry = {
+            "language_code": code,
+            "language": SHORT_LANGUAGE_SUFFIXES.get(code, code),
+            "path": None,
+            "track_index": None,
+            "codec": None,
+            "extractable": False,
+            "status": "pending",
+            "detail": "",
+            "sidecar": None,
+        }
+        if chosen:
+            probe, track = chosen
+            entry["path"] = probe.get("path", "")
+            entry["track_index"] = track.get("track_index")
+            entry["codec"] = track.get("codec", "unknown")
+            entry["extractable"] = bool(track.get("extractable"))
+        plan.append(entry)
+    return plan
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -168,6 +223,7 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         [validated_video_path]
         + [os.path.realpath(a["path"]) for a in req.audio_sources]
     ))
+    subtitle_plan: list[dict] = []
     if len(unique_files) > 1:
         try:
             probes = await asyncio.gather(
@@ -205,6 +261,11 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
                 "required": required,
             })
 
+        # S6: .srt sidecar plan derived server-side from the probes (the
+        # client's languages are never trusted) — one entry per audio
+        # language of the A+B union.
+        subtitle_plan = _build_subtitle_plan(list(probes))
+
     # Determine output directory
     from application.gateways import get_setting
     output_dir = req.output_path or get_setting("paths", "output_mixed", default="/mnt/storage/mixed")
@@ -224,7 +285,7 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         })
 
     try:
-        task_id = start_mux(video_source, audio_sources, output_dir)
+        task_id = start_mux(video_source, audio_sources, output_dir, subtitle_plan=subtitle_plan)
     except Exception as exc:
         log.exception("mux start failed")
         raise HTTPException(status_code=500, detail=f"Failed to start mux: {exc}")

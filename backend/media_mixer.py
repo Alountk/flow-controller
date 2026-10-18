@@ -26,6 +26,24 @@ _LANGUAGE_ALIASES: dict[str, str] = {
     "cat": "cat", "ca": "cat",
 }
 
+#: S6/L12: short sidecar suffixes for the four ordered languages (`…_mixed.es.srt`);
+#: any other language uses its normalized code as the suffix.
+SHORT_LANGUAGE_SUFFIXES: dict[str, str] = {"spa": "es", "eng": "en", "rus": "ru", "cat": "ca"}
+
+#: S6: subtitle codecs ffmpeg can re-mux into `.srt` without OCR.
+TEXT_SUBTITLE_CODECS: set[str] = {"subrip", "ssa", "ass", "webvtt", "mov_text", "text"}
+#: S6/L12: bitmap subtitles (PGS/VobSub…) — «no extraíble» without OCR.
+BITMAP_SUBTITLE_CODECS: set[str] = {"hdmv_pgs_subtitle", "pgssub", "dvd_subtitle", "dvb_subtitle"}
+
+
+def _subtitle_kind(codec: str) -> str:
+    """`text` (→ .srt possible), `bitmap` (needs OCR) or `unknown`."""
+    if codec in TEXT_SUBTITLE_CODECS:
+        return "text"
+    if codec in BITMAP_SUBTITLE_CODECS:
+        return "bitmap"
+    return "unknown"
+
 
 def normalize_language(tag: str) -> str:
     """Canonical three-letter code for an audio language tag (S2).
@@ -49,7 +67,8 @@ def probe_file(path: str) -> dict:
             "duration": float,
             "size_bytes": int,
             "video_tracks": [...],
-            "audio_tracks": [...]
+            "audio_tracks": [...],
+            "subtitle_tracks": [...]
         }
     Raises:
         FileNotFoundError: if file doesn't exist
@@ -89,9 +108,19 @@ def parse_probe_data(data: dict, path: str) -> dict:
 
     video_tracks = []
     audio_tracks = []
+    subtitle_tracks = []
+    ordinals = {"video": 0, "audio": 0, "subtitle": 0}
 
     for s in streams:
         codec_type = s.get("codec_type")
+        if codec_type not in ordinals:
+            continue
+        # Ordinal within its codec_type — the value ffmpeg -map v:N/a:N/s:N
+        # expects (L18: MuxRequest.track_index contract). `index` stays the
+        # absolute ffprobe stream index.
+        track_index = ordinals[codec_type]
+        ordinals[codec_type] += 1
+
         if codec_type == "video":
             fps_str = s.get("r_frame_rate", "0/1")
             try:
@@ -102,6 +131,7 @@ def parse_probe_data(data: dict, path: str) -> dict:
 
             video_tracks.append({
                 "index": s.get("index", 0),
+                "track_index": track_index,
                 "codec": s.get("codec_name", "unknown"),
                 "width": s.get("width", 0),
                 "height": s.get("height", 0),
@@ -116,11 +146,32 @@ def parse_probe_data(data: dict, path: str) -> dict:
 
             audio_tracks.append({
                 "index": s.get("index", 0),
+                "track_index": track_index,
                 "codec": s.get("codec_name", "unknown"),
                 "language": language,
                 "channels": s.get("channels", 0),
                 "bitrate": int(s.get("bit_rate", 0) or 0),
                 "default": default,
+            })
+        else:  # subtitle (S6)
+            tags = s.get("tags", {})
+            disposition = s.get("disposition", {})
+            language = tags.get("language", "und")
+            codec = s.get("codec_name", "unknown")
+            kind = _subtitle_kind(codec)
+
+            subtitle_tracks.append({
+                "index": s.get("index", 0),
+                "track_index": track_index,
+                "codec": codec,
+                "language": language,
+                "language_code": normalize_language(language),
+                "title": tags.get("title", ""),
+                "forced": disposition.get("forced", 0) == 1,
+                "default": disposition.get("default", 0) == 1,
+                "kind": kind,
+                # Only text can become .srt without OCR (L12).
+                "extractable": kind == "text",
             })
 
     return {
@@ -131,6 +182,7 @@ def parse_probe_data(data: dict, path: str) -> dict:
         "size_bytes": int(fmt.get("size", 0) or 0),
         "video_tracks": video_tracks,
         "audio_tracks": audio_tracks,
+        "subtitle_tracks": subtitle_tracks,
     }
 
 
@@ -373,6 +425,33 @@ def build_mux_command(
     return cmd
 
 
+def build_subtitle_extract_command(input_path: str, subtitle_ordinal: int, output_path: str) -> list[str]:
+    """ffmpeg argv that extracts one text subtitle stream to `.srt` (S6).
+
+    `-map 0:s:{ordinal}` selects the stream; `-c:s srt` re-muxes the text
+    container into SubRip. That is subtitle re-muxing, not video transcoding
+    (S8 forbids re-encoding, not `.srt` conversion).
+    """
+    return [
+        "ffmpeg", "-y", "-i", input_path,
+        "-map", f"0:s:{subtitle_ordinal}",
+        "-c:s", "srt",
+        output_path,
+    ]
+
+
+def subtitle_sidecar_path(output_path: str, language_code: str) -> str:
+    """Sidecar `.srt` path next to the mux output (S6/L12).
+
+    `<output stem>.<suffix>.srt` — short suffix (`es/en/ru/ca`) for the four
+    ordered languages, the normalized code otherwise (`…_mixed.es.srt`).
+    """
+    code = normalize_language(language_code)
+    suffix = SHORT_LANGUAGE_SUFFIXES.get(code, code)
+    p = Path(output_path)
+    return str(p.with_name(f"{p.stem}.{suffix}.srt"))
+
+
 def _generate_output_path(video_source: dict, output_dir: str) -> str:
     """Generate output path with timestamp naming convention."""
     video_path = Path(video_source["path"])
@@ -391,13 +470,17 @@ def start_mux(
     video_source: dict,
     audio_sources: list[dict],
     output_dir: str,
+    subtitle_plan: list[dict] | None = None,
 ) -> str:
     """Start a mux task. Returns task_id.
 
-    Creates task dict, launches background coroutine.
+    Creates task dict, launches background coroutine. `subtitle_plan` (S6)
+    is copied into the task as `subtitles` (statuses start `pending`) and
+    resolved by the background run after a successful mux.
     """
     task_id = str(uuid.uuid4())
     output_path = _generate_output_path(video_source, output_dir)
+    subtitles = [dict(entry) for entry in (subtitle_plan or [])]
 
     mux_tasks.create(task_id,
         channel="mixer",
@@ -409,20 +492,26 @@ def start_mux(
         paused=False,
         pause_event=threading.Event(),
         process=None,
+        subtitles=subtitles,
     )
     mux_tasks._tasks[task_id]["pause_event"].set()  # Not paused initially
 
     cmd = build_mux_command(video_source, audio_sources, output_path)
-    asyncio.create_task(_run_mux_background(task_id, cmd, output_path))
+    asyncio.create_task(_run_mux_background(task_id, cmd, output_path, subtitles))
 
     return task_id
 
 
-async def _run_mux_background(task_id: str, cmd: list[str], output_path: str):
-    """Background coroutine that runs ffmpeg and tracks progress."""
+async def _run_mux_background(task_id: str, cmd: list[str], output_path: str, subtitles: list[dict] | None = None):
+    """Background coroutine that runs ffmpeg and tracks progress.
+
+    After a successful mux it extracts the planned `.srt` sidecars (S6/S8).
+    Pause does not apply during extraction; cancel only stops it.
+    """
     task = mux_tasks.get(task_id)
     if not task:
         return
+    subtitles = subtitles if subtitles is not None else list(task.get("subtitles") or [])
 
     pause_event = task["pause_event"]
 
@@ -485,6 +574,9 @@ async def _run_mux_background(task_id: str, cmd: list[str], output_path: str):
 
         if result == "cancelled":
             _cleanup_partial(output_path)
+            for entry in subtitles:
+                if entry.get("status") == "pending":
+                    entry["status"] = "skipped"
             mux_tasks.update(task_id,
                 status="cancelled",
                 detail="Task cancelled",
@@ -496,6 +588,7 @@ async def _run_mux_background(task_id: str, cmd: list[str], output_path: str):
                 detail="Task paused",
             )
         elif result == "done":
+            await _extract_subtitles(task, subtitles, output_path)
             mux_tasks.update(task_id,
                 status="done",
                 progress=1.0,
@@ -530,6 +623,59 @@ def _cleanup_partial(path: str):
             p.unlink()
     except OSError:
         pass
+
+
+def _run_extract(cmd: list[str]) -> tuple[int, str]:
+    """Run one subtitle-extraction ffmpeg (Popen, same as the mux)."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    _, err = proc.communicate()
+    return proc.returncode, (err or b"").decode("utf-8", errors="ignore")
+
+
+def _stderr_snippet(stderr: str) -> str:
+    """Short ffmpeg failure detail: last non-empty stderr line, capped."""
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    return lines[-1][:200] if lines else "extraction failed"
+
+
+async def _extract_subtitles(task: dict, subtitles: list[dict], output_path: str) -> None:
+    """Resolve the subtitle plan after a successful mux (S6/S8).
+
+    Entries pre-marked `not_extractable` (bitmap/unknown codec, L12) or
+    `missing` (no track — T6 fills those via OpenSubtitles) keep those
+    statuses; the rest get extracted or become `skipped` on cancel. Pause
+    does not apply during extraction.
+    """
+    for entry in subtitles:
+        if entry.get("status") != "pending":
+            continue
+        if entry.get("track_index") is None:
+            entry["status"] = "missing"
+        elif not entry.get("extractable"):
+            codec = entry.get("codec", "unknown")
+            entry["status"] = "not_extractable"
+            entry["detail"] = f"{_subtitle_kind(codec)}: {codec}"
+
+    for entry in subtitles:
+        if entry.get("status") != "pending":
+            continue
+        if task.get("cancelled"):
+            entry["status"] = "skipped"
+            continue
+        sidecar = subtitle_sidecar_path(output_path, entry["language_code"])
+        cmd = build_subtitle_extract_command(entry.get("path", ""), entry["track_index"], sidecar)
+        try:
+            code, stderr = await asyncio.to_thread(_run_extract, cmd)
+        except Exception as exc:  # noqa: BLE001 — a sidecar never fails the mux
+            entry["status"] = "failed"
+            entry["detail"] = f"{type(exc).__name__}: {exc}"
+            continue
+        if code == 0:
+            entry["status"] = "extracted"
+            entry["sidecar"] = sidecar
+        else:
+            entry["status"] = "failed"
+            entry["detail"] = _stderr_snippet(stderr)
 
 
 def cancel_task(task_id: str) -> dict:
@@ -605,6 +751,7 @@ def get_task(task_id: str) -> dict | None:
         "detail": task.get("detail", ""),
         "output_path": task.get("output_path"),
         "created_at": task.get("created_at", 0),
+        "subtitles": task.get("subtitles", []),
     }
 
 

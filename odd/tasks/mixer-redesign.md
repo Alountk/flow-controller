@@ -58,9 +58,9 @@ bloque 🟡 (tabla densa Archivos, secciones Calidad/Avisos, 3 namings), cambios
 secciones de la app.
 
 > **Delivery**: single PR a cierre de T9 (regla del usuario). Slices ya en la rama:
-> C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339) — 546 líneas acumuladas, frontera
-> de slice registrada aquí según avisa el commit; los slices siguientes se cortan con
-> tareas nuevas (T4, T5+T6, T7+T8) sin esperar a T9.
+> C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339), C3 `b5eeeb1` T4 (460) — 1002
+> líneas acumuladas, frontera de slice registrada aquí según avisa el commit; los slices
+> siguientes se cortan con tareas nuevas (T5, T6, T7+T8) sin esperar a T9.
 
 ## Tasks
 
@@ -135,6 +135,21 @@ secciones de la app.
   (subrip/ass/webvtt); bitmap (PGS/VobSub) marcado «no extraíble sin OCR»; el mux sigue
   sin mapear subtítulos al contenedor (S8). Tests RED→GREEN. Ruta: `backend/media_mixer.py`,
   `backend/interfaces/http/routes_mixer.py`, tests. Commit: —.
+  - Evidencia (2026-10-18): RED observado **18 failed / 82 passed** —
+    `KeyError: 'subtitle_tracks'` (parse ignora subs), `AttributeError` de
+    `build_subtitle_extract_command`/`subtitle_sidecar_path`, `TypeError: start_mux()
+    got an unexpected keyword argument 'subtitle_plan'` + `KeyError: 'subtitle_plan'`
+    (la ruta no construye plan) y `KeyError: 'subtitles'` en `get_task`. Implementado:
+    `subtitle_tracks` en `parse_probe_data` (+ `track_index` ordinal en vídeo/audio/subs,
+    L18), `build_subtitle_extract_command`, `subtitle_sidecar_path`, plan en `/mux`
+    (unión de idiomas de audio, extraíble preferido entre archivos) y extracción post-mux
+    en `start_mux`/`_run_mux_background`. Contrato `task["subtitles"]` (desde la creación,
+    expuesto en `GET /api/mixer/tasks/:id`): `{language_code, language, path,
+    track_index, codec, extractable, status, detail, sidecar}` con estados
+    `pending|extracted|failed|not_extractable|missing|skipped`. **GREEN 100/100 tocados;
+    suite completa 1180/1180** (base 1162 + 18 tests nuevos). Deuda legacy:
+    techo **2869 → 3016** con `#:` en `tests/contracts/tests_architecture.py`.
+    `task_manager.py` sin cambios. Tareas de un solo fichero: sin probe ⇒ plan vacío.
 - [ ] **T6 [S6]** — backend+frontend: cliente OpenSubtitles + campo API key en
   Configuración; búsqueda/descarga de `.srt` por idioma de audio hacia el sidecar de la
   salida; tests con stub (sin red real). Ruta: backend (infra) + `frontend/src/features/settings/Settings.tsx`
@@ -248,3 +263,35 @@ secciones de la app.
   antes de arrancar ffmpeg, después del check de fps/duración (S3 «el primer
   check»). Deuda legacy 2782 → **2869** con `#:` en el contrato; disclosure
   obligada en la descripción de la PR de cierre (T9).
+- **L18 (2026-10-18, contrato `track_index` — requisito para T8)**: el campo `index` de
+  los tracks del probe es el **índice absoluto de stream de ffprobe**, pero
+  `build_mux_command` mapea con ordinales (`-map 0:v:N`/`0:a:N`). El frontend actual
+  (`MediaMixer.tsx:536-548`) envía `track.index` absoluto ⇒ para audio típico
+  (vídeo=0, audio=1) hay un off-by-one preexistente (`a:1` selecciona el segundo audio
+  o falla). **Decisión de contrato: `MuxRequest.track_index` = ordinal dentro del tipo
+  de stream del fichero** (coherente con `-map` y con `best_video.track_index` de T3).
+  T8 debe cambiar el frontend para enviar ordinales (posición en `video_tracks` /
+  `audio_tracks`, no `track.index`) y el selector dejar de usar `track.index` como
+  valor de selección. Bug preexistente, no introducido por T2-T4 — queda fijado en el
+  port del mockup.
+- **L19 (2026-10-18, T5 completada subagent)**: RED observado (18 failed) → GREEN
+  **1180/1180** (base 1162 + 18 tests nuevos de T5). En `media_mixer.py`:
+  `parse_probe_data` construye `subtitle_tracks` (codec, idioma raw +
+  `language_code`, `title`/`forced`/`default`, `kind` text|bitmap|unknown y
+  `extractable` solo para `TEXT_SUBTITLE_CODECS`) y vídeo/audio/subtítulo llevan
+  `track_index` ordinal para `-map v:N/a:N/s:N` (L18, `index` absoluto intacto);
+  nuevos `build_subtitle_extract_command` (`ffmpeg -y -i … -map 0:s:N -c:s srt …`,
+  re-mux de texto, no transcodifica vídeo — S8) y `subtitle_sidecar_path`
+  (`<stem>.<sufijo>.srt` con `spa→es/eng→en/rus→ru/cat→ca`, resto el código
+  normalizado). `/mux` construye `subtitle_plan` server-side desde los probes
+  (unión de idiomas de audio, orden S2; un track por idioma con extraíble
+  preferido entre archivos; bitmap/unknown solo ⇒ queda «no extraíble»; idiomas
+  sin pista también tienen entrada para la búsqueda de T6) y
+  `start_mux(..., subtitle_plan=)` lo guarda como `task["subtitles"]` desde la
+  creación. Tras mux OK se extraen los sidecars: éxito → `extracted` + `sidecar`;
+  fallo → `failed` + snippet de stderr en `detail`; sin pista → `missing`;
+  bitmap/unknown → `not_extractable` con `detail: "bitmap: <codec>"`; cancelada
+  la fase de mux → todo lo pendiente `skipped` y sin extracción. El mux sigue
+  mapeando solo vídeo+audio (S8). Un solo fichero ⇒ sin probe ⇒ plan vacío.
+  `task_manager.py` sin cambios. Deuda legacy 2869 → **3016** con `#:`;
+  disclosure obligada en la descripción de la PR de cierre (T9).
