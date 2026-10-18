@@ -143,6 +143,7 @@ export interface TaskSubtitle {
 
 export interface MuxTask {
   task_id: string
+  /** Includes S11's `queued` (waiting for the serial mix slot). */
   status: string
   progress: number
   detail: string
@@ -177,15 +178,19 @@ export interface MuxLanguageOverride {
   language: string
 }
 
+/** S11/T13: `destination_path` is the full absolute path of one of the two
+ *  inputs — the original file the mix replaces (the UI always sends it). */
 export async function startMux(
   videoSource: { path: string; track_index: number },
   audioSources: { path: string; track_index: number }[],
+  destinationPath: string,
   outputPath?: string,
   languageOverrides: MuxLanguageOverride[] = [],
 ): Promise<MuxResponse> {
   const body: Record<string, unknown> = {
     video_source: videoSource,
     audio_sources: audioSources,
+    destination_path: destinationPath,
   }
   if (outputPath) body.output_path = outputPath
   // L24: omitted when empty so the wire keeps its old shape.

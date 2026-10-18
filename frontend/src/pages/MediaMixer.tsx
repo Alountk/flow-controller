@@ -7,9 +7,6 @@ import {
   listTasks,
   getTask,
   searchTaskSubtitles,
-  cancelTask,
-  pauseTask,
-  resumeTask,
   alternativeLookup,
   alternativeStatus,
 } from '../shared/api/mixer.ts'
@@ -26,6 +23,7 @@ import type {
 } from '../shared/api/mixer.ts'
 import { browsePath, fetchRoots } from '../shared/api/files.ts'
 import { apiFetch } from '../shared/api/auth.ts'
+import { toast } from '../shared/utils/toast.ts'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
 import type { MixerLookupResponse } from '../shared/types.ts'
 import './MediaMixer.css'
@@ -139,6 +137,12 @@ function baseName(path: string | null): string {
   return path ? path.split('/').pop() || path : ''
 }
 
+/** The folder a path lives in (S11: «basename + folder» of the replaced file). */
+function folderOf(path: string): string {
+  const idx = path.lastIndexOf('/')
+  return idx <= 0 ? '/' : path.slice(0, idx)
+}
+
 /** Display-only mirror of the backend's `_title_from_filename` (S7's mockup
  *  line «Busca la película por el título del archivo — …»). The lookup itself
  *  still derives its title server-side. */
@@ -153,16 +157,6 @@ function displayTitle(filename: string): string {
 
 /** S2's fixed order: castellano → inglés → ruso → catalán. */
 const ORDERED_LANGUAGES = ['spa', 'eng', 'rus', 'cat']
-
-const STATUS_LABELS: Record<string, string> = {
-  running: 'En curso',
-  paused: 'Pausada',
-  done: 'Completada',
-  error: 'Error',
-  cancelled: 'Cancelada',
-  pending: 'Pendiente',
-  unknown: 'Desconocida',
-}
 
 /* ── State machine ─────────────────────────────────────────────────────────── */
 
@@ -533,99 +527,6 @@ function CompatibilityStrip({ probe, ok }: { probe: ProbeResult; ok: boolean }) 
   )
 }
 
-/* ── Task list (unchanged behavior — ssePollGate + darkModePolish contracts) ─ */
-
-function TaskList({ tasks }: { tasks: MuxTask[] }) {
-  const queryClient = useQueryClient()
-
-  const cancelMut = useMutation({
-    mutationFn: cancelTask,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mixer-tasks'] }),
-  })
-
-  const pauseMut = useMutation({
-    mutationFn: pauseTask,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mixer-tasks'] }),
-  })
-
-  const resumeMut = useMutation({
-    mutationFn: resumeTask,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mixer-tasks'] }),
-  })
-
-  if (!tasks.length) return null
-
-  return (
-    <div className="mixer-task-list">
-      <div className="mixer-task-list-header">Tareas</div>
-      {tasks.map((task) => (
-        <div key={task.task_id} className={`mixer-task mixer-task-${task.status}`}>
-          <div className="mixer-task-info">
-            <span className={`mixer-task-status mixer-status-${task.status}`}>
-              {STATUS_LABELS[task.status] || task.status}
-            </span>
-            <span className="mixer-task-detail">{task.detail}</span>
-            {task.output_path && (
-              <span className="mixer-task-output" title={task.output_path}>
-                → {task.output_path.split('/').pop()}
-              </span>
-            )}
-          </div>
-          {(task.status === 'running' || task.status === 'paused') && (
-            <div className="mixer-task-progress">
-              <div className="mixer-progress-bar">
-                <div
-                  className="mixer-progress-fill"
-                  style={{ width: `${Math.round(task.progress * 100)}%` }}
-                />
-              </div>
-              <span className="mixer-progress-pct">{Math.round(task.progress * 100)}%</span>
-            </div>
-          )}
-          <div className="mixer-task-actions">
-            {task.status === 'running' && (
-              <>
-                <button
-                  className="action-btn"
-                  onClick={() => pauseMut.mutate(task.task_id)}
-                  disabled={pauseMut.isPending}
-                >
-                  ⏸ Pausar
-                </button>
-                <button
-                  className="action-btn destructive"
-                  onClick={() => cancelMut.mutate(task.task_id)}
-                  disabled={cancelMut.isPending}
-                >
-                  ✕ Cancelar tarea
-                </button>
-              </>
-            )}
-            {task.status === 'paused' && (
-              <>
-                <button
-                  className="action-btn"
-                  onClick={() => resumeMut.mutate(task.task_id)}
-                  disabled={resumeMut.isPending}
-                >
-                  ▶ Reanudar
-                </button>
-                <button
-                  className="action-btn destructive"
-                  onClick={() => cancelMut.mutate(task.task_id)}
-                  disabled={cancelMut.isPending}
-                >
-                  ✕ Cancelar tarea
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 /* ── Subtitle panel state (S6) ─────────────────────────────────────────────── */
 
 interface SubtitleRowState {
@@ -709,6 +610,11 @@ export function MediaMixer() {
   const [checkedAudio, setCheckedAudio] = useState<Set<string>>(new Set())
   // L24/T10: `und` rows the user marked as castellano (row keys, this selection only).
   const [markedSpanish, setMarkedSpanish] = useState<Set<string>>(new Set())
+  // S11/L30 — the destination is an EXPLICIT choice (no default): the exact
+  // path of the input file the mix replaces. It is keyed by path, never by
+  // slot, and revalidated below: a destination that stops matching a current
+  // input re-disables «Mezclar» instead of silently rebinding to another file.
+  const [destinationPath, setDestinationPath] = useState<string | null>(null)
 
   // Poll tasks while any are active
   const { data: tasksData } = useQuery({
@@ -811,6 +717,17 @@ export function MediaMixer() {
     return rows
   })()
 
+  // S11/L30 — resolve the chosen destination against the CURRENT inputs: it
+  // must be exactly one of the two probed paths (the original the mix replaces).
+  const destFile =
+    probeResult != null && destinationPath !== null
+      ? destinationPath === probeResult.file_a.path
+        ? probeResult.file_a
+        : destinationPath === probeResult.file_b.path
+          ? probeResult.file_b
+          : null
+      : null
+
   const probeMut = useMutation({
     mutationFn: () => probeFiles(pathA, pathB),
     onSuccess: (result) => {
@@ -867,14 +784,21 @@ export function MediaMixer() {
         }
       })
 
+      // S11/L30 — `canMux` holds destFile, but the guard keeps the payload
+      // honest on its own: `destination_path` is always the chosen input path.
+      if (!destFile) throw new Error('Selecciona el destino de la mezcla')
+
       return startMux(
         { path: videoRow.path, track_index: videoRow.track_index },
         audioSources,
+        destFile!.path,
         undefined,
         languageOverrides,
       )
     },
     onSuccess: () => {
+      // S11/L31 — the mix went to the serial queue; its state lives in Seguimiento.
+      toast('Enviado a la cola', 'ok')
       setError(null)
       setMuxConflict(null)
       queryClient.invalidateQueries({ queryKey: ['mixer-tasks'] })
@@ -1009,6 +933,9 @@ export function MediaMixer() {
     setSelectedVideoKey(null)
     setCheckedAudio(new Set())
     setMarkedSpanish(new Set())
+    // `destinationPath` stays on purpose: it is a session choice keyed by an
+    // exact input path. The next probe revalidates it — if it no longer
+    // matches an input it stops authorizing the submit until re-picked.
   }
 
   function toggleAudio(key: string) {
@@ -1023,7 +950,8 @@ export function MediaMixer() {
   // S3/L14 + L24 — `canMux` needs compatibility.ok AND the EFFECTIVE language
   // gate (a marked und track satisfies `spa` locally; the mux re-derives it
   // from language_overrides) plus real selections; the mockup-11 «Mezclar»
-  // carries a real `disabled` attribute.
+  // carries a real `disabled` attribute. S11/L30 adds the explicit destination
+  // (never a default): without a valid one the button stays disabled.
   const compatOk =
     probeResult != null &&
     probeResult.compatibility.ok &&
@@ -1038,9 +966,9 @@ export function MediaMixer() {
     selectedVideoKey !== null &&
     audioCheckedCount > 0 &&
     compatOk &&
-    langOk
+    langOk &&
+    destFile !== null
   const canSearch = !!latestTask && subtitleRows.some((r) => r.searchable)
-  const activeTasks = tasks.filter((t) => t.status === 'running' || t.status === 'paused')
 
   const mismatch = {
     fps: (probeResult?.compatibility.warnings ?? []).some((w) => w.type === 'fps_mismatch'),
@@ -1346,13 +1274,36 @@ export function MediaMixer() {
             </div>
           </section>
 
-          {/* 6) Action row (S8) */}
+          {/* 6) Action row (S8 + S11/L30's obligatory destination) */}
           <div className="mixer-actionbar">
             <div className="mixer-actionbar-info">
-              {latestTask?.output_path && (
+              {/* L30: «Carpeta de A» / «Carpeta de B» with NO default — the
+                  choice names the exact input file the output replaces. */}
+              <div className="mixer-dest-picker" role="group" aria-label="Destino">
+                <button
+                  type="button"
+                  className="mixer-dest-btn"
+                  aria-pressed={destinationPath === probeResult.file_a.path}
+                  onClick={() => setDestinationPath(probeResult.file_a.path)}
+                >
+                  Carpeta de A
+                </button>
+                <button
+                  type="button"
+                  className="mixer-dest-btn"
+                  aria-pressed={destinationPath === probeResult.file_b.path}
+                  onClick={() => setDestinationPath(probeResult.file_b.path)}
+                >
+                  Carpeta de B
+                </button>
+              </div>
+              {destFile && (
                 <div className="mixer-destino">
                   <span className="mixer-meta-label">Destino:</span>{' '}
-                  <span className="mixer-mono">{latestTask.output_path}</span>
+                  <span className="mixer-mono" title={destFile.path}>{destFile.path}</span>
+                  <div className="mixer-dest-replace">
+                    {`Sustituirá ${baseName(destFile.path)} (carpeta ${folderOf(destFile.path)})`}
+                  </div>
                 </div>
               )}
               <p className="mixer-copy-note">copia de streams, sin transcodificar (-c copy)</p>
@@ -1381,20 +1332,6 @@ export function MediaMixer() {
 
           {error && <div className="fm-error">{error}</div>}
         </>
-      )}
-
-      {/* ── Task list (idle or results) ──────────────────────────────────── */}
-      {tasksData && tasksData.tasks.length > 0 && (
-        <div className="mixer-section">
-          <TaskList tasks={tasksData.tasks} />
-          {activeTasks.length === 0 && phase === 'idle' && (
-            <div className="mixer-actions">
-              <button className="action-btn" onClick={resetAll}>
-                ← Nueva mezcla
-              </button>
-            </div>
-          )}
-        </div>
       )}
 
       {/* ── Releases of the movie the indexer lookup found (S7) ───────── */}

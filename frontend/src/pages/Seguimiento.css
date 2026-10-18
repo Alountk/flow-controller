@@ -615,6 +615,98 @@
   outline-offset: 1px;
 }
 
+/* S11/T13 — «Mezclas» band: the mixer's task state, beside the copy queue.
+   The status chips and the progress bar are the mixer display primitives
+   (`.mixer-task-status` / `.mixer-progress-*` live in MediaMixer.css — the
+   darkModePolish contract pins them there); this is only band layout. */
+
+.sg-mix {
+  margin-top: 14px;
+}
+
+.sg-mix-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 10px;
+}
+
+.sg-mix-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sg-mix-detail {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-mix-output {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.sg-mix-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.sg-mix-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sg-mix-btn {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.sg-mix-btn:hover:not(:disabled) {
+  background: var(--hover, var(--bg));
+}
+
+.sg-mix-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sg-mix-btn-cancel {
+  color: var(--bad-text);
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+}
+
+.sg-mix-btn-cancel:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  border-color: var(--bad);
+}
+
 /* ── Estados ── */
 
 .sg-empty {

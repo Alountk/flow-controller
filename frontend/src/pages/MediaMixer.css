@@ -772,6 +772,42 @@
   color: var(--text-dim);
 }
 
+/* S11/L30 — the obligatory destination choice («Carpeta de A» / «Carpeta de B») */
+.mixer-dest-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.mixer-dest-btn {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.mixer-dest-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.mixer-dest-btn[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.mixer-dest-replace {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 .mixer-actionbar-buttons {
   display: flex;
   align-items: center;
@@ -833,32 +869,14 @@
   cursor: not-allowed;
 }
 
-/* ── Task list (unchanged behavior — ssePollGate + darkModePolish contracts) ─ */
-
-.mixer-task-list {
-  margin-bottom: 16px;
-}
-
-.mixer-task-list-header {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 10px;
-}
-
-.mixer-task {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 8px;
-}
-
-.mixer-task-info {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
+/* ── Mixer task display primitives (S11) ──────────────────────────────────────
+ *
+ * The mixer page's own «Tareas» section is gone (T13): mix state lives in
+ * the Seguimiento «Mezclas» band. The status chips and the progress bar
+ * stayed HERE because the band renders mixer tasks with these classes and
+ * the darkModePolish contract (T2/T3) pins `.mixer-status-error`,
+ * `.mixer-status-cancelled` and `.mixer-status-pending` to this file.
+ */
 
 .mixer-task-status {
   font-size: 12px;
@@ -898,22 +916,10 @@
   color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
-.mixer-task-detail {
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.mixer-task-output {
-  font-size: 11px;
-  font-family: var(--mono, monospace);
-  color: var(--text-dim);
-}
-
-.mixer-task-progress {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
+/* S11's `queued`: waiting for the serial mix slot — a dim chip, like pending. */
+.mixer-status-queued {
+  background: color-mix(in srgb, var(--text-dim) 15%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
 .mixer-progress-bar {
@@ -937,27 +943,6 @@
   color: var(--text-dim);
   min-width: 32px;
   text-align: right;
-}
-
-.mixer-task-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.mixer-task-actions .action-btn {
-  font-size: 11px;
-  padding: 4px 10px;
-}
-
-.mixer-task-actions .action-btn.destructive {
-  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
-  color: var(--bad);
-}
-
-.mixer-task-actions .action-btn.destructive:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bad) 12%, transparent);
-  border-color: var(--bad);
 }
 
 /* L24/T10 — mark an und audio track as castellano (and undo it) */
