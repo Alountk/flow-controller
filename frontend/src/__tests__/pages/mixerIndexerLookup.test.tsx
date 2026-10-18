@@ -121,7 +121,7 @@ function renderMixer() {
 }
 
 async function selectFile(pickerIndex: number) {
-  const browseButtons = await screen.findAllByRole('button', { name: 'Browse' })
+  const browseButtons = await screen.findAllByRole('button', { name: 'Examinar…' })
   fireEvent.click(browseButtons[pickerIndex])
   const fileName = await screen.findByText(FILE_A)
   const row = fileName.closest('.scan-file-item')
@@ -135,8 +135,8 @@ async function driveToResults(languageCheck: LanguageCheck, lookup: LookupReply)
   renderMixer()
   await selectFile(0)
   await selectFile(1)
-  fireEvent.click(await screen.findByRole('button', { name: /Probe Files/ }))
-  await screen.findByRole('button', { name: '← Back' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Cotejar archivos' }))
+  await screen.findByRole('button', { name: 'Cancelar' })
   return calls
 }
 

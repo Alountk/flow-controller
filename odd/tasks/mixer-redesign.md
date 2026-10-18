@@ -59,8 +59,9 @@ secciones de la app.
 
 > **Delivery**: single PR a cierre de T9 (regla del usuario). Slices ya en la rama:
 > C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339), C3 `b5eeeb1` T4 (460),
-> C4 `761e0e0` T5 (788), C5 `6f26951` T6 (969) — 2757 líneas acumuladas, frontera de
-> slice registrada aquí según avisa el commit; T7 y T8 cierran cada uno en su slice.
+> C4 `761e0e0` T5 (788), C5 `6f26951` T6 (969), C6 `c811282` T7 (603) — 3359
+> líneas acumuladas, frontera de slice registrada aquí según avisa el commit; T8 cierra
+> en su slice y T9 es el cierre documental.
 
 ## Tasks
 
@@ -212,6 +213,38 @@ secciones de la app.
   (badge que bloquea `canMux`, lista de audio ordenada con automático+manual, panel de
   subtítulos con estado extraído/buscado/no-extraíble, botón indexador). Tests
   RED→GREEN + checks. Commit: —.
+  - [x] Evidencia (2026-10-18): RED observado **27 failed / 584 passed** (611
+    tocados) — 15 nuevos de `mixerRedesign.test.tsx` + 7 de
+    `mixerSubtitlePanel.test.tsx` + los 5 de `mixerIndexerLookup.test.tsx` (T7),
+    que en RED fallan por los renames de copy que fuerza el port («Browse»→
+    «Examinar…», «Probe Files»→«Cotejar archivos», «← Back»→«Cancelar»: el mockup
+    trae «Examinar…» y la action row «Cancelar»/«Mezclar»). Implementado el port
+    de las pantallas 10/11/12 con los tokens de `prototypes/DESIGN.md`: cotejo
+    A|B + strip de compatibilidad (verde con valores / rojo «No compatible» con
+    `fps: A … | B …` y `duración … (Δ …)` desde `compatibility.warnings`) que
+    bloquea `canMux` junto con `language_check.ok` («Mezclar» con `disabled`
+    real), 409 de `/mux` con `detail.error` superficiado (badge rojo +
+    `fm-error`), panel de vídeo con `best_video` (puede nombrar a B; chip «Auto ·
+    mejor compresión»), audio MERGEADO en el orden entregado (4 automáticas +
+    resto a elegir, nº = orden de salida), panel de subtítulos (Extraído+sidecar
+    / OpenSubtitles / Buscando… / No extraíble (bitmap PGS) derivado de `detail`
+    / No encontrado / candidatos del probe sin tarea) con «Buscar subtítulos»
+    (`languages` de 3 letras → refresh de la tarea), y aviso de idioma con chip
+    «Bloqueante» + lookup de T7 intacto. **L18 fijado**: `video_source` y
+    `audio_sources` = `{path, track_index}` ORDINAL (posición en
+    `video_tracks`/`audio_ordered[].track_index`), nunca `track.index` absoluto —
+    pin con assert exacto de payload (fixture con `index` absoluto 5/3 ≠
+    ordinal 1/1). **GREEN 611/611 vitest** (base 589 + 22 nuevos), tsc 0,
+    eslint 0; backend **1223/1223** y `git status --short backend/` limpio.
+    Tests preexistentes que codificaran la spec vieja (payload `track.index`
+    absoluto, auto-selección de `default` por archivo): **no existían** — el
+    único mixer con tests era el lookup de T7; sus 5 tests solo se adaptaron a
+    los renames de copy (fixtures intactas, comportamiento idéntico). Desviaciones
+    del mockup (reportadas): helper «resolución > codec > bitrate» (L15 corrige
+    el orden), «Destino:» solo cuando la tarea tiene `output_path` real (regla
+    de no inventar datos), chips «Pendiente»/«Sin pista embebida»/«Extraíble»/
+    «Omitida» para estados que el mockup no define, y fps/duración en rojo en
+    ambas columnas del header (el mockup solo marca B).
 - [ ] **T9 [S1–S9]** — docs y cierre: BACKLOG (fila del mixer/bloque 🟡) + HANDOFF
   (pendiente 1) + este doc (tasks/espejo); checks finales backend/frontend/tsc/eslint.
   Commit: —.
@@ -390,3 +423,23 @@ secciones de la app.
   errores de red y devuelve `{}` ⇒ un Radarr caído pero configurado degrada a
   `movie: null` en vez de 502 (el 502 cubre no-configurado y excepciones que suban
   del puerto); corregirlo requiere tocar el adapter en un task futuro.
+- **L22 (2026-10-18, T8 completada subagent)**: RED observado **27 failed** (15+7
+  tests nuevos + los 5 de T7 adaptados a los renames «Examinar…»/«Cotejar
+  archivos»/«Cancelar») → GREEN **611/611 vitest** (base 589 + 22 nuevos), tsc 0,
+  eslint 0; backend 1223/1223 sin tocar (`git status --short backend/` limpio).
+  Port de las pantallas Stich 10/11/12 a `MediaMixer.tsx`/`MediaMixer.css` con los
+  tokens de `prototypes/DESIGN.md`. Contrato **L18 fijado** con assert exacto:
+  `video_source`/`audio_sources` = `{path, track_index}` ordinal (fixture con
+  `index` absoluto ≠ ordinal para que el pin sea real); `canMux` =
+  `compatibility.ok && language_check.ok` + selecciones, con `disabled` real en
+  «Mezclar» (mockup 11); 409 de `/mux` con `detail.error` superficiado (badge
+  rojo + `fm-error`; `MuxError.conflict` aditivo en `shared/api/mixer.ts`);
+  audio mergeado en el orden entregado con las 4 automáticas marcadas; panel de
+  subtítulos combinando `subtitle_tracks` del probe con `task["subtitles"]` +
+  «Buscar subtítulos» (3 letras → refresh de la tarea); aviso de idioma con
+  «Bloqueante» + «Buscar en el indexador» (T7) intacto dentro del layout nuevo.
+  Tipos: `shared/types.ts` sin cambios — los adicionales viven en
+  `shared/api/mixer.ts` y el workaround `ProbeResultWithChecks` queda eliminado.
+  Desviaciones del mockup documentadas en la evidencia de T8 (orden de ranking
+  L15, «Destino:» solo con dato real, chips de estados no maquetados, rojo en
+  ambas columnas del header).
