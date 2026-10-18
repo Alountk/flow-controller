@@ -81,6 +81,39 @@ bloque 🟡 (tabla densa Archivos, secciones Calidad/Avisos, 3 namings), cambios
 secciones de la app **salvo el prop opcional `onGrabStarted` del `ReleaseSearchModal`
 (aditivo, S10)**.
 
+### S11 — Cola de mezcla, progreso real y destino sustitutivo (L29–L32)
+
+Al pulsar «Mezclar» la tarea se **envía a la cola**, con destino informado y
+estado visible desde cualquier consola en **Seguimiento**:
+
+1) **Destino obligatorio (L30)**: la barra de acciones ofrece «Carpeta de A» /
+   «Carpeta de B» **sin default** — sin elegir destino, «Mezclar» no se
+   activa. El resultado **sustituye al fichero original** de esa carpeta (misma
+   ruta y nombre): ffmpeg escribe un temporal en la misma carpeta y, solo si
+   termina con éxito (y hay salida verificable), un rename atómico reemplaza
+   al original; si algo falla, el original queda intacto. El fichero de la
+   otra carpeta no se toca. La sustitución es el **último paso** de la tarea
+   (tras la extracción de subtítulos, que sigue leyendo los originales). La UI
+   informa la ruta exacta que se va a sustituir.
+2) **Toast + Seguimiento (L31)**: al enviar se muestra el toast «Enviado a la
+   cola». La sección «Tareas» del mixer se **elimina**; el estado de las
+   mezclas vive en **Seguimiento** junto a la cola de copias (orden, progreso
+   real y controles pausar/cancelar/reanudar).
+3) **Progreso real**: el progreso de ffmpeg se lee de la salida por la que
+   realmente lo emite y la barra avanza durante `running` (refresco activo
+   mientras haya mezclas en curso, con o sin SSE).
+4) **Cola serie (L32)**: una mezcla a la vez; con una en curso, las siguientes
+   esperan con estado `queued` y arrancan en orden FIFO (el endpoint de tareas
+   las devuelve en orden de cola). Cancelar una `queued` la retira **sin
+   ejecutarla**; pausa/reanúsa, TTL, subtítulos y semántica terminal
+   conservan lo actual.
+5) El destino se envía como `destination_path` (ruta completa de uno de los
+   inputs); el servidor lo valida **fail-closed** (400 `invalid_destination`
+   si no es exactamente el realpath de A o de B o no pasa
+   `path_is_allowed`). Sin `destination_path` el endpoint conserva el modo
+   legacy de directorio (compatibilidad interna; el UI siempre envía destino).
+   Ningún gate 409 (compatibilidad, idiomas) ni la selección A/B cambian.
+
 > **Delivery**: single PR a cierre de T9 (regla del usuario). Slices ya en la rama:
 > C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339), C3 `b5eeeb1` T4 (460),
 > C4 `761e0e0` T5 (788), C5 `6f26951` T6 (969), C6 `c811282` T7 (603),
@@ -351,6 +384,45 @@ secciones de la app **salvo el prop opcional `onGrabStarted` del `ReleaseSearchM
     (acepta también tmdbId); probe→400 (manda el contrato); `ready && !allowed` mantiene
     la espera; `progress` 0–100. **PR #211** — slices C2 ~650 / C3 ~600 líneas
     (frontera de slice registrada aquí: backend y frontend por separado).
+- [x] **T12 [S11]** — backend: cola serie (encolado FIFO con estado `queued`,
+  una mezcla a la vez, cancel de `queued` sin ejecutar), progreso real (el
+  parser de ffmpeg lee la salida por la que emite de verdad — RED primero,
+  con el test existente de stderr como regresión que hay que mover), destino
+  `destination_path` fail-closed 400 `invalid_destination` + sustitución
+  atómica (temporal en la misma carpeta → rename solo tras éxito, último paso
+  tras subtítulos). RED→GREEN; los workers NO hacen git — los commits son del
+  padre. Criterios S11-1,3,4,5.
+  - Evidencia (2026-10-18): worker `gentle-ai-worker` con **STOP inicial** correcto
+    (ratchet `MAX_LEGACY_LOC=3017` a headroom 0; desbloqueo del padre = opción 1:
+    surfaces + techo al mínimo medido con `#:`) — RED observado **17 failed / 1265
+    passed** (bug vivo `assert 0.5 in [1.0]`, TypeError `destination_path`, cola
+    `running×3`, orden de lista, cancel de `queued`) → GREEN **1282/1282** (base
+    1261 + 21, cero regresiones); techo final **3218** (media_mixer 760→957,
+    task_manager 133→137, disclosure en PR #212). Interpretación de pausa aprobada
+    (pausa conserva el slot, reanudar relanza, cancelar pausada libera el slot).
+    `assess` con `escalate item 1` → plan self-verification + verificador
+    independiente; el lanzamiento del verificador fue **rechazado por gate** (tarea
+    sin línea `Risk:` → orden de verificar inline, sin reintentar) → **verificador
+    no disponible** reportado; self-verification del padre = spot-check de los hunks
+    (validación fail-closed previa a los 409, temporal same-dir, `os.replace` solo
+    con salida verificable y tras extraer subtítulos) + focused **188 passed** +
+    suite completa **1282**. Commits: C1 `442d213` (spec), C2 `c3563aa` (backend,
+    slice con Risk item 1 aislado), C4 (docs de cierre). **PR #212**.
+- [x] **T13 [S11]** — frontend: selector obligatorio «Carpeta de A»/«Carpeta
+  de B» en la barra de acciones («Mezclar» desactivado sin destino; informe de
+  la ruta que se sustituye; envía `destination_path`), toast «Enviado a la
+  cola», **eliminación** de la sección «Tareas» del mixer, y banda de mezclas
+  en **Seguimiento** (junto a `OpsBand`) con orden de cola `queued`, progreso
+  real y pausar/cancelar/reanudar. RED→GREEN; los workers NO hacen git — los
+  commits son del padre. Criterios S11-1,2,3.
+  - Evidencia (2026-10-18): worker `gentle-ai-worker` — RED observado **21 failed /
+    43 passed** (selector ausente, «Tareas» presente, toast vacío, banda «Mezclas»
+    inexistente) → GREEN **636/636** (base 626 + 10; `tsc -b` 0, `eslint` 0). Copy
+    nueva llevada al español por el padre («Sustituirá `<basename>` (carpeta …)»,
+    «Aún no hay mezclas») con sus asserts re-pinados, y verificación completa
+    re-ejecutada: **636/636 + tsc 0 + eslint 0**. Contrato `destination_path`
+    coherente con T12 (ruta exacta del input elegido en el body). Commit: C3
+    `bdffa97`.
 
 ## Log
 
@@ -570,4 +642,19 @@ secciones de la app **salvo el prop opcional `onGrabStarted` del `ReleaseSearchM
   permitida"** (auto-selección solo si la ruta está en `allowed_roots`; si no, aviso con
   la ruta).
 - **L28 (2026-10-18, usuario → filtro por idiomas, S10)**: "huelga decir que esa busqueda
-  deberiamos poder hacerla por idiomas si no nos buscaria el mismo que ya tenemos"
+  deberiamos poder hacerla por idiomas si no nos buscaria el mismo que ya tenemos
+- **L29 (2026-10-18, usuario, requiso S11 → T12-T13)**: "creo que en el mixer cuando
+  le damos a mezclar deberia mandar la tarea a la cola, ahora mismo aparece abajo del
+  todo una seccion de tareas, pero que además la barra no se mueve. podrias mirar esto?
+  Esto creo que deberia verse tal vez en una seccion en seguimiento y cuando le damos a
+  mezclar un toast que diga que se ha enviado a la cola. para cualquier consula puede
+  ver el estado en la cola de seguimiento. Tampoco informamos y no dejamos escoger el
+  destino del archivo, normalmente deberiamos guardarlo en una de las dos rutas de los
+  dos archivos y luego sustituir el que hay (no se si me explico)"
+- **L30 (2026-10-18, ask → destino)**: respuesta: **"Selector A/B, sin default"**
+  (preview elegido: "Destino: ( ) Carpeta de A  ( ) Carpeta de B   ← obligatorio").
+- **L31 (2026-10-18, ask → ver cola)**: respuesta: **"Seguimiento + quitar
+  Tareas"** (preview elegido: "Seguimiento ▸ [Mix] Dune 2024 — running 42% ▸
+  pausar/cancelar / Mixer: (sin sección Tareas; toast «Enviado a la cola»)").
+- **L32 (2026-10-18, ask → semántica de cola)**: respuesta: **"Serie (1 a la
+  vez)"** (preview elegido: "cola: [Dune running] → [Blade Runner queued] → …")."

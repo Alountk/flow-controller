@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Seguimiento } from '../../pages/Seguimiento.tsx'
 import { queueCancel, queueStatus } from '../../shared/api/files.ts'
+import type { MuxTask } from '../../shared/api/mixer.ts'
 import type { ActionsResponse, Trace, TraceResponse } from '../../shared/types.ts'
 
 /**
@@ -710,5 +711,129 @@ describe('the detail panel', () => {
     expect(container.querySelectorAll('.sg-col')).toHaveLength(4)
     // …and the overlay is rendered, just not inside the measured grid.
     expect(container.querySelector('.sg-det')).not.toBeNull()
+  })
+})
+
+describe('the Mezclas band (S11)', () => {
+  function mixTask(over: Partial<MuxTask> = {}): MuxTask {
+    return {
+      task_id: 'm-1',
+      status: 'running',
+      progress: 0,
+      detail: '',
+      output_path: null,
+      created_at: 1,
+      ...over,
+    }
+  }
+
+  /** `/api/mixer/tasks` with a mutable queue so a control can retire a row. */
+  function stubMixer(state: { tasks: MuxTask[] }, onCall?: (url: string) => void) {
+    const calls: { url: string; method: string }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        calls.push({ url, method: init?.method ?? 'GET' })
+        onCall?.(url)
+        if (url.includes('/api/mixer/tasks')) {
+          return { ok: true, json: async () => ({ tasks: state.tasks }) } as Response
+        }
+        return { ok: true, json: async () => ({ items: [] }) } as Response
+      }),
+    )
+    return calls
+  }
+
+  async function mixBand(): Promise<HTMLElement> {
+    const heading = await screen.findByRole('heading', { name: /Mezclas/ })
+    return heading.closest('section') as HTMLElement
+  }
+
+  it('renders the queue rows as received: running with progress, queued waiting, terminal rows', async () => {
+    stubMixer({
+      tasks: [
+        mixTask({ task_id: 'm-run', status: 'running', progress: 0.42, detail: 'mezclando vídeo', output_path: '/mnt/movies/Dune.mkv', created_at: 3 }),
+        mixTask({ task_id: 'm-q', status: 'queued', progress: 0, detail: 'espera FIFO', created_at: 4 }),
+        mixTask({ task_id: 'm-done', status: 'done', progress: 1, detail: 'sustituido', created_at: 2 }),
+        mixTask({ task_id: 'm-err', status: 'error', progress: 0.7, detail: 'ffmpeg falló', created_at: 1 }),
+      ],
+    })
+    renderView(resp([trace()]))
+
+    const band = await mixBand()
+    await within(band).findByText('mezclando vídeo')
+    const rows = [...band.querySelectorAll('.sg-mix-row')]
+
+    // The backend sends queue order (running first, queued FIFO, terminal
+    // last) — the band renders it as-is, no re-sorting.
+    expect(rows.map((r) => r.querySelector('.sg-mix-detail')?.textContent)).toEqual([
+      'mezclando vídeo',
+      'espera FIFO',
+      'sustituido',
+      'ffmpeg falló',
+    ])
+
+    // The running row carries a real progress bar whose width follows the
+    // 0..1 `progress` fraction.
+    const fill = rows[0].querySelector('.mixer-progress-fill') as HTMLElement | null
+    expect(fill).not.toBeNull()
+    expect(fill!.style.width).toBe('42%')
+
+    // The queued row shows its waiting state and no progress bar.
+    expect(rows[1].textContent).toContain('En cola')
+    expect(rows[1].querySelector('.mixer-progress-fill')).toBeNull()
+
+    // Recent terminal rows keep their place at the tail.
+    expect(rows[2].textContent).toContain('Completada')
+    expect(rows[3].textContent).toContain('Error')
+  })
+
+  it('cancelling a queued row calls the cancel endpoint and the row disappears after refetch', async () => {
+    const state = {
+      tasks: [mixTask({ task_id: 'm-q', status: 'queued', progress: 0, detail: 'espera FIFO', created_at: 2 })],
+    }
+    const calls = stubMixer(state, (url) => {
+      if (url === '/api/mixer/tasks/m-q/cancel') state.tasks = []
+    })
+    renderView(resp([trace()]))
+
+    const band = await mixBand()
+    const cancel = await within(band).findByRole('button', { name: '✕ Cancelar tarea' })
+    fireEvent.click(cancel)
+
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.url === '/api/mixer/tasks/m-q/cancel' && c.method === 'POST'),
+      ).toBe(true),
+    )
+    // A cancelled queued mix is retired without running: the refetch shows it.
+    await waitFor(() => expect(within(band).queryByText('espera FIFO')).toBeNull())
+  })
+
+  it('wires «Pausar» / «Reanudar» to the pause and resume endpoints', async () => {
+    const state = {
+      tasks: [
+        mixTask({ task_id: 'm-run', status: 'running', progress: 0.3, detail: 'mezclando', created_at: 2 }),
+        mixTask({ task_id: 'm-pa', status: 'paused', progress: 0.3, detail: 'en pausa', created_at: 1 }),
+      ],
+    }
+    const calls = stubMixer(state)
+    renderView(resp([trace()]))
+
+    const band = await mixBand()
+    fireEvent.click(await within(band).findByRole('button', { name: '⏸ Pausar' }))
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.url === '/api/mixer/tasks/m-run/pause' && c.method === 'POST'),
+      ).toBe(true),
+    )
+
+    fireEvent.click(within(band).getByRole('button', { name: '▶ Reanudar' }))
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.url === '/api/mixer/tasks/m-pa/resume' && c.method === 'POST'),
+      ).toBe(true),
+    )
   })
 })

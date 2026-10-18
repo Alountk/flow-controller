@@ -10,6 +10,7 @@ import {
   type TraceStage,
 } from '../shared/types.ts'
 import { queueCancel, queueStatus, type QueueOp } from '../shared/api/files.ts'
+import { listTasks, cancelTask, pauseTask, resumeTask } from '../shared/api/mixer.ts'
 import { formatBytes } from '../shared/utils/text.ts'
 import { relativeTime } from '../shared/utils/time.ts'
 import { AutoCopyPanel } from '../features/auto-copy/AutoCopyPanel.tsx'
@@ -175,6 +176,153 @@ function opStatusLabel(op: QueueOp): string {
   return op.status
 }
 
+/* S11/T13 — the «Mezclas» band: the mixer page's «Tareas» section retired
+ * into Seguimiento, beside the copy queue. Rows render in the order the
+ * backend sends them (running first, queued FIFO, terminal last — as-is,
+ * never re-sorted); a `queued` row is the waiting state and cancelling one
+ * retires it before it ever runs. Controls keep TaskList's semantics on the
+ * existing endpoints (pause / cancel / resume).
+ *
+ * The active poll IS the progress refresh (S11-3, with or without SSE):
+ * ~2 s while any mix is running or queued, ~10 s otherwise, on the shared
+ * `['mixer-tasks']` cache every console reads. */
+
+const MIX_STATUS_LABELS: Record<string, string> = {
+  queued: 'En cola',
+  running: 'En curso',
+  paused: 'Pausada',
+  done: 'Completada',
+  error: 'Error',
+  cancelled: 'Cancelada',
+  pending: 'Pendiente',
+  unknown: 'Desconocida',
+}
+
+/** Chip class: an unknown status falls back to the dim `pending` chip. */
+function mixChipClass(status: string): string {
+  return ['queued', 'running', 'paused', 'done', 'error', 'cancelled'].includes(status)
+    ? status
+    : 'pending'
+}
+
+function MixerBand() {
+  const queryClient = useQueryClient()
+  const { data } = useQuery({
+    queryKey: ['mixer-tasks'],
+    queryFn: listTasks,
+    refetchInterval: (query) => {
+      const tasks = query.state.data?.tasks ?? []
+      const active = tasks.some((t) => t.status === 'running' || t.status === 'queued')
+      return active ? 2000 : 10000
+    },
+  })
+  const tasks = data?.tasks ?? []
+
+  const cancelMut = useMutation({
+    mutationFn: cancelTask,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mixer-tasks'] }),
+  })
+  const pauseMut = useMutation({
+    mutationFn: pauseTask,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mixer-tasks'] }),
+  })
+  const resumeMut = useMutation({
+    mutationFn: resumeTask,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mixer-tasks'] }),
+  })
+
+  return (
+    <section className="sg-mix" aria-label="Mezclas">
+      <h2 className="sg-mix-title">
+        Mezclas
+        {tasks.length > 0 && <span className="sg-ops-count">{tasks.length}</span>}
+      </h2>
+      {tasks.length === 0 ? (
+        <div className="sg-empty">Aún no hay mezclas</div>
+      ) : (
+        tasks.map((task) => (
+          <div key={task.task_id} className={`sg-mix-row sg-mix-${task.status}`}>
+            <span className={`mixer-task-status mixer-status-${mixChipClass(task.status)}`}>
+              {MIX_STATUS_LABELS[task.status] || task.status}
+            </span>
+            <span className="sg-mix-detail" title={task.detail}>
+              {task.detail}
+            </span>
+            {task.output_path && (
+              <span className="sg-mix-output" title={task.output_path}>
+                → {task.output_path.split('/').pop()}
+              </span>
+            )}
+            {(task.status === 'running' || task.status === 'paused') && (
+              <div className="sg-mix-progress">
+                <div className="mixer-progress-bar">
+                  <div
+                    className="mixer-progress-fill"
+                    style={{ width: `${Math.round(task.progress * 100)}%` }}
+                  />
+                </div>
+                <span className="mixer-progress-pct">{Math.round(task.progress * 100)}%</span>
+              </div>
+            )}
+            <div className="sg-mix-actions">
+              {task.status === 'running' && (
+                <>
+                  <button
+                    type="button"
+                    className="sg-mix-btn"
+                    onClick={() => pauseMut.mutate(task.task_id)}
+                    disabled={pauseMut.isPending}
+                  >
+                    ⏸ Pausar
+                  </button>
+                  <button
+                    type="button"
+                    className="sg-mix-btn sg-mix-btn-cancel"
+                    onClick={() => cancelMut.mutate(task.task_id)}
+                    disabled={cancelMut.isPending}
+                  >
+                    ✕ Cancelar tarea
+                  </button>
+                </>
+              )}
+              {task.status === 'paused' && (
+                <>
+                  <button
+                    type="button"
+                    className="sg-mix-btn"
+                    onClick={() => resumeMut.mutate(task.task_id)}
+                    disabled={resumeMut.isPending}
+                  >
+                    ▶ Reanudar
+                  </button>
+                  <button
+                    type="button"
+                    className="sg-mix-btn sg-mix-btn-cancel"
+                    onClick={() => cancelMut.mutate(task.task_id)}
+                    disabled={cancelMut.isPending}
+                  >
+                    ✕ Cancelar tarea
+                  </button>
+                </>
+              )}
+              {task.status === 'queued' && (
+                <button
+                  type="button"
+                  className="sg-mix-btn sg-mix-btn-cancel"
+                  onClick={() => cancelMut.mutate(task.task_id)}
+                  disabled={cancelMut.isPending}
+                >
+                  ✕ Cancelar tarea
+                </button>
+              )}
+            </div>
+          </div>
+        ))
+      )}
+    </section>
+  )
+}
+
 function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }) {
   const queryClient = useQueryClient()
   const { data } = useQuery({
@@ -269,6 +417,12 @@ function OpsBand({ safeMode, onDone }: { safeMode: boolean; onDone: () => void }
           ))}
         </>
       )}
+
+      {/* S11/T13 — the mix queue lives next to the copy queue. It renders
+          INSIDE the ops tail because `.sg` is contract-pinned to exactly two
+          children (sg-board, sg-ops): an extra flex child would rewrite the
+          kanban-fit e2e geometry (see the DOM contract test). */}
+      <MixerBand />
 
       <div className="sg-ops-rule" />
       {/* The sweep belongs with the app's operations, not on top of the board:

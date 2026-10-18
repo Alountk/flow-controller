@@ -68,7 +68,13 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 2782 -> 2869 (mixer-redesign T4 / S2): language normalization, audio ordering and required-language check in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
 #: 2869 -> 3016 (mixer-redesign T5 / S6): subtitle stream parsing and .srt sidecar extraction in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
 #: 3016 -> 3017 (mixer-redesign T6 / S6): the `opensubtitles=opensubtitles_client` binding line in `app.py` — composition-root wiring, like every router registration (the import name fit on the existing line). Disclosed as debt in the mixer-redesign PR.
-MAX_LEGACY_LOC = 3017
+#: 3017 -> 3218 (mixer-redesign T12 / S11): the serial mux queue (one mux at a
+#: time, `queued` FIFO with slot release), destination substitution (hidden
+#: same-directory temp + atomic `os.replace` after subtitle extraction) and
+#: the two-stream ffmpeg progress reader in `media_mixer.py` (+197), plus
+#: `queued` as a cancellable live state in `task_manager.py` (+4). Disclosed
+#: as debt in the mixer-redesign PR description.
+MAX_LEGACY_LOC = 3218
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

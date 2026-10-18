@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-18 · **PR #211 (S10 descarga de alternativa)** · RDD **on** (global)
-> · specs: 1261 backend / 626 frontend · main pre-#211 = `430e718` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-18 · **PR #212 (S11 cola/progreso/destino)** · RDD **on** (global)
+> · specs: 1282 backend / 636 frontend · main pre-#212 = `ce08db5` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,10 +16,10 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `430e718` (pre-#211), CI (GitGuardian/backend/frontend/e2e/docker)
-pass. Tras #211: specs 1261 backend / 626 frontend, working tree limpia.
+**Verde**: `main` en `ce08db5` (pre-#212), CI (GitGuardian/backend/frontend/e2e/docker)
+pass. Tras #212: specs 1282 backend / 636 frontend, working tree limpia.
 
-**Tanda 2026-10-17/18 (PRs #206–#211)**:
+**Tanda 2026-10-17/18 (PRs #206–#212)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
 - #207 — corrección del HANDOFF sobre deploy: **es automático** (webhook Portainer 204
   verificado en vivo).
@@ -32,7 +32,7 @@ pass. Tras #211: specs 1261 backend / 626 frontend, working tree limpia.
   fábrica solo castellano, unión A+B); subtítulos `.srt` extraídos a sidecars tras el mux
   + OpenSubtitles (`POST /tasks/{id}/subtitles/search`, API key **cifrada en reposo**);
   lookup al indexador con `ReleaseSearchModal`; port de las pantallas Stitch 10/11/12 a
-  `MediaMixer` con badge bloqueante y panel de subtítulos. Deuda legacy 2751→3017
+  `MediaMixer` con badge bloqueante y panel de subtítulos. Deuda legacy 2751→3017→3218
   (`MAX_LEGACY_LOC`, disclosure en el PR). Feature doc: `odd/tasks/mixer-redesign.md`.
 - #210 — **enmienda L24/T10**: las pistas de audio `und` reales pueden **marcarse como
   castellano** en la lista («Marcar como castellano»/«Quitar marca») para pasar el flag
@@ -48,6 +48,16 @@ pass. Tras #211: specs 1261 backend / 626 frontend, working tree limpia.
   poll ~5 s, aviso si la ruta no está en allowed_roots (L27), «Dejar de esperar» sin
   endpoint destructivo (L27), `item.languages` → chips de idioma existentes (L28).
   Specs 1261/626.
+- #212 — **S11/T12-T13 cola, progreso real y destino sustitutivo**: «Mezclar» →
+  cola serie (`queued` FIFO, una a la vez, cancel de queued sin ejecutar), selector
+  obligatorio «Carpeta de A»/«Carpeta de B» con `destination_path` fail-closed
+  (400 `invalid_destination` previo a los 409) y **sustitución atómica** del original
+  (temporal same-dir → `os.replace` solo con salida verificable, como último paso
+  tras subtítulos), progreso leído del **stdout** real de ffmpeg (bug: se leía
+  stderr), toast «Enviado a la cola», sección «Tareas» del mixer **fuera**, banda
+  «Mezclas» en **Seguimiento** (`.sg-ops`). Ratchet **3017→3218** (`#:` disclosure).
+  Verificador independiente no disponible (gate: sin Risk en la tarea; self-
+  verification inline: spot-check + focused 188 + suite 1282). Specs 1282/636.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -162,7 +172,9 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   (`backend/tests/_stubs.py`, httpx ASGITransport en un loop).
 - **Ratchet `MAX_LEGACY_LOC`** (`tests/contracts/tests_architecture.py`): event_bus/app.py
   y `media_mixer.py` son legacy; cualquier línea nueva exige subir el máximo CON comentario
-  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017 hecho; entradas `#:`).
+  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017→3218 hecho; entradas
+  `#:`). **Headroom 0**: a tope, cualquier fix legado exige subir el techo en la misma
+  PR (STOP del worker T12 → opción 1 del padre: surfaces + mínimo medido).
 - **`track_index` del mux = ORDINAL** (posición en `video_tracks`/`audio_tracks` para
   `-map 0:v:N/a:N`), NO `track.index` (índice absoluto de ffprobe). El frontend viejo
   enviaba el absoluto ⇒ off-by-one preexistente en audio; corregido y fijado con asserts

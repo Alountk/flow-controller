@@ -1565,3 +1565,212 @@ class TestAlternativesStatusEndpoint:
         assert resp.status_code == 200
         assert resp.json()["state"] == "ready"
         mock_downloads.assert_not_awaited()
+
+
+# ── destination_path: fail-closed substitution target (S11-1/S11-5) ───────
+
+class TestMuxDestination:
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_destination_that_is_not_an_input_is_400_invalid_destination(
+        self, mock_probe, mock_start, mock_isfile
+    ):
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "destination_path": "/mnt/storage/other.mkv",
+            },
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "invalid_destination"
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_destination_fails_closed_when_not_allowed(
+        self, mock_probe, mock_start, mock_isfile
+    ):
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
+
+        with patch("config.path_is_allowed", return_value=False):
+            resp = client.post(
+                "/api/mixer/mux",
+                json={
+                    "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                    "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                    "destination_path": "/mnt/storage/video.mkv",
+                },
+            )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "invalid_destination"
+        mock_probe.assert_not_called()  # fail closed BEFORE any gate work
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_destination_may_be_the_video_input(self, mock_probe, mock_start, mock_isfile):
+        mock_start.return_value = "dest-task-video"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "destination_path": "/mnt/storage/video.mkv",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert mock_start.call_args.kwargs["destination_path"] == "/mnt/storage/video.mkv"
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_destination_may_be_an_audio_input(self, mock_probe, mock_start, mock_isfile):
+        mock_start.return_value = "dest-task-audio"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "destination_path": "/mnt/storage/audio.mkv",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert mock_start.call_args.kwargs["destination_path"] == "/mnt/storage/audio.mkv"
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_no_destination_keeps_the_legacy_call(self, mock_probe, mock_start, mock_isfile):
+        mock_start.return_value = "legacy-task"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+            },
+        )
+
+        assert resp.status_code == 200
+        # Empty destination: legacy output-path-directory mode, untouched.
+        assert not mock_start.call_args.kwargs.get("destination_path")
+        # The sidecar plan still covers the audio languages (S6/T6).
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [entry["language_code"] for entry in plan] == ["spa"]
+
+
+# ── task list ordering: running, queued FIFO, terminal desc (S11-4) ───────
+
+class TestTasksListOrdering:
+    def test_running_first_then_queued_fifo_then_terminal_by_created_at_desc(self):
+        mux_tasks._tasks.clear()
+        now = time.time()
+        specs = {
+            # Inserted scrambled: dict order must NOT decide the listing.
+            "done-new": ("done", now - 10),
+            "queued-second": ("queued", now - 40),
+            "running-1": ("running", now - 100),
+            "done-old": ("done", now - 300),
+            "queued-first": ("queued", now - 50),
+        }
+        for task_id, (status, created_at) in specs.items():
+            mux_tasks._tasks[task_id] = {
+                "status": status,
+                "progress": 0.5,
+                "detail": "",
+                "output_path": None,
+                "created_at": created_at,
+                "cancelled": False,
+                "paused": False,
+            }
+
+        resp = client.get("/api/mixer/tasks")
+
+        assert resp.status_code == 200
+        ids = [t["task_id"] for t in resp.json()["tasks"]]
+        assert ids == [
+            "running-1",
+            "queued-first",   # FIFO: starts first comes first
+            "queued-second",
+            "done-new",       # terminal: newest first
+            "done-old",
+        ]
+        mux_tasks._tasks.clear()
+
+    def test_a_queued_task_is_visible_in_list_and_detail(self):
+        mux_tasks._tasks.clear()
+        mux_tasks._tasks["queued-visible"] = {
+            "status": "queued",
+            "progress": 0.0,
+            "detail": "Queued",
+            "output_path": None,
+            "created_at": time.time(),
+            "cancelled": False,
+            "paused": False,
+        }
+
+        resp = client.get("/api/mixer/tasks")
+        assert resp.status_code == 200
+        assert [t["status"] for t in resp.json()["tasks"]] == ["queued"]
+
+        resp = client.get("/api/mixer/tasks/queued-visible")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "queued"
+        mux_tasks._tasks.clear()
+
+
+class TestCancelQueuedTask:
+    def test_cancelling_a_queued_task_is_terminal_and_ok(self):
+        mux_tasks._tasks.clear()
+        pause_event = MagicMock()
+        pause_event.is_set.return_value = True
+        mux_tasks._tasks["queued-cancel"] = {
+            "status": "queued",
+            "progress": 0.0,
+            "detail": "Queued",
+            "output_path": None,
+            "created_at": time.time(),
+            "cancelled": False,
+            "paused": False,
+            "pause_event": pause_event,
+            "process": None,
+        }
+
+        resp = client.post("/api/mixer/tasks/queued-cancel/cancel")
+
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        # Consistent terminal vocabulary: `cancelled`, never left to run.
+        assert resp.json()["status"] == "cancelled"
+        mux_tasks._tasks.clear()

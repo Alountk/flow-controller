@@ -194,6 +194,12 @@ async function selectFile(pickerIndex: number, fileName: string) {
   fireEvent.doubleClick(row)
 }
 
+/** S11/L30 — the destination is now one more «Mezclar» gate: pick one so a
+ *  later assertion can care about a DIFFERENT reason for the button state. */
+function pickDest(label: 'Carpeta de A' | 'Carpeta de B' = 'Carpeta de A') {
+  fireEvent.click(screen.getByRole('button', { name: label }))
+}
+
 /** Pick both files and probe — lands in the results workspace. */
 async function driveToResults(probe: Obj, extra: Route[] = []) {
   // `extra` comes first so a test can override any default route (e.g. /mux).
@@ -230,9 +236,10 @@ describe('mixer — cotejo compatible (S3, mockup 10)', () => {
     expect(screen.getByText('(Δ 2 s)')).toBeInTheDocument()
   })
 
-  it('enables «Mezclar» when compatibility, language check and selections are good', async () => {
+  it('enables «Mezclar» when compatibility, language check, selections and destination are good', async () => {
     await driveToResults(probeBody())
 
+    pickDest()
     expect(screen.getByRole('button', { name: 'Mezclar' })).toBeEnabled()
   })
 })
@@ -255,6 +262,7 @@ describe('mixer — cotejo no compatible (S3, mockup 11)', () => {
   it('gives «Mezclar» a real disabled attribute when the files are not compatible', async () => {
     await driveToResults(incompatibleProbe())
 
+    pickDest()
     const mezclar = screen.getByRole('button', { name: 'Mezclar' })
     expect(mezclar).toBeDisabled()
     expect(mezclar.hasAttribute('disabled')).toBe(true)
@@ -281,6 +289,7 @@ describe('mixer — cotejo no compatible (S3, mockup 11)', () => {
       })],
     ])
 
+    pickDest()
     fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
 
     expect(await screen.findByText('incompatible')).toBeInTheDocument()
@@ -291,6 +300,7 @@ describe('mixer — cotejo no compatible (S3, mockup 11)', () => {
   it('disables «Mezclar» while no audio track is checked', async () => {
     await driveToResults(probeBody())
 
+    pickDest()
     for (const box of screen.getAllByRole('checkbox')) {
       if ((box as HTMLInputElement).checked) fireEvent.click(box)
     }
@@ -307,6 +317,7 @@ describe('mixer — idioma exigido ausente (S2/L14, mockup 12)', () => {
       probeBody({ language_check: { ok: false, missing: ['spa'], required: ['spa'] } }),
     )
 
+    pickDest()
     expect(screen.getByRole('button', { name: 'Mezclar' })).toBeDisabled()
   })
 
@@ -339,6 +350,7 @@ describe('mixer — marcar und como castellano (L24/T10)', () => {
   it('offers «Marcar como castellano» on und rows and clears the block when marked', async () => {
     await driveToResults(undMissingProbe())
 
+    pickDest()
     expect(screen.getByText('Falta castellano (exigido) en los dos archivos')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Marcar como castellano' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mezclar' })).toBeDisabled()
@@ -354,6 +366,7 @@ describe('mixer — marcar und como castellano (L24/T10)', () => {
   it('sends language_overrides for the marked und track in the mux payload', async () => {
     const calls = await driveToResults(undMissingProbe())
 
+    pickDest()
     fireEvent.click(screen.getByRole('button', { name: 'Marcar como castellano' }))
     fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
     await waitFor(() => expect(calls.some((c) => c.url.includes('/api/mixer/mux'))).toBe(true))
@@ -373,6 +386,7 @@ describe('mixer — marcar und como castellano (L24/T10)', () => {
   it('re-blocks when the mark is removed', async () => {
     await driveToResults(undMissingProbe())
 
+    pickDest()
     fireEvent.click(screen.getByRole('button', { name: 'Marcar como castellano' }))
     fireEvent.click(screen.getByRole('button', { name: 'Quitar marca' }))
 
@@ -402,6 +416,7 @@ describe('mixer — vídeo por mejor compresión (S4, L18)', () => {
   it('sends the video as file B path + ordinal track_index, never the absolute index', async () => {
     const calls = await driveToResults(probeBody())
 
+    pickDest()
     fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
     await waitFor(() => expect(calls.some((c) => c.url.includes('/api/mixer/mux'))).toBe(true))
 
@@ -451,6 +466,7 @@ describe('mixer — audio ordenado (S2/S5, L18)', () => {
     const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
     fireEvent.click(boxes[1]) // Inglés out
     fireEvent.click(boxes[4]) // Francés in
+    pickDest()
     fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
     await waitFor(() => expect(calls.some((c) => c.url.includes('/api/mixer/mux'))).toBe(true))
 
@@ -466,6 +482,7 @@ describe('mixer — audio ordenado (S2/S5, L18)', () => {
   it('defaults the mux payload to the 4 automáticas in delivered order', async () => {
     const calls = await driveToResults(probeBody())
 
+    pickDest()
     fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
     await waitFor(() => expect(calls.some((c) => c.url.includes('/api/mixer/mux'))).toBe(true))
 
@@ -484,6 +501,8 @@ describe('mixer — audio ordenado (S2/S5, L18)', () => {
         { path: PATH_A, track_index: 1 },
         { path: PATH_A, track_index: 2 },
       ],
+      // S11/L30 — the UI always sends the destination of the mix.
+      destination_path: PATH_A,
     })
   })
 })
