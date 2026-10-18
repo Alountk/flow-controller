@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useHashState } from '../shared/hooks/useHashState.ts'
 import {
   STAGE_LABELS,
   type ActionKey,
@@ -120,11 +121,12 @@ type RowData = TraceRowData | CopyRowData | MixRowData
 /**
  * The one list S2 is about — and T3's seam: hoisting a just-submitted mix to
  * the top of «Activas» (with its accent border) is a reorder of the rows THIS
- * function returns, keyed by the stable `rowKey`s, never a second list beside
- * it. Order is source-stable and never re-sorted here: traces in payload
- * order, copy operations as the queue sends them (active first, then the last
- * ten settled, newest first), mix tasks in the backend's own order (running
- * first, queued FIFO, terminal last).
+ * function returns — `hoistHighlight` below, keyed by the stable `rowKey`s —
+ * never a second list beside it. Order is source-stable and never re-sorted
+ * here: traces in payload order, copy operations as the queue sends them
+ * (active first, then the last ten settled, newest first), mix tasks in the
+ * backend's own order (running first, queued FIFO, terminal last). The
+ * highlight adds no order of its own without a target present.
  */
 function buildRows(
   traces: Trace[],
@@ -169,6 +171,27 @@ function buildRows(
   return rows
 }
 
+/**
+ * T3/S1's hoist (the seam above): while a highlight target is present, that
+ * row moves to the TOP of the visible list — a reorder of `buildRows`' output,
+ * keyed by the stable rowKeys. No target (or a target this filter hides)
+ * returns the rows untouched: the DEFAULT order the T2 contract pins.
+ */
+function hoistHighlight(rows: RowData[], rowKey: string | null): RowData[] {
+  if (rowKey === null) return rows
+  const index = rows.findIndex((row) => row.rowKey === rowKey)
+  if (index <= 0) return rows
+  return [rows[index], ...rows.slice(0, index), ...rows.slice(index + 1)]
+}
+
+/**
+ * S1/L4's «borde de acento» for the just-submitted mix row. Inline on
+ * purpose: the marker is a one-visit highlight driven by a one-shot URL param
+ * (below), and the border must appear and disappear with the logic that owns
+ * it. `sg-row-highlight` stays as the styling hook a theme can target.
+ */
+const HIGHLIGHT_STYLE: CSSProperties = { borderLeft: '3px solid var(--accent)' }
+
 /** The path the row shows for where the file is (or ended up). */
 function cardPath(trace: Trace): string {
   if (trace.stage === 'sent') {
@@ -186,6 +209,7 @@ function TraceRow({
   safeMode,
   onDone,
   onDetails,
+  highlighted,
 }: {
   row: TraceRowData
   meta: Record<ActionKey, ActionMeta>
@@ -193,6 +217,8 @@ function TraceRow({
   onDone: () => void
   /** Opens this row's record in the detail overlay (F-09 phase 2). */
   onDetails: () => void
+  /** T3/S1 — the just-submitted marker: accent border + styling hook. */
+  highlighted?: boolean
 }) {
   const trace = row.trace
   const showBar =
@@ -206,7 +232,11 @@ function TraceRow({
   const path = cardPath(trace)
 
   return (
-    <article className={`sg-row sg-row-trace sg-${row.bucket}`} aria-label={trace.title}>
+    <article
+      className={`sg-row sg-row-trace sg-${row.bucket}${highlighted ? ' sg-row-highlight' : ''}`}
+      style={highlighted ? HIGHLIGHT_STYLE : undefined}
+      aria-label={trace.title}
+    >
       <div className="sg-row-main">
         <span className={`sg-svc sg-${trace.source}`}>{trace.source}</span>
         <span className="sg-title" title={trace.title}>
@@ -269,14 +299,21 @@ function CopyRow({
   row,
   onCancel,
   onComplete,
+  highlighted,
 }: {
   row: CopyRowData
   onCancel: (id: string) => void
   onComplete: (id: string) => void
+  /** T3/S1 — the just-submitted marker: accent border + styling hook. */
+  highlighted?: boolean
 }) {
   const op = row.op
   return (
-    <article className={`sg-row sg-row-copy sg-${row.bucket}`} aria-label={op.name}>
+    <article
+      className={`sg-row sg-row-copy sg-${row.bucket}${highlighted ? ' sg-row-highlight' : ''}`}
+      style={highlighted ? HIGHLIGHT_STYLE : undefined}
+      aria-label={op.name}
+    >
       <div className="sg-row-main">
         <span className={`sg-op-kind sg-op-${op.type}`}>
           {op.type === 'copy' ? 'Copiar' : 'Mover'}
@@ -353,16 +390,20 @@ function MixRow({
   onPause,
   onResume,
   onCancel,
+  highlighted,
 }: {
   row: MixRowData
   onPause: (id: string) => void
   onResume: (id: string) => void
   onCancel: (id: string) => void
+  /** T3/S1 — the just-submitted marker: accent border + styling hook. */
+  highlighted?: boolean
 }) {
   const task = row.task
   return (
     <article
-      className={`sg-row sg-row-mix sg-${row.bucket}`}
+      className={`sg-row sg-row-mix sg-${row.bucket}${highlighted ? ' sg-row-highlight' : ''}`}
+      style={highlighted ? HIGHLIGHT_STYLE : undefined}
       aria-label={task.detail || task.task_id}
     >
       <div className="sg-row-main">
@@ -614,6 +655,30 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
   const traces = data?.traces ?? []
   const [tab, setTab] = useState<Bucket>('active')
 
+  // T3/S1 — the just-submitted mix's highlight (S1 «borde de acento»). The
+  // hash carries the mix TASK id (`#/seguimiento?highlight=<task id>`, the
+  // hash contract useHashState serves elsewhere); App writes it on the way to
+  // this page after an accepted «Mezclar», and the target row is keyed
+  // `mix:<task id>` like buildRows keys it.
+  //
+  // LIFETIME (pinned by tests): one-shot per visit — the FIRST tab change
+  // consumes it (state latch and URL param cleared together), so the hoist
+  // can never resurrect after the filter changes, not even from a restored
+  // hash; leaving the page drops the param with the route push. A target
+  // outside «Activas» gets no special casing: its row keeps living under its
+  // own tab, and the pending highlight dies with the first tab change.
+  const [highlightTask, setHighlightTask] = useHashState<string>('seguimiento', 'highlight', '')
+  const [highlightConsumed, setHighlightConsumed] = useState(false)
+  const highlightRowKey =
+    highlightTask !== '' && !highlightConsumed ? `mix:${highlightTask}` : null
+
+  function selectTab(next: Bucket) {
+    if (next === tab) return
+    setHighlightConsumed(true)
+    if (highlightTask !== '') setHighlightTask('')
+    setTab(next)
+  }
+
   const queueQuery = useQuery({
     queryKey: ['queue'],
     queryFn: queueStatus,
@@ -710,7 +775,12 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
     return c
   }, [rows])
 
-  const visible = rows.filter((row) => row.bucket === tab)
+  // T3/S1 — the hoist applies to the VISIBLE tab: with a highlight target
+  // present that row reads first, without one this is the T2 order.
+  const visible = hoistHighlight(
+    rows.filter((row) => row.bucket === tab),
+    highlightRowKey,
+  )
 
   // Which record the overlay shows, keyed by the download's own id: a poll
   // that reorders rows (a stage change moves them between tabs) must never
@@ -740,7 +810,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
             role="tab"
             aria-selected={tab === 'active'}
             className={`sg-tab${tab === 'active' ? ' sg-tab-on' : ''}`}
-            onClick={() => setTab('active')}
+            onClick={() => selectTab('active')}
           >
             Activas ({counts.active})
           </button>
@@ -749,7 +819,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
             role="tab"
             aria-selected={tab === 'done'}
             className={`sg-tab${tab === 'done' ? ' sg-tab-on' : ''}`}
-            onClick={() => setTab('done')}
+            onClick={() => selectTab('done')}
           >
             Completadas
           </button>
@@ -758,7 +828,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
             role="tab"
             aria-selected={tab === 'error'}
             className={`sg-tab${tab === 'error' ? ' sg-tab-on' : ''}`}
-            onClick={() => setTab('error')}
+            onClick={() => selectTab('error')}
           >
             Errores
           </button>
@@ -774,6 +844,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
             <div className="sg-empty">{TAB_EMPTY[tab]}</div>
           ) : (
             visible.map((row) => {
+              const highlighted = row.rowKey === highlightRowKey
               if (row.kind === 'trace') {
                 return (
                   <TraceRow
@@ -783,6 +854,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
                     safeMode={Boolean(actions?.safe_mode)}
                     onDone={onActionDone}
                     onDetails={() => setDetailId(row.trace.download_id)}
+                    highlighted={highlighted}
                   />
                 )
               }
@@ -793,6 +865,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
                     row={row}
                     onCancel={(id) => cancelMutation.mutate(id)}
                     onComplete={(id) => completeMutation.mutate(id)}
+                    highlighted={highlighted}
                   />
                 )
               }
@@ -803,6 +876,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
                   onPause={(id) => mixPauseMut.mutate(id)}
                   onResume={(id) => mixResumeMut.mutate(id)}
                   onCancel={(id) => mixCancelMut.mutate(id)}
+                  highlighted={highlighted}
                 />
               )
             })

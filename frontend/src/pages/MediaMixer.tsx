@@ -586,7 +586,18 @@ function audioKey(entry: { file: string; track_index: number }): string {
 
 /* ── Main Component ────────────────────────────────────────────────────────── */
 
-export function MediaMixer() {
+interface MediaMixerProps {
+  /**
+   * T3/S1 — the accepted submit's new mix task id, handed to the app shell so
+   * it can land the user on Seguimiento with the row hoisted and accented
+   * (S1: «una vez le doy al mezclar pierdo la tarea, no se donde visualizarla»
+   * → decision L4 «Saltar a Seguimiento»). Optional so the page still renders
+   * standalone (tests); an empty id means "navigate without a highlight".
+   */
+  onSubmitted?: (taskId: string) => void
+}
+
+export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   const queryClient = useQueryClient()
   // B1: while the SSE stream is connected, mixer task events replace the poll
   // below (`refetchInterval` → false); a disconnect wakes it back up.
@@ -796,12 +807,17 @@ export function MediaMixer() {
         languageOverrides,
       )
     },
-    onSuccess: () => {
+    onSuccess: (resp) => {
       // S11/L31 — the mix went to the serial queue; its state lives in Seguimiento.
       toast('Enviado a la cola', 'ok')
       setError(null)
       setMuxConflict(null)
       queryClient.invalidateQueries({ queryKey: ['mixer-tasks'] })
+      // T3/S1 — this path IS the accepted submit (response ok), so the new
+      // task id rides up to the shell for the jump to Seguimiento. The toast
+      // above stays (L31): the navigation replaces neither it nor the state
+      // resets — it happens on top of the success handling.
+      onSubmitted?.(resp.task_id ?? '')
     },
     onError: (err: Error) => {
       setError(err.message)

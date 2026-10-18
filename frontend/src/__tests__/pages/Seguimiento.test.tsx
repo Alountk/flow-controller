@@ -195,6 +195,9 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks()
   vi.unstubAllGlobals()
+  // The highlight tests carry the target in the hash; nothing may leak into
+  // the next test through the URL.
+  window.location.hash = ''
 })
 
 describe('the unified task list (S2)', () => {
@@ -1158,5 +1161,125 @@ describe('marking a blocked operation as completed (T1/S3)', () => {
     openTab('Errores')
     await screen.findByText('fallida')
     expect(screen.queryByRole('button', { name: 'Marcar como completada' })).toBeNull()
+  })
+})
+
+/* ── T3/S1 — the just-submitted mix lands hoisted and accented ─────────── */
+
+describe('the highlighted mix after «Mezclar» (T3/S1)', () => {
+  /** How App lands the user here: the target rides the hash. */
+  function landWithHighlight(taskId: string) {
+    window.location.hash = `#/seguimiento?highlight=${taskId}`
+  }
+
+  /** Two mixes + a copy op + a trace, all «Activas» — the target is LAST in
+   *  the source-stable order, so the hoist has to move it across sources. */
+  function stubActiveSources() {
+    queueStatusMock.mockResolvedValue({
+      queue: [opRow({ id: 'op-1', name: 'copia en curso' })],
+      completed: [],
+      running: true,
+    })
+    stubMixer({
+      tasks: [
+        mixTask({ task_id: 'm-old', status: 'running', detail: 'mezcla previa', created_at: 1 }),
+        mixTask({ task_id: 'm-new', status: 'queued', detail: 'mezcla nueva', created_at: 2 }),
+      ],
+    })
+  }
+
+  it('hoists the just-submitted mix to the top of «Activas» and draws the accent border on it', async () => {
+    stubActiveSources()
+    landWithHighlight('m-new')
+    const { container } = renderView(resp([trace({ title: 'Descarga activa', download_id: 'h-1' })]))
+
+    await screen.findByText('mezcla nueva')
+
+    // Landing always shows «Activas» (the default tab) …
+    expect(screen.getByRole('tab', { name: /Activas/ })).toHaveAttribute('aria-selected', 'true')
+
+    // … with the target hoisted ABOVE every other source, and only the
+    // target carrying the accent border (S1: «borde de acento arriba del
+    // todo»). The rest of the order is untouched source-stable order.
+    expect(rowNames(list(container))).toEqual([
+      'mezcla nueva',
+      'Descarga activa',
+      'copia en curso',
+      'mezcla previa',
+    ])
+    const target = screen.getByRole('article', { name: 'mezcla nueva' })
+    expect(target).toHaveClass('sg-row-highlight')
+    expect(target.style.borderLeft).toBe('3px solid var(--accent)')
+    for (const name of ['Descarga activa', 'copia en curso', 'mezcla previa']) {
+      const other = screen.getByRole('article', { name })
+      expect(other).not.toHaveClass('sg-row-highlight')
+      expect(other.style.borderLeft).toBe('')
+    }
+  })
+
+  it('consumes the highlight on the first tab change — returning to «Activas» must not resurrect the hoist', async () => {
+    stubActiveSources()
+    landWithHighlight('m-new')
+    const { container } = renderView(resp([trace({ title: 'Descarga activa', download_id: 'h-1' })]))
+
+    await screen.findByText('mezcla nueva')
+    expect(rowNames(list(container))[0]).toBe('mezcla nueva')
+
+    openTab('Completadas')
+    openTab(/Activas/)
+
+    // The highlight is one-shot per visit: the row is back in its natural
+    // slot, plain, and the consumed param is gone from the URL.
+    expect(rowNames(list(container))).toEqual([
+      'Descarga activa',
+      'copia en curso',
+      'mezcla previa',
+      'mezcla nueva',
+    ])
+    expect(container.querySelector('.sg-row-highlight')).toBeNull()
+    expect(window.location.hash).not.toContain('highlight')
+  })
+
+  it('never resurrects the hoist even if the hash param comes back', async () => {
+    stubActiveSources()
+    landWithHighlight('m-new')
+    const { container } = renderView(resp([trace({ title: 'Descarga activa', download_id: 'h-1' })]))
+
+    await screen.findByText('mezcla nueva')
+    openTab('Completadas') // consumes the highlight
+
+    // A back/forward restore puts the parameter back in the URL — the
+    // consumed latch must swallow it for the rest of this visit.
+    window.location.hash = '#/seguimiento?highlight=m-new'
+    fireEvent(window, new Event('hashchange'))
+    openTab(/Activas/)
+
+    expect(rowNames(list(container))).toEqual([
+      'Descarga activa',
+      'copia en curso',
+      'mezcla previa',
+      'mezcla nueva',
+    ])
+    expect(container.querySelector('.sg-row-highlight')).toBeNull()
+  })
+
+  it('shows no highlight when the just-submitted mix is not in «Activas»', async () => {
+    // No special casing: a mix that settled into «Errores» before the user
+    // landed keeps living under its own tab like every error row. The
+    // pending highlight is consumed by the first tab change like any other.
+    queueStatusMock.mockResolvedValue({ queue: [], completed: [], running: false })
+    stubMixer({
+      tasks: [mixTask({ task_id: 'm-new', status: 'error', detail: 'mezcla fallida' })],
+    })
+    landWithHighlight('m-new')
+    const { container } = renderView(resp([trace({ title: 'Descarga activa', download_id: 'h-1' })]))
+
+    await screen.findByText('Descarga activa')
+    expect(rowNames(list(container))).toEqual(['Descarga activa'])
+    expect(container.querySelector('.sg-row-highlight')).toBeNull()
+
+    openTab('Errores')
+    expect(rowNames(list(container))).toEqual(['mezcla fallida'])
+    expect(container.querySelector('.sg-row-highlight')).toBeNull()
   })
 })

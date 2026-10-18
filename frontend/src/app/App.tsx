@@ -27,6 +27,7 @@ import {
   verifyApiKey,
 } from '../shared/api/auth.ts'
 import { usePageRoute } from '../shared/hooks/usePageRoute.ts'
+import { useHashState } from '../shared/hooks/useHashState.ts'
 import { useConfiguredServices } from '../shared/hooks/useConfiguredServices.ts'
 import { useEventStream, EventStreamContext } from '../shared/hooks/useEventStream.ts'
 import { fetchSetupStatus } from '../shared/api/setup.ts'
@@ -117,6 +118,28 @@ function App() {
 
   // Hoisted with the queries: the dashboard-only readers below gate on it.
   const [page, setPage] = usePageRoute()
+
+  // T3/S1 — the hash carries the just-submitted mix's task id to Seguimiento
+  // (`#/seguimiento?highlight=<task id>`, the same hash contract useHashState
+  // serves for the media panes' `q`). This instance is the WRITER only — the
+  // read side lives in Seguimiento, which also documents the highlight's
+  // lifetime.
+  const [, setHighlightTask] = useHashState<string>('seguimiento', 'highlight', '')
+
+  // T3/S1 — an accepted «Mezclar» lands the user on Seguimiento with the new
+  // mix hoisted and accented (decision L4), instead of losing the task in the
+  // queue. ORDER MATTERS: setPage's pushState resolves to the bare path and
+  // drops the hash, so the highlight is written AFTER the route change. The
+  // same drop is what clears the highlight when the user later leaves the
+  // page — the param lives until the user changes tab on Seguimiento or
+  // leaves it.
+  const handleMixSubmitted = useCallback(
+    (taskId: string) => {
+      setPage('seguimiento')
+      setHighlightTask(taskId)
+    },
+    [setPage, setHighlightTask],
+  )
 
   const { data, error, isPending } = useQuery<StatusResponse>({
     queryKey: ['status'],
@@ -374,7 +397,7 @@ function App() {
               <FileManager />
             )}
 
-            {page === 'mixer' && <MediaMixer />}
+            {page === 'mixer' && <MediaMixer onSubmitted={handleMixSubmitted} />}
 
             {page === 'config' && <Settings />}
 
