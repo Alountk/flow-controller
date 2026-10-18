@@ -260,3 +260,24 @@ def test_a_status_already_terminal_publishes_only_once():
             event_bus.unsubscribe(queue)
 
     assert asyncio.run(scenario()) is True
+
+
+# ── `queued` status vocabulary (S11-4, one mux at a time) ───────────────
+
+def test_a_queued_task_can_be_cancelled():
+    # `queued` is a live state like `pending`: cancellable before it runs.
+    tasks = _manager()
+    tasks.create("q1", status="queued")
+
+    assert tasks.cancel("q1")["ok"] is True
+    assert tasks.is_cancelled("q1") is True
+
+
+def test_a_queued_task_is_not_cleaned_up_as_terminal():
+    # TTL cleanup only reclaims terminal states; a queued task must survive
+    # to run (or be cancelled), so `queued` is NOT in that set.
+    tasks = TaskManager(ttl=0)
+    tasks.create("q1", status="queued")
+
+    assert tasks.cleanup() == 0
+    assert tasks.get("q1") is not None

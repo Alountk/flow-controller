@@ -62,6 +62,9 @@ class MuxRequest(BaseModel):
     video_source: dict
     audio_sources: list[dict]
     output_path: str = ""
+    # S11-1/S11-5: full path of the mux input file the output must SUBSTITUTE
+    # («Carpeta de A» / «Carpeta de B»). Empty = legacy output-directory mode.
+    destination_path: str = ""
     # L24: [{path, track_index, language}] — pistas `und` que el usuario marcó
     # como castellano (u otro idioma ordenado) para pasar el gate de exigidos.
     language_overrides: list[dict] = []
@@ -547,6 +550,28 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         if not os.path.isfile(validated_audio_path):
             raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
 
+    # S11-1/S11-5: `destination_path` names the mux input file the result must
+    # SUBSTITUTE. Fail closed: it must resolve to exactly one of the validated
+    # inputs AND pass the allowlist — anything else is 400
+    # `{"code": "invalid_destination"}` before any gate or ffmpeg work runs.
+    # Empty keeps the legacy output-directory mode (S11-5, internal compat).
+    destination_path = req.destination_path or ""
+    if destination_path:
+        resolved_destination = os.path.realpath(destination_path)
+        input_paths = {validated_video_path} | {
+            os.path.realpath(a["path"]) for a in req.audio_sources
+        }
+        if resolved_destination not in input_paths:
+            raise HTTPException(status_code=400, detail={
+                "code": "invalid_destination",
+                "message": "destination_path must be the real path of one of the mux inputs",
+            })
+        if not config.path_is_allowed(resolved_destination):
+            raise HTTPException(status_code=400, detail={
+                "code": "invalid_destination",
+                "message": f"destination_path is not allowed: {destination_path}",
+            })
+
     # S3 compatibility gate: the client's badge is UI sugar — the backend
     # re-probes every distinct file involved and blocks an incompatible mux
     # with 409 BEFORE any ffmpeg process starts.
@@ -621,7 +646,12 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         })
 
     try:
-        task_id = start_mux(video_source, audio_sources, output_dir, subtitle_plan=subtitle_plan)
+        start_kwargs: dict = {"subtitle_plan": subtitle_plan}
+        if destination_path:
+            # S11-2: substitution mode — the task reports the destination as
+            # its output_path. Empty keeps the legacy call untouched.
+            start_kwargs["destination_path"] = destination_path
+        task_id = start_mux(video_source, audio_sources, output_dir, **start_kwargs)
     except Exception as exc:
         log.exception("mux start failed")
         raise HTTPException(status_code=500, detail=f"Failed to start mux: {exc}")
@@ -635,7 +665,12 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
 
 @router.get("/tasks")
 async def mixer_list_tasks(_key: str = Depends(verify_api_key)):
-    """List all mixer tasks with their status."""
+    """List all mixer tasks with their status.
+
+    Order (S11-4): the running mux first, then the `queued` ones in FIFO
+    order (the one that will start first comes first), then the terminal
+    tasks by `created_at` descending (newest first).
+    """
     cleanup_tasks()
 
     tasks = []
@@ -648,6 +683,17 @@ async def mixer_list_tasks(_key: str = Depends(verify_api_key)):
             "output_path": task.get("output_path"),
             "created_at": task.get("created_at", 0),
         })
+
+    def _order(entry: dict) -> tuple[int, float, str]:
+        status = entry.get("status", "")
+        created = entry.get("created_at", 0) or 0
+        if status in ("running", "paused"):
+            return (0, created, entry["task_id"])
+        if status == "queued":
+            return (1, created, entry["task_id"])  # FIFO = creation order
+        return (2, -created, entry["task_id"])  # terminal: newest first
+
+    tasks.sort(key=_order)
 
     return {"tasks": tasks}
 

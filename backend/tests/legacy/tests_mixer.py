@@ -1,6 +1,10 @@
 """Tests para las funciones de media_mixer."""
 import os
+import threading
 import types
+from pathlib import Path
+
+import pytest
 
 # Configurar env vars antes de importar
 os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
@@ -780,16 +784,52 @@ class TestSubtitleSidecarPath:
 
 # ── extraction lifecycle inside start_mux (S6/S8) ──────────────────────────
 
-class _FakeProc:
-    """Stands in for the ffmpeg Popen handle (mux + subtitle extraction)."""
+class _Stream:
+    """Pipe stand-in that records whether anything read it (S11-3).
 
-    def __init__(self, returncode, stderr_bytes):
+    «never leave a pipe unread» — an unread pipe is a full pipe buffer and a
+    blocked ffmpeg, so the runner must touch (and drain) both streams.
+    """
+
+    def __init__(self, lines):
+        self._lines = list(lines)
+        self.touched = False
+        self.drained = False
+
+    def __iter__(self):
+        self.touched = True
+        try:
+            yield from self._lines
+        finally:
+            self.drained = True
+
+
+class _FakeProc:
+    """Stands in for the ffmpeg Popen handle (mux + subtitle extraction).
+
+    S11-3: `-progress pipe:1` (build_mux_command) emits the progress protocol
+    on STDOUT; stderr only carries the banner (`Duration:`). The old fake fed
+    `progress=end` on stderr and pinned the bug where the runner read the
+    wrong stream. `hang=True` keeps the task "running" until the test calls
+    `release()` (queue tests); `terminate`/`kill` end the hang like a real
+    signal would.
+    """
+
+    def __init__(self, returncode, stderr_bytes, stdout_lines=None, hang=False):
         self.returncode = returncode
-        self.stderr = [b"Duration: 00:02:00.00, start: 0.0\n", b"progress=end\n"]
+        self.stdout = _Stream(stdout_lines if stdout_lines is not None else [b"progress=end\n"])
+        self.stderr = _Stream([b"Duration: 00:02:00.00, start: 0.0\n"])
         self._err = stderr_bytes
+        self._hang = hang
+        self._released = threading.Event()
         self.terminated = False
 
+    def release(self):
+        self._released.set()
+
     def wait(self):
+        if self._hang:
+            self._released.wait(timeout=5)
         return self.returncode
 
     def communicate(self):
@@ -797,25 +837,41 @@ class _FakeProc:
 
     def terminate(self):
         self.terminated = True
+        self._released.set()
 
     def kill(self):
         self.terminated = True
+        self._released.set()
 
 
-def _fake_subprocess(script):
-    """Fake media_mixer.subprocess; script = [(rc, stderr_bytes), ...] per call.
+def _fake_subprocess(script, on_call=None):
+    """Fake media_mixer.subprocess; one entry per Popen call.
 
-    Returns (namespace, calls) where `calls` records every argv.
+    Entries are `(rc, stderr_bytes)` or `(rc, stderr_bytes, stdout_lines)`,
+    or a ready `_FakeProc` (hang control). Returns (namespace, calls) where
+    `calls` records every argv and `namespace.procs` every process handed
+    out. `on_call(index, cmd)` runs right after each Popen (side effects
+    like writing the file ffmpeg would have written).
     """
     calls = []
+    procs = []
     remaining = list(script)
 
     def _popen(cmd, stdout=None, stderr=None):
         calls.append([str(part) for part in cmd])
-        rc, err = remaining.pop(0) if remaining else (0, b"")
-        return _FakeProc(rc, err)
+        entry = remaining.pop(0) if remaining else (0, b"")
+        if isinstance(entry, _FakeProc):
+            proc = entry
+        else:
+            rc, err = entry[0], entry[1]
+            out_lines = entry[2] if len(entry) > 2 else None
+            proc = _FakeProc(rc, err, out_lines)
+        procs.append(proc)
+        if on_call is not None:
+            on_call(len(calls) - 1, [str(part) for part in cmd])
+        return proc
 
-    return types.SimpleNamespace(Popen=_popen, PIPE=-1), calls
+    return types.SimpleNamespace(Popen=_popen, PIPE=-1, procs=procs), calls
 
 
 def _plan_entry(language_code, suffix, path=None, track_index=None,
@@ -834,16 +890,20 @@ def _plan_entry(language_code, suffix, path=None, track_index=None,
     }
 
 
-def _drive_mux(tmp_path, plan, cancel_during_mux=False):
+def _drive_mux(tmp_path, plan, cancel_during_mux=False, destination_path=None,
+               input_path="/in/a.mkv"):
     """Run a real start_mux + background coroutine to completion."""
     import asyncio
 
     async def scenario():
+        kwargs = {"subtitle_plan": plan}
+        if destination_path:
+            kwargs["destination_path"] = destination_path
         task_id = media_mixer.start_mux(
-            {"path": "/in/a.mkv", "track_index": 0},
-            [{"path": "/in/a.mkv", "track_index": 0}],
+            {"path": input_path, "track_index": 0},
+            [{"path": input_path, "track_index": 0}],
             str(tmp_path / "out"),
-            subtitle_plan=plan,
+            **kwargs,
         )
         if cancel_during_mux:
             media_mixer.cancel_task(task_id)
@@ -954,3 +1014,304 @@ class TestSubtitleSidecarExtraction:
         # GET /api/mixer/tasks/:id exposes subtitles from task creation on.
         assert [s["status"] for s in seen["created"]] == ["pending"]
         assert final["subtitles"][0]["status"] == "extracted"
+
+
+# ── ffmpeg progress protocol: read the stream that carries it (S11-3) ─────
+
+class TestFFmpegProgressFromStdout:
+    def test_progress_lines_on_stdout_advance_the_task_progress(self, tmp_path, monkeypatch):
+        # `-progress pipe:1` puts the protocol on STDOUT: `out_time_us=` lines
+        # and the `progress=end` terminator. stderr only carries the banner
+        # (`Duration:`), which is where the total comes from.
+        fake, calls = _fake_subprocess([
+            (0, b"", [b"out_time_us=60000000\n", b"progress=end\n"]),
+        ])
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        seen: list[float] = []
+        original_update = media_mixer.mux_tasks.update
+
+        def _recording_update(task_id, **kwargs):
+            if "progress" in kwargs:
+                seen.append(kwargs["progress"])
+            return original_update(task_id, **kwargs)
+
+        monkeypatch.setattr(media_mixer.mux_tasks, "update", _recording_update)
+
+        task = _drive_mux(tmp_path, [])
+
+        # 60 s of the 120 s banner → progress must have advanced mid-run.
+        assert 0.5 in seen
+        assert task["progress"] == 1.0
+        # The protocol stream is read and stderr is drained, never left to
+        # fill its buffer and block ffmpeg («never leave a pipe unread»).
+        assert fake.procs[0].stdout.touched
+        assert fake.procs[0].stderr.touched
+        assert fake.procs[0].stderr.drained
+
+
+# ── destination substitution: atomic replace, last step (S11-1/S11-2) ─────
+
+class TestDestinationSubstitution:
+    def test_success_replaces_the_destination_after_subtitle_extraction(self, tmp_path, monkeypatch):
+        dest = tmp_path / "Movie.mkv"
+        dest.write_bytes(b"ORIGINAL")
+        extraction_saw = []
+
+        def _on_call(index, cmd):
+            if index == 0:  # the mux writes the hidden temp in dest's folder
+                Path(cmd[-1]).write_bytes(b"NEWMUX")
+            else:  # extraction must still read the ORIGINAL input files
+                extraction_saw.append(dest.read_bytes())
+
+        fake, calls = _fake_subprocess([(0, b""), (0, b"")], on_call=_on_call)
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+        plan = [_plan_entry("spa", "es", str(dest), 0, "subrip", True)]
+
+        task = _drive_mux(tmp_path, plan, destination_path=str(dest), input_path=str(dest))
+
+        assert task["status"] == "done"
+        assert task["output_path"] == str(dest)  # the destination IS the output
+        temp = calls[0][-1]
+        assert os.path.dirname(temp) == str(tmp_path)  # same filesystem
+        assert os.path.basename(temp).startswith(".")  # hidden temp file
+        assert not os.path.exists(temp)  # renamed away, not left behind
+        assert dest.read_bytes() == b"NEWMUX"
+        # The atomic replace is the LAST step: extraction saw the original.
+        assert extraction_saw == [b"ORIGINAL"]
+        assert task["subtitles"][0]["status"] == "extracted"
+
+    def test_ffmpeg_failure_keeps_the_original_and_removes_the_temp(self, tmp_path, monkeypatch):
+        dest = tmp_path / "Movie.mkv"
+        dest.write_bytes(b"ORIGINAL")
+
+        def _on_call(index, cmd):
+            Path(cmd[-1]).write_bytes(b"NEWMUX")
+
+        fake, calls = _fake_subprocess([(1, b"boom\n")], on_call=_on_call)
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        task = _drive_mux(tmp_path, [], destination_path=str(dest), input_path=str(dest))
+
+        assert task["status"] == "error"
+        assert task["detail"] == "Mux failed"
+        assert dest.read_bytes() == b"ORIGINAL"  # the original is untouched
+        assert not os.path.exists(calls[0][-1])  # and the temp is cleaned up
+
+    def test_a_missing_output_file_never_replaces(self, tmp_path, monkeypatch):
+        # Exit code 0 but no verifiable output: nothing to replace with.
+        dest = tmp_path / "Movie.mkv"
+        dest.write_bytes(b"ORIGINAL")
+        fake, calls = _fake_subprocess([(0, b"")])
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        task = _drive_mux(tmp_path, [], destination_path=str(dest), input_path=str(dest))
+
+        assert task["status"] == "error"
+        assert dest.read_bytes() == b"ORIGINAL"
+
+    def test_an_empty_output_file_never_replaces(self, tmp_path, monkeypatch):
+        dest = tmp_path / "Movie.mkv"
+        dest.write_bytes(b"ORIGINAL")
+
+        def _on_call(index, cmd):
+            Path(cmd[-1]).write_bytes(b"")  # zero bytes: not verifiable output
+
+        fake, calls = _fake_subprocess([(0, b"")], on_call=_on_call)
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        task = _drive_mux(tmp_path, [], destination_path=str(dest), input_path=str(dest))
+
+        assert task["status"] == "error"
+        assert dest.read_bytes() == b"ORIGINAL"
+
+    def test_cancelled_substitution_leaves_the_original_untouched(self, tmp_path, monkeypatch):
+        dest = tmp_path / "Movie.mkv"
+        dest.write_bytes(b"ORIGINAL")
+
+        def _on_call(index, cmd):
+            Path(cmd[-1]).write_bytes(b"NEWMUX")
+
+        fake, calls = _fake_subprocess([(0, b"")], on_call=_on_call)
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        task = _drive_mux(tmp_path, [], cancel_during_mux=True,
+                          destination_path=str(dest), input_path=str(dest))
+
+        assert task["status"] == "cancelled"
+        assert dest.read_bytes() == b"ORIGINAL"
+        assert not os.path.exists(calls[0][-1])
+
+
+class TestLegacyOutputNaming:
+    def test_without_destination_the_name_is_stem_timestamp_mixed(self, tmp_path, monkeypatch):
+        # Empty destination_path: legacy output_path directory mode, byte for
+        # byte — `<stem>_<YYYYMMDDTHHMMSS>_mixed<ext>` under the output dir.
+        import re
+
+        fake, calls = _fake_subprocess([(0, b"")])
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        task = _drive_mux(tmp_path, [], input_path="/in/Movie.mkv")
+
+        assert re.fullmatch(
+            re.escape(str(tmp_path / "out")) + r"/Movie_\d{8}T\d{6}_mixed\.mkv",
+            task["output_path"],
+        )
+        assert calls[0][-1] == task["output_path"]
+
+
+# ── serial mix queue: one mux at a time, FIFO (S11-4) ─────────────────────
+
+@pytest.fixture(autouse=True)
+def _isolate_mux_queue():
+    """The mux queue is module state (S11-4): never leak a held slot."""
+
+    def _reset():
+        holder = getattr(media_mixer, "_mux_queue", None)
+        if holder is not None:
+            holder.clear()
+        pending = getattr(media_mixer, "_pending_jobs", None)
+        if pending is not None:
+            pending.clear()
+        if hasattr(media_mixer, "_mux_active"):
+            media_mixer._mux_active = None
+
+    _reset()
+    yield
+    _reset()
+
+
+def _start_named_mux(tmp_path, name):
+    return media_mixer.start_mux(
+        {"path": f"/in/{name}.mkv", "track_index": 0},
+        [{"path": f"/in/{name}.mkv", "track_index": 0}],
+        str(tmp_path / "out"),
+    )
+
+
+class TestMuxQueue:
+    def test_a_second_mux_waits_queued_and_they_start_fifo(self, tmp_path, monkeypatch):
+        import asyncio
+
+        fake, calls = _fake_subprocess([_FakeProc(0, b"", hang=True), (0, b""), (0, b"")])
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        async def scenario():
+            ids = [_start_named_mux(tmp_path, name) for name in ("first", "second", "third")]
+            try:
+                await asyncio.sleep(0.05)  # the first mux is now running
+                snapshot = [media_mixer.get_task(t)["status"] for t in ids]
+                assert snapshot == ["running", "queued", "queued"]
+                fake.procs[0].release()  # the first finishes → FIFO start
+                for _ in range(500):
+                    if all(media_mixer.get_task(t)["status"] == "done" for t in ids):
+                        break
+                    await asyncio.sleep(0.01)
+                return [media_mixer.get_task(t)["status"] for t in ids]
+            finally:
+                for proc in fake.procs:
+                    proc.release()
+
+        statuses = asyncio.run(scenario())
+
+        assert statuses == ["done", "done", "done"]
+        # FIFO: the queued muxes spawned ffmpeg in enqueue order.
+        assert len(calls) == 3
+        assert [calls[i][3] for i in range(3)] == [
+            "/in/first.mkv", "/in/second.mkv", "/in/third.mkv",
+        ]
+
+    def test_cancelling_a_queued_mux_never_runs_it(self, tmp_path, monkeypatch):
+        import asyncio
+
+        fake, calls = _fake_subprocess([_FakeProc(0, b"", hang=True), (0, b"")])
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        async def scenario():
+            first = _start_named_mux(tmp_path, "first")
+            second = _start_named_mux(tmp_path, "second")
+            try:
+                await asyncio.sleep(0.05)
+                assert media_mixer.get_task(second)["status"] == "queued"
+                result = media_mixer.cancel_task(second)
+                assert result["ok"] is True
+                assert media_mixer.get_task(second)["status"] == "cancelled"
+                fake.procs[0].release()
+                for _ in range(500):
+                    if media_mixer.get_task(first)["status"] == "done":
+                        break
+                    await asyncio.sleep(0.01)
+                return media_mixer.get_task(first)["status"]
+            finally:
+                for proc in fake.procs:
+                    proc.release()
+
+        assert asyncio.run(scenario()) == "done"
+        # The cancelled mux never spawned ffmpeg at all.
+        assert len(calls) == 1
+
+    def test_paused_mux_holds_the_slot_and_cancelling_it_frees_the_next_one(self, tmp_path, monkeypatch):
+        import asyncio
+
+        fake, calls = _fake_subprocess([(0, b""), (0, b"")])
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        async def scenario():
+            first = _start_named_mux(tmp_path, "first")
+            # Pause lands before the runner consumes its first progress line.
+            assert media_mixer.pause_task(first)["ok"] is True
+            second = _start_named_mux(tmp_path, "second")
+            try:
+                for _ in range(500):
+                    if media_mixer.get_task(first)["status"] == "paused":
+                        break
+                    await asyncio.sleep(0.01)
+                assert media_mixer.get_task(first)["status"] == "paused"
+                # One mux at a time: the paused one still owns the slot.
+                assert media_mixer.get_task(second)["status"] == "queued"
+                # Cancelling the paused mux is terminal and frees the slot.
+                assert media_mixer.cancel_task(first)["ok"] is True
+                for _ in range(500):
+                    if media_mixer.get_task(second)["status"] == "done":
+                        break
+                    await asyncio.sleep(0.01)
+                return (
+                    media_mixer.get_task(first)["status"],
+                    media_mixer.get_task(second)["status"],
+                    len(calls),
+                )
+            finally:
+                for proc in fake.procs:
+                    proc.release()
+
+        assert asyncio.run(scenario()) == ("cancelled", "done", 2)
+
+    def test_resume_relaunches_the_paused_mux(self, tmp_path, monkeypatch):
+        import asyncio
+
+        fake, calls = _fake_subprocess([(0, b""), (0, b"")])
+        monkeypatch.setattr(media_mixer, "subprocess", fake)
+
+        async def scenario():
+            first = _start_named_mux(tmp_path, "first")
+            assert media_mixer.pause_task(first)["ok"] is True
+            try:
+                for _ in range(500):
+                    if media_mixer.get_task(first)["status"] == "paused":
+                        break
+                    await asyncio.sleep(0.01)
+                assert media_mixer.get_task(first)["status"] == "paused"
+                assert media_mixer.resume_task(first)["ok"] is True
+                for _ in range(500):
+                    if media_mixer.get_task(first)["status"] in ("done", "error"):
+                        break
+                    await asyncio.sleep(0.01)
+                return media_mixer.get_task(first)["status"], len(calls)
+            finally:
+                for proc in fake.procs:
+                    proc.release()
+
+        # Resuming restarts the mux run (ffmpeg is killed on pause): the task
+        # reaches a terminal state again instead of sitting zombie forever.
+        assert asyncio.run(scenario()) == ("done", 2)

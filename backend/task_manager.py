@@ -88,12 +88,16 @@ class TaskManager:
                 log.debug("task event for %s dropped", task_id, exc_info=True)
 
     def cancel(self, task_id: str) -> dict:
-        """Request cancellation of a task."""
+        """Request cancellation of a task.
+
+        A `queued` task is cancellable like `pending` (S11-4): cancelling it
+        must let it never run, and `cancelled` is the terminal vocabulary.
+        """
         with self._lock:
             task = self._tasks.get(task_id)
             if not task:
                 return {"ok": False, "error": "tarea no encontrada"}
-            if task.get("status") not in ("running", "pending", "paused", None):
+            if task.get("status") not in ("running", "pending", "paused", "queued", None):
                 return {"ok": False, "error": f"tarea ya en estado: {task['status']}"}
             task["cancelled"] = True
             task["detail"] = "cancelación solicitada..."
