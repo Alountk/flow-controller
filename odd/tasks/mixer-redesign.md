@@ -60,9 +60,26 @@
   **Cerrado L14**: pantallas 10/11/12 aprobadas 2026-10-17 (con el chip «Bloqueante» de
   la 12 confirmado → regla añadida a S2).
 
+- **S10 (descarga de alternativa en los slots, L25–L28)**: *"podemos introducir en el
+  flow que cuando en una de las dos opciones de examinar el archivo (cuando seleccionamos
+  los dos), en una de las opciones busque una alternativa en los indexadores y la
+  descarge? una vez descargada la seleccionamos en esa seccion."* + decisión ask L26:
+  **"Título del otro slot (auto)"** → el botón solo aparece en el slot vacío cuando el
+  otro slot ya tiene archivo, y el título sale de ese archivo + respuesta custom L26:
+  *"Lo suyo es que sea automatico, pero tambien tenemos que tener opcion de que si no se
+  descarga que hacer, si cancelar y buscarlo en otro indexador."* → auto-colocación al
+  completarse y salida de la espera; «cancelar» = decisión L27 **"Abandonar la espera
+  aquí"** (la descarga sigue en su cola normal, sin endpoint destructivo) + decisión L27
+  **"Aviso si no está permitida"** (si la ruta final no está en `allowed_roots`: aviso
+  con la ruta y NO se coloca) + L28: *"huelga decir que esa busqueda deberiamos poder
+  hacerla por idiomas si no nos buscaria el mismo que ya tenemos"* → el modal recibe los
+  idiomas de audio del otro archivo (`item.languages`) y su filtro de chips de idioma
+  (ya existente) restringe la búsqueda.
+
 Fuera de alcance: transcodificar/re-encode de vídeo o audio (S8), el resto de puntos del
 bloque 🟡 (tabla densa Archivos, secciones Calidad/Avisos, 3 namings), cambios en otras
-secciones de la app.
+secciones de la app **salvo el prop opcional `onGrabStarted` del `ReleaseSearchModal`
+(aditivo, S10)**.
 
 > **Delivery**: single PR a cierre de T9 (regla del usuario). Slices ya en la rama:
 > C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339), C3 `b5eeeb1` T4 (460),
@@ -280,7 +297,47 @@ secciones de la app.
     GREEN frontend **615/615** (4 tests: botón+desbloqueo, payload `language_overrides`
     exacto, ausencia del botón en filas no-und, re-bloqueo al desmarcar), `tsc -b` 0,
     eslint 0. Rama `feat/mixer-und-spanish-mark` → **PR #210** (448 líneas, 1 commit:
-    frontera de slice registrada aquí — T10 completo en un solo work unit).
+    frontera de slice registrada aquí — T10 completo en un solo work unit). Merge
+    `430e718` (CI verde, docker-push → deploy).
+- [ ] **T11 [S10]** — descarga de alternativa desde los slots A/B (RED→GREEN en ambos
+  stacks; los workers NO hacen git — los commits son del padre). Contrato exacto:
+  **Backend** (nuevo; `/api/mixer/lookup` de T7 NO se toca):
+  - `POST /api/mixer/alternatives/lookup {path}` → `200 {ok, title, movie|null,
+    audio_languages}`: título con `_title_from_filename` + Radarr siguiendo el patrón T7
+    (`movie` solo si está en librería; 400 si falta `path` o ffprobe falla; 502 si Radarr
+    caído/no configurado) + `audio_languages` = códigos 3 letras de los audios de
+    `probe_file(path)` (en `asyncio.to_thread`), `normalize_language` + orden
+    `ORDERED_AUDIO_LANGUAGES`, dedup.
+  - `GET /api/mixer/alternatives/status?movie_id=<int>&title=<str>` → `200 {state,
+    progress, path, allowed}`, `state ∈ 'ready'|'downloading'|'unknown'`:
+    1) **ready** — Radarr tiene el fichero de la película: extender el patrón Arr de
+    `application/gateways` + `infrastructure/arr_client` con `arr_movie_file(session,
+    service, tmdb_id) -> str | None` (siguiendo el estilo y tests MockTransport
+    existentes); `path` = ruta absoluta, `allowed = config.path_is_allowed(path)`,
+    `progress = null`;
+    2) **downloading** — `application.use_cases.downloads_cache.get_downloads()` sin
+    fichero aún: fila cuyo título casefold contenga el `title` normalizado → `progress`
+    de esa fila (null si no se puede saber), `path = null`, `allowed = false`;
+    3) **unknown** — sin file ni fila. `movie_id <= 0` o `title` vacío → 400.
+  **Frontend**:
+  - `shared/api/mixer.ts`: tipos + `alternativeLookup(path)` + `alternativeStatus(movieId, title)`.
+  - `ReleaseSearchModal`: prop opcional `onGrabStarted?: (taskId: string) => void`,
+    invocado una sola vez cuando el grab devuelve `task_id` (aditivo, con sus tests).
+  - `MediaMixer`: en cada slot VACÍO con el otro slot lleno → botón «Buscar y descargar
+    alternativa». Click → `alternativeLookup(path del otro slot)` → `movie: null` →
+    aviso «añádela primero en Radarr» (patrón T7) → ok → abrir `ReleaseSearchModal` con
+    `item` (id/title del lookup + `languages: audio_languages`) y `onGrabStarted` que
+    pone el slot en ESPERA: «Descargando… <title>» (+ % si `progress` llega) y botón
+    «Dejar de esperar» (abandonar = vuelve al botón inicial; NO se toca nada más).
+    Poll `alternativeStatus` (useQuery ~5 s, solo en espera): `ready && allowed` →
+    `onSelect(path)` + aviso «Colocado automáticamente: <basename>»; `ready && !allowed`
+    → aviso «El fichero quedó en <path> — añade esa carpeta a allowed_roots» (sin
+    colocar); `downloading`/`unknown` → sigue la espera (sin timeout automático).
+  Tests RED primero: backend (lookup 200/400/502 + `audio_languages` ordenado; status
+  ready/downloading/unknown/400) y frontend (botón solo con otro slot lleno y slot
+  vacío; espera con `onGrabStarted`; auto-colocado; aviso allowed_roots; «Dejar de
+  esperar»; `item.languages` enviado). Suites verdes al final (backend ≥1228+6, vitest
+  ≥615+6, `tsc -b` 0, eslint 0). Commit: — (padre).
 
 ## Log
 
@@ -487,3 +544,17 @@ secciones de la app.
   encuentra el idioma castellano me bloquea eso es bien, pero pasa una cosa hay a veces
   que los idiomas castellano no vienen como spa y vienen como und, deberiamos poder
   marcar las pista und si son las castellanas para poder pasar el flag"
+- **L25 (2026-10-18, usuario, requiso S10 → T11)**: "podemos introducir en el flow que
+  cuando en una de las dos opciones de examinar el archivo (cuando seleccionamos los dos),
+  en una de las opciones busque una alternativa en los indexadores y la descarge? una vez
+  descargada la seleccionamos en esa seccion."
+- **L26 (2026-10-18, ask → alcance y finalización)**: respuestas: **"Título del otro slot
+  (auto)"** (botón solo con el otro slot lleno; título = el de ese archivo) y custom:
+  "Lo suyo es que sea automatico, pero tambien tenemos que tener opcion de que si no se
+  descarga que hacer, si cancelar y buscarlo en otro indexador."
+- **L27 (2026-10-18, ask → cancelar y ruta)**: respuestas: **"Abandonar la espera aquí"**
+  (sin endpoint destructivo; la descarga sigue en la cola normal) y **"Aviso si no está
+  permitida"** (auto-selección solo si la ruta está en `allowed_roots`; si no, aviso con
+  la ruta).
+- **L28 (2026-10-18, usuario → filtro por idiomas, S10)**: "huelga decir que esa busqueda
+  deberiamos poder hacerla por idiomas si no nos buscaria el mismo que ya tenemos"
