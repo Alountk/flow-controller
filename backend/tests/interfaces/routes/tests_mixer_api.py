@@ -774,3 +774,204 @@ class TestTaskLifecycle:
         assert data["ok"] is True
 
         mux_tasks._tasks.clear()
+
+
+# ── Subtitle search (OpenSubtitles, S6/T6) ───────────────────────────────────
+
+_SRT = "1\n00:00:01,000 --> 00:00:02,000\nHola\n"
+
+
+def _sub_entry(code, status, **over):
+    """`task["subtitles"]` entry as the S6 plan/T6 search leave it."""
+    entry = {
+        "language_code": code,
+        "language": media_mixer.SHORT_LANGUAGE_SUFFIXES.get(code, code),
+        "path": None,
+        "track_index": None,
+        "codec": None,
+        "extractable": False,
+        "status": status,
+        "detail": "",
+        "sidecar": None,
+    }
+    entry.update(over)
+    return entry
+
+
+def _search_task(task_id, tmp_path, entries, output_name="Mixer_20261018T120000_mixed.mkv"):
+    """A finished mux task whose sidecar plan sits in the requested state."""
+    mux_tasks._tasks[task_id] = {
+        "status": "done",
+        "progress": 1.0,
+        "detail": "Mux complete",
+        "output_path": str(tmp_path / output_name),
+        "created_at": time.time(),
+        "cancelled": False,
+        "paused": False,
+        "subtitles": entries,
+    }
+
+
+class TestSubtitleSearchEndpoint:
+    def test_search_without_api_key_is_400_before_any_search(self, tmp_path):
+        _search_task("t-nokey", tmp_path, [_sub_entry("spa", "missing")])
+        with patch("infrastructure.settings_store.get_setting", return_value=""), \
+                patch("infrastructure.opensubtitles_client.search_subtitles") as mock_search:
+            resp = client.post("/api/mixer/tasks/t-nokey/subtitles/search", json={})
+        try:
+            assert resp.status_code == 400
+            assert resp.json() == {"detail": {"error": "opensubtitles_not_configured"}}
+            mock_search.assert_not_called()
+        finally:
+            mux_tasks._tasks.clear()
+
+    def test_search_unknown_task_is_404(self):
+        with patch("infrastructure.settings_store.get_setting", return_value="test-os-key"):
+            resp = client.post("/api/mixer/tasks/nonexistent-id/subtitles/search", json={})
+        assert resp.status_code == 404
+        assert resp.json() == {"detail": "Task not found"}
+
+    @patch("infrastructure.opensubtitles_client.download_subtitle", return_value=_SRT)
+    @patch("infrastructure.opensubtitles_client.search_subtitles")
+    @patch("infrastructure.settings_store.get_setting", return_value="test-os-key")
+    def test_search_downloads_the_first_candidate_to_the_sidecar(self, _get, mock_search, mock_download, tmp_path):
+        # «Extraer + OpenSubtitles»: los idiomas que la extracción no pudo dar
+        # se buscan y bajan al MISMO sidecar junto a la salida.
+        mock_search.return_value = [
+            {"file_id": 42, "language": "es", "release": "r1", "title": "Mixer", "file_name": "Mixer.es.srt"},
+            {"file_id": 43, "language": "es", "release": "r2", "title": "Mixer", "file_name": "Mixer.es2.srt"},
+        ]
+        _search_task("t-happy", tmp_path, [_sub_entry("spa", "missing")])
+
+        resp = client.post("/api/mixer/tasks/t-happy/subtitles/search", json={})
+        try:
+            assert resp.status_code == 200
+            sidecar = str(tmp_path / "Mixer_20261018T120000_mixed.es.srt")
+            assert resp.json() == {
+                "ok": True,
+                "results": [{
+                    "language": "es",
+                    "language_code": "spa",
+                    "status": "downloaded",
+                    "sidecar": sidecar,
+                }],
+            }
+            with open(sidecar, encoding="utf-8") as fh:
+                assert fh.read() == _SRT
+            # First candidate wins; the query is the title parsed from the
+            # output filename (stem minus the `_mixed` suffix and timestamp).
+            mock_search.assert_called_once_with("test-os-key", "Mixer", languages="spa")
+            mock_download.assert_called_once_with("test-os-key", 42)
+            # In place on the live task: GET /tasks/:id shows the new state.
+            data = client.get("/api/mixer/tasks/t-happy").json()
+            assert data["subtitles"][0]["status"] == "downloaded"
+            assert data["subtitles"][0]["sidecar"] == sidecar
+        finally:
+            mux_tasks._tasks.clear()
+
+    @patch("infrastructure.opensubtitles_client.download_subtitle", return_value=_SRT)
+    @patch("infrastructure.opensubtitles_client.search_subtitles")
+    @patch("infrastructure.settings_store.get_setting", return_value="test-os-key")
+    def test_search_failure_keeps_the_status_and_continues(self, _get, mock_search, mock_download, tmp_path):
+        # Un fallo a mitad de camino anota el error en ESA entrada y sigue con
+        # el resto de idiomas.
+        from infrastructure.opensubtitles_client import OpenSubtitlesError
+        mock_search.side_effect = [
+            OpenSubtitlesError("HTTP 503"),
+            [{"file_id": 7, "language": "en", "release": "r", "title": "Mixer", "file_name": "Mixer.en.srt"}],
+        ]
+        _search_task("t-error", tmp_path, [_sub_entry("spa", "missing"), _sub_entry("eng", "not_extractable")])
+
+        resp = client.post("/api/mixer/tasks/t-error/subtitles/search", json={})
+        try:
+            assert resp.status_code == 200
+            assert resp.json() == {
+                "ok": True,
+                "results": [
+                    {"language": "es", "language_code": "spa", "status": "missing", "detail": "HTTP 503"},
+                    {
+                        "language": "en",
+                        "language_code": "eng",
+                        "status": "downloaded",
+                        "sidecar": str(tmp_path / "Mixer_20261018T120000_mixed.en.srt"),
+                    },
+                ],
+            }
+            mock_download.assert_called_once_with("test-os-key", 7)
+        finally:
+            mux_tasks._tasks.clear()
+
+    @patch("infrastructure.opensubtitles_client.download_subtitle", return_value=_SRT)
+    @patch("infrastructure.opensubtitles_client.search_subtitles", return_value=[])
+    @patch("infrastructure.settings_store.get_setting", return_value="test-os-key")
+    def test_search_without_candidates_marks_not_found(self, _get, mock_search, mock_download, tmp_path):
+        _search_task("t-nocand", tmp_path, [_sub_entry("spa", "failed")])
+
+        resp = client.post("/api/mixer/tasks/t-nocand/subtitles/search", json={})
+        try:
+            assert resp.status_code == 200
+            assert resp.json() == {
+                "ok": True,
+                "results": [{"language": "es", "language_code": "spa", "status": "failed", "detail": "not_found"}],
+            }
+            mock_download.assert_not_called()
+        finally:
+            mux_tasks._tasks.clear()
+
+    @patch("infrastructure.opensubtitles_client.download_subtitle", return_value=_SRT)
+    @patch("infrastructure.opensubtitles_client.search_subtitles")
+    @patch("infrastructure.settings_store.get_setting", return_value="test-os-key")
+    def test_search_languages_filter_limits_the_targets(self, _get, mock_search, mock_download, tmp_path):
+        mock_search.return_value = [
+            {"file_id": 9, "language": "en", "release": "r", "title": "Mixer", "file_name": "Mixer.en.srt"},
+        ]
+        _search_task("t-filter", tmp_path, [_sub_entry("spa", "missing"), _sub_entry("eng", "missing")])
+
+        resp = client.post("/api/mixer/tasks/t-filter/subtitles/search", json={"languages": ["eng"]})
+        try:
+            assert resp.status_code == 200
+            data = resp.json()
+            assert [r["language_code"] for r in data["results"]] == ["eng"]
+            mock_search.assert_called_once_with("test-os-key", "Mixer", languages="eng")
+        finally:
+            mux_tasks._tasks.clear()
+
+    @patch("infrastructure.opensubtitles_client.download_subtitle", return_value=_SRT)
+    @patch("infrastructure.opensubtitles_client.search_subtitles")
+    @patch("infrastructure.settings_store.get_setting", return_value="test-os-key")
+    def test_search_without_output_path_annotates_and_skips(self, _get, mock_search, mock_download, tmp_path):
+        # Sin salida no hay sidecar que escribir: la entrada se anota y se
+        # sigue — una entrada rara nunca tumba la llamada completa.
+        _search_task("t-noout", tmp_path, [_sub_entry("spa", "missing")])
+        mux_tasks._tasks["t-noout"]["output_path"] = None
+
+        resp = client.post("/api/mixer/tasks/t-noout/subtitles/search", json={})
+        try:
+            assert resp.status_code == 200
+            assert resp.json() == {
+                "ok": True,
+                "results": [{"language": "es", "language_code": "spa", "status": "missing", "detail": "no_output_path"}],
+            }
+            mock_search.assert_not_called()
+            mock_download.assert_not_called()
+        finally:
+            mux_tasks._tasks.clear()
+
+    @patch("infrastructure.opensubtitles_client.download_subtitle", return_value=_SRT)
+    @patch("infrastructure.opensubtitles_client.search_subtitles")
+    @patch("infrastructure.settings_store.get_setting", return_value="test-os-key")
+    def test_search_without_searchable_entries_returns_empty_results(self, _get, mock_search, mock_download, tmp_path):
+        # «extracted»/«downloaded» nunca se vuelven a buscar.
+        _search_task("t-empty", tmp_path, [
+            _sub_entry("spa", "extracted", sidecar=str(tmp_path / "x.es.srt")),
+            _sub_entry("eng", "downloaded", sidecar=str(tmp_path / "x.en.srt")),
+        ])
+
+        resp = client.post("/api/mixer/tasks/t-empty/subtitles/search", json={})
+        try:
+            assert resp.status_code == 200
+            assert resp.json() == {"ok": True, "results": []}
+            mock_search.assert_not_called()
+            mock_download.assert_not_called()
+        finally:
+            mux_tasks._tasks.clear()

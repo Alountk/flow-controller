@@ -58,9 +58,9 @@ bloque 🟡 (tabla densa Archivos, secciones Calidad/Avisos, 3 namings), cambios
 secciones de la app.
 
 > **Delivery**: single PR a cierre de T9 (regla del usuario). Slices ya en la rama:
-> C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339), C3 `b5eeeb1` T4 (460) — 1002
-> líneas acumuladas, frontera de slice registrada aquí según avisa el commit; los slices
-> siguientes se cortan con tareas nuevas (T5, T6, T7+T8) sin esperar a T9.
+> C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339), C3 `b5eeeb1` T4 (460),
+> C4 `761e0e0` T5 (788), C5 T6 — 1788+ líneas acumuladas, frontera de slice
+> registrada aquí según avisa el commit; T7 y T8 cierran cada uno en su slice.
 
 ## Tasks
 
@@ -154,6 +154,33 @@ secciones de la app.
   Configuración; búsqueda/descarga de `.srt` por idioma de audio hacia el sidecar de la
   salida; tests con stub (sin red real). Ruta: backend (infra) + `frontend/src/features/settings/Settings.tsx`
   + tests. Commit: —.
+  - Evidencia (2026-10-18): RED observado backend **9 failed / 63 passed** (72 tocados) —
+    8 tests nuevos de `TestSubtitleSearchEndpoint` (la ruta no existía: 404 `Not Found` en
+    vez de 404 `"Task not found"`/400/200) + `test_the_key_is_stored_as_ciphertext` (clave
+    guardada en claro); vitest **3 failed / 581 passed** (campo «Clave API de
+    OpenSubtitles» inexistente ×2 + `apiKeyMask` con 3 de 4 campos). Implementado: settings (`DEFAULTS["services"]["opensubtitles"]`, env
+    `OPENSUBTITLES_API_KEY` y cifrado en reposo vía `credentials.ENCRYPTED_SECRET_FIELDS`,
+    como radarr/sonarr/amutorrent); cliente síncrono `infrastructure/opensubtitles_client.py`
+    (`search_subtitles` aplanado por fichero con `limit`, `download_subtitle` gzip→`.srt`,
+    stubs con `httpx.MockTransport`, cero red real) con `OpenSubtitlesError` definido en
+    `application.ports` (como `CopyCancelled`: la excepción cruza la costura); wiring
+    hexagonal `OpenSubtitlesClient` (ports) + delegados `gateways.search_subtitles`/
+    `download_subtitle` + bind en `app.py`, cliente parcheado en
+    `infrastructure.opensubtitles_client.*` (precedente gateways); y el endpoint
+    `POST /api/mixer/tasks/:id/subtitles/search` — 404 `{"detail": "Task not found"}`, 400
+    `{"detail": {"error": "opensubtitles_not_configured"}}` antes de buscar, objetivos
+    `missing|not_extractable|failed` ∩ filtro `languages`, primer candidato descargado al
+    sidecar `<stem>.<sufijo>.srt` de la salida con estado **`downloaded`** (nuevo), sin
+    candidato `detail: "not_found"`, `OpenSubtitlesError` por entrada sin frenar el resto
+    y guardas `no_output_path`; mutación en la tarea viva (patrón cancel/pause) y red vía
+    `asyncio.to_thread`. Cuerpo feliz: `{"ok": true, "results": [{"language": "es",
+    "language_code": "spa", "status": "downloaded", "sidecar": "<out>.es.srt"}]}`.
+    **GREEN 72/72 tocados; suite completa 1209/1209** (base 1180 + 16 cliente + 5 settings
+    + 8 endpoint) y frontend **584/584**, tsc 0, eslint 0 (campo + test nuevo
+    `opensubtitlesApiKey.test.tsx`; `apiKeyMask` 3→4 campos — nada borrado ni debilitado).
+    `media_mixer.py` intacto: la tarea ya lleva `output_path` cuando hay objetivos
+    (se fija al terminar el mux). Deuda legacy: techo **3016 → 3017** (la línea
+    `opensubtitles=` del bind en `app.py`) con `#:` en el contrato; disclosure en la PR.
 - [ ] **T7 [S7]** — backend+frontend: botón «buscar en indexador» en el mixer cuando
   falta un idioma exigido: filename → `arr_movie_lookup` → `ReleaseSearchModal` si está
   en librería, si no aviso con el título. Tests. Ruta: backend (route) +
@@ -295,3 +322,25 @@ secciones de la app.
   mapeando solo vídeo+audio (S8). Un solo fichero ⇒ sin probe ⇒ plan vacío.
   `task_manager.py` sin cambios. Deuda legacy 2869 → **3016** con `#:`;
   disclosure obligada en la descripción de la PR de cierre (T9).
+- **L20 (2026-10-18, T6 completada subagent)**: RED observado (9 failed backend + 3
+  vitest) → GREEN **1209/1209** backend y **584/584** vitest (tsc 0, eslint 0). El
+  vocabulario de `task["subtitles"]` gana el estado **`downloaded`** (junto a
+  `pending|extracted|failed|not_extractable|missing|skipped`): el `.srt` encontrado en
+  OpenSubtitles se escribe en el MISMO sidecar `<stem>.<sufijo>.srt` junto a la salida.
+  `POST /api/mixer/tasks/:id/subtitles/search` busca por idioma para los estados que la
+  extracción no pudo dar, toma el primer candidato y sigue aunque una entrada falle
+  (`detail` corto por entrada; `not_found` sin candidato). API key en
+  `services.opensubtitles.api_key` (Configuración → Servicios, copy del mockup) y
+  **cifrada en reposo** como el resto de credenciales
+  (`credentials.ENCRYPTED_SECRET_FIELDS`; feature sin estrenar ⇒ sin migración).
+  Cliente `infrastructure/opensubtitles_client.py` síncrono (httpx; tests con
+  `httpx.MockTransport`, sin red nunca) con `OpenSubtitlesError` declarado en
+  `application.ports` — como `CopyCancelled`, la excepción cruza la costura y ni la ruta
+  puede importar el adapter ni al revés (arquitectura: interfaces jamás importa
+  infrastructure; comprobado con tests de contrato). Wiring: puerto `OpenSubtitlesClient`,
+  delegados `search_subtitles`/`download_subtitle` en `gateways` y bind en `app.py`;
+  `bind()` acepta `opensubtitles` opcional y si se omite deja el slot como estaba (una
+  composición parcial no puede desactivar un adapter ya bindado). La API key nunca viaja
+  al CDN del `link` de descarga ni aparece en mensajes de error. Guarda `no_output_path`
+  cuando la tarea no tiene salida que nombre el sidecar (detalle, no estado). Deuda
+  legacy 3016 → **3017** (línea `opensubtitles=` del bind en `app.py`) con `#:`;

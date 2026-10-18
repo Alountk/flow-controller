@@ -29,6 +29,16 @@ class CopyCancelled(Exception):
     """
 
 
+class OpenSubtitlesError(Exception):
+    """OpenSubtitles did not answer: non-2xx, missing key, missing link, broken body.
+
+    Lives at the seam — like `CopyCancelled` — because it CROSSES it: the
+    adapter raises it and delivery catches it per subtitle entry, so both sides
+    need one name and neither may import the other's layer. The message is
+    short and never carries the API key.
+    """
+
+
 @runtime_checkable
 class FileStorage(Protocol):
     """Bytes from one place to another, with the operator in control.
@@ -210,6 +220,19 @@ class SettingsStore(Protocol):
     #: Live module-level string: set when decryption fails, cleared when it
     #: works. Read per request by `/api/config`, so it is a type, not a call.
     encryption_error: str
+
+
+@runtime_checkable
+class OpenSubtitlesClient(Protocol):
+    """The subtitles extraction could not give (S6): find and download.
+
+    Two questions, one port — `search_subtitles` lists candidates and
+    `download_subtitle` returns the `.srt` text of one of them. Failures raise
+    `OpenSubtitlesError` rather than answer with a lie.
+    """
+
+    def search_subtitles(self, *args, **kwargs): ...
+    def download_subtitle(self, *args, **kwargs): ...
 
 
 @runtime_checkable

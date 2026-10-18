@@ -67,7 +67,8 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: feature code, disclosed as debt in the mixer-redesign PR description.
 #: 2782 -> 2869 (mixer-redesign T4 / S2): language normalization, audio ordering and required-language check in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
 #: 2869 -> 3016 (mixer-redesign T5 / S6): subtitle stream parsing and .srt sidecar extraction in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
-MAX_LEGACY_LOC = 3016
+#: 3016 -> 3017 (mixer-redesign T6 / S6): the `opensubtitles=opensubtitles_client` binding line in `app.py` — composition-root wiring, like every router registration (the import name fit on the existing line). Disclosed as debt in the mixer-redesign PR.
+MAX_LEGACY_LOC = 3017
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

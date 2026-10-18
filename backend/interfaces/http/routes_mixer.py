@@ -6,6 +6,7 @@ and managing mux tasks (list, status, cancel, pause, resume).
 import asyncio
 import logging
 import os
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -23,10 +24,13 @@ from media_mixer import (
     resume_task,
     get_task,
     cleanup_tasks,
+    subtitle_sidecar_path,
     ORDERED_AUDIO_LANGUAGES,
     SHORT_LANGUAGE_SUFFIXES,
 )
 from task_manager import mux_tasks
+from application.gateways import download_subtitle, get_setting, search_subtitles
+from application.ports import OpenSubtitlesError
 from interfaces.http.deps import verify_api_key
 import config
 
@@ -46,6 +50,10 @@ class MuxRequest(BaseModel):
     video_source: dict
     audio_sources: list[dict]
     output_path: str = ""
+
+
+class SubtitleSearchRequest(BaseModel):
+    languages: list[str] | None = None
 
 
 # ── Path validation ──────────────────────────────────────────────────────────
@@ -133,6 +141,40 @@ def _build_subtitle_plan(probes: list[dict]) -> list[dict]:
             entry["extractable"] = bool(track.get("extractable"))
         plan.append(entry)
     return plan
+
+
+#: Plan entries T6 can fill by searching: the extraction could not give these.
+#: `extracted`/`downloaded` are never re-searched.
+_SEARCHABLE_STATUSES = {"missing", "not_extractable", "failed"}
+
+
+def _title_from_output_path(output_path: str) -> str:
+    """Search title: the output stem minus `_mixed` and the timestamp.
+
+    `_generate_output_path` names the output `<stem>_<YYYYMMDDTHHMMSS>_mixed<ext>`;
+    the search query is the original stem (S6: find subtitles for the same
+    audio languages).
+    """
+    stem = os.path.splitext(os.path.basename(output_path))[0]
+    stem = re.sub(r"_mixed$", "", stem)
+    return re.sub(r"_\d{8}T\d{6}$", "", stem)
+
+
+def _fetch_sidecar(api_key: str, query: str, language_code: str, output_path: str) -> dict:
+    """Search + download one `.srt` into the output sidecar (S6/T6).
+
+    Blocking (HTTP + file write): the route runs it through
+    `asyncio.to_thread` — one event loop, and it does not preempt. Raises
+    `OpenSubtitlesError`; the route annotates that entry and continues.
+    """
+    candidates = search_subtitles(api_key, query, languages=language_code)
+    if not candidates:
+        return {"detail": "not_found"}
+    text = download_subtitle(api_key, candidates[0]["file_id"])
+    sidecar = subtitle_sidecar_path(output_path, language_code)
+    with open(sidecar, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return {"status": "downloaded", "sidecar": sidecar, "detail": ""}
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -362,3 +404,65 @@ async def mixer_resume_task(task_id: str, _key: str = Depends(verify_api_key)):
     # Return updated task status
     task = get_task(task_id)
     return {"ok": True, **(task or {}), "detail": result.get("detail", "Task resumed")}
+
+
+@router.post("/tasks/{task_id}/subtitles/search")
+async def mixer_search_subtitles(
+    task_id: str,
+    req: SubtitleSearchRequest | None = None,
+    _key: str = Depends(verify_api_key),
+):
+    """S6/T6: search OpenSubtitles for the `.srt` extraction could not give.
+
+    Targets are the plan entries still `missing`/`not_extractable`/`failed`
+    (optionally narrowed by `languages`); each one is searched on its own and
+    the FIRST candidate is downloaded into the same sidecar naming the mux
+    output would produce, flipping the entry to `downloaded`. Without an API
+    key configured this answers 400 BEFORE any search. Entries are mutated in
+    place on the live task (the cancel/pause pattern), so GET /tasks/:id shows
+    the new statuses.
+    """
+    task = get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    api_key = get_setting("services", "opensubtitles", "api_key") or ""
+    if not api_key:
+        raise HTTPException(status_code=400, detail={"error": "opensubtitles_not_configured"})
+
+    wanted = set(req.languages) if req and req.languages else None
+    live = mux_tasks.get(task_id) or task
+    targets = [
+        entry
+        for entry in (live.get("subtitles") or [])
+        if entry.get("status") in _SEARCHABLE_STATUSES
+        and (wanted is None or entry.get("language_code") in wanted)
+    ]
+
+    output_path = task.get("output_path") or ""
+    query = _title_from_output_path(output_path) if output_path else ""
+    results: list[dict] = []
+    for entry in targets:
+        if not output_path:
+            entry["detail"] = "no_output_path"
+        else:
+            try:
+                entry.update(await asyncio.to_thread(
+                    _fetch_sidecar, api_key, query, entry["language_code"], output_path,
+                ))
+            except OpenSubtitlesError as exc:
+                # One entry's failure never stops the rest (S6: los mismos
+                # idiomas de audio — cada idioma se busca por separado).
+                entry["detail"] = str(exc)[:200]
+        result = {
+            "language": entry["language"],
+            "language_code": entry["language_code"],
+            "status": entry["status"],
+        }
+        if entry.get("sidecar"):
+            result["sidecar"] = entry["sidecar"]
+        if entry.get("detail"):
+            result["detail"] = entry["detail"]
+        results.append(result)
+
+    return {"ok": True, "results": results}

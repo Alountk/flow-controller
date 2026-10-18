@@ -266,6 +266,8 @@ export interface Settings {
     radarr: { url: string; api_key: string }
     sonarr: { url: string; api_key: string }
     amutorrent: { url: string; api_key: string; user: string; password: string }
+    /** Clave de OpenSubtitles (mixer-redesign S6): Configuración → Servicios. */
+    opensubtitles: { api_key: string }
   }
   security: { api_key: string; safe_mode: boolean }
   developer: boolean

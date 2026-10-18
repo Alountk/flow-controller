@@ -49,6 +49,7 @@ ENCRYPTED_SECRET_FIELDS = (
     ("services", "sonarr", "api_key"),
     ("services", "amutorrent", "api_key"),
     ("services", "amutorrent", "password"),
+    ("services", "opensubtitles", "api_key"),
 )
 
 #: Marks a value as ciphertext, so legacy plaintext can still be read.
