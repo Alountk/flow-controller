@@ -57,6 +57,11 @@ Fuera de alcance: transcodificar/re-encode de vídeo o audio (S8), el resto de p
 bloque 🟡 (tabla densa Archivos, secciones Calidad/Avisos, 3 namings), cambios en otras
 secciones de la app.
 
+> **Delivery**: single PR a cierre de T9 (regla del usuario). Slices ya en la rama:
+> C1 `6b6c0d8` docs (176), C2 `2774227` T2+T3 (339) — 546 líneas acumuladas, frontera
+> de slice registrada aquí según avisa el commit; los slices siguientes se cortan con
+> tareas nuevas (T4, T5+T6, T7+T8) sin esperar a T9.
+
 ## Tasks
 
 - [ ] **T1 [S9]** — Ronda Stich: mockup(s) del mixer nuevo en el proyecto Stitch
@@ -106,6 +111,25 @@ secciones de la app.
   sobre la unión A+B, clave `mixer.languages` en settings (de fábrica: castellano
   exigido). Tests RED→GREEN. Ruta: `backend/media_mixer.py`, settings, tests backend.
   Commit: —.
+  - [x] Evidencia (2026-10-18): RED observado **19 failed / 72 passed** —
+    `AttributeError: module 'media_mixer' has no attribute 'normalize_language'`
+    (15 tests nuevos de tests_mixer.py: normalize/order_and_mark/check_required),
+    `KeyError: 'language_check'` (2 de probe), `200 == 409` (mux sin gate) y
+    `None == ['spa']` (settings sin sección `mixer`); los otros 2 tests nuevos ya
+    pasaban en RED (pines de la unión A+B y del override en settings.json).
+    Implementado: `normalize_language` (solo los 4 idiomas mapean a canónico, el
+    resto pasa lowercased), `ORDERED_AUDIO_LANGUAGES=("spa","eng","rus","cat")`,
+    `order_and_mark_audio` (lenguaje > archivo A antes que B > bitrate desc;
+    primera entrada de cada idioma ordenado = «automática», resto a elegir),
+    `check_required_languages` sobre la unión A+B, DEFAULTS
+    `mixer.required_languages=["spa"]` (L9), `_required_languages()` que fuerza
+    `spa` primero (L3), `language_check` + `audio_ordered` en `/probe` (contrato
+    aditivo) y gate en `/mux` tras fps/duración: 409 body
+    `{"error": "missing_required_language", "missing": ["spa"], "required": ["spa"]}`
+    antes de `start_mux`. **GREEN 91/91 tocados; suite completa 1162/1162**
+    (base 1141 + 21 tests nuevos; nada borrado ni debilitado). **Deuda legacy:
+    techo 2782 → 2869** (+87 en `media_mixer.py`) con comentario `#:` de ownership
+    en `tests/contracts/tests_architecture.py` y disclosure en la PR de cierre.
 - [ ] **T5 [S6,S8]** — backend: probe parsea streams de subtítulo (codec, idioma,
   texto vs bitmap); extracción a `.srt` sidecar junto a la salida para texto
   (subrip/ass/webvtt); bitmap (PGS/VobSub) marcado «no extraíble sin OCR»; el mux sigue
@@ -208,3 +232,19 @@ secciones de la app.
   quedan aprobadas sin cambios; sin castellano (exigido) no se mezcla, coherente con
   «castellano es el mínimo» → regla añadida a S2 (badge + Mezclar deshabilitado + 409
   en el mux). Abre el gate de implementación T2–T9.
+- **L17 (2026-10-18, T4 completada subagent)**: RED observado (19 failed) → GREEN
+  **1162/1162** (base 1141 + 21 tests nuevos de T4). En `media_mixer.py`:
+  `normalize_language` (solo `spa/eng/rus/cat` y sus códigos cortos `es/en/ru/ca`
+  mapean a canónico; `fra→fra`, `fr→fr`, `und→und` pasan lowercased),
+  `ORDERED_AUDIO_LANGUAGES=("spa","eng","rus","cat")` fijo (S2),
+  `order_and_mark_audio` (rango de idioma > A antes que B > bitrate desc; la
+  primera entrada de cada idioma ordenado es la «automática», L6) y
+  `check_required_languages` sobre la unión A+B (L3). Settings: DEFAULTS
+  `mixer.required_languages=["spa"]` (L9) y la ruta fuerza `spa` el primero
+  siempre (L3: «es el minimo») — la config solo puede añadir exigidos.
+  `/probe` expone `language_check` + `audio_ordered` (contrato aditivo) y `/mux`
+  responde **409**
+  `{"error": "missing_required_language", "missing": ["spa"], "required": ["spa"]}`
+  antes de arrancar ffmpeg, después del check de fps/duración (S3 «el primer
+  check»). Deuda legacy 2782 → **2869** con `#:` en el contrato; disclosure
+  obligada en la descripción de la PR de cierre (T9).

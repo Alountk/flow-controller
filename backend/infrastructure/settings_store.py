@@ -43,6 +43,10 @@ DEFAULTS: dict[str, Any] = {
     # How long a downloaded file stays before the UI may offer deleting it.
     # Deletion itself is always manual — see the retention feature.
     "retention": {"amule_days": 7},
+    # Mixer (S2/L9): «Solo castellano» required by default. `spa` is always
+    # required regardless of this list (L3: «es el minimo») — the route forces
+    # it back in, so the config can only ADD required languages, not drop spa.
+    "mixer": {"required_languages": ["spa"]},
     "server": {"port": 8000},
 }
 

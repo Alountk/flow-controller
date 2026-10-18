@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from media_mixer import (
     probe_file,
     check_compatibility,
+    check_required_languages,
+    normalize_language,
+    order_and_mark_audio,
     select_best_video_pair,
     start_mux,
     cancel_task,
@@ -59,6 +62,24 @@ def _validate_mixer_path(path: str) -> str:
     raise HTTPException(status_code=403, detail=f"Path not allowed: {path}")
 
 
+def _required_languages() -> list[str]:
+    """Required languages from settings, normalized, with `spa` forced first.
+
+    L3: «Castellano tiene que estar siempre, es el minimo» — whatever the
+    user configures (default «Solo castellano», L9), castellano can never
+    be dropped. Deduped, configured order preserved after `spa`.
+    """
+    from application.gateways import get_setting
+
+    configured = get_setting("mixer", "required_languages", default=["spa"]) or []
+    result: list[str] = []
+    for tag in ["spa", *(t for t in configured if isinstance(t, str))]:
+        code = normalize_language(tag)
+        if code not in result:
+            result.append(code)
+    return result
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
@@ -100,6 +121,8 @@ async def mixer_probe(req: ProbeRequest, _key: str = Depends(verify_api_key)):
         "file_b": probe_b,
         "compatibility": compatibility,
         "best_video": select_best_video_pair(probe_a, probe_b),
+        "language_check": check_required_languages(probe_a, probe_b, _required_languages()),
+        "audio_ordered": order_and_mark_audio(probe_a, probe_b),
     }
 
 
@@ -163,6 +186,24 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
                     "reasons": compatibility["reasons"],
                     "compatibility": compatibility,
                 })
+
+        # S2/L14 required-language gate — after the fps/duration check (S3
+        # «el primer check») and still BEFORE any ffmpeg starts. Availability
+        # is checked over the UNION of the probed files (L3: one of the two
+        # files carrying the language is enough).
+        required = _required_languages()
+        available = {
+            normalize_language(track.get("language", "und"))
+            for probe in probes
+            for track in probe.get("audio_tracks", [])
+        }
+        missing = [code for code in required if code not in available]
+        if missing:
+            raise HTTPException(status_code=409, detail={
+                "error": "missing_required_language",
+                "missing": missing,
+                "required": required,
+            })
 
     # Determine output directory
     from application.gateways import get_setting

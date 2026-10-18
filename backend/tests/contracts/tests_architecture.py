@@ -65,7 +65,8 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: (`_video_rank_key`, rewritten `select_best_video`, `select_best_video_pair`)
 #: in `media_mixer.py` — the mixer still lives in the legacy module. New
 #: feature code, disclosed as debt in the mixer-redesign PR description.
-MAX_LEGACY_LOC = 2782
+#: 2782 -> 2869 (mixer-redesign T4 / S2): language normalization, audio ordering and required-language check in media_mixer.py. Disclosed as debt in the mixer-redesign PR.
+MAX_LEGACY_LOC = 2869
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

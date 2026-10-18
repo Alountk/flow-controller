@@ -88,6 +88,25 @@ class TestTheFileWinsAfterwards:
         assert settings.get_setting("intervals", "check") == 15
 
 
+class TestMixerRequiredLanguages:
+    def test_default_is_solo_castellano(self, cfg):
+        (cfg / "settings.json").write_text(json.dumps({"developer": False}))
+
+        settings.load_settings()
+
+        # L9: «Solo castellano» by default.
+        assert settings.get_setting("mixer", "required_languages") == ["spa"]
+
+    def test_stored_value_overrides_the_default(self, cfg):
+        (cfg / "settings.json").write_text(
+            json.dumps({"mixer": {"required_languages": ["spa", "eng", "cat"]}})
+        )
+
+        settings.load_settings()
+
+        assert settings.get_setting("mixer", "required_languages") == ["spa", "eng", "cat"]
+
+
 class TestUnwritableConfigDirectory:
     def test_seeded_values_survive_when_they_cannot_be_persisted(self, cfg, monkeypatch):
         """A read-only config directory must not silently drop the seed."""

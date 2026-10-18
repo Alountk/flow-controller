@@ -13,8 +13,13 @@ from task_manager import mux_tasks
 client = TestClient(app, raise_server_exceptions=False)
 
 
-def _probe_fixture(path, fps=23.976, duration=7200.0, width=1920, height=1080):
-    """Minimal probe_file() result as parse_probe_data would produce it."""
+def _probe_fixture(path, fps=23.976, duration=7200.0, width=1920, height=1080, languages=("spa",)):
+    """Minimal probe_file() result as parse_probe_data would produce it.
+
+    One audio track per entry of `languages` (tag as the file reports it).
+    `languages=()` builds a video-only probe — a file with no audio tracks
+    contributes an empty language set to the A+B union.
+    """
     return {
         "filename": os.path.basename(path),
         "path": path,
@@ -25,7 +30,13 @@ def _probe_fixture(path, fps=23.976, duration=7200.0, width=1920, height=1080):
             "index": 0, "codec": "hevc", "width": width, "height": height,
             "fps": fps, "bitrate": 5_000_000, "selected": False,
         }],
-        "audio_tracks": [],
+        "audio_tracks": [
+            {
+                "index": i + 1, "codec": "aac", "language": lang,
+                "channels": 6, "bitrate": 128_000, "default": i == 0,
+            }
+            for i, lang in enumerate(languages)
+        ],
     }
 
 
@@ -142,6 +153,53 @@ class TestProbeEndpoint:
         assert best["path"] == "/mnt/storage/b.mkv"
         assert best["track_index"] == 0
 
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.check_compatibility")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_exposes_language_check_and_audio_ordered(self, mock_probe, mock_compat, mock_isfile):
+        # S2: additive contract — the response gains the required-language
+        # check and the ca→en→ru→cat ordered audio list, old keys unchanged.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("spa", "fra")),
+            _probe_fixture("/mnt/storage/b.mkv", languages=("rus", "eng")),
+        ]
+        mock_compat.return_value = {"ok": True, "reasons": [], "warnings": []}
+
+        resp = client.post(
+            "/api/mixer/probe",
+            json={"path_a": "/mnt/storage/a.mkv", "path_b": "/mnt/storage/b.mkv"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert {"file_a", "file_b", "compatibility", "best_video",
+                "language_check", "audio_ordered"} <= set(data)
+        assert data["language_check"] == {"ok": True, "missing": [], "required": ["spa"]}
+        ordered = data["audio_ordered"]
+        assert [t["language_code"] for t in ordered] == ["spa", "eng", "rus", "fra"]
+        assert [t["file"] for t in ordered] == ["a", "b", "b", "a"]
+        assert [t["track_index"] for t in ordered] == [0, 1, 0, 1]
+        assert [t["selected"] for t in ordered] == [True, True, True, False]
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.check_compatibility")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_flags_missing_required_language(self, mock_probe, mock_compat, mock_isfile):
+        # No spa in either file: the badge must know before anyone hits /mux.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("eng",)),
+            _probe_fixture("/mnt/storage/b.mkv", languages=("rus",)),
+        ]
+        mock_compat.return_value = {"ok": True, "reasons": [], "warnings": []}
+
+        resp = client.post(
+            "/api/mixer/probe",
+            json={"path_a": "/mnt/storage/a.mkv", "path_b": "/mnt/storage/b.mkv"},
+        )
+        assert resp.status_code == 200
+        check = resp.json()["language_check"]
+        assert check["ok"] is False
+        assert check["missing"] == ["spa"]
+
 
 class TestMuxEndpoint:
     @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
@@ -230,6 +288,56 @@ class TestMuxEndpoint:
         mock_start.assert_called_once()
         started_video = mock_start.call_args[0][0]
         assert started_video["path"] == "/mnt/storage/fileB.mkv"
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_rejects_missing_required_language_409(self, mock_probe, mock_start, mock_isfile):
+        # S2/L14: no spa in the A+B union ⇒ 409 BEFORE ffmpeg is spawned.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("eng",)),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=("rus",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+            },
+        )
+        assert resp.status_code == 409
+        detail = resp.json()["detail"]
+        assert detail["error"] == "missing_required_language"
+        assert "spa" in detail["missing"]
+        assert detail == {
+            "error": "missing_required_language",
+            "missing": ["spa"],
+            "required": ["spa"],
+        }
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_union_allows_language_present_in_only_one_file(self, mock_probe, mock_start, mock_isfile):
+        # L3: «solo hace falta que uno de los dos archivos lo tenga» — spa as
+        # a short code in A alone satisfies the requirement.
+        mock_start.return_value = "test-task-union"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("es",)),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=()),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+            },
+        )
+        assert resp.status_code == 200
+        mock_start.assert_called_once()
 
     def test_mux_missing_video_path(self):
         resp = client.post(

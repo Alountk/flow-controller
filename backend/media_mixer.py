@@ -14,6 +14,29 @@ log = logging.getLogger("flow-controller")
 # Priority: hevc > h264 > other (lower index = higher priority)
 CODEC_PRIORITY: dict[str, int] = {"hevc": 0, "h265": 0, "h264": 1, "avc": 1}
 
+#: S2: fixed display/selection order of audio languages — castellano,
+#: inglés, ruso, catalán. The user's order; not configurable.
+ORDERED_AUDIO_LANGUAGES: tuple[str, ...] = ("spa", "eng", "rus", "cat")
+
+#: ISO 639-2/B + 639-1 aliases for the four ordered languages only.
+_LANGUAGE_ALIASES: dict[str, str] = {
+    "spa": "spa", "es": "spa",
+    "eng": "eng", "en": "eng",
+    "rus": "rus", "ru": "rus",
+    "cat": "cat", "ca": "cat",
+}
+
+
+def normalize_language(tag: str) -> str:
+    """Canonical three-letter code for an audio language tag (S2).
+
+    ffprobe reports ISO 639-2 (`spa/eng/rus/cat`) but short codes (`es/en/ru/ca`)
+    appear too. Only the four ordered languages get a canonical mapping;
+    anything else passes through lowercased (`fra -> fra`, `fr -> fr`).
+    """
+    cleaned = str(tag or "").strip().lower()
+    return _LANGUAGE_ALIASES.get(cleaned, cleaned)
+
 
 def probe_file(path: str) -> dict:
     """Run ffprobe on a file, return parsed metadata.
@@ -230,6 +253,70 @@ def _get_primary_resolution(probe: dict) -> tuple[int, int] | None:
     if tracks:
         return (tracks[0].get("width", 0), tracks[0].get("height", 0))
     return None
+
+
+def order_and_mark_audio(probe_a: dict, probe_b: dict) -> list[dict]:
+    """Merged audio of A+B in the S2 order, with the «4 automáticas» marked.
+
+    Each entry is {**track, "file": "a"|"b", "language_code" (normalized),
+    "track_index" (0-based audio ordinal inside its own file), "selected"}.
+    Sort: language rank (index in ORDERED_AUDIO_LANGUAGES; other languages
+    last, alphabetical by normalized tag) → file (A before B) → bitrate
+    descending. The FIRST entry of each ordered language present is
+    `selected` (L6: one automatic per language); the rest is «a elegir».
+    """
+    def _sort_key(entry: dict) -> tuple[int, str, int, int]:
+        code = entry["language_code"]
+        if code in ORDERED_AUDIO_LANGUAGES:
+            return (
+                ORDERED_AUDIO_LANGUAGES.index(code),
+                "",
+                0 if entry["file"] == "a" else 1,
+                -(entry.get("bitrate") or 0),
+            )
+        return (len(ORDERED_AUDIO_LANGUAGES), code, 0 if entry["file"] == "a" else 1, -(entry.get("bitrate") or 0))
+
+    merged: list[dict] = []
+    for label, probe in (("a", probe_a), ("b", probe_b)):
+        for ordinal, track in enumerate(probe.get("audio_tracks", [])):
+            merged.append({
+                **track,
+                "file": label,
+                "language_code": normalize_language(track.get("language", "und")),
+                "track_index": ordinal,
+                "selected": False,
+            })
+
+    merged.sort(key=_sort_key)
+
+    selected: set[str] = set()
+    for entry in merged:
+        code = entry["language_code"]
+        if code in ORDERED_AUDIO_LANGUAGES and code not in selected:
+            entry["selected"] = True
+            selected.add(code)
+    return merged
+
+
+def check_required_languages(probe_a: dict, probe_b: dict, required: list[str]) -> dict:
+    """Availability of the required languages over the UNION of A+B (L3).
+
+    «Solo hace falta que uno de los dos archivos lo tenga» — one file carrying
+    the language is enough. Missing ⇒ the mux must be blocked (L14).
+    Returns {"ok", "missing", "required"} with canonical comparison.
+    """
+    available = {
+        normalize_language(track.get("language", "und"))
+        for probe in (probe_a, probe_b)
+        for track in probe.get("audio_tracks", [])
+    }
+    normalized: list[str] = []
+    for tag in required:
+        code = normalize_language(tag)
+        if code not in normalized:
+            normalized.append(code)
+    missing = [code for code in normalized if code not in available]
+    return {"ok": not missing, "missing": missing, "required": normalized}
 
 
 def build_mux_command(

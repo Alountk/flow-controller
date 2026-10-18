@@ -4,6 +4,7 @@ import os
 # Configurar env vars antes de importar
 os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
 
+import media_mixer
 from media_mixer import (
     parse_probe_data,
     select_best_video,
@@ -440,6 +441,161 @@ class TestCodecPriority:
 
     def test_hevc_before_h264(self):
         assert CODEC_PRIORITY["hevc"] < CODEC_PRIORITY["h264"]
+
+
+# ── normalize_language / ORDERED_AUDIO_LANGUAGES (S2) ──────────────────────
+
+class TestNormalizeLanguage:
+    def test_iso_639_2_codes_are_already_canonical(self):
+        assert media_mixer.normalize_language("spa") == "spa"
+        assert media_mixer.normalize_language("eng") == "eng"
+        assert media_mixer.normalize_language("rus") == "rus"
+        assert media_mixer.normalize_language("cat") == "cat"
+
+    def test_iso_639_1_short_codes_map_to_canonical(self):
+        assert media_mixer.normalize_language("es") == "spa"
+        assert media_mixer.normalize_language("en") == "eng"
+        assert media_mixer.normalize_language("ru") == "rus"
+        assert media_mixer.normalize_language("ca") == "cat"
+
+    def test_case_and_whitespace_are_normalized(self):
+        assert media_mixer.normalize_language("SPA") == "spa"
+        assert media_mixer.normalize_language("  Es ") == "spa"
+
+    def test_unknown_tags_pass_through_lowercased(self):
+        # Only the four ordered languages get a canonical mapping.
+        assert media_mixer.normalize_language("fra") == "fra"
+        assert media_mixer.normalize_language("fr") == "fr"
+        assert media_mixer.normalize_language("und") == "und"
+
+
+class TestOrderedAudioLanguages:
+    def test_the_display_order_is_ca_en_ru_cat(self):
+        # S2: castellano, inglés, ruso, catalán — fixed, not configurable.
+        assert media_mixer.ORDERED_AUDIO_LANGUAGES == ("spa", "eng", "rus", "cat")
+
+
+def _audio_track(language, bitrate, index=0):
+    """Minimal parse_probe_data() audio track."""
+    return {
+        "index": index, "codec": "ac3", "language": language,
+        "channels": 6, "bitrate": bitrate, "default": False,
+    }
+
+
+def _audio_probe(*tracks):
+    return {"video_tracks": [], "audio_tracks": list(tracks), "duration": 7200}
+
+
+# ── order_and_mark_audio (S2/S5) ──────────────────────────────────────────
+
+class TestOrderAndMarkAudio:
+    def test_mixed_a_b_order_labels_ordinals_and_selection(self):
+        a = _audio_probe(
+            _audio_track("spa", 8_000_000, 1),
+            _audio_track("spa", 3_000_000, 2),
+            _audio_track("fra", 500_000, 3),
+        )
+        b = _audio_probe(
+            _audio_track("eng", 2_000_000, 1),
+            _audio_track("rus", 1_000_000, 2),
+            _audio_track("cat", 500_000, 3),
+        )
+        ordered = media_mixer.order_and_mark_audio(a, b)
+
+        assert [(t["language_code"], t["file"], t["bitrate"]) for t in ordered] == [
+            ("spa", "a", 8_000_000),
+            ("spa", "a", 3_000_000),
+            ("eng", "b", 2_000_000),
+            ("rus", "b", 1_000_000),
+            ("cat", "b", 500_000),
+            ("fra", "a", 500_000),
+        ]
+        # track_index = 0-based audio ordinal inside its own file.
+        assert [t["track_index"] for t in ordered] == [0, 1, 0, 1, 2, 2]
+        # L6 «4 automáticas, resto a elegir»: one per ordered language present.
+        assert [t["selected"] for t in ordered] == [True, False, True, True, True, False]
+        # Original track fields survive the merge.
+        assert ordered[0]["codec"] == "ac3"
+        assert ordered[0]["index"] == 1
+
+    def test_language_rank_beats_file_rank(self):
+        # eng from B sorts BEFORE cat from A: S2 language order dominates.
+        a = _audio_probe(_audio_track("cat", 9_000_000, 1))
+        b = _audio_probe(_audio_track("eng", 1_000_000, 1))
+        ordered = media_mixer.order_and_mark_audio(a, b)
+        assert [t["language_code"] for t in ordered] == ["eng", "cat"]
+        assert [t["file"] for t in ordered] == ["b", "a"]
+
+    def test_absent_ordered_language_selects_only_the_present_ones(self):
+        # No cat anywhere: marking is independent of the required check.
+        a = _audio_probe(_audio_track("spa", 8_000_000, 1), _audio_track("eng", 2_000_000, 2))
+        b = _audio_probe(_audio_track("rus", 1_000_000, 1))
+        ordered = media_mixer.order_and_mark_audio(a, b)
+        assert [t["language_code"] for t in ordered] == ["spa", "eng", "rus"]
+        assert [t["selected"] for t in ordered] == [True, True, True]
+        assert not any(t["language_code"] == "cat" for t in ordered)
+
+    def test_file_a_precedes_file_b_before_bitrate(self):
+        # L12: within a language, A first, then bitrate descending.
+        a = _audio_probe(_audio_track("spa", 1_000_000, 1))
+        b = _audio_probe(_audio_track("spa", 5_000_000, 1))
+        ordered = media_mixer.order_and_mark_audio(a, b)
+        assert [(t["file"], t["bitrate"]) for t in ordered] == [("a", 1_000_000), ("b", 5_000_000)]
+        assert [t["selected"] for t in ordered] == [True, False]
+
+    def test_unknown_languages_sort_last_alphabetically(self):
+        a = _audio_probe(_audio_track("fra", 1_000_000, 1), _audio_track("und", 2_000_000, 2))
+        b = _audio_probe(_audio_track("deu", 3_000_000, 1))
+        ordered = media_mixer.order_and_mark_audio(a, b)
+        assert [t["language_code"] for t in ordered] == ["deu", "fra", "und"]
+        assert [t["selected"] for t in ordered] == [False, False, False]
+
+
+# ── check_required_languages (S2/L3/L14) ──────────────────────────────────
+
+class TestRequiredLanguages:
+    def test_spa_in_both_files_is_ok(self):
+        result = media_mixer.check_required_languages(
+            _audio_probe(_audio_track("spa", 1_000_000, 1)),
+            _audio_probe(_audio_track("spa", 1_000_000, 1)),
+            ["spa"],
+        )
+        assert result == {"ok": True, "missing": [], "required": ["spa"]}
+
+    def test_spa_nowhere_blocks(self):
+        result = media_mixer.check_required_languages(
+            _audio_probe(_audio_track("eng", 1_000_000, 1)),
+            _audio_probe(),
+            ["spa"],
+        )
+        assert result == {"ok": False, "missing": ["spa"], "required": ["spa"]}
+
+    def test_missing_only_the_absent_required_language(self):
+        result = media_mixer.check_required_languages(
+            _audio_probe(_audio_track("spa", 1_000_000, 1)),
+            _audio_probe(),
+            ["spa", "cat"],
+        )
+        assert result == {"ok": False, "missing": ["cat"], "required": ["spa", "cat"]}
+
+    def test_short_codes_satisfy_canonical_requirements(self):
+        result = media_mixer.check_required_languages(
+            _audio_probe(_audio_track("es", 1_000_000, 1)),
+            _audio_probe(_audio_track("ca", 1_000_000, 1)),
+            ["spa", "cat"],
+        )
+        assert result == {"ok": True, "missing": [], "required": ["spa", "cat"]}
+
+    def test_one_of_the_two_files_is_enough(self):
+        # L3: «solo hace falta que uno de los dos archivos lo tenga».
+        result = media_mixer.check_required_languages(
+            _audio_probe(),
+            _audio_probe(_audio_track("spa", 1_000_000, 1)),
+            ["spa"],
+        )
+        assert result["ok"] is True
+        assert result["missing"] == []
 
 
 def test_the_mux_creation_site_tags_the_mixer_channel(tmp_path, monkeypatch):
