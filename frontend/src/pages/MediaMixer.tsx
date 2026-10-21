@@ -213,6 +213,9 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
   const [selectedVolume, setSelectedVolume] = useState(roots[0]?.path || '')
   const [currentPath, setCurrentPath] = useState(roots[0]?.path || '')
   const [selected, setSelected] = useState<string | null>(null)
+  // Live filter over the visible directory: one query drives folders AND files
+  // (the same pattern Archivos already uses in ScanModal).
+  const [filter, setFilter] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
 
   const { data: browseData } = useQuery({
@@ -264,6 +267,10 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
   }
 
   const items = browseData?.ok ? browseData.items : []
+  const query = filter.trim().toLocaleLowerCase()
+  const matchesFilter = (name: string) => !query || name.toLocaleLowerCase().includes(query)
+  const visibleDirs = items.filter((i) => i.is_dir && matchesFilter(i.name))
+  const visibleFiles = items.filter((i) => !i.is_dir && matchesFilter(i.name))
 
   return (
     <>
@@ -271,7 +278,7 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
         <div className="mixer-file-input-head">
           <span className="mixer-file-badge">{label.slice(-1)}</span>
           <span className="mixer-file-label">{label}</span>
-          <button className="fm-action-btn" onClick={() => setOpen(true)}>
+          <button className="fm-action-btn" onClick={() => { setFilter(''); setOpen(true) }}>
             Examinar…
           </button>
           {value && (
@@ -353,10 +360,21 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
                   )}
                 </div>
 
+                <div className="scan-row">
+                  <input
+                    type="search"
+                    className="fm-filter-input"
+                    placeholder="Buscar carpeta o archivo…"
+                    aria-label="Buscar carpeta o archivo"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                  />
+                </div>
+
                 {currentPath && (
                   <div className="scan-path-list">
                     <div className="scan-current-path">{currentPath}</div>
-                    {items.filter((i) => i.is_dir).map((dirItem) => (
+                    {visibleDirs.map((dirItem) => (
                       <div
                         key={dirItem.path}
                         className="scan-folder-item"
@@ -365,15 +383,21 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
                         📁 {dirItem.name}
                       </div>
                     ))}
-                    {items.filter((i) => i.is_dir).length === 0 && (
-                      <div className="scan-no-subfolders">Sin subcarpetas</div>
+                    {visibleDirs.length === 0 && (
+                      <div className="scan-no-subfolders">
+                        {!query
+                          ? 'Sin subcarpetas'
+                          : visibleFiles.length === 0
+                            ? 'Sin coincidencias'
+                            : 'Sin carpetas'}
+                      </div>
                     )}
                   </div>
                 )}
 
-                {items.filter((i) => !i.is_dir).length > 0 && (
+                {visibleFiles.length > 0 && (
                   <div className="scan-file-list">
-                    {items.filter((i) => !i.is_dir).map((file) => (
+                    {visibleFiles.map((file) => (
                       <div
                         key={file.path}
                         className={`scan-file-item ${selected === file.path ? 'selected' : ''}`}

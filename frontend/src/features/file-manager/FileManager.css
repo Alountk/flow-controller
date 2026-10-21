@@ -92,6 +92,23 @@
   border-color: var(--accent);
 }
 
+/* Picker live filter — folders AND files of the visible directory. */
+.fm-filter-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 11px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.fm-filter-input:focus {
+  border-color: var(--accent);
+}
+
 .fm-path {
   flex: 1;
   font-family: monospace;
