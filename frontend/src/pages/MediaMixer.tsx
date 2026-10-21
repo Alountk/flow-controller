@@ -213,6 +213,9 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
   const [selectedVolume, setSelectedVolume] = useState(roots[0]?.path || '')
   const [currentPath, setCurrentPath] = useState(roots[0]?.path || '')
   const [selected, setSelected] = useState<string | null>(null)
+  // Live filter over the visible directory: one query drives folders AND files
+  // (the same pattern Archivos already uses in ScanModal).
+  const [filter, setFilter] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
 
   const { data: browseData } = useQuery({
@@ -264,6 +267,10 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
   }
 
   const items = browseData?.ok ? browseData.items : []
+  const query = filter.trim().toLocaleLowerCase()
+  const matchesFilter = (name: string) => !query || name.toLocaleLowerCase().includes(query)
+  const visibleDirs = items.filter((i) => i.is_dir && matchesFilter(i.name))
+  const visibleFiles = items.filter((i) => !i.is_dir && matchesFilter(i.name))
 
   return (
     <>
@@ -271,7 +278,7 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
         <div className="mixer-file-input-head">
           <span className="mixer-file-badge">{label.slice(-1)}</span>
           <span className="mixer-file-label">{label}</span>
-          <button className="fm-action-btn" onClick={() => setOpen(true)}>
+          <button className="fm-action-btn" onClick={() => { setFilter(''); setOpen(true) }}>
             Examinar…
           </button>
           {value && (
@@ -353,10 +360,21 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
                   )}
                 </div>
 
+                <div className="scan-row">
+                  <input
+                    type="search"
+                    className="fm-filter-input"
+                    placeholder="Buscar carpeta o archivo…"
+                    aria-label="Buscar carpeta o archivo"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                  />
+                </div>
+
                 {currentPath && (
                   <div className="scan-path-list">
                     <div className="scan-current-path">{currentPath}</div>
-                    {items.filter((i) => i.is_dir).map((dirItem) => (
+                    {visibleDirs.map((dirItem) => (
                       <div
                         key={dirItem.path}
                         className="scan-folder-item"
@@ -365,15 +383,21 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
                         📁 {dirItem.name}
                       </div>
                     ))}
-                    {items.filter((i) => i.is_dir).length === 0 && (
-                      <div className="scan-no-subfolders">Sin subcarpetas</div>
+                    {visibleDirs.length === 0 && (
+                      <div className="scan-no-subfolders">
+                        {!query
+                          ? 'Sin subcarpetas'
+                          : visibleFiles.length === 0
+                            ? 'Sin coincidencias'
+                            : 'Sin carpetas'}
+                      </div>
                     )}
                   </div>
                 )}
 
-                {items.filter((i) => !i.is_dir).length > 0 && (
+                {visibleFiles.length > 0 && (
                   <div className="scan-file-list">
-                    {items.filter((i) => !i.is_dir).map((file) => (
+                    {visibleFiles.map((file) => (
                       <div
                         key={file.path}
                         className={`scan-file-item ${selected === file.path ? 'selected' : ''}`}
@@ -606,6 +630,10 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   const [pathA, setPathA] = useState('')
   const [pathB, setPathB] = useState('')
   const [probeResult, setProbeResult] = useState<ProbeResult | null>(null)
+  // Output-order override for the audio rows (▲▼): the payload is built in
+  // rendered order and `build_mux_command` maps `-map` in array order, so this
+  // array IS the mux output order. Reset on every new probe.
+  const [audioOrder, setAudioOrder] = useState<string[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [muxConflict, setMuxConflict] = useState<MuxConflict | null>(null)
   const [lookupNotice, setLookupNotice] = useState<string | null>(null)
@@ -676,13 +704,45 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
     return rows
   })()
 
-  // Merged audio rows in the order the backend delivered them (S2/S5).
-  const audioRows = (probeResult?.audio_ordered ?? []).map((entry: AudioOrderedTrack) => ({
+  // Merged audio rows in the order the backend delivered them (S2/S5),
+  // re-projected through the user's manual reorder when one exists.
+  const baseAudioRows = (probeResult?.audio_ordered ?? []).map((entry: AudioOrderedTrack) => ({
     key: audioKey(entry),
     entry,
     file: entry.file,
     track_index: entry.track_index,
   }))
+  const audioRows = (() => {
+    if (!audioOrder) return baseAudioRows
+    const byKey = new Map(baseAudioRows.map((r) => [r.key, r] as const))
+    const ordered: typeof baseAudioRows = []
+    for (const key of audioOrder) {
+      const row = byKey.get(key)
+      if (row) {
+        ordered.push(row)
+        byKey.delete(key)
+      }
+    }
+    // Rows never seen by the override keep their delivered tail position.
+    for (const row of baseAudioRows) {
+      if (byKey.delete(row.key)) ordered.push(row)
+    }
+    return ordered
+  })()
+
+  // One position up/down; boundary positions are no-ops (the buttons are also
+  // disabled there). Keys, not indexes, so reordering never corrupts state.
+  function moveAudio(key: string, delta: -1 | 1) {
+    setAudioOrder((prev) => {
+      const current = prev ?? baseAudioRows.map((r) => r.key)
+      const i = current.indexOf(key)
+      const j = i + delta
+      if (i < 0 || j < 0 || j >= current.length) return prev
+      const next = [...current]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
 
   // L24/T10: a marked `und` row reads as castellano everywhere it is consumed —
   // group headers, subtitle languages, the gate below and the mux payload.
@@ -743,6 +803,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
     mutationFn: () => probeFiles(pathA, pathB),
     onSuccess: (result) => {
       setProbeResult(result)
+      setAudioOrder(null)
       setLookupNotice(null)
       setError(null)
       setMuxConflict(null)
@@ -940,6 +1001,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
     setPathA('')
     setPathB('')
     setProbeResult(null)
+    setAudioOrder(null)
     setError(null)
     setMuxConflict(null)
     setLookupNotice(null)
@@ -1189,6 +1251,36 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                     )}
                     <label className="mixer-audio-row">
                       <span className="mixer-audio-num">{checked ? orderNum : '—'}</span>
+                      {checked && (
+                        <span className="mixer-audio-move-group">
+                          <button
+                            type="button"
+                            className="mixer-audio-move"
+                            title="Subir posición"
+                            disabled={i === 0}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              moveAudio(row.key, -1)
+                            }}
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            className="mixer-audio-move"
+                            title="Bajar posición"
+                            disabled={i === audioRows.length - 1}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              moveAudio(row.key, 1)
+                            }}
+                          >
+                            ▼
+                          </button>
+                        </span>
+                      )}
                       <input
                         type="checkbox"
                         checked={checked}
