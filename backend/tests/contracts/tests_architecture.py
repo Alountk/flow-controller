@@ -74,7 +74,7 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: the two-stream ffmpeg progress reader in `media_mixer.py` (+197), plus
 #: `queued` as a cancellable live state in `task_manager.py` (+4). Disclosed
 #: as debt in the mixer-redesign PR description.
-MAX_LEGACY_LOC = 3218
+MAX_LEGACY_LOC = 3254
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

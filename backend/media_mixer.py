@@ -482,10 +482,13 @@ def _substitution_temp_path(destination: str, task_id: str) -> str:
 
     Same directory ⇒ same filesystem ⇒ the final `os.replace` is atomic.
     Hidden (leading dot) so pickers and scanners ignore it; the task id keeps
-    concurrent jobs from ever colliding on it.
+    concurrent jobs from ever colliding on it. The destination's own extension
+    is preserved because ffmpeg infers the container from the output name: a
+    bare `.tmp` made every substitution mux die with «Unable to choose an
+    output format» (rc=234) and a silent «Mux failed».
     """
     dest = Path(destination)
-    return str(dest.with_name(f".{dest.name}.{task_id[:8]}.tmp"))
+    return str(dest.with_name(f".{dest.stem}.{task_id[:8]}.tmp{dest.suffix}"))
 
 
 def _finalize_replace(temp_path: str, destination: str) -> bool:
@@ -498,10 +501,16 @@ def _finalize_replace(temp_path: str, destination: str) -> bool:
     try:
         temp = Path(temp_path)
         if not temp.is_file() or temp.stat().st_size <= 0:
+            log.error("mux finalize: temp missing or empty temp=%s dest=%s",
+                      temp_path, destination)
             return False
         os.replace(temp_path, destination)
         return True
-    except OSError:
+    except OSError as exc:
+        # Swallowed by design (original stays intact) — but never silently:
+        # this OSError was invisible in the production diagnosis.
+        log.error("mux finalize replace failed temp=%s dest=%s: %s",
+                  temp_path, destination, exc)
         return False
 
 
@@ -616,7 +625,9 @@ def _run_ffmpeg(task_id: str, cmd: list[str], pause_event: threading.Event) -> s
     """
     drain: threading.Thread | None = None
     banner = threading.Event()
-    state = {"duration": 0.0}
+    # tail: last stderr lines kept for diagnosability — on rc≠0 they become the
+    # task detail, because the old silent branch hid why production muxes died.
+    state = {"duration": 0.0, "tail": deque(maxlen=10)}
     try:
         proc = subprocess.Popen(
             cmd,
@@ -631,6 +642,7 @@ def _run_ffmpeg(task_id: str, cmd: list[str], pause_event: threading.Event) -> s
             try:
                 for line in proc.stderr:
                     decoded = line.decode("utf-8", errors="ignore").strip()
+                    state["tail"].append(decoded)  # diagnosability: kept for rc≠0
                     # Parse duration from the ffmpeg banner (first lines)
                     if decoded.startswith("Duration:") and state["duration"] == 0:
                         try:
@@ -680,8 +692,25 @@ def _run_ffmpeg(task_id: str, cmd: list[str], pause_event: threading.Event) -> s
                 break
 
         proc.wait()
-        return "done" if proc.returncode == 0 else "error"
-    except Exception:
+        if proc.returncode == 0:
+            return "done"
+        # rc ≠ 0: join the drain first so the tail is complete, then make the
+        # failure legible wherever the task is read (detail) and in the log.
+        if drain is not None:
+            drain.join(timeout=2)
+        tail = list(state["tail"])
+        log.error(
+            "ffmpeg mux %s exited rc=%s; stderr tail: %s",
+            task_id, proc.returncode, " | ".join(tail[-3:]) or "(empty)",
+        )
+        last = tail[-1] if tail else "no stderr output"
+        mux_tasks.update(
+            task_id, detail=f"Mux failed (ffmpeg rc={proc.returncode}): {last}"
+        )
+        return "error"
+    except Exception as exc:
+        log.exception("ffmpeg mux %s raised", task_id)
+        mux_tasks.update(task_id, detail=f"Mux failed ({type(exc).__name__}: {exc})")
         return "error"
     finally:
         if drain is not None:
@@ -768,9 +797,16 @@ async def _run_mux_background(task_id: str):
                 )
         else:
             _cleanup_partial(write_path)
+            # _run_ffmpeg already recorded WHY it failed (stderr tail or the
+            # raised exception). Keep that reason; only fall back to the bare
+            # label when nothing was captured — never clobber the diagnosis.
+            current = mux_tasks.get(task_id) or {}
+            reason = current.get("detail") or ""
+            if not reason.startswith("Mux failed"):
+                reason = "Mux failed"
             mux_tasks.update(task_id,
                 status="error",
-                detail="Mux failed",
+                detail=reason,
                 progress=0.0,
             )
     except Exception as exc:
