@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-18 · **PR #213 (seguimiento-unificado T1-T3)** · RDD **on** (global)
-> · specs: 1288 backend / 653 frontend · main pre-#213 = `4b82be2` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-21 · **PR #214 (fix: temporal de sustitución del mux)** · RDD **on** (global)
+> · specs: 1293 backend / 653 frontend · main pre-#214 = `bc1503e` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,10 +16,11 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `4b82be2` (pre-#213), CI (GitGuardian/backend/frontend/e2e/docker)
-pass. Tras #213: specs 1288 backend / 653 frontend, working tree limpia.
+**Verde**: `main` en `46a8de7` (post-#214), run `39652233735` pass (backend-tests /
+frontend-build / docker-verify / e2e / docker-push → webhook Portainer). Specs: 1293
+backend / 653 frontend, working tree limpia.
 
-**Tanda 2026-10-17/18 (PRs #206–#213)**:
+**Tanda 2026-10-17/21 (PRs #206–#214)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
 - #207 — corrección del HANDOFF sobre deploy: **es automático** (webhook Portainer 204
   verificado en vivo).
@@ -68,6 +69,19 @@ pass. Tras #213: specs 1288 backend / 653 frontend, working tree limpia.
   acento (`#/seguimiento?highlight=<id>`, lifetime one-shot por visita). RED 6/15/5 observados;
   e2e `kanban-fit` 4/4 **observado en local** con shim nuevo `e2e/docker-compose.local.yml`
   (disclosed + disclosures de flake/rate-limit). Specs 1288/653.
+- #214 — **fix bug de producción: «Mux failed» silencioso en el destino sustitutivo**
+  (reportado en vivo tras el deploy de #213): `_substitution_temp_path` escribía a
+  `.{nombre}.{id}.tmp` sin extensión y sin `-f` ⇒ ffmpeg rc=234 «Unable to choose an
+  output format» ⇒ rama muda → «Mux failed» y `output_path: null`. Ahora
+  `.{stem}.{id8}.tmp{suffix}` y el fallo es diagnósticable (`detail = "Mux failed
+  (ffmpeg rc=N): …"` + log.error/exception; `_finalize_replace` loguea el OSError que
+  tragaba). RED 4 observados (unidad + e2e ffmpeg REAL con skipif + bash rc≠0 + caplog),
+  test cadena **order-independent** (`output_path` explícito en el body; el seed de env
+  a nivel módulo perdía contra imports), suites **1293 backend / 653 frontend**,
+  ratchet 3218→**3254** disclosed, contrato de detail de errores actualizado
+  (`tests_mixer.py`). Review nativo: grupo 4 lentes **aprobado** (11 hallazgos
+  informativos, ninguno bloqueante), autoridad quemada. Commit `9021d97`, merge
+  `46a8de7`. Pendiente: retry de la mezcla en prod por el usuario.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -182,7 +196,7 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   (`backend/tests/_stubs.py`, httpx ASGITransport en un loop).
 - **Ratchet `MAX_LEGACY_LOC`** (`tests/contracts/tests_architecture.py`): event_bus/app.py
   y `media_mixer.py` son legacy; cualquier línea nueva exige subir el máximo CON comentario
-  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017→3218 hecho; entradas
+  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017→3218→3254 hecho; entradas
   `#:`). **Headroom 0**: a tope, cualquier fix legado exige subir el techo en la misma
   PR (STOP del worker T12 → opción 1 del padre: surfaces + mínimo medido).
 - **`track_index` del mux = ORDINAL** (posición en `video_tracks`/`audio_tracks` para
