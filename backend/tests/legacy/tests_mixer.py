@@ -1094,7 +1094,10 @@ class TestDestinationSubstitution:
         task = _drive_mux(tmp_path, [], destination_path=str(dest), input_path=str(dest))
 
         assert task["status"] == "error"
-        assert task["detail"] == "Mux failed"
+        # Detail now carries the captured reason (diagnosability): the bare
+        # «Mux failed» label hid every production failure.
+        assert task["detail"].startswith("Mux failed")
+        assert "rc=1" in task["detail"]
         assert dest.read_bytes() == b"ORIGINAL"  # the original is untouched
         assert not os.path.exists(calls[0][-1])  # and the temp is cleaned up
 
@@ -1141,6 +1144,108 @@ class TestDestinationSubstitution:
         assert task["status"] == "cancelled"
         assert dest.read_bytes() == b"ORIGINAL"
         assert not os.path.exists(calls[0][-1])
+
+    def test_the_substitution_temp_keeps_the_media_extension_for_ffmpeg(self):
+        """The hidden temp still needs an extension ffmpeg can infer.
+
+        Production bug: `.{name}.{id8}.tmp` gives ffmpeg no container hint
+        («Unable to choose an output format», rc=234), so every substitution
+        mux died in the silent branch as a bare «Mux failed». The temp must
+        stay hidden and unique (S11-2) but end with the destination's own
+        extension so the stream copy can be muxed.
+        """
+        temp = media_mixer._substitution_temp_path(
+            "/mnt/storage/Shows/Show S01E02.mkv",
+            "09013bc1-f4c6-4d78-829e-1dd02479a47e",
+        )
+        name = os.path.basename(temp)
+        assert name.startswith(".")  # hidden (S11-2)
+        assert "09013bc1" in name  # unique per task (S11-2)
+        assert os.path.dirname(temp) == "/mnt/storage/Shows"  # same filesystem
+        assert name.endswith(".mkv")  # the extension ffmpeg needs
+
+
+class TestSubstitutionWithRealFfmpeg:
+    """The substitution path as production runs it: a real ffmpeg.
+
+    The mocked suite never caught the `.tmp` bug because the fake accepts
+    any output name; only a real ffmpeg enforces «use a standard extension».
+    Skipped where ffmpeg is absent.
+    """
+
+    def test_real_ffmpeg_writes_the_temp_and_replaces_the_destination(self, tmp_path):
+        import shutil
+        import subprocess
+
+        if shutil.which("ffmpeg") is None:
+            pytest.skip("ffmpeg is not installed")
+
+        src = tmp_path / "video.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", "testsrc=duration=2:size=320x180:rate=25",
+                "-f", "lavfi", "-i", "sine=duration=2",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-metadata:s:a:0", "language=spa",
+                str(src),
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        task = _drive_mux(tmp_path, [], destination_path=str(src), input_path=str(src))
+
+        assert task["status"] == "done", task.get("detail")
+        assert task["output_path"] == str(src)
+        assert src.stat().st_size > 0
+        leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".")]
+        assert leftovers == []  # the hidden temp was renamed away
+
+
+class TestMuxFailureDiagnosability:
+    """A failed mux must say why — the silent branch hid production errors."""
+
+    def test_failed_ffmpeg_surfaces_its_stderr_tail_in_the_task_detail(self):
+        import threading
+
+        pause = threading.Event()
+        pause.set()
+        task_id = "mux-diag-stderr"
+        media_mixer.mux_tasks.create(
+            task_id, channel="mixer", status="running", progress=0.0,
+            detail="Starting mux...", output_path=None, cancelled=False,
+            paused=False, pause_event=pause, process=None, subtitles=[],
+        )
+
+        result = media_mixer._run_ffmpeg(
+            task_id, ["bash", "-c", "echo 'codec-boom-42' >&2; exit 7"], pause
+        )
+
+        task = media_mixer.mux_tasks.get(task_id)
+        assert result == "error"
+        assert "codec-boom-42" in task["detail"]
+        assert "rc=7" in task["detail"]
+
+    def test_finalize_replace_logs_a_swallowed_oserror(self, tmp_path, monkeypatch, caplog):
+        import logging
+
+        dest = tmp_path / "Movie.mkv"
+        dest.write_bytes(b"ORIGINAL")
+        temp = tmp_path / ".Movie.deadbeef.tmp.mkv"
+        temp.write_bytes(b"NEWMUX")
+
+        def _raise(*args, **kwargs):
+            raise OSError("Read-only file system")
+
+        monkeypatch.setattr(media_mixer.os, "replace", _raise)
+
+        with caplog.at_level(logging.ERROR):
+            ok = media_mixer._finalize_replace(str(temp), str(dest))
+
+        assert ok is False
+        assert dest.read_bytes() == b"ORIGINAL"
+        assert "Read-only file system" in caplog.text
 
 
 class TestLegacyOutputNaming:

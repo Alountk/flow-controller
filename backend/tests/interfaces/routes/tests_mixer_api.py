@@ -280,6 +280,50 @@ class TestMuxEndpoint:
         assert data["task_id"] == "test-task-id-123"
         mock_start.assert_called_once()
 
+    @patch("media_mixer._launch")
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_submitted_task_appears_in_list(self, mock_probe, mock_isfile, mock_launch, tmp_path):
+        """The chain the post-«Mezclar» jump relies on: the task_id POST /mux
+        returns IS in GET /tasks right away, so Seguimiento can show the row
+        on landing. `start_mux` runs for real — only the ffmpeg thread is
+        suppressed — so the registration under test is the production one.
+        """
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
+        task_id = ""
+        try:
+            resp = client.post(
+                "/api/mixer/mux",
+                json={
+                    "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                    "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                    # Explicit output dir: order-independent (module-level env
+                    # seeding loses against earlier imports in a full run).
+                    "output_path": str(tmp_path),
+                },
+            )
+            assert resp.status_code == 200
+            task_id = resp.json()["task_id"]
+            assert task_id
+
+            listing = client.get("/api/mixer/tasks")
+            assert listing.status_code == 200
+            entries = listing.json()["tasks"]
+            match = next((t for t in entries if t["task_id"] == task_id), None)
+            assert match is not None, f"task {task_id} missing from GET /api/mixer/tasks"
+            assert match["status"] in ("running", "queued")
+        finally:
+            # Hygiene: this real registration must not leak into later tests
+            # (e.g. the empty-registry list assertions).
+            mux_tasks._tasks.pop(task_id, None)
+            media_mixer._pending_jobs.pop(task_id, None)
+            if task_id in media_mixer._mux_queue:
+                media_mixer._mux_queue.remove(task_id)
+            media_mixer._mux_active = None
+
     @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
     @patch("interfaces.http.routes_mixer.start_mux")
     @patch("interfaces.http.routes_mixer.probe_file")
