@@ -635,6 +635,34 @@
   flex-shrink: 0;
 }
 
+/* Output-order controls (1,2,3,4) next to the badge of each checked row. */
+.mixer-audio-move-group {
+  display: inline-flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.mixer-audio-move {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 3px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.mixer-audio-move:hover:not(:disabled) {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.mixer-audio-move:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .mixer-lang-name {
   font-weight: 500;
   color: var(--text);
