@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-21 · **PR #214 (fix: temporal de sustitución del mux)** · RDD **on** (global)
-> · specs: 1293 backend / 653 frontend · main pre-#214 = `bc1503e` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-21 · **PR #216 (mixer: buscador en el picker + orden de audio)** · RDD **on** (global)
+> · specs: 1293 backend / 660 frontend · main pre-#216 = `7781f57` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,11 +16,12 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `46a8de7` (post-#214), run `39652233735` pass (backend-tests /
-frontend-build / docker-verify / e2e / docker-push → webhook Portainer). Specs: 1293
-backend / 653 frontend, working tree limpia.
+**Verde**: `main` en `72c74c6` (post-#216), run `39670062809` pass — el e2e
+flakeó 1× en el build (`npm install` exit 152, infra; el e2e del PR pasó verde)
+y el `rerun --failed` quedó success. Specs: 1293 backend / 660 frontend,
+working tree limpia.
 
-**Tanda 2026-10-17/21 (PRs #206–#214)**:
+**Tanda 2026-10-17/21 (PRs #206–#216)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
 - #207 — corrección del HANDOFF sobre deploy: **es automático** (webhook Portainer 204
   verificado en vivo).
@@ -82,6 +83,23 @@ backend / 653 frontend, working tree limpia.
   (`tests_mixer.py`). Review nativo: grupo 4 lentes **aprobado** (11 hallazgos
   informativos, ninguno bloqueante), autoridad quemada. Commit `9021d97`, merge
   `46a8de7`. Pendiente: retry de la mezcla en prod por el usuario.
+- #216 — **mixer: buscador en el picker + orden de salida de audio** (dos
+  decisiones del usuario 2026-10-21): **(a)** input «Buscar carpeta o
+  archivo…» en el modal que filtra carpetas y archivos del directorio
+  visible (case-insensitive; estados «Sin subcarpetas»/«Sin carpetas»/
+  «Sin coincidencias»; la query se limpia al abrir; mismo patrón que
+  ScanModal); **(b)** flechas ▲▼ en las pistas marcadas que reordenan el
+  payload `audio_sources` (estado por keys con reset en cada cotejo, bordes
+  deshabilitados sin wrap, badge 1..n viajando con la fila; patrón
+  preventDefault/stopPropagation de los botones «Marcar como castellano»)
+  — **sin tocar backend**: `build_mux_command` ya mapeaba `-map` en orden de
+  array. RED 4/4 y 2/3 observados; suites **1293 backend / 660 frontend**
+  (+7), tsc/eslint 0, sin ratchet. PR único de 520 líneas / 2 commits
+  (disclosed). Review nativo 3 lentes **aprobado** (9 hallazgos
+  informativos; la admisión del reviewer reliability rechazó 1 payload con
+  campo desconocido `severity_minor_note` y se re-ejecutó OK), autoridad
+  quemada. Commits `675e036`+`aade27a`, merge `72c74c6`; e2e de main
+  flakeó 1× en el build → rerun success.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
