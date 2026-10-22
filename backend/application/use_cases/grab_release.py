@@ -30,6 +30,15 @@ shape: a request that could never run never gets a job id. Everything the
 worker needs arrives as an argument — the session factory and the route's
 series lookup included — because that is how this layer stays testable
 without an arr in the room.
+
+The transport of the foreign/direct path moved to the direct EC seam (S3):
+`AMULE_EC_DIRECT` unset (or anything except `"0"`) resolves and enqueues ED2K
+through `amule_search`/`amule_add_ed2k`, and `AMULE_EC_DIRECT=0` is the exact
+aMuTorrent rollback the spec mandates (`amutorrent_search_link`/
+`amutorrent_add_download`, same calls, same messages). The flag is read from
+the environment at call time, and the payload contract above is identical on
+both transports — minus the `(categoría flow)` label, which the EC add cannot
+apply (no category is invented on that path, S5).
 """
 
 from __future__ import annotations
@@ -37,10 +46,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import uuid
 from typing import Any, Awaitable, Callable
 
 from application.gateways import (
+    amule_add_ed2k,
+    amule_search,
     amutorrent_add_download,
     amutorrent_search_link,
     arr_grab_release,
@@ -132,6 +144,144 @@ def _inside(path: str, root: str) -> bool:
     )
 
 
+def _ec_direct() -> bool:
+    """Whether the grab resolves/enqueues ED2K through the direct EC seam.
+
+    `AMULE_EC_DIRECT` is read from the environment on EVERY call, never
+    cached: the mandated rollback must take effect on the next grab without a
+    restart. Unset or anything except `"0"` is the EC default (S3); `"0"` is
+    the exact aMuTorrent path this worker has always run.
+    """
+    return os.environ.get("AMULE_EC_DIRECT") != "0"
+
+
+def _search_query(title: str) -> str:
+    """The query an ED2K network can answer — measured, not assumed.
+
+    Byte-for-byte mirror of `infrastructure/arr_client._search_query`: the
+    full release name times out (>40 s measured against the live indexer)
+    while "Name Year" answers in ~30 s, and both transports must ask the
+    network the same question or they would resolve different releases. The
+    pure normalization travels with the code that needs it (the `_inside`
+    precedent above): this layer may not import an adapter.
+    """
+    head = re.split(r"[()]", title, maxsplit=1)[0]
+    head = re.split(
+        r"\.(?=(?:1080p|720p|2160p|4k|HDTV|WEB-?DL|BluRay|BDRip|HDRip|VHS)\b)",
+        head,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    tokens = head.replace(".", " ").split()
+    year = re.search(r"\(((?:19|20)\d{2})\)", title)
+    if year:
+        tokens.append(year.group(1))
+    return " ".join(tokens[:8]).strip()
+
+
+async def _ec_search_link(title: str, guid: str, size: int) -> dict:
+    """`amutorrent_search_link`'s dict contract over the direct EC seam.
+
+    Same three guid shapes and same refusals byte for byte: a direct `ed2k://`
+    or `magnet:` guid IS the link and never searches; an `https://` guid is
+    another indexer's details page and refuses with the same honesty; any
+    other guid is the indexer's hash id and resolves by searching EC with the
+    short query and joining on the result's file hash — exact first, then the
+    base of a Radarr-suffixed id (`<hash>-<suffix>`), disambiguated by size
+    when several results share it. Title matching stays deliberately ABSENT:
+    the same title exists at 5.8 GB and at 13 KB. The selection mirrors
+    `arr_client.amutorrent_search_link` rule for rule.
+
+    The EC adapter is blocking, so both seam calls ride `asyncio.to_thread`
+    (the `record_own_grab` precedent): the resolve happens inside the grab's
+    server-side task (ED2K is slow) and must never block the loop. The answer
+    carries `name` — the file name inside the constructed link — because
+    `direct_link_identity` parses the aMuTorrent `|file <name>|` link shape
+    and the EC link is the standard `|file|<name>|` one; the client's name
+    must keep travelling into the own-grab registry unchanged (S5).
+    """
+    if guid.startswith("ed2k://") or guid.startswith("magnet:"):
+        return {"ok": True, "link": guid, "detail": "link del propio guid"}
+    if guid.startswith(("http://", "https://")):
+        return {
+            "ok": False,
+            "detail": (
+                "Este release viene de otro indexador (su guid es una página web, "
+                "no un enlace): el indexador de aMule no lo tiene. Elige "
+                "Destino = Biblioteca para descargarlo con Radarr/Sonarr."
+            ),
+        }
+    query = _search_query(title)
+    if not query:
+        return {"ok": False, "detail": "el título no deja ninguna consulta que lanzar"}
+    try:
+        results = await asyncio.to_thread(amule_search, query)
+    except RuntimeError as exc:
+        # The seam's fail-closed refusal (`service_unavailable_reason`): the
+        # same not-configured refusal "aMuTorrent no está configurado" is
+        # today — a refusal the worker produced, never a failed job.
+        return {"ok": False, "detail": str(exc)}
+    except Exception as exc:  # noqa: BLE001 — typed AmuleEC* transport errors
+        return {
+            "ok": False,
+            "detail": (
+                f"el indexador de aMule no respondió ({type(exc).__name__}); "
+                "puede estar buscando en ED2K — inténtalo de nuevo o elige "
+                "Destino = Biblioteca"
+            ),
+        }
+    if not results:
+        return {
+            "ok": False,
+            "detail": (
+                f"el indexador de aMule no devolvió resultados para «{title}»; "
+                "elige Destino = Biblioteca para descargarlo con Radarr/Sonarr"
+            ),
+        }
+    want = (guid or "").strip()
+    base = want.rsplit("-", 1)[0] if want else ""
+    exact = [r for r in results if r.file_hash == want]
+    candidates = exact or (
+        [r for r in results if base and r.file_hash == base] if want and "-" in want else []
+    )
+    if not candidates:
+        return {
+            "ok": False,
+            "detail": (
+                f"No encontré «{title}» en el indexador de aMule; no se envió nada "
+                "al arr. Elige Destino = Biblioteca para descargarlo con Radarr/Sonarr."
+            ),
+        }
+    if len(candidates) > 1 and size:
+        sized = [r for r in candidates if r.size == size]
+        if sized:
+            candidates = sized
+    chosen = candidates[0]
+    return {
+        "ok": True,
+        "link": f"ed2k://|file|{chosen.name}|{chosen.size}|{chosen.file_hash}|/",
+        "detail": f"query «{query}»",
+        "name": chosen.name,
+    }
+
+
+async def _ec_add_link(link: str) -> dict:
+    """`amutorrent_add_download`'s dict contract over `amule_add_ed2k`.
+
+    No category: `amule_add_ed2k`'s category is an aMule category id, the
+    current call passes no category (its qBittorrent `flow` label has no aMule
+    counterpart) — S5: never invent category handling. A refusal is a dict,
+    never a raise; the detail keeps the `Tipo: mensaje` shape of the current
+    add's failures, without a dangling `: ` when the exception is bare.
+    """
+    try:
+        await asyncio.to_thread(amule_add_ed2k, link)
+    except Exception as exc:  # noqa: BLE001 — typed AmuleEC* transport errors
+        detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+        return {"ok": False, "detail": detail}
+    return {"ok": True, "detail": "Descarga añadida"}
+
+
 async def run_grab(
     task_id: str,
     source: str,
@@ -186,8 +336,15 @@ async def run_grab(
                         "detail": "Falta el título del release para resolver el enlace directo",
                     }
                 else:
-                    resolved = await amutorrent_search_link(
-                        session, title, guid=guid, size=size
+                    # The transport is chosen per call (`_ec_direct`): the EC
+                    # seam by default, the aMuTorrent seams behind
+                    # `AMULE_EC_DIRECT=0` — same dict contract either way.
+                    resolved = (
+                        await _ec_search_link(title, guid, size)
+                        if _ec_direct()
+                        else await amutorrent_search_link(
+                            session, title, guid=guid, size=size
+                        )
                     )
                     if not resolved.get("ok"):
                         # No search, no add, nothing sent to the arr: the
@@ -200,7 +357,11 @@ async def run_grab(
                         }
                     else:
                         link = resolved["link"]
-                        added = await amutorrent_add_download(session, link)
+                        added = (
+                            await _ec_add_link(link)
+                            if _ec_direct()
+                            else await amutorrent_add_download(session, link)
+                        )
                         if not added.get("ok"):
                             result = {
                                 "ok": False,
@@ -208,7 +369,15 @@ async def run_grab(
                             }
                         else:
                             direct = True
-                            client_name, client_hash = direct_link_identity(link, title)
+                            # The resolved `name` (EC only) is the file name
+                            # inside the link: `direct_link_identity` parses
+                            # the aMuTorrent `|file <name>|` shape, and the EC
+                            # link is the standard `|file|<name>|` one. On the
+                            # aMuTorrent path there is no `name` and the call
+                            # is exactly the old one.
+                            client_name, client_hash = direct_link_identity(
+                                link, resolved.get("name") or title
+                            )
                             series_id = (
                                 await resolve_series(session, service, source, episode_id)
                                 if episode_id

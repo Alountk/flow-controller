@@ -1,6 +1,6 @@
 # Flow Controller
 
-Panel de control para el flujo de descargas **Radarr → aMuTorrent → Sonarr**.
+Panel de control para el flujo de descargas **Radarr → aMule → Sonarr**: desde esta feature las descargas hablan **directo con aMule por EC** (`AMULE_URL`/`AMULE_EC_PORT`/`AMULE_EC_PASSWORD`), con el puente aMuTorrent como rollback (`AMULE_EC_DIRECT=0`) y para el tramo qBittorrent.
 Detecta dónde se rompe el pipeline y ofrece acciones de remediación directas
 desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 
@@ -10,7 +10,8 @@ desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 
 - **Backend**: Python 3.11 / FastAPI / aiohttp (async)
 - **Frontend**: React 19 / TypeScript / Vite 7 / @tanstack/react-query
-- **Control aMuTorrent**: WebSocket nativo (`ws://host:4000/ws`)
+- **Conexión directa aMule**: protocolo EC (autenticación challenge-response con el hash de `AMULE_EC_PASSWORD`)
+- **Control aMuTorrent**: WebSocket nativo (`ws://host:4000/ws`) — ruta de rollback (`AMULE_EC_DIRECT=0`) y puente qBittorrent
 
 ## Requisitos
 
@@ -116,6 +117,10 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `AMUTORRENT_API_KEY` | API key de aMuTorrent |
 | `AMUTORRENT_USER` | Usuario de la web UI de aMuTorrent |
 | `AMUTORRENT_PASSWORD` | Contraseña de la web UI (requerida para WebSocket) |
+| `AMULE_URL` | Host/URL de aMule para la conexión directa EC |
+| `AMULE_EC_PORT` | Puerto EC de aMule (default `4712`) |
+| `AMULE_EC_PASSWORD` | Hash md5 de la contraseña EC (se usa tal cual, nunca en claro) |
+| `AMULE_EC_DIRECT` | `0` para volver al puente aMuTorrent byte-idéntico (default: EC directo) |
 | `SAFE_MODE` | `true` para bloquear acciones destructivas |
 | `FOLDER_OUTPUT_MIXED` | Ruta de salida para archivos mixeados (default: `/mnt/storage/mixed`) |
 
@@ -150,15 +155,17 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 
 | Acción | Descripción |
 |--------|-------------|
-| `fix_category` | Pone la categoría correcta en aMuTorrent y reintenta el import |
+| `fix_category` | Pone la categoría correcta en aMule (EC directo) y reintenta el import |
 | `fix_path_mapping` | Crea un remote path mapping en Radarr/Sonarr |
 | `copy_files` | Copia archivos del cliente de descargas al directorio correcto del *arr |
 | `retry_import` | Fuerza a Radarr/Sonarr a reprocesar la descarga |
 | `research` | Lanza una búsqueda del episodio/película |
-| `pause` | Pausa la descarga en aMuTorrent |
-| `resume` | Reanuda la descarga en aMuTorrent |
+| `pause` | Pausa la descarga en aMule (EC directo) |
+| `resume` | Reanuda la descarga en aMule (EC directo) |
 | `remove_queue` | Elimina el item de la cola del *arr |
-| `delete_torrent` | Elimina la descarga de aMuTorrent |
+| `delete_torrent` | Elimina la descarga de aMule (EC directo; de disco si está completa) |
+
+Con `AMULE_EC_DIRECT=0` estas acciones vuelven al WebSocket de aMuTorrent con el comportamiento previo byte-idéntico.
 
 ## Arquitectura
 

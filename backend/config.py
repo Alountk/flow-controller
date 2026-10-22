@@ -179,6 +179,7 @@ def rebuild() -> None:
     restarted, right after the UI said it had been saved.
     """
     global RADARR_URL, SONARR_URL, PROWLARR_URL, AMUTORRENT_URL
+    global AMULE_URL, AMULE_EC_PORT, AMULE_EC_PASSWORD
     global RADARR_API_KEY, SONARR_API_KEY, PROWLARR_API_KEY, AMUTORRENT_API_KEY
     global AMUTORRENT_USER, AMUTORRENT_PASSWORD
     global CHECK_INTERVAL, MAX_RETRIES, RETRY_DELAY, REQUEST_TIMEOUT
@@ -192,6 +193,15 @@ def rebuild() -> None:
     RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
     SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:7878")
     AMUTORRENT_URL = get_setting("services", "amutorrent", "url", default="http://localhost:4000")
+
+    # Conexión directa EC (S2): settings.json manda; si no está, manda el
+    # entorno (.env.local / env_file del despliegue). La contraseña EC es un
+    # hash md5 que NUNCA se copia a la lista `SERVICES` (se expone la API key).
+    AMULE_URL = get_setting("services", "amule", "url", default=os.getenv("AMULE_URL", ""))
+    AMULE_EC_PORT = get_setting("services", "amule", "ec_port", default=os.getenv("AMULE_EC_PORT", "4712"))
+    AMULE_EC_PASSWORD = get_setting(
+        "services", "amule", "ec_password", default=os.getenv("AMULE_EC_PASSWORD", "")
+    )
 
     RADARR_API_KEY = get_setting("services", "radarr", "api_key", default="")
     SONARR_API_KEY = get_setting("services", "sonarr", "api_key", default="")
@@ -277,6 +287,17 @@ def rebuild() -> None:
             "url": AMUTORRENT_URL,
             "api_key": AMUTORRENT_API_KEY,
             "configured": service_is_configured(AMUTORRENT_URL, AMUTORRENT_API_KEY),
+        },
+        {
+            # Conexiones directas (S2): `kind` propio — EC no es HTTP, queda
+            # fuera de los bucles "arr" y "qbit". `api_key` vacía a propósito:
+            # la lista de servicios enmascara/expone `api_key`, y aquí el
+            # secreto es la contraseña EC, que jamás sale por la API.
+            "key": "amule",
+            "kind": "amule",
+            "url": AMULE_URL,
+            "api_key": "",
+            "configured": bool(AMULE_URL and AMULE_EC_PASSWORD),
         },
     ]
 

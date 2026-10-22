@@ -27,12 +27,26 @@ import time
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from application.use_cases.grab_release import grab_tasks, start_grab
 
 import event_bus
 
 FOREIGN = "/mnt/storage-6tb/Movies4K"
 LIBRARY_ROOT = "/mnt/storage/movies"
+
+
+@pytest.fixture(autouse=True)
+def _amutorrent_transport(monkeypatch):
+    """These tests pin the aMuTorrent behavior — the EXACT behavior
+    `AMULE_EC_DIRECT=0` restores (S3's mandated rollback).
+
+    Pinning the flag here is the differential proof: every assertion below
+    predates the EC migration and runs unchanged on the legacy path. The EC
+    path has its own tests in `tests_grab_release_ec.py`.
+    """
+    monkeypatch.setenv("AMULE_EC_DIRECT", "0")
 
 
 @asynccontextmanager

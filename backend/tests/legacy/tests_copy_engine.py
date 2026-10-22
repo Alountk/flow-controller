@@ -11,10 +11,24 @@ import asyncio
 import errno
 import os
 
+import pytest
+
 from infrastructure import arr_client as clients
 import config
 import copy_engine
 from copy_engine import copy_files_to_root, copy_tasks, do_action, run_copy_background
+
+
+@pytest.fixture(autouse=True)
+def _amutorrent_transport(monkeypatch):
+    """These tests pin the aMuTorrent behavior — the EXACT behavior
+    `AMULE_EC_DIRECT=0` restores (S4's mandated rollback).
+
+    Pinning the flag here is the differential proof: every assertion below
+    predates the EC migration and runs unchanged on the legacy path. The EC
+    path has its own tests in `tests_copy_engine_ec.py`.
+    """
+    monkeypatch.setenv("AMULE_EC_DIRECT", "0")
 
 
 class TestRecursiveStructurePreserved:

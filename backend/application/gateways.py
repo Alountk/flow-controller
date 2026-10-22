@@ -31,6 +31,7 @@ delegates below ever touches it.
 from __future__ import annotations
 
 from application.ports import (
+    AmuleECService,
     ArrClient,
     CredentialsStore,
     HistoryStore,
@@ -52,6 +53,7 @@ system: SystemProbe | None = None
 scan: ScanWalk | None = None
 _opensubtitles: OpenSubtitlesClient | None = None
 _prowlarr: ProwlarrClient | None = None
+_amule: AmuleECService | None = None
 
 
 def _require(adapter: object, port: type, slot: str) -> None:
@@ -75,6 +77,7 @@ def bind(
     scan: ScanWalk,
     opensubtitles: OpenSubtitlesClient | None = None,
     prowlarr: ProwlarrClient | None = None,
+    amule: AmuleECService | None = None,
 ) -> None:
     """Hand delivery its adapters. Called once, by `app.py`, at startup.
 
@@ -90,7 +93,8 @@ def bind(
     way. Omitted means "leave that slot as it is" — a partial composition
     cannot disable an adapter an earlier bind installed. `prowlarr` is optional
     for the same reason and bound the same way (the language search behind
-    «Buscar y descargar alternativa»).
+    «Buscar y descargar alternativa»). `amule` follows the same rule — the
+    direct EC connection of S2.
     """
     _require(arr, ArrClient, "arr")
     _require(settings, SettingsStore, "settings")
@@ -105,6 +109,9 @@ def bind(
     if prowlarr is not None:
         _require(prowlarr, ProwlarrClient, "prowlarr")
         globals().update(_prowlarr=prowlarr)
+    if amule is not None:
+        _require(amule, AmuleECService, "amule")
+        globals().update(_amule=amule)
     globals().update(
         _arr=arr,
         settings=settings,
@@ -368,3 +375,48 @@ def download_subtitle(*args, **kwargs):
 def prowlarr_search(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _prowlarr.prowlarr_search(*args, **kwargs)
+
+
+def amule_search(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_search(*args, **kwargs)
+
+
+def amule_add_ed2k(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_add_ed2k(*args, **kwargs)
+
+
+def amule_download_search_result(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_download_search_result(*args, **kwargs)
+
+
+def amule_pause(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_pause(*args, **kwargs)
+
+
+def amule_resume(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_resume(*args, **kwargs)
+
+
+def amule_set_priority(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_set_priority(*args, **kwargs)
+
+
+def amule_set_category(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_set_category(*args, **kwargs)
+
+
+def amule_delete(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_delete(*args, **kwargs)
+
+
+def amule_categories(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_categories(*args, **kwargs)
