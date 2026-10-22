@@ -3,6 +3,10 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { addCalendarItem } from '../../shared/api/calendar.ts'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
 import {
+  LanguageSearchSection,
+  type LanguageSearchContext,
+} from './LanguageSearchSection.tsx'
+import {
   startCalendarReleaseSearch,
   fetchReleaseSearchStatus,
   type Release,
@@ -245,6 +249,12 @@ export type ReleaseSearchModalProps = {
    *  `task_id` and the status poll owns the rest. Purely additive: nothing
    *  about the modal's own flow changes when the prop is absent. */
   onGrabStarted?: (taskId: string) => void
+  /** T3/S4/S5: the «Búsqueda en idioma» section's data from the alternative
+   *  lookup. This prop's PRESENCE is the `enableLanguageSearch` gate — only
+   *  «Buscar y descargar alternativa» (MediaMixer) passes it; Películas,
+   *  Series and every other mount pass nothing and the modal renders exactly
+   *  what it always did (S5 «Sólo en alternativa»). */
+  languageSearch?: LanguageSearchContext
 } & (
   | { presentation?: 'overlay'; onClose: () => void }
   | { presentation: 'panel'; onClose?: undefined }
@@ -254,6 +264,7 @@ export function ReleaseSearchModal({
   item,
   onClose,
   onGrabStarted,
+  languageSearch,
   presentation = 'overlay',
 }: ReleaseSearchModalProps) {
   const inPanel = presentation === 'panel'
@@ -917,6 +928,11 @@ export function ReleaseSearchModal({
             </div>
           </div>
           )}
+
+          {/* T3/S4/S5 — «Búsqueda en idioma»: ONLY the alternative flow
+              passes `languageSearch`, so the section lives here and nowhere
+              else. Independent of the step machine — it owns its own search. */}
+          {languageSearch && <LanguageSearchSection context={languageSearch} />}
 
           {/* Indexer selector. Overlay: only on the initial step, as always.
               Panel: persistent — changing it re-runs the search, the ONE
