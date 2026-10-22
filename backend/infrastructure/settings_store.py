@@ -17,6 +17,9 @@ DEFAULTS: dict[str, Any] = {
     "services": {
         "radarr": {"url": "http://localhost:7878", "api_key": ""},
         "sonarr": {"url": "http://localhost:8989", "api_key": ""},
+        # Búsqueda por idioma en la alternativa (S6/T1). Vacío a propósito: sin
+        # URL ni clave el servicio queda "no configurado" y nunca se le llama.
+        "prowlarr": {"url": "", "api_key": ""},
         "amutorrent": {"url": "http://localhost:4000", "api_key": "", "user": "admin", "password": ""},
         "opensubtitles": {"api_key": ""},
     },
@@ -56,6 +59,8 @@ _env_to_settings: dict[str, tuple[str, ...]] = {
     "RADARR_API_KEY": ("services", "radarr", "api_key"),
     "SONARR_URL": ("services", "sonarr", "url"),
     "SONARR_API_KEY": ("services", "sonarr", "api_key"),
+    "PROWLARR_URL": ("services", "prowlarr", "url"),
+    "PROWLARR_API_KEY": ("services", "prowlarr", "api_key"),
     "AMUTORRENT_URL": ("services", "amutorrent", "url"),
     "AMUTORRENT_API_KEY": ("services", "amutorrent", "api_key"),
     "AMUTORRENT_USER": ("services", "amutorrent", "user"),

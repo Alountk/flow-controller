@@ -178,8 +178,8 @@ def rebuild() -> None:
     else: `find_service` kept returning the old one until the container
     restarted, right after the UI said it had been saved.
     """
-    global RADARR_URL, SONARR_URL, AMUTORRENT_URL
-    global RADARR_API_KEY, SONARR_API_KEY, AMUTORRENT_API_KEY
+    global RADARR_URL, SONARR_URL, PROWLARR_URL, AMUTORRENT_URL
+    global RADARR_API_KEY, SONARR_API_KEY, PROWLARR_API_KEY, AMUTORRENT_API_KEY
     global AMUTORRENT_USER, AMUTORRENT_PASSWORD
     global CHECK_INTERVAL, MAX_RETRIES, RETRY_DELAY, REQUEST_TIMEOUT
     global IMPORT_POLL_TIMEOUT, TRACE_LIMIT
@@ -195,6 +195,10 @@ def rebuild() -> None:
 
     RADARR_API_KEY = get_setting("services", "radarr", "api_key", default="")
     SONARR_API_KEY = get_setting("services", "sonarr", "api_key", default="")
+    # Búsqueda por idioma en la alternativa (S6/T1): defaults vacíos, como la
+    # api_key de radarr — sin configurar, `configured` es False y nadie lo llama.
+    PROWLARR_URL = get_setting("services", "prowlarr", "url", default="")
+    PROWLARR_API_KEY = get_setting("services", "prowlarr", "api_key", default="")
     AMUTORRENT_API_KEY = get_setting("services", "amutorrent", "api_key", default="")
 
     AMUTORRENT_USER = get_setting("services", "amutorrent", "user", default="admin")
@@ -256,6 +260,16 @@ def rebuild() -> None:
             "url": SONARR_URL,
             "api_key": SONARR_API_KEY,
             "configured": service_is_configured(SONARR_URL, SONARR_API_KEY),
+        },
+        {
+            # S6/T1. `kind` propio, no "arr": los bucles `configured_services("arr")`
+            # (traces, wanted, files) llaman a /api/v3 sobre cada uno, y Prowlarr
+            # responde otra API — ver tests_prowlarr_service.py.
+            "key": "prowlarr",
+            "kind": "prowlarr",
+            "url": PROWLARR_URL,
+            "api_key": PROWLARR_API_KEY,
+            "configured": service_is_configured(PROWLARR_URL, PROWLARR_API_KEY),
         },
         {
             "key": "amutorrent",

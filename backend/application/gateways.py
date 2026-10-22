@@ -35,6 +35,7 @@ from application.ports import (
     CredentialsStore,
     HistoryStore,
     OpenSubtitlesClient,
+    ProwlarrClient,
     ScanWalk,
     SettingsStore,
     SystemProbe,
@@ -50,6 +51,7 @@ credentials: CredentialsStore | None = None
 system: SystemProbe | None = None
 scan: ScanWalk | None = None
 _opensubtitles: OpenSubtitlesClient | None = None
+_prowlarr: ProwlarrClient | None = None
 
 
 def _require(adapter: object, port: type, slot: str) -> None:
@@ -72,6 +74,7 @@ def bind(
     system: SystemProbe,
     scan: ScanWalk,
     opensubtitles: OpenSubtitlesClient | None = None,
+    prowlarr: ProwlarrClient | None = None,
 ) -> None:
     """Hand delivery its adapters. Called once, by `app.py`, at startup.
 
@@ -85,7 +88,9 @@ def bind(
     it keep binding (they simply cannot serve subtitle search); `app.py` binds
     it like every other adapter, and a provided adapter is validated the same
     way. Omitted means "leave that slot as it is" — a partial composition
-    cannot disable an adapter an earlier bind installed.
+    cannot disable an adapter an earlier bind installed. `prowlarr` is optional
+    for the same reason and bound the same way (the language search behind
+    «Buscar y descargar alternativa»).
     """
     _require(arr, ArrClient, "arr")
     _require(settings, SettingsStore, "settings")
@@ -97,6 +102,9 @@ def bind(
     if opensubtitles is not None:
         _require(opensubtitles, OpenSubtitlesClient, "opensubtitles")
         globals().update(_opensubtitles=opensubtitles)
+    if prowlarr is not None:
+        _require(prowlarr, ProwlarrClient, "prowlarr")
+        globals().update(_prowlarr=prowlarr)
     globals().update(
         _arr=arr,
         settings=settings,
@@ -355,3 +363,8 @@ def search_subtitles(*args, **kwargs):
 def download_subtitle(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _opensubtitles.download_subtitle(*args, **kwargs)
+
+
+def prowlarr_search(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _prowlarr.prowlarr_search(*args, **kwargs)

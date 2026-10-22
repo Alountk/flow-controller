@@ -158,6 +158,11 @@ async def test_service_connection(session: aiohttp.ClientSession, service: dict)
     if service["kind"] == "qbit":
         endpoint = f"{service['url']}/api/v2/app/version"
         headers = qbit_headers(service["api_key"])
+    elif service["kind"] == "prowlarr":
+        # Prowlarr is a v1 API: it 404s every /api/v3 path, so the generic
+        # arr probe would paint a perfectly healthy instance as down.
+        endpoint = f"{service['url']}/api"
+        headers = arr_headers(service["api_key"])
     else:
         endpoint = f"{service['url']}/api/v3/system/status"
         headers = arr_headers(service["api_key"])
@@ -173,7 +178,8 @@ async def test_service_connection(session: aiohttp.ClientSession, service: dict)
                 version = (await resp.text()).strip()
             else:
                 data = await resp.json(content_type=None)
-                version = data.get("version", "")
+                # Prowlarr answers {"current": "v1"} on /api; arrs answer "version".
+                version = data.get("current") or data.get("version", "")
 
             return {
                 **result,
@@ -1897,8 +1903,45 @@ async def arr_series_lookup(session: aiohttp.ClientSession, service: dict, title
         return {}
 
 
+#: T3/S4 — the «Búsqueda en idioma» chip row is capped here, BEFORE the wire:
+#: Radarr can send a translated-heavy list and the chip row must not flood.
+#: Radarr order is the UI order, so the cap simply keeps the first 12.
+ALTERNATE_TITLES_CAP = 12
+
+
+def _alternate_titles(entries) -> list[dict]:
+    """Radarr's `alternateTitles` → `[{title, language}]`, Radarr order, cap 12.
+
+    Each entry is normalized to exactly two keys: `title` (the field name the
+    real payload uses — see the captured shape in tests_wanted_scan.py) and
+    `language`, which is `None` whenever the payload omits it (that captured
+    shape has no language at all): a missing language is never a guessed code.
+    Non-dict entries degrade to a title with no language rather than crashing
+    the lookup the modal depends on.
+    """
+    out: list[dict] = []
+    for alt in entries or []:
+        if isinstance(alt, dict):
+            title = alt.get("title") or ""
+            language = alt.get("language") or None
+        else:
+            title, language = str(alt), None
+        if not title:
+            continue
+        out.append({"title": title, "language": language})
+        if len(out) >= ALTERNATE_TITLES_CAP:
+            break
+    return out
+
+
 async def arr_movie_lookup(session: aiohttp.ClientSession, service: dict, title: str) -> dict:
-    """Busca una película por título en Radarr y devuelve metadata (tmdbId, title, year, etc)."""
+    """Busca una película por título en Radarr y devuelve metadata (tmdbId, title, year, etc).
+
+    T3/S4: `originalTitle` and `alternateTitles` ride along as
+    `original_title` / `alternate_titles` — the «Búsqueda en idioma» chips
+    (Radarr searches by id and never `alternateTitles`, so the UI must offer
+    them to the operator). Previously discarded here.
+    """
     headers = arr_headers(service["api_key"])
     timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2)
     try:
@@ -1920,6 +1963,8 @@ async def arr_movie_lookup(session: aiohttp.ClientSession, service: dict, title:
                 "year": m.get("year"),
                 "qualityProfileId": m.get("qualityProfileId", 1),
                 "path": m.get("path", ""),
+                "original_title": m.get("originalTitle") or None,
+                "alternate_titles": _alternate_titles(m.get("alternateTitles")),
             }
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         log.warning("arr_movie_lookup %s error: %s", service["key"], exc)

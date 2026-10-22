@@ -304,6 +304,15 @@ export interface AlternativeLookupMovie {
   source: string
 }
 
+/** T3/S4: one title the «Búsqueda en idioma» chips offer — a Radarr
+ *  `alternateTitles` entry normalized to `{title, language}`. `language` is
+ *  null when the payload omits it (the documented real shape): a missing
+ *  language is never a guessed code. */
+export interface AlternativeTitle {
+  title: string
+  language: string | null
+}
+
 /** `POST /api/mixer/alternatives/lookup {path}` — the title and the audio
  *  languages both come from the OTHER slot's file (L26/L28). */
 export interface AlternativeLookupResponse {
@@ -313,6 +322,10 @@ export interface AlternativeLookupResponse {
   movie: AlternativeLookupMovie | null
   /** Three-letter audio codes, normalized, in the S2 order, deduped. */
   audio_languages: string[]
+  /** T3/S4: Radarr's `originalTitle` — null when the lookup payload has none. */
+  original_title: string | null
+  /** T3/S4: Radarr's `alternateTitles` — Radarr order, capped at 12 server-side. */
+  alternate_titles: AlternativeTitle[]
 }
 
 /** `GET /api/mixer/alternatives/status` — where the alternative download
@@ -351,4 +364,75 @@ export async function alternativeStatus(
     throw new Error(msg)
   }
   return res.json() as Promise<AlternativeStatusResponse>
+}
+
+/** T3/S4: one Prowlarr row `POST /api/mixer/alternatives/language-search`
+ *  answers. T4/S7 gives it a «Descargar» action — `magnet_url` or
+ *  `download_url` (exactly one non-null) goes straight to the download
+ *  client. */
+export interface LanguageSearchRelease {
+  title: string
+  indexer: string
+  size: number
+  seeders: number
+  guid: string
+  magnet_url?: string | null
+  download_url?: string | null
+}
+
+export interface LanguageSearchResponse {
+  releases: LanguageSearchRelease[]
+}
+
+/** S6/T3: search Prowlarr with the term AS WRITTEN — a Russian title for a
+ *  Russian release (Radarr searches by id and never `alternateTitles`).
+ *  `language` rides along only when a chip supplied it; `movieId` is the
+ *  spec's spelling — the backend accepts it and `movie_id` alike. A failure
+ *  throws with the backend's own detail (the 502 «no está configurado» shape
+ *  is shown inline as-is). */
+export async function alternativeLanguageSearch(
+  query: string,
+  opts: { language?: string; movieId?: number } = {},
+): Promise<LanguageSearchResponse> {
+  const body: Record<string, unknown> = { query }
+  if (opts.language) body.language = opts.language
+  if (opts.movieId !== undefined) body.movieId = opts.movieId
+
+  const res = await apiFetch('/api/mixer/alternatives/language-search', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const resp = await res.json().catch(() => ({})) as Record<string, unknown>
+    const msg = (typeof resp.detail === 'string' ? resp.detail : null) || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return res.json() as Promise<LanguageSearchResponse>
+}
+
+/** T4/S7: `POST /api/mixer/alternatives/language-download` — one Prowlarr
+ *  row straight to the download client (magnet or a direct .torrent URL; no
+ *  Torznab resolve). `url` is the row's `magnet_url` OR `download_url`; the
+ *  `title` rides for logging and fallback. A client refusal arrives
+ *  `{ok: false, detail}` and throws with that detail, exactly like the
+ *  non-2xx shapes, so the row can show it inline. */
+export interface LanguageDownloadResponse {
+  ok: boolean
+  detail?: string
+}
+
+export async function alternativeLanguageDownload(
+  url: string,
+  title: string,
+): Promise<LanguageDownloadResponse> {
+  const res = await apiFetch('/api/mixer/alternatives/language-download', {
+    method: 'POST',
+    body: JSON.stringify({ url, title }),
+  })
+  const body = await res.json().catch(() => ({})) as Record<string, unknown>
+  if (!res.ok || body.ok !== true) {
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return body as unknown as LanguageDownloadResponse
 }

@@ -2235,13 +2235,30 @@ class TestServiceConnectionTester:
         routes = {
             "/api/v3/system/status": (200, {"version": "1.0"}),
             "/api/v2/app/version": (200, "v5.1.4"),
+            "/api": (200, {"current": "v1"}),
         }
         with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
             resp = client.get("/api/services/test")
 
         body = resp.json()
-        assert {r["key"] for r in body["results"]} == ARR_KEYS | {"amutorrent"}
+        assert {r["key"] for r in body["results"]} == ARR_KEYS | {"amutorrent", "prowlarr"}
         assert body["ok"] is True
+
+    def test_prowlarr_is_probed_with_its_own_v1_api(self):
+        """Prowlarr answers {"current": "v1"} on /api — never /api/v3/status.
+
+        The generic arr probe would paint a healthy Prowlarr as down (404 on
+        every real instance), so the connection tester must ask the endpoint
+        Prowlarr actually serves and read the version it actually returns.
+        """
+        routes = {"/api": (200, {"current": "v1"})}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            resp = client.get("/api/services/test", params={"service": "prowlarr"})
+
+        body = resp.json()
+        assert [r["key"] for r in body["results"]] == ["prowlarr"]
+        assert body["results"][0]["ok"] is True, body
+        assert body["results"][0]["detail"] == "Conectado (v1)"
 
     def test_a_single_service_can_be_tested(self):
         routes = {"/api/v3/system/status": (200, {"version": "1.0"})}

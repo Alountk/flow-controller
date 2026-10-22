@@ -10,7 +10,7 @@ import re
 
 import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from media_mixer import (
     probe_file,
@@ -31,11 +31,13 @@ from media_mixer import (
 )
 from task_manager import mux_tasks
 from application.gateways import (
+    amutorrent_add_download,
     arr_movie_exists,
     arr_movie_file,
     arr_movie_lookup,
     download_subtitle,
     get_setting,
+    prowlarr_search,
     search_subtitles,
 )
 from application.ports import OpenSubtitlesError
@@ -80,6 +82,31 @@ class LookupRequest(BaseModel):
 
 class AlternativeLookupRequest(BaseModel):
     path: str = ""
+
+
+class LanguageSearchRequest(BaseModel):
+    """T2's «(query, language, movieId)» for the language search.
+
+    `language`/`movie_id` ride along so T3/T4 keep one request shape; T2's
+    search only uses `query`, and T4's direct add sends `{url, title}` and
+    needs neither. `movieId` is the spec's spelling and `movie_id` the
+    repo's — both land.
+    """
+
+    query: str = ""
+    language: str = ""
+    movie_id: int = Field(default=0, validation_alias=AliasChoices("movie_id", "movieId"))
+
+
+class LanguageDownloadRequest(BaseModel):
+    """T4/S7: add one Prowlarr row straight to the download client.
+
+    `url` is the row's `magnet_url` OR `download_url` (exactly one non-null
+    from T2's normalization); `title` rides for logging and fallback.
+    """
+
+    url: str = ""
+    title: str = ""
 
 
 # ── Path validation ──────────────────────────────────────────────────────────
@@ -431,9 +458,16 @@ async def mixer_alternatives_lookup(
     if not service:
         raise HTTPException(status_code=502, detail=service_unavailable_reason("radarr", "arr"))
 
+    original_title = None
+    alternate_titles: list[dict] = []
     try:
         async with http_session() as session:
             lookup = await arr_movie_lookup(session, service, title)
+            # T3/S4: the «Búsqueda en idioma» chips come from the LOOKUP
+            # payload (`originalTitle`/`alternateTitles`), not from the
+            # library: they surface even when the movie is not in it.
+            original_title = (lookup or {}).get("original_title")
+            alternate_titles = (lookup or {}).get("alternate_titles") or []
             movie = None
             tmdb_id = (lookup or {}).get("tmdbId", 0)
             if tmdb_id:
@@ -448,7 +482,16 @@ async def mixer_alternatives_lookup(
     except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
         raise HTTPException(status_code=502, detail=f"Radarr lookup failed: {exc}")
 
-    return {"ok": True, "title": title, "movie": movie, "audio_languages": audio_languages}
+    return {
+        "ok": True,
+        "title": title,
+        "movie": movie,
+        "audio_languages": audio_languages,
+        # T3/S4: always in the response — `null` / `[]` when the lookup
+        # payload carries no titles, never a missing key.
+        "original_title": original_title,
+        "alternate_titles": alternate_titles,
+    }
 
 
 @router.get("/alternatives/status")
@@ -513,6 +556,77 @@ async def mixer_alternatives_status(
             "allowed": False,
         }
     return {"state": "unknown", "progress": None, "path": None, "allowed": False}
+
+
+@router.post("/alternatives/language-search")
+async def mixer_alternatives_language_search(
+    req: LanguageSearchRequest, _key: str = Depends(verify_api_key)
+):
+    """S6: Prowlarr text search with the term in the language it is written in.
+
+    Radarr searches by id and never `alternateTitles`, so «Buscar y descargar
+    alternativa» searches Prowlarr with THE TERM THE USER WROTE — a Russian
+    title for a Russian release (feature doc S2/S3). The answer is
+    `{releases: [...]}`, already relevance-filtered and normalized by the
+    Prowlarr adapter; adding one to the download client is T4's job (S7).
+
+    An empty query is 400 like the sibling request models; an unconfigured
+    Prowlarr is the established not-configured 502 (the alternatives-lookup
+    precedent), and a Prowlarr that fails is a 502 — never a silent `[]`.
+    """
+    query = (req.query or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+
+    service = find_service("prowlarr", "prowlarr")
+    if not service:
+        raise HTTPException(
+            status_code=502, detail=service_unavailable_reason("prowlarr", "prowlarr")
+        )
+
+    log.debug(
+        "language-search query=%r language=%s movie_id=%s", query, req.language, req.movie_id
+    )
+    try:
+        async with http_session() as session:
+            releases = await prowlarr_search(query, session=session)
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Prowlarr search failed: {exc}")
+
+    return {"releases": releases}
+
+
+@router.post("/alternatives/language-download")
+async def mixer_alternatives_language_download(
+    req: LanguageDownloadRequest, _key: str = Depends(verify_api_key)
+):
+    """S7: send one Prowlarr row straight to the download client.
+
+    «Descargar» on a «Búsqueda en idioma» row — the add is a single fast POST
+    (`amutorrent_add_download`: magnet or a direct .torrent URL, no Torznab
+    resolve), so this endpoint answers synchronously with `{ok, detail?}`.
+    A client refusal is a 200 `{ok: false, detail}` — the calendar grab
+    answers a refusal the same way; the detail IS the message. The only 400s
+    are the contract's own, in Spanish like the UI that shows them: an empty
+    url, or one that is neither a magnet nor an http(s) link.
+    """
+    url = (req.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Falta la url de la descarga")
+    if not (url.startswith("magnet:") or url.startswith(("http://", "https://"))):
+        raise HTTPException(
+            status_code=400, detail="url no válida: se espera un magnet o una URL http(s)"
+        )
+
+    log.debug("language-download title=%r url=%s", req.title, url[:48])
+    async with http_session() as session:
+        added = await amutorrent_add_download(session, url)
+    if not added.get("ok"):
+        return {
+            "ok": False,
+            "detail": f"aMuTorrent no aceptó la descarga: {added.get('detail', '')}",
+        }
+    return {"ok": True, "detail": added.get("detail", "")}
 
 
 @router.post("/mux")

@@ -20,6 +20,7 @@ import type {
   SubtitleTrack,
   TaskSubtitle,
   AlternativeLookupResponse,
+  AlternativeTitle,
 } from '../shared/api/mixer.ts'
 import { browsePath, fetchRoots } from '../shared/api/files.ts'
 import { apiFetch } from '../shared/api/auth.ts'
@@ -180,7 +181,9 @@ interface SlotAlternative {
 }
 
 /** The modal the alternative lookup opened: the item carries the languages
- *  (L28) and the wait it starts hangs on `onGrabStarted`. */
+ *  (L28) and the wait it starts hangs on `onGrabStarted`. The T3/S4 titles
+ *  ride along for «Búsqueda en idioma» — this modal is the ONLY mount that
+ *  gets them (S5 «Sólo en alternativa»). */
 interface AltModalState {
   slot: AltSlot
   item: ReleaseSearchItem
@@ -189,6 +192,9 @@ interface AltModalState {
   title: string
   /** `movie.id` — the status endpoint's `movie_id`. */
   movieId: number
+  /** T3/S4: Radarr's `originalTitle`/`alternateTitles` from the lookup. */
+  originalTitle: string | null
+  alternateTitles: AlternativeTitle[]
 }
 
 /** The ESPERA: this slot is waiting for its alternative download. */
@@ -940,6 +946,8 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
           },
           title: data.title,
           movieId: data.movie.id,
+          originalTitle: data.original_title ?? null,
+          alternateTitles: data.alternate_titles ?? [],
         })
       } else {
         setLookupNotice(`${data.title} no está en la librería — añádela primero en Radarr`)
@@ -1451,6 +1459,14 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
       {altModal && (
         <ReleaseSearchModal
           item={altModal.item}
+          // T3/S4/S5 — the `enableLanguageSearch` gate: THIS mount is the only
+          // one that passes it, so «Búsqueda en idioma» lives in the
+          // alternative flow and nowhere else.
+          languageSearch={{
+            originalTitle: altModal.originalTitle,
+            alternateTitles: altModal.alternateTitles,
+            movieId: altModal.movieId,
+          }}
           onClose={() => setAltModal(null)}
           onGrabStarted={() => {
             // The grab became a job: this slot goes into ESPERA. The modal

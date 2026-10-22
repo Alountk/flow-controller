@@ -1360,6 +1360,10 @@ class TestAlternativesLookupEndpoint:
             "title": "Dune Parte Dos 2024",
             "movie": {"id": 42, "title": "Dune Parte Dos", "year": 2024, "source": "radarr"},
             "audio_languages": ["spa", "eng", "rus", "cat"],
+            # T3/S4: always in the response — `null` / `[]` when the lookup
+            # payload carries no titles, never a missing key.
+            "original_title": None,
+            "alternate_titles": [],
         }
         mock_probe.assert_called_once_with(_ALT_PATH)
         mock_lookup.assert_awaited_once_with(ANY, _RADARR_SERVICE, "Dune Parte Dos 2024")
@@ -1396,6 +1400,66 @@ class TestAlternativesLookupEndpoint:
         body = resp.json()
         assert body["movie"] is None
         assert body["audio_languages"] == ["spa"]
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_exists", new_callable=AsyncMock, return_value=42)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_the_response_surfaces_original_and_alternate_titles(
+        self, mock_probe, mock_lookup, _exists, _find
+    ):
+        """T3/S4: the «Búsqueda en idioma» chips ride the lookup response —
+        `original_title` plus `[{title, language}]` in Radarr order, with
+        `language: null` where the payload omits it (the documented real
+        Radarr shape, tests_wanted_scan.py)."""
+        mock_probe.return_value = _probe_fixture(_ALT_PATH)
+        mock_lookup.return_value = {
+            "tmdbId": 550,
+            "title": "Arthur and the Invisibles",
+            "year": 2006,
+            "original_title": "Arthur et les Minimoys",
+            "alternate_titles": [
+                {"title": "Артур и минипуты", "language": "ru"},
+                {"title": "Ton Nom", "language": None},
+            ],
+        }
+
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["original_title"] == "Arthur et les Minimoys"
+        assert body["alternate_titles"] == [
+            {"title": "Артур и минипуты", "language": "ru"},
+            {"title": "Ton Nom", "language": None},
+        ]
+
+    @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
+    @patch("interfaces.http.routes_mixer.arr_movie_exists", new_callable=AsyncMock, return_value=None)
+    @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_titles_surface_even_when_the_movie_is_not_in_the_library(
+        self, mock_probe, mock_lookup, _exists, _find
+    ):
+        """The titles come from the LOOKUP payload, not from the library: they
+        surface even when `movie` is null (T7's "not in the library" answer).
+        The two keys are always served (`str | null` / `list`) — an absent
+        payload field is `null`/`[]`, never a missing key (the exact-body test
+        above pins that reading)."""
+        mock_probe.return_value = _probe_fixture(_ALT_PATH)
+        mock_lookup.return_value = {
+            "tmdbId": 550,
+            "title": "Arthur and the Invisibles",
+            "year": 2006,
+            "original_title": "Arthur et les Minimoys",
+            "alternate_titles": [{"title": "Артур и минипуты", "language": "ru"}],
+        }
+
+        resp = client.post("/api/mixer/alternatives/lookup", json={"path": _ALT_PATH})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["movie"] is None
+        assert body["original_title"] == "Arthur et les Minimoys"
+        assert body["alternate_titles"] == [{"title": "Артур и минипуты", "language": "ru"}]
 
     @patch("interfaces.http.routes_mixer.find_service", return_value=_RADARR_SERVICE)
     @patch("interfaces.http.routes_mixer.arr_movie_lookup", new_callable=AsyncMock)
