@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-22 · **PR #218 (búsqueda por idioma en la alternativa, Prowlarr)** · RDD **on** (global)
-> · specs: 1335 backend / 673 frontend · main pre-#218 = `fca7b6b` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-22 · **PR #220 (conexión directa a aMule por EC)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1440 backend** / 673 frontend · main pre-#220 = `6a91b37` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,9 +16,9 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `84826b7` (post-#218), run `39783102165` pass (backend-tests,
-frontend-build, docker-verify, e2e y **docker-push** → deploy disparado hacia
-GHCR/Portainer). Specs: 1335 backend / 673 frontend, working tree limpia.
+**Verde**: `main` en `94292bb` (post-#220), run `39838355890` **pass** (backend-tests,
+frontend-build, docker-verify, e2e y **docker-push** → deploy + Portainer notificado).
+Specs: **1440 backend** / 673 frontend, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -117,6 +117,29 @@ GHCR/Portainer). Specs: 1335 backend / 673 frontend, working tree limpia.
   lentes **aprobado** (6 hallazgos informativos; la admisión rechazó un payload con
   `severity_note` → STATUS + grupo re-ejecutado), autoridad quemada. Commits
   `2005f6f`+`03e63c7`+`c0d640e`, merge `84826b7`.
+- #219 — refresco de HANDOFF (tanda hasta #218, merge `6a91b37`).
+- #220 — **`conexion-directa-amule` T1–T6** (Steps 1-2 del plan «conexiones directas»;
+  decisiones L3/L7): cliente EC stdlib (`amule_ec_client.py`: framing+tags, auth
+  challenge con `AMULE_EC_PASSWORD` = hash md5 usado verbatim, búsqueda start/polls/
+  results/stop, cola por hash) **verificado en vivo** (AUTH OK + 149 resultados contra
+  el aMule 3.0.1 del usuario — la UI de amuleweb está rota, bug aMule #1556; `amuleapi`
+  NO desplegado ⇒ cero infra nueva); seam ports/gateways/adapter con servicio `amule`
+  (settings.json→env; 502 «no está configurado» fail-closed; `/api/services/test` no
+  sondea EC porque es TCP); `grab_release` → EC por defecto (3 shapes de `guid`
+  preservados, `asyncio.to_thread`, refusal con razón compartida); `copy_engine` → EC
+  (`fix_category` con `amule_categories()` vía GET_PREFERENCES + binding live de sólo
+  lectura verificado por 2 fuentes: 4=`radarr`, 6=`tv-sonarr`; borrado 0x6A completos /
+  0x1D resto; `remove_queue` intacto = arr-REST); flag **`AMULE_EC_DIRECT=0`** = rollback
+  byte-idéntico (pinnes diferenciales fixture-only, cero aserciones tocadas); SHA1/qbit
+  sigue por WS. README + doc actualizados. RED→GREEN por capacidad; suites **1440
+  backend / 673 frontend**, tsc/eslint 0, ratchet **3270→3292→3408** (+138 disclosed).
+  PR único ~3715 líneas / 7 commits (divulgado). **Review nativa: 6 capturas rechazadas**
+  («complete distinct current reviewer group» y «missing or stale» — bindings byte-idénticos
+  a STATUS, incluso en transacción fresca tras abandon; el recordatorio del controller citaba
+  otro target `14c45a43` ≠ `b4da832a` de la lineage) → decisión del usuario: abandon
+  `operator_disposition` + **RDD clone-local OFF (D)** → merge por política ordinaria.
+  Commits `e1ccec4`+`821a6fd`+`9122b96`+`aa99ed1`+`29b87a8`+`4ab904d`, merge `94292bb`.
+  Feature doc: `odd/tasks/conexion-directa-amule.md` (S1–S7, T1–T6, Log L1–L8).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -130,9 +153,11 @@ GHCR/Portainer). Specs: 1335 backend / 673 frontend, working tree limpia.
 - #204 — npm audit: `source-map-js` 1.2.1→1.2.2 (lockfile), 0 vulnerabilities.
 - #205 — **B-12 resuelto**: guarda de petición en vuelo en el botón Actualizar.
 
-**RDD**: `gentle-ai review mode status` → global **on**, clone-local unset. La review
-nativa SÍ opera en este entorno (ciclos completos en #214, #216 y #218 → approved +
-autoridad quemada; #218: assess `nativeRisk medium`, 23 paths/2225 líneas, 3 lentes).
+**RDD**: `gentle-ai review mode status` → global **on**, **clone-local OFF** (razón D;
+la activa `gentle-ai review mode enable --scope clone`). La review nativa operó en
+#214/#216/#218 (approved + autoridad quemada; #218: assess `nativeRisk medium`, 23
+paths/2225 líneas, 3 lentes). En **#220 quedó atascada en collect**: 6 capturas
+rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario.
 Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
 (STATUS fresco antes de cada una) y verificación por tier.
 
@@ -210,6 +235,12 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
    frontend — decisión de producto del BACKLOG:737).
 4. Operaciones: health de Radarr sigue con `RemotePathMappingCheck` (qBittorrent-novpn) y
    carpeta de colección ausente — no es del código, revisar en su Radarr.
+5. **Plan «conexiones directas» — Steps 3-6** (L3/L7 de `conexion-directa-amule.md`):
+   Step 3 cliente Torznab (`t=caps`/`search`/`movie|tvsearch`, parseo RSS) · Step 4 MVP
+   **sección «Indexadores»** (CRUD SQLite `indexers` + caja de búsqueda unificada
+   **Torznab + aMule + Prowlarr** reutilizando `ReleaseSearchModal`) · Step 5 Prowlarr:
+   importar sus 13 indexadores como directos, re-cablear la búsqueda por idioma (#218) y
+   retirarlo · Step 6 Radarr/Sonarr sólo archivos (ahí entra `remove_queue`).
 
 ## Gotchas que costaron esta sesión
 
@@ -232,7 +263,7 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   (`backend/tests/_stubs.py`, httpx ASGITransport en un loop).
 - **Ratchet `MAX_LEGACY_LOC`** (`tests/contracts/tests_architecture.py`): event_bus/app.py
   y `media_mixer.py` son legacy; cualquier línea nueva exige subir el máximo CON comentario
-  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017→3218→3254→3270 hecho; entradas
+  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017→3218→3254→3270→3292→3408 hecho; entradas
   `#:`). **Headroom 0**: a tope, cualquier fix legado exige subir el techo en la misma
   PR (STOP del worker T12 → opción 1 del padre: surfaces + mínimo medido).
 - **`track_index` del mux = ORDINAL** (posición en `video_tracks`/`audio_tracks` para
@@ -256,6 +287,17 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   27 min con el run ya success). Forma correcta: `gh run watch <id> --exit-status` o
   comparar `--jq '.conclusion'` con grep, con `timeout` por invocación. Ante un watcher
   eterno: log del job + `ps` primero, no sospechar de la red.
+- **Capturas de review rechazadas en bucle (#220)**: 6 intentos con bindings byte-idénticos
+  al STATUS (`capture-group-rejected: must be the complete distinct current reviewer group`
+  y `capture-binding-rejected: missing or stale`) en 4 formas (grupo strings/objetos/wrapper,
+  slot singular) e incluso en una transacción NUEVA tras `abandon`. Tras 2 rechazos seguidos:
+  NO iterar formas → decisión humana («review nueva» o D). El recordatorio del controller
+  citaba target `14c45a43` mientras lineage/inspect decían `b4da832a` (desalineación no
+  resoluble desde el modelo).
+- **`subagent_run` task-mode = espera sin salida propia**: un worker cancelado con
+  «The tool call was aborted» NO está colgado — `subagent_list_tasks` (turns/calls crecientes
+  = vivo) + `ps` + `git status` primero (Engram 1446); exigir `timeout 30` por fetch externo
+  en los task texts para que ninguna red parezca un cuelgue.
 - Engram: si `mem_save` falla con "multiple active runtime sessions" → `engram doctor
   --json` y `mem_session_end` de la sesión runtime zombie (funcionó: `ses_ee284984...`).
   Los feature docs viven en el espejo de Engram (p. ej. `odd/stitch-series-tree/tasks`,
@@ -275,4 +317,6 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   evidencia por tarea y fronteras de slice C1–C8).
 - `odd/tasks/busqueda-idioma-prowlarr.md` — búsqueda por idioma en la alternativa:
   specs S1–S7, tareas T1–T6, Log L1–L5 (decisiones de usuario y contrato Prowlarr).
+- `odd/tasks/conexion-directa-amule.md` — **conexión directa EC a aMule**: specs S1–S7,
+  tareas T1–T6, Log L1–L8 (decisiones, corrección de tipos EC, ratchet, gotcha de capturas).
 - `prototypes/DESIGN.md` — handoff original de Stitch (tokens C-06 + briefs).

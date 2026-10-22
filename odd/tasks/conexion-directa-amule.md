@@ -34,12 +34,12 @@ S7: Fixtures de red: tests unitarios sin red real (socket simulado/mock); fixtur
 
 | ID | Specs | Ruta | Commit |
 |----|-------|------|--------|
-| T1 | S1-S7 | parent — feature doc | (este commit) |
-| T2 | S1, S7 | worker — `amule_ec_client.py`: framing + auth + búsqueda + ops de cola, tests RED→GREEN | pendiente |
-| T3 | S2, S6 | parent — seam ports/gateways + configuración `amule` + 502 fail-closed, tests | pendiente |
-| T4 | S3, S6 | worker — `grab_release.py` a EC por defecto + flag rollback; Risk: item 3 | pendiente |
-| T5 | S4, S5, S6 | worker — `copy_engine.py` a EC + flag rollback; Risk: item 3 | pendiente |
-| T6 | S6 | parent — gate (suite completa + tsc + eslint + ratchet), docs si aplican, PR único con divulgación, review nativa, merge | pendiente |
+| T1 | S1-S7 | parent — feature doc | `e1ccec4` |
+| T2 | S1, S7 | worker — `amule_ec_client.py`: framing + auth + búsqueda + ops de cola, tests RED→GREEN | `821a6fd` |
+| T3 | S2, S6 | parent — seam ports/gateways + configuración `amule` + 502 fail-closed, tests | `9122b96` |
+| T4 | S3, S6 | worker — `grab_release.py` a EC por defecto + flag rollback; Risk: item 3 | `aa99ed1` |
+| T5 | S4, S5, S6 | worker — `copy_engine.py` a EC + flag rollback (L7: seam ampliado); Risk: item 3 | `29b87a8` |
+| T6 | S6 | parent — gate (suite 1440 + tsc + eslint + ratchet 3408), README/docs (`4ab904d`), PR #220, review (L8), merge `94292bb` | `4ab904d` / merge `94292bb` |
 
 ## Log
 
@@ -79,3 +79,5 @@ L7 (decisiones del usuario tras las stop-conditions de T5 — 2026-10-22):
 - Ratchet: **autorizado** subir `MAX_LEGACY_LOC` 3292→3359 (+67 de glue en copy_engine) con divulgación en el PR (prescrito por el propio contrato; precedente T3).
 - `remove_queue`: **confirmado intacto** (no es WS: es REST de arr con scope "arr").
 - Diagnóstico del «colgado» de T5: no era el bug 1442 (sin jobs bash, `ps` limpio, árbol limpio); el worker iba vivo (21 turns/38 tool calls) y la espera de `subagent_run` fue abortada desde fuera (firma «The tool call was aborted»). Engram **1446** (global) con el blindaje: `timeout 30` por cada fetch externo en los task texts.
+
+L8 (cierre de T6/feature — 2026-10-22): gate observado por el parent: suite backend **1440 passed / 0 failed** (base 1335 → +105 tests), `tsc -b` 0, `eslint` 0, ratchet 3292→**3408** (diff = 1 sola línea). README + doc (`4ab904d`), push + **PR #220** (~3715 líneas / 7 commits, divulgado: ratchet +138 y deltas EC) → CI del PR **verde en 3m22s**. Review nativa: assess `nativeRisk high` (dangerous_sink en `amule_ec_client.py`) → start (4 lentes, budget 200) → **6 capturas rechazadas** (grupo strings / objetos / wrapper, singular, y grupo otra vez en transacción fresca — bindings byte-idénticos a STATUS; controller citaba target `14c45a43` ≠ `b4da832a`) → decisión del usuario «review nueva» → abandon `operator_disposition` (cuarentena, 0 resultados descartados) → nuevo start → 6º rechazo → **fallback autorizado**: `gentle-ai review mode disable --scope clone` (RDD clone-local OFF, razón D) → **merge `94292bb`** bajo política ordinaria. Specs finales **1440 backend / 673 frontend**. Post-merge: watcher main run `39838355890`, HANDOFF en este PR de cierre.
