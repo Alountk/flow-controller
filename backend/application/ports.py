@@ -237,6 +237,20 @@ class OpenSubtitlesClient(Protocol):
 
 
 @runtime_checkable
+class ProwlarrClient(Protocol):
+    """Prowlarr's release text search — the term in the language it is written in (S6/T2).
+
+    One question, one port. Radarr searches by id and never `alternateTitles`,
+    so «Buscar y descargar alternativa» asks Prowlarr with THE TERM THE USER
+    WROTE (a Russian title for a Russian release). `prowlarr_search` answers
+    the relevant, normalized releases; unconfigured or failing it raises
+    rather than lie with `[]`.
+    """
+
+    def prowlarr_search(self, *args, **kwargs): ...
+
+
+@runtime_checkable
 class HistoryStore(Protocol):
     """The durable record: operations, downloads, and our own grabs.
 
