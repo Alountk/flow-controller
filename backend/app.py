@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 
 from application import gateways
 from application.use_cases import downloads_cache, trace_cache
-from infrastructure import arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
+from infrastructure import amule_service, arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
 from infrastructure import credentials as credentials_module, sqlite_history as history
 from infrastructure import prowlarr_client
 from config import FRONTEND_DIST
@@ -44,6 +44,7 @@ gateways.bind(
     scan=wanted_scan.walk,
     opensubtitles=opensubtitles_client,
     prowlarr=prowlarr_client,
+    amule=amule_service,
 )
 
 from interfaces.http.routes import status as status_routes

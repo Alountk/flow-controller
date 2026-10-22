@@ -251,6 +251,27 @@ class ProwlarrClient(Protocol):
 
 
 @runtime_checkable
+class AmuleECService(Protocol):
+    """The direct aMule connection over EC (S2) — search and the whole queue surface.
+
+    Direct connections mean Radarr/aMuTorrent no longer resolve or enqueue
+    ED2K: `amule_search` queries eD2k/Kad, the rest enqueues links and
+    governs the queue by hash. One connection per operation, configuration
+    read at call time; unconfigured or failing it raises rather than lie
+    with `[]` (the route maps that to the established 502).
+    """
+
+    def amule_search(self, *args, **kwargs): ...
+    def amule_add_ed2k(self, *args, **kwargs): ...
+    def amule_download_search_result(self, *args, **kwargs): ...
+    def amule_pause(self, *args, **kwargs): ...
+    def amule_resume(self, *args, **kwargs): ...
+    def amule_set_priority(self, *args, **kwargs): ...
+    def amule_set_category(self, *args, **kwargs): ...
+    def amule_delete(self, *args, **kwargs): ...
+
+
+@runtime_checkable
 class HistoryStore(Protocol):
     """The durable record: operations, downloads, and our own grabs.
 

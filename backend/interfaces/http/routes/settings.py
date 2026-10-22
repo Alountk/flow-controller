@@ -224,7 +224,14 @@ async def test_services(service: str = "", _key: str = Depends(verify_api_key)):
     dejen de estar en localhost, esto dice si siguen siendo alcanzables y con
     qué URL se está intentando.
     """
-    targets = [s for s in SERVICES if not service or s["key"] == service]
+    # Conexiones directas (S2): `amule` vive sobre EC (TCP), no HTTP — aquí
+    # sólo se sondean interfaces HTTP. /api/services lo sigue listando con su
+    # `configured`, y si está roto el fallo sale en flujos reales (502 fail-
+    # closed), no como "servicio caído" inventado por un GET a su puerto web.
+    targets = [
+        s for s in SERVICES
+        if s["kind"] != "amule" and (not service or s["key"] == service)
+    ]
     results = []
     async with http_session() as session:
         for target in targets:
