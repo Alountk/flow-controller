@@ -18,6 +18,7 @@ from infrastructure.amule_ec_client import AmuleECClient, EC_SEARCH_GLOBAL
 
 __all__ = [
     "amule_add_ed2k",
+    "amule_categories",
     "amule_delete",
     "amule_download_search_result",
     "amule_pause",
@@ -95,6 +96,21 @@ def amule_set_category(file_hash, category: int) -> None:
         client.set_category(file_hash, category)
 
 
-def amule_delete(file_hash) -> None:
+def amule_categories() -> dict:
+    """Categorías de aMule como `{título: índice}`, en su propia conexión."""
     with _client() as client:
+        return client.categories()
+
+
+def amule_delete(file_hash, delete_files: bool = False) -> None:
+    """Borra la descarga de la cola de aMule.
+
+    Mapeo semántico (decisión L7): con `delete_files`, un fichero COMPLETO
+    (listado en compartidos) sale del disco vía `KNOWNFILE_DELETE` (0x6A) y
+    todo lo demás se descarta vía `PARTFILE_DELETE` (0x1D); sin
+    `delete_files`, siempre `PARTFILE_DELETE`.
+    """
+    with _client() as client:
+        if delete_files and client.delete_disk(file_hash):
+            return
         client.delete(file_hash)

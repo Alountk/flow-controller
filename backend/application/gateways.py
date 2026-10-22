@@ -415,3 +415,8 @@ def amule_set_category(*args, **kwargs):
 def amule_delete(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _amule.amule_delete(*args, **kwargs)
+
+
+def amule_categories(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_categories(*args, **kwargs)

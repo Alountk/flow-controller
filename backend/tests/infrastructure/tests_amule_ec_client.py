@@ -592,3 +592,190 @@ def test_timeout_is_wrapped_as_typed_error(monkeypatch):
     with pytest.raises(AmuleECTimeoutError) as excinfo:
         _connect(monkeypatch, replies=[], recv_error=_socket.timeout("timed out"))
     assert isinstance(excinfo.value, AmuleECError)
+
+
+# ---------------------------------------------------------------------------
+# Categorías (GET_PREFERENCES) y borrado en disco (KNOWNFILE_DELETE) — T5/L7.
+# ---------------------------------------------------------------------------
+
+from infrastructure.amule_ec_client import (  # noqa: E402
+    EC_OP_GET_PREFERENCES,
+    EC_OP_GET_SHARED_FILES,
+    EC_OP_KNOWNFILE_DELETE,
+    EC_OP_SET_PREFERENCES,
+    EC_OP_SHARED_FILES,
+    EC_PREFS_CATEGORIES,
+    EC_TAG_CATEGORY,
+    EC_TAG_CATEGORY_TITLE,
+    EC_TAG_ECID,
+    EC_TAG_KNOWNFILE,
+    EC_TAG_KNOWNFILE_FILENAME,
+    EC_TAG_KNOWNFILE_PATH,
+    EC_TAG_PARTFILE_HASH,
+    EC_TAG_PARTFILE_NAME,
+    EC_TAG_PREFS_CATEGORIES,
+    EC_TAG_SELECT_PREFS,
+    build_get_preferences,
+    build_get_shared_files,
+    build_knownfile_delete,
+)
+
+#: Petición GET_PREFERENCES con SELECT_PREFS = EC_PREFS_CATEGORIES (0x1).
+GET_PREFS_REQ = "000000200000000b3f00012000020000000101"
+#: Petición GET_SHARED_FILES con DETAIL_LEVEL = EC_DETAIL_FULL (0x02).
+GET_SHARED_REQ = "000000200000000b1000010008020000000102"
+#: KNOWNFILE_DELETE de "test.bin" (MD4 0011..ff, ECID 841, dir /downloads/incoming).
+KNOWNFILE_DELETE_REQ = (
+    "000000200000004e6a00040800090000001000112233445566778899aabbccddeeff"
+    "001e03000000020349082c06000000142f646f776e6c6f6164732f696e636f6d696e67"
+    "0006020600000009746573742e62696e00"
+)
+
+#: Binding índice↔título VERIFICADO EN VIVO (2026-10-22) con dos fuentes de
+#: sólo lectura que concuerdan en las 18 entradas: (a) el <select> de
+#: categorías de amuleweb tras login (pares value↔label, mismo orden) y (b) el
+#: orden de las categorías de EC_OP_GET_PREFERENCES (EC_TAG_CATEGORY_TITLE),
+#: cuyo EC_TAG_CATEGORY lleva además el índice como dato propio (== posición
+#: en las 18). Normalizado: rutas/comentarios sintéticos; títulos e índices
+#: son literalmente los capturados (la fuente «radarr» de EXPECTED_CATEGORY
+#: vive en el 4; «tv-sonarr» en el 6).
+CATEGORY_BINDING = [
+    (0, "all"),
+    (1, "juegos"),
+    (2, "lidarr"),
+    (3, "prowlarr"),
+    (4, "radarr"),
+    (5, "radarr-ru"),
+    (6, "tv-sonarr"),
+    (7, "tv-sonarr-ru"),
+    (8, "3d"),
+    (9, "[PW]-Audio"),
+    (10, "[PW]-Books"),
+    (11, "[PW]-Console"),
+    (12, "[PW]-Movies"),
+    (13, "[PW]-PC"),
+    (14, "[PW]-Tv"),
+    (15, "[PW]-XXX"),
+    (16, "sonarr"),
+    (17, "__probe__"),
+]
+
+
+def _cat_tag(index: int, title: str) -> bytes:
+    """EC_TAG_CATEGORY con el layout capturado: índice como dato propio y
+    subtags PATH/COMMENT/COLOR/PRIO/TITLE (orden del vivo; valores sanos)."""
+    return encode_tag(EC_TAG_CATEGORY, EC_TAGTYPE_UINT8, bytes([index]), children=[
+        encode_string_tag(0x1103, "/downloads/incoming"),  # EC_TAG_CATEGORY_PATH
+        encode_string_tag(0x1104, ""),  # EC_TAG_CATEGORY_COMMENT
+        encode_uint_tag(0x1105, 0),  # EC_TAG_CATEGORY_COLOR
+        encode_uint_tag(0x1106, 0),  # EC_TAG_CATEGORY_PRIO
+        encode_string_tag(EC_TAG_CATEGORY_TITLE, title),
+    ])
+
+
+def _categories_reply(pairs=CATEGORY_BINDING) -> str:
+    wrapper = encode_tag(
+        EC_TAG_PREFS_CATEGORIES, EC_TAGTYPE_CUSTOM, b"",
+        children=[_cat_tag(i, t) for i, t in pairs],
+    )
+    return encode_frame(EC_OP_SET_PREFERENCES, [wrapper]).hex()
+
+
+def _knownfile(hash_hex: str, ecid: int, full_path: str, name: str) -> bytes:
+    """EC_TAG_KNOWNFILE con el layout capturado: ECID como dato propio y
+    subtags PARTFILE_NAME (basename), PARTFILE_HASH (MD4) y
+    KNOWNFILE_FILENAME (ruta completa)."""
+    return encode_tag(EC_TAG_KNOWNFILE, EC_TAGTYPE_UINT16, ecid.to_bytes(2, "big"), children=[
+        encode_string_tag(EC_TAG_PARTFILE_NAME, name),
+        encode_uint_tag(0x0303, 1024),
+        encode_tag(EC_TAG_PARTFILE_HASH, EC_TAGTYPE_HASH16, bytes.fromhex(hash_hex)),
+        encode_string_tag(EC_TAG_KNOWNFILE_FILENAME, full_path),
+    ])
+
+
+def _shared_reply(entries) -> str:
+    return encode_frame(EC_OP_SHARED_FILES, [_knownfile(*e) for e in entries]).hex()
+
+
+def test_get_preferences_request_is_byte_exact():
+    assert build_get_preferences().hex() == GET_PREFS_REQ
+    opcode, tags = decode_frame(build_get_preferences())
+    assert opcode == EC_OP_GET_PREFERENCES
+    assert [t.code for t in tags] == [EC_TAG_SELECT_PREFS]
+
+
+def test_get_shared_files_request_is_byte_exact():
+    assert build_get_shared_files().hex() == GET_SHARED_REQ
+    assert decode_frame(build_get_shared_files())[0] == EC_OP_GET_SHARED_FILES
+
+
+def test_knownfile_delete_request_is_byte_exact():
+    frame = build_knownfile_delete(HASH_HEX, 841, "/downloads/incoming", "test.bin")
+    assert frame.hex() == KNOWNFILE_DELETE_REQ
+    opcode, tags = decode_frame(frame)
+    assert opcode == EC_OP_KNOWNFILE_DELETE
+    assert [t.code for t in tags] == [
+        EC_TAG_KNOWNFILE, EC_TAG_ECID, EC_TAG_KNOWNFILE_PATH, EC_TAG_PARTFILE_NAME,
+    ]
+
+
+def test_categories_parse_the_live_captured_layout(monkeypatch):
+    client, fake = _connect(
+        monkeypatch,
+        replies=[AUTH_SALT_REPLY, AUTH_OK_REPLY, _categories_reply()],
+    )
+    assert client.categories() == {title: index for index, title in CATEGORY_BINDING}
+    assert build_get_preferences(EC_PREFS_CATEGORIES).hex() == GET_PREFS_REQ
+    assert fake.sent[2].hex() == GET_PREFS_REQ
+
+
+def test_categories_take_the_index_from_the_own_value_not_the_position(monkeypatch):
+    reply = _categories_reply([(7, "x"), (3, "y")])
+    client, _fake = _connect(monkeypatch, replies=[AUTH_SALT_REPLY, AUTH_OK_REPLY, reply])
+    assert client.categories() == {"x": 7, "y": 3}
+
+
+def test_categories_reply_must_be_set_preferences(monkeypatch):
+    client, _fake = _connect(
+        monkeypatch,
+        replies=[AUTH_SALT_REPLY, AUTH_OK_REPLY, encode_frame(EC_OP_NOOP, []).hex()],
+    )
+    with pytest.raises(AmuleECProtocolError):
+        client.categories()
+
+
+def test_delete_disk_sends_the_identity_the_server_listed(monkeypatch):
+    other = "ffeeddccbbaa99887766554433221100"
+    reply = _shared_reply([
+        (other, 840, "/downloads/incoming/other.bin", "other.bin"),
+        (HASH_HEX, 841, "/downloads/incoming/sub/test.bin", "test.bin"),
+    ])
+    client, fake = _connect(
+        monkeypatch,
+        replies=[AUTH_SALT_REPLY, AUTH_OK_REPLY, reply, NOOP_REPLY],
+    )
+    assert client.delete_disk(HASH_HEX) is True
+    assert fake.sent[2].hex() == GET_SHARED_REQ
+    assert fake.sent[3] == build_knownfile_delete(
+        HASH_HEX, 841, "/downloads/incoming/sub", "test.bin"
+    )
+
+
+def test_delete_disk_returns_false_and_sends_nothing_more_for_an_unknown_hash(monkeypatch):
+    reply = _shared_reply([("ffeeddccbbaa99887766554433221100", 840, "/x/other.bin", "other.bin")])
+    client, fake = _connect(
+        monkeypatch,
+        replies=[AUTH_SALT_REPLY, AUTH_OK_REPLY, reply],
+    )
+    assert client.delete_disk(HASH_HEX) is False
+    assert [bytes.fromhex(GET_SHARED_REQ)] == fake.sent[2:], "no KNOWNFILE_DELETE for a hash the server never listed"
+
+
+def test_delete_disk_surfaces_a_refused_unlink(monkeypatch):
+    reply = _shared_reply([(HASH_HEX, 841, "/downloads/incoming/test.bin", "test.bin")])
+    client, _fake = _connect(
+        monkeypatch,
+        replies=[AUTH_SALT_REPLY, AUTH_OK_REPLY, reply, FAILED_REPLY],
+    )
+    with pytest.raises(AmuleECCommandError):
+        client.delete_disk(HASH_HEX)

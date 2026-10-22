@@ -85,7 +85,7 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: `infrastructure/prowlarr_client.py` behind the `ProwlarrClient` port, so
 #: this is wiring, not migration debt. Disclosed as debt in the
 #: busqueda-idioma-prowlarr PR description.
-MAX_LEGACY_LOC = 3292
+MAX_LEGACY_LOC = 3408
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

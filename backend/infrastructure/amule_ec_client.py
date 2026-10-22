@@ -73,6 +73,11 @@ __all__ = [
     "EC_OP_SEARCH_RESULTS",
     "EC_OP_SEARCH_PROGRESS",
     "EC_OP_DOWNLOAD_SEARCH_RESULT",
+    "EC_OP_GET_SHARED_FILES",
+    "EC_OP_SHARED_FILES",
+    "EC_OP_GET_PREFERENCES",
+    "EC_OP_SET_PREFERENCES",
+    "EC_OP_KNOWNFILE_DELETE",
     "EC_OP_AUTH_SALT",
     "EC_OP_AUTH_PASSWD",
     "EC_TAG_STRING",
@@ -101,6 +106,14 @@ __all__ = [
     "EC_TAG_SEARCH_EXTENSION",
     "EC_TAG_SEARCH_AVAILABILITY",
     "EC_TAG_SEARCH_STATUS",
+    "EC_TAG_ECID",
+    "EC_TAG_KNOWNFILE",
+    "EC_TAG_KNOWNFILE_FILENAME",
+    "EC_TAG_KNOWNFILE_PATH",
+    "EC_TAG_SELECT_PREFS",
+    "EC_TAG_PREFS_CATEGORIES",
+    "EC_TAG_CATEGORY",
+    "EC_TAG_CATEGORY_TITLE",
     "EC_TAGTYPE_CUSTOM",
     "EC_TAGTYPE_UINT8",
     "EC_TAGTYPE_UINT16",
@@ -118,10 +131,14 @@ __all__ = [
     "EC_SEARCH_GLOBAL",
     "EC_SEARCH_KAD",
     "EC_SEARCH_PROGRESS_DONE",
+    "EC_PREFS_CATEGORIES",
     # Builders y utilidades de cable
     "build_add_link",
     "build_auth_request",
     "build_download_search_result",
+    "build_get_preferences",
+    "build_get_shared_files",
+    "build_knownfile_delete",
     "build_partfile_delete",
     "build_partfile_pause",
     "build_partfile_resume",
@@ -156,16 +173,21 @@ EC_OP_FAILED = 0x05
 EC_OP_STRINGS = 0x06
 EC_OP_MISC_DATA = 0x07
 EC_OP_ADD_LINK = 0x09
+EC_OP_GET_SHARED_FILES = 0x10
 EC_OP_PARTFILE_PAUSE = 0x19
 EC_OP_PARTFILE_RESUME = 0x1A
 EC_OP_PARTFILE_PRIO_SET = 0x1C
 EC_OP_PARTFILE_DELETE = 0x1D
 EC_OP_PARTFILE_SET_CAT = 0x1E
+EC_OP_SHARED_FILES = 0x22  # respuesta a GET_SHARED_FILES
 EC_OP_SEARCH_START = 0x26
 EC_OP_SEARCH_STOP = 0x27
 EC_OP_SEARCH_RESULTS = 0x28
 EC_OP_SEARCH_PROGRESS = 0x29
 EC_OP_DOWNLOAD_SEARCH_RESULT = 0x2A
+EC_OP_GET_PREFERENCES = 0x3F
+EC_OP_SET_PREFERENCES = 0x40  # respuesta a GET_PREFERENCES (verificado en vivo)
+EC_OP_KNOWNFILE_DELETE = 0x6A
 EC_OP_AUTH_SALT = 0x4F
 EC_OP_AUTH_PASSWD = 0x50
 
@@ -176,6 +198,7 @@ EC_TAG_PASSWD_HASH = 0x0001
 EC_TAG_PROTOCOL_VERSION = 0x0002
 EC_TAG_DETAIL_LEVEL = 0x0004
 EC_TAG_PASSWD_SALT = 0x000B
+EC_TAG_ECID = 0x000F
 EC_TAG_CLIENT_NAME = 0x0100
 EC_TAG_CLIENT_VERSION = 0x0101
 EC_TAG_SERVER_VERSION = 0x050B
@@ -197,6 +220,16 @@ EC_TAG_SEARCH_FILE_TYPE = 0x0705
 EC_TAG_SEARCH_EXTENSION = 0x0706
 EC_TAG_SEARCH_AVAILABILITY = 0x0707
 EC_TAG_SEARCH_STATUS = 0x0708
+EC_TAG_KNOWNFILE = 0x0400
+EC_TAG_KNOWNFILE_FILENAME = 0x0408
+EC_TAG_KNOWNFILE_PATH = 0x0416
+EC_TAG_SELECT_PREFS = 0x1000
+EC_TAG_PREFS_CATEGORIES = 0x1100
+EC_TAG_CATEGORY = 0x1101
+EC_TAG_CATEGORY_TITLE = 0x1102
+
+#: EcPrefs (máscara uint32 de EC_TAG_SELECT_PREFS).
+EC_PREFS_CATEGORIES = 0x00000001
 
 # --- Tipos de tag (ECTagTypes.abstract) -----------------------------------
 
@@ -578,6 +611,36 @@ def build_download_search_result(file_hash, category: int | None = None) -> byte
     return _partfile_frame(EC_OP_DOWNLOAD_SEARCH_RESULT, file_hash, children)
 
 
+def build_get_preferences(prefs: int = EC_PREFS_CATEGORIES) -> bytes:
+    """`EC_OP_GET_PREFERENCES` con `EC_TAG_SELECT_PREFS` (máscara EcPrefs).
+
+    La respuesta llega como `EC_OP_SET_PREFERENCES` (verificado en vivo).
+    """
+    return encode_frame(EC_OP_GET_PREFERENCES, [encode_uint_tag(EC_TAG_SELECT_PREFS, prefs)])
+
+
+def build_get_shared_files(detail: int = EC_DETAIL_FULL) -> bytes:
+    """`EC_OP_GET_SHARED_FILES` con `EC_TAG_DETAIL_LEVEL` — la identidad
+    completa (ECID, ruta, nombre) sólo llega en detalle FULL."""
+    return encode_frame(EC_OP_GET_SHARED_FILES, [encode_uint_tag(EC_TAG_DETAIL_LEVEL, detail)])
+
+
+def build_knownfile_delete(file_hash, ecid: int, directory: str, name: str) -> bytes:
+    """`EC_OP_KNOWNFILE_DELETE`: KNOWNFILE(MD4) + ECID + KNOWNFILE_PATH
+    (directorio) + PARTFILE_NAME (basename). El servidor verifica
+    identidad/ruta antes de borrar (ECCodes.abstract): NOOP si borra;
+    FAILED + STRING si no, dejando el fichero compartido/listado."""
+    return encode_frame(
+        EC_OP_KNOWNFILE_DELETE,
+        [
+            encode_hash_tag(EC_TAG_KNOWNFILE, file_hash),
+            encode_uint_tag(EC_TAG_ECID, ecid),
+            encode_string_tag(EC_TAG_KNOWNFILE_PATH, directory),
+            encode_string_tag(EC_TAG_PARTFILE_NAME, name),
+        ],
+    )
+
+
 # --- Cliente ---------------------------------------------------------------
 
 
@@ -765,6 +828,79 @@ class AmuleECClient:
     def delete(self, file_hash) -> None:  # noqa: V105 — API pública del cliente EC; la consumen T3-T5
         self._send(build_partfile_delete(file_hash))
         self._await_ack()
+
+    # -- categorías y borrado en disco (T5/L7) --
+
+    def categories(self) -> dict:
+        """Categorías de aMule como `{título: índice}`.
+
+        `EC_OP_GET_PREFERENCES` con `EC_TAG_PREFS_CATEGORIES`: cada
+        `EC_TAG_CATEGORY` trae el ÍNDICE como dato propio y el título en
+        `EC_TAG_CATEGORY_TITLE`. Binding verificado en vivo (2026-10-22)
+        contra el `<select>` de amuleweb: índice == posición en la lista.
+        Un título duplicado conserva el primer índice.
+        """
+        self._send(build_get_preferences(EC_PREFS_CATEGORIES))
+        opcode, tags = self._recv_frame()
+        self._raise_if_rejected(opcode, tags)
+        if opcode != EC_OP_SET_PREFERENCES:
+            raise AmuleECProtocolError("respuesta inesperada a GET_PREFERENCES")
+        mapping: dict = {}
+        for wrapper in tags:
+            if wrapper.code != EC_TAG_PREFS_CATEGORIES:
+                continue
+            for cat in wrapper.subtags:
+                if cat.code != EC_TAG_CATEGORY:
+                    continue
+                title = find_tag(cat.subtags, EC_TAG_CATEGORY_TITLE)
+                if title is None:
+                    continue
+                mapping.setdefault(title.as_str(), cat.as_int())
+        return mapping
+
+    def shared_identity(self, file_hash) -> tuple | None:
+        """`(ECID, directorio, basename)` de un fichero COMPLETO, o None.
+
+        `EC_OP_GET_SHARED_FILES` en detalle FULL: el MD4 viaja en
+        `EC_TAG_PARTFILE_HASH`, el ECID es el dato propio de
+        `EC_TAG_KNOWNFILE`, y `EC_TAG_KNOWNFILE_FILENAME` trae la ruta
+        completa mientras `EC_TAG_PARTFILE_NAME` es el basename (verificado
+        en vivo). Un hash ausente de la lista de compartidos no es un
+        fichero completo: la única identidad que `KNOWNFILE_DELETE` acepta.
+        """
+        self._send(build_get_shared_files(EC_DETAIL_FULL))
+        opcode, tags = self._recv_frame()
+        self._raise_if_rejected(opcode, tags)
+        if opcode != EC_OP_SHARED_FILES:
+            raise AmuleECProtocolError("respuesta inesperada a GET_SHARED_FILES")
+        want = _hash16(file_hash)
+        for entry in tags:
+            if entry.code != EC_TAG_KNOWNFILE:
+                continue
+            listed = find_tag(entry.subtags, EC_TAG_PARTFILE_HASH)
+            if listed is None or listed.data != want:
+                continue
+            full = find_tag(entry.subtags, EC_TAG_KNOWNFILE_FILENAME)
+            name = find_tag(entry.subtags, EC_TAG_PARTFILE_NAME)
+            if full is None or name is None:
+                return None
+            return entry.as_int(), full.as_str().rpartition("/")[0], name.as_str()
+        return None
+
+    def delete_disk(self, file_hash) -> bool:
+        """Borra del disco un fichero COMPLETO (`EC_OP_KNOWNFILE_DELETE`).
+
+        True si amuled confirmó el borrado; False si el hash no figura como
+        fichero completo (el llamante opta por `PARTFILE_DELETE`). Un FAILED
+        del servidor sube como excepción tipada: nunca se fuerza el borrado.
+        """
+        identity = self.shared_identity(file_hash)
+        if identity is None:
+            return False
+        ecid, directory, name = identity
+        self._send(build_knownfile_delete(file_hash, ecid, directory, name))
+        self._await_ack()
+        return True
 
     # -- transporte --
 

@@ -96,6 +96,8 @@ class FakeClient:
     """Sustituto de AmuleECClient: registra ctor y operaciones, sin red."""
 
     instances: list["FakeClient"] = []
+    #: Lo que `delete_disk` responderá (False = el hash no está completo).
+    disk_deletable = False
 
     def __init__(self, host, port, password, **kwargs):
         self.host = host
@@ -167,6 +169,14 @@ class FakeClient:
 
     def delete(self, file_hash):
         self.calls.append(("delete", file_hash))
+
+    def categories(self):
+        self.calls.append(("categories",))
+        return {"radarr": 4, "tv-sonarr": 6}
+
+    def delete_disk(self, file_hash):
+        self.calls.append(("delete_disk", file_hash))
+        return FakeClient.disk_deletable
 
 
 @pytest.fixture(autouse=True)
@@ -249,6 +259,7 @@ def test_port_declares_the_whole_ec_surface():
         "amule_set_priority",
         "amule_set_category",
         "amule_delete",
+        "amule_categories",
     } <= members
 
 
@@ -291,3 +302,38 @@ def test_bind_rejects_an_adapter_that_misses_the_port():
             scan=lambda: None,
             amule=object(),
         )
+
+
+# ── T5/L7: categorías y borrado con semántica de ficheros completos ─────────
+
+
+def test_categories_open_their_own_connection_and_close():
+    assert amule_service.amule_categories() == {"radarr": 4, "tv-sonarr": 6}
+    client = FakeClient.instances[0]
+    assert ("categories",) in client.calls
+    assert client.closed is True
+
+
+def test_delete_without_files_is_the_partfile_delete():
+    amule_service.amule_delete("aa" * 16)
+    client = FakeClient.instances[0]
+    assert ("delete", "aa" * 16) in client.calls
+    assert all(c[0] != "delete_disk" for c in client.calls), "sin delete_files no se mira si es completo"
+
+
+def test_delete_with_files_removes_a_complete_file_from_disk(monkeypatch):
+    monkeypatch.setattr(FakeClient, "disk_deletable", True)
+    amule_service.amule_delete("aa" * 16, True)
+    client = FakeClient.instances[0]
+    # Completo + delete_files ⇒ KNOWNFILE_DELETE; el PARTFILE_DELETE no procede.
+    assert [("delete_disk", "aa" * 16)] == [c for c in client.calls if c[0].startswith("delete")]
+
+
+def test_delete_with_files_falls_back_to_the_partfile_delete(monkeypatch):
+    monkeypatch.setattr(FakeClient, "disk_deletable", False)
+    amule_service.amule_delete("aa" * 16, True)
+    client = FakeClient.instances[0]
+    # Incompleto (no listado como completo) ⇒ descarte vía PARTFILE_DELETE.
+    assert [("delete_disk", "aa" * 16), ("delete", "aa" * 16)] == [
+        c for c in client.calls if c[0].startswith("delete")
+    ]
