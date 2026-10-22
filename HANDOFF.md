@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-21 · **PR #216 (mixer: buscador en el picker + orden de audio)** · RDD **on** (global)
-> · specs: 1293 backend / 660 frontend · main pre-#216 = `7781f57` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-22 · **PR #218 (búsqueda por idioma en la alternativa, Prowlarr)** · RDD **on** (global)
+> · specs: 1335 backend / 673 frontend · main pre-#218 = `fca7b6b` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,12 +16,11 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `72c74c6` (post-#216), run `39670062809` pass — el e2e
-flakeó 1× en el build (`npm install` exit 152, infra; el e2e del PR pasó verde)
-y el `rerun --failed` quedó success. Specs: 1293 backend / 660 frontend,
-working tree limpia.
+**Verde**: `main` en `84826b7` (post-#218), run `39783102165` pass (backend-tests,
+frontend-build, docker-verify, e2e y **docker-push** → deploy disparado hacia
+GHCR/Portainer). Specs: 1335 backend / 673 frontend, working tree limpia.
 
-**Tanda 2026-10-17/21 (PRs #206–#216)**:
+**Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
 - #207 — corrección del HANDOFF sobre deploy: **es automático** (webhook Portainer 204
   verificado en vivo).
@@ -83,6 +82,8 @@ working tree limpia.
   (`tests_mixer.py`). Review nativo: grupo 4 lentes **aprobado** (11 hallazgos
   informativos, ninguno bloqueante), autoridad quemada. Commit `9021d97`, merge
   `46a8de7`. Pendiente: retry de la mezcla en prod por el usuario.
+- #215 — documentación del fix de #214 (HANDOFF: symptom→fix de «Mux failed», merge
+  `7781f57`).
 - #216 — **mixer: buscador en el picker + orden de salida de audio** (dos
   decisiones del usuario 2026-10-21): **(a)** input «Buscar carpeta o
   archivo…» en el modal que filtra carpetas y archivos del directorio
@@ -100,6 +101,22 @@ working tree limpia.
   campo desconocido `severity_minor_note` y se re-ejecutó OK), autoridad
   quemada. Commits `675e036`+`aade27a`, merge `72c74c6`; e2e de main
   flakeó 1× en el build → rerun success.
+- #217 — refresco de HANDOFF (tanda #206–#216; gotchas de e2e/CI).
+- #218 — **`busqueda-idioma-prowlarr` T1–T6** (decisiones L2–L5 del feature doc):
+  diagnóstico en vivo confirmado (Radarr sólo busca Original+English+Translated y
+  jamás `alternateTitles` → Arthur 43 releases/0 rusos, Bolt 203/1) y solución por
+  **Prowlarr** sólo en la alternativa: servicio `prowlarr` (config/settings/sonda
+  `GET /api`), `POST /api/mixer/alternatives/language-search` con `GET /api/v1/search`
+  **sin filtro `categories`** (NoNaMe reporta ids 100xxx y clasifica películas como
+  TV/Other: con cats «Вольт 2008» 31→0), regla de relevancia (≥1 token no numérico
+  ≥3 chars), sección «Búsqueda en idioma» con chips ORIGINAL/RU + input editable
+  (sólo el modal de alternativa; los 4 mounts compartidos intactos) y descarga directa
+  a qBittorrent vía `amutorrent_add_download` (costura ports/gateways, 502 si el
+  servicio no está configurado). Suites **1335 backend / 673 frontend**, ratchet
+  3268→**3270** disclosed, PR único de ~2225 líneas (divulgado). Review nativa 3
+  lentes **aprobado** (6 hallazgos informativos; la admisión rechazó un payload con
+  `severity_note` → STATUS + grupo re-ejecutado), autoridad quemada. Commits
+  `2005f6f`+`03e63c7`+`c0d640e`, merge `84826b7`.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -113,10 +130,11 @@ working tree limpia.
 - #204 — npm audit: `source-map-js` 1.2.1→1.2.2 (lockfile), 0 vulnerabilities.
 - #205 — **B-12 resuelto**: guarda de petición en vuelo en el botón Actualizar.
 
-**RDD**: `gentle-ai review mode status` → global **on**, clone-local unset. El binario
-nativo de review no está en este entorno (`package-local-binary-missing` → assess devuelve
-`nativeRisk: unassessable` y plan `writerSelfVerification`) — el gate es igual: assess antes
-de reportar completo, verificación del writer + spot-check del padre.
+**RDD**: `gentle-ai review mode status` → global **on**, clone-local unset. La review
+nativa SÍ opera en este entorno (ciclos completos en #214, #216 y #218 → approved +
+autoridad quemada; #218: assess `nativeRisk medium`, 23 paths/2225 líneas, 3 lentes).
+Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
+(STATUS fresco antes de cada una) y verificación por tier.
 
 **Stitch**: proyecto `FlowController — Diseños` (`projects/4305330220058954866`) con design
 system "FlowController" (`assets/5781956853225900110`) + 9 pantallas numeradas 01–09
@@ -164,9 +182,9 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   aunque >400 líneas** (decisión explícita repetida), merge al estar CI verde sin preguntar.
   PR bodies vía `--body-file` (zsh se come backticks); prosa en español, código en inglés;
   todo PR cierra con `Risk: item N`.
-- **Gate (RDD on global)**: `gentle_review assess` antes de reportar completo → plan
-  (hoy: writerSelfVerification, binario native ausente). Si el plan pide verifier, no
-  degradar. TDD RED→GREEN obligatorio (RED observado antes de implementar); e2e de CI = gate.
+- **Gate (RDD on global)**: `gentle_review assess` antes de reportar completo → sigue el
+  plan que devuelva (review nativa operativa; último ciclo #218). Si el plan pide verifier,
+  no degradar. TDD RED→GREEN obligatorio (RED observado antes de implementar); e2e de CI = gate.
 - Writers `gentle-ai-worker`: **no ejecutan git** (reportan `partial` si toca commitear) →
   el padre commitea. Handoff de writer con heading `## Allowed edit surfaces` (rutas
   exactas, una por línea) + rediseño TDD ya cerrado para que solo ejecute.
@@ -214,7 +232,7 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   (`backend/tests/_stubs.py`, httpx ASGITransport en un loop).
 - **Ratchet `MAX_LEGACY_LOC`** (`tests/contracts/tests_architecture.py`): event_bus/app.py
   y `media_mixer.py` son legacy; cualquier línea nueva exige subir el máximo CON comentario
-  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017→3218→3254 hecho; entradas
+  dated y owned en el PR (2578→2730→2750→2751→2782→2869→3016→3017→3218→3254→3270 hecho; entradas
   `#:`). **Headroom 0**: a tope, cualquier fix legado exige subir el techo en la misma
   PR (STOP del worker T12 → opción 1 del padre: surfaces + mínimo medido).
 - **`track_index` del mux = ORDINAL** (posición en `video_tracks`/`audio_tracks` para
@@ -232,6 +250,12 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   a `null` en el guard y el call queda `never` (TS2349) → holder de objeto
   (`const armed: {fire?: () => void}`).
 - zsh se come backticks en `gh pr create --body` → siempre `--body-file`.
+- **Watcher de CI con `gh … --jq -e '…'` nunca termina**: `--jq` de `gh` no admite flags
+  jq (`-e`) y la invocación falla al instante (`accepts at most 1 arg(s), received 2`),
+  pero el `until` + `sleep 25` del bucle lo disfraza de espera infinita (job-11 «colgado»
+  27 min con el run ya success). Forma correcta: `gh run watch <id> --exit-status` o
+  comparar `--jq '.conclusion'` con grep, con `timeout` por invocación. Ante un watcher
+  eterno: log del job + `ps` primero, no sospechar de la red.
 - Engram: si `mem_save` falla con "multiple active runtime sessions" → `engram doctor
   --json` y `mem_session_end` de la sesión runtime zombie (funcionó: `ses_ee284984...`).
   Los feature docs viven en el espejo de Engram (p. ej. `odd/stitch-series-tree/tasks`,
@@ -249,4 +273,6 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
 - `odd/tasks/mixer-redesign.md` — **redesign del Mixer completo**: specs S1–S9, tareas
   T1–T9, Log L1–L23 (decisiones verbatim, aprobación de mockups L14, contrato ordinal L18,
   evidencia por tarea y fronteras de slice C1–C8).
+- `odd/tasks/busqueda-idioma-prowlarr.md` — búsqueda por idioma en la alternativa:
+  specs S1–S7, tareas T1–T6, Log L1–L5 (decisiones de usuario y contrato Prowlarr).
 - `prototypes/DESIGN.md` — handoff original de Stitch (tokens C-06 + briefs).
