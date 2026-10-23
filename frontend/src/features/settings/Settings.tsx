@@ -133,41 +133,11 @@ function withAmuleEc(data: Settings): SettingsForm {
   return next
 }
 
-/** Doble raíl (S1) — sub-nav «Configuración», estilo Radarr. Los estilos son
- *  en línea porque `Settings.css` queda fuera de las superficies de edición de
- *  esta tarea. */
-const subnavStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: 8,
-  alignItems: 'center',
-  margin: '0 0 12px',
-}
-
-function subnavTabStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: '8px 14px',
-    borderRadius: 8,
-    border: active ? '1px solid var(--accent, #b48ead)' : '1px solid var(--border)',
-    background: active ? 'var(--surface-1)' : 'transparent',
-    color: active ? 'var(--text)' : 'var(--text-2)',
-    fontWeight: active ? 600 : 500,
-    fontSize: 13,
-    cursor: 'pointer',
-  }
-}
-
-const subnavTagStyle: React.CSSProperties = {
-  fontSize: 11,
-  color: 'var(--text-dim)',
-  fontFamily: 'monospace',
-}
-
-/** Ambos paneles siguen montados (el inactivo, oculto): así la mitad llena de
- *  un formulario no se pierde al pestañear, y las queries de jsdom siguen
- *  encontrando lo que ya encontraban. */
-function panelStyle(active: boolean): React.CSSProperties {
-  return active ? {} : { display: 'none' }
-}
+/** Anclajes ARIA del par tab/panel (tablist del sub-raíl, stitch-12). */
+const TABS = {
+  general: { id: 'settings-tab-general', panel: 'settings-panel-general' },
+  indexadores: { id: 'settings-tab-indexadores', panel: 'settings-panel-indexadores' },
+} as const
 
 export function Settings() {
   const queryClient = useQueryClient()
@@ -248,31 +218,100 @@ export function Settings() {
     <div className="settings-page">
       {toast && <div className="settings-toast">{toast}</div>}
 
-      {/* S1: submenú interno — sin rutas nuevas; la barra lateral no se toca. */}
-      <nav className="settings-subnav" aria-label="Secciones de configuración" style={subnavStyle}>
-        <button
-          type="button"
-          style={subnavTabStyle(tab === 'general')}
-          aria-current={tab === 'general' ? 'page' : undefined}
-          onClick={() => setTab('general')}
-        >
-          General
-        </button>
-        <button
-          type="button"
-          style={subnavTabStyle(tab === 'indexadores')}
-          aria-current={tab === 'indexadores' ? 'page' : undefined}
-          onClick={() => setTab('indexadores')}
-        >
-          Indexadores
-        </button>
-        <span aria-hidden="true" style={subnavTagStyle}>Torznab</span>
-      </nav>
-      <p className="settings-hint">
-        Parámetros operacionales, endpoints locales, demonios multimedia y credenciales de acceso.
-      </p>
+      {/* Sub-raíl VERTICAL de ~320px (config-1x1 T3/S2, stitch-12-general.html):
+          título, descripción, ítems «General»/«Indexadores» (semántica de
+          pestañas) y la tarjeta de pie «Sincronización de Daemons». Copia y
+          disposición literales del diseño; sin rutas nuevas. */}
+      <aside className="settings-rail">
+        <div className="settings-rail-top">
+          <div>
+            <span className="settings-rail-title">Configuración</span>
+            <p className="settings-rail-desc">
+              Parámetros operacionales, endpoints locales, demonios multimedia y credenciales de acceso.
+            </p>
+          </div>
+          <nav aria-label="Secciones de configuración">
+            <div
+              role="tablist"
+              aria-label="Secciones de configuración"
+              aria-orientation="vertical"
+              className="settings-rail-tabs"
+            >
+              <button
+                type="button"
+                role="tab"
+                id={TABS.general.id}
+                aria-controls={TABS.general.panel}
+                aria-selected={tab === 'general'}
+                className={`settings-rail-item ${tab === 'general' ? 'active' : ''}`}
+                onClick={() => setTab('general')}
+              >
+                <span className="settings-rail-item-label">General</span>
+                <span className="settings-rail-item-dot" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id={TABS.indexadores.id}
+                aria-controls={TABS.indexadores.panel}
+                aria-selected={tab === 'indexadores'}
+                className={`settings-rail-item ${tab === 'indexadores' ? 'active' : ''}`}
+                onClick={() => setTab('indexadores')}
+              >
+                <span className="settings-rail-item-label">Indexadores</span>
+                <span className="settings-rail-item-tag" aria-hidden="true">Torznab</span>
+              </button>
+            </div>
+          </nav>
+        </div>
+        <div className="settings-rail-foot">
+          <div className="settings-rail-foot-title">Sincronización de Daemons</div>
+          <p className="settings-rail-foot-text">
+            Los perfiles y conexiones críticas se sincronizan directamente con los daemons locales de Node y sockets UNIX. Cualquier cambio surte efecto de forma inmediata sin necesidad de reiniciar el host salvo que se modifique el puerto de escucha.
+          </p>
+        </div>
+      </aside>
 
-      <div hidden={tab !== 'general'} style={panelStyle(tab === 'general')}>
+      {/* Ambos paneles siguen montados (el inactivo, oculto y con aria-hidden):
+          así la mitad llena de un formulario no se pierde al pestañear, y las
+          queries de jsdom siguen encontrando lo que ya encontraban. */}
+      <div
+        role="tabpanel"
+        id={TABS.general.panel}
+        aria-labelledby={TABS.general.id}
+        aria-hidden={tab !== 'general'}
+        hidden={tab !== 'general'}
+        className="settings-panel"
+      >
+      {/* Cabecera del panel (stitch-12): título + subtítulo y las acciones
+          «Guardar cambios» / «Descartar» arriba a la derecha. «Descartar»
+          hereda la semántica del antiguo «Restablecer» (recarga lo guardado y
+          limpia los avisos de reinicio); sólo cambian sitio y nombre. */}
+      <div className="settings-panel-header">
+        <div>
+          <h2 className="settings-panel-title">General</h2>
+          <p className="settings-panel-subtitle">
+            Ajustes generales del panel y conexiones de los servicios
+          </p>
+        </div>
+        <div className="settings-panel-actions">
+          <button
+            type="button"
+            className="settings-btn settings-btn-secondary"
+            onClick={() => { setForm(data ? withAmuleEc(data) : null); setRestartFields([]) }}
+          >
+            Descartar
+          </button>
+          <button
+            type="button"
+            className="settings-btn settings-btn-primary"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || !form}
+          >
+            {saveMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
       <Section title="Servicios">
         <div className="settings-group">
           <h4>Radarr</h4>
@@ -354,6 +393,7 @@ export function Settings() {
         values={form.services.amule ?? { url: '', ec_port: '', ec_password: '' }}
         update={update}
         isRestarting={isRestarting}
+        onOpenIndexadores={() => setTab('indexadores')}
       />
 
       <Section title="Seguridad">
@@ -380,7 +420,7 @@ export function Settings() {
       </Section>
 
       {/* Not inside the form above: it writes aMule's own files and takes
-          effect on its own button, where "Guardar configuración" would
+          effect on its own button, where "Guardar cambios" would
           otherwise claim to have saved something it never saw. */}
       <SharedDirsSection />
 
@@ -405,28 +445,19 @@ export function Settings() {
       </Section>
 
       <LogsSection />
-
-      <div className="settings-actions">
-        <button
-          className="action-btn search-all"
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending || !form}
-        >
-          {saveMutation.isPending ? 'Guardando...' : '💾 Guardar configuración'}
-        </button>
-        <button
-          className="action-btn"
-          onClick={() => { setForm(data ? withAmuleEc(data) : null); setRestartFields([]) }}
-        >
-          Restablecer
-        </button>
-      </div>
       </div>
 
-      <div hidden={tab !== 'indexadores'} style={panelStyle(tab === 'indexadores')}>
+      <div
+        role="tabpanel"
+        id={TABS.indexadores.panel}
+        aria-labelledby={TABS.indexadores.id}
+        aria-hidden={tab !== 'indexadores'}
+        hidden={tab !== 'indexadores'}
+        className="settings-panel"
+      >
         {/* T6/S5 — direct connections: its own SQLite table and its own
             buttons, so (like SharedDirsSection) it is not part of the form
-            that "Guardar configuración" claims to save. */}
+            that "Guardar cambios" claims to save. */}
         <IndexadoresSection />
       </div>
     </div>

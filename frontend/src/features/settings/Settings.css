@@ -1,10 +1,213 @@
 /* ── Settings page ──────────────────────────────────────────────── */
+/* Doble raíl (config-1x1 T3/S2, stitch-12-general.html): sub-raíl vertical
+   ~320px a la izquierda + panel de contenido a la derecha. */
 .settings-page {
-  max-width: 720px;
+  display: flex;
+  align-items: stretch;
+}
+
+/* ── Sub-raíl vertical de Configuración ────────────────────────── */
+.settings-rail {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.settings-rail-top {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-rail-title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-rail-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.settings-rail-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-rail-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.settings-rail-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.settings-rail-item.active {
+  background: var(--surface-1);
+  border-color: var(--border);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.settings-rail-item-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--accent);
+}
+
+.settings-rail-item-tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* Tarjeta de pie del raíl («Sincronización de Daemons…»). */
+.settings-rail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.settings-rail-foot-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-rail-foot-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+/* ── Panel de contenido (General | Indexadores) ────────────────── */
+.settings-panel {
+  flex: 1;
+  min-width: 0;
+  padding: 32px;
+  overflow-y: auto;
+}
+
+/* `hidden` debe ganarle a cualquier display del panel. */
+.settings-panel[hidden] {
+  display: none;
+}
+
+.settings-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.settings-panel-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.settings-panel-subtitle {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.settings-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.settings-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.settings-btn-primary {
+  padding: 8px 20px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--on-fill);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.settings-btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 85%, var(--on-fill));
+  border-color: color-mix(in srgb, var(--accent) 85%, var(--on-fill));
+}
+
+.settings-btn-secondary {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.settings-btn-secondary:hover:not(:disabled) {
+  background: var(--hover);
 }
 
 .settings-section {
   margin-bottom: 28px;
+  max-width: 72rem;
 }
 
 .settings-section-title {
@@ -105,14 +308,8 @@
   word-break: break-word;
 }
 
-.settings-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
+/* El guardado vive en la cabecera del panel (stitch-12); no hay barra de
+   acciones inferior — la clase se retira con el elemento. */
 .settings-toast {
   position: fixed;
   bottom: 24px;
@@ -126,6 +323,109 @@
   font-weight: 500;
   z-index: 300;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Tarjeta «aMule — conexión directa (EC)» (stitch-12, CARD 3) ─ */
+.amule-ec-card {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 28px;
+  padding: 24px;
+  border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  max-width: 72rem;
+}
+
+/* Barra de acento izquierda del diseño (decorativa). */
+.amule-ec-card-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--accent);
+}
+
+.amule-ec-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.amule-ec-card-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.amule-ec-card-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.amule-ec-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-fill);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Host/URL · Puerto · Contraseña EC, en fila (grid de 3 del diseño). */
+.amule-ec-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: end;
+}
+
+@media (max-width: 900px) {
+  .amule-ec-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.amule-ec-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* Callout «Nota: …» con «Indexadores» como enlace accionable. */
+.amule-ec-note {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+
+.amule-ec-note-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.amule-ec-note-link {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+.amule-ec-note-link:hover {
+  color: color-mix(in srgb, var(--accent) 85%, var(--on-fill));
 }
 
 

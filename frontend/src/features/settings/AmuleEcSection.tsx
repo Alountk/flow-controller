@@ -19,6 +19,13 @@
  * removed while a probe is pending instead of disabling the button — a guard
  * that also holds under jsdom, where a click on a disabled button still fires
  * handlers.
+ *
+ * config-1x1 T3 (S2) brings the card to STRICT 1:1 with the design: header
+ * with the title + the exact subtitle and the «Protocolo Nativo» badge on the
+ * right, the three fields in the design's row, and the note with «Indexadores»
+ * as an ACCIONABLE link (liberty #2 of #224 — plain text — is undone) that
+ * switches to the Indexadores panel. All styling lives in `Settings.css`
+ * (liberty #3 — inline styles — is undone).
  */
 
 import { useState } from 'react'
@@ -57,33 +64,17 @@ function candidateFrom(values: AmuleEcValues): AmuleEcCandidate {
   return candidate
 }
 
-/** The card's distinctive look (mockup: highlighted border + left accent bar).
- *  Inline styles on purpose: `Settings.css` is outside this task's edit
- *  surfaces, and the accent exists only for this card. */
-const cardStyle: React.CSSProperties = {
-  border: '2px solid var(--accent, #b48ead)',
-  borderLeft: '6px solid var(--accent, #b48ead)',
-  background: 'var(--surface-1)',
-}
-
-const badgeStyle: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '2px 8px',
-  borderRadius: 6,
-  border: '1px solid var(--accent, #b48ead)',
-  color: 'var(--text)',
-  fontSize: 11,
-  fontWeight: 600,
-}
-
 export function AmuleEcSection({
   values,
   update,
   isRestarting = () => false,
+  onOpenIndexadores,
 }: {
   values: AmuleEcValues
   update: (path: string, value: string) => void
   isRestarting?: (path: string) => boolean
+  /** El enlace «Indexadores» de la nota conmuta al panel Indexadores. */
+  onOpenIndexadores: () => void
 }) {
   const [pending, setPending] = useState(false)
 
@@ -100,13 +91,18 @@ export function AmuleEcSection({
   }
 
   return (
-    <div className="settings-section">
-      <h3 className="settings-section-title">aMule — conexión directa (EC)</h3>
-      <div className="settings-group amule-ec-card" style={cardStyle}>
-        <p className="settings-hint">
-          <strong>External Connection (EC)</strong> para telemetría directa con el core aMuled.{' '}
-          <span style={badgeStyle}>Protocolo Nativo</span>
-        </p>
+    <section className="amule-ec-card">
+      <div className="amule-ec-card-accent" aria-hidden="true" />
+      <div className="amule-ec-card-head">
+        <div className="amule-ec-card-heading">
+          <h3 className="amule-ec-card-title">aMule — conexión directa (EC)</h3>
+          <p className="amule-ec-card-subtitle">
+            External Connection (EC) para telemetría directa con el core aMuled.
+          </p>
+        </div>
+        <span className="amule-ec-badge">Protocolo Nativo</span>
+      </div>
+      <div className="amule-ec-fields">
         <Field
           label="Host / URL"
           value={values.url}
@@ -128,20 +124,33 @@ export function AmuleEcSection({
           restart={isRestarting('services.amule.ec_password')}
           type="password"
         />
-        <div className="settings-logs-controls">
-          <button
-            type="button"
-            className="action-btn"
-            onClick={pending ? undefined : probe}
-          >
-            {pending ? 'Probando…' : 'Probar conexión EC'}
-          </button>
-        </div>
-        <p className="shared-dirs-hint">
+      </div>
+      <div className="amule-ec-actions">
+        <button
+          type="button"
+          className="settings-btn settings-btn-secondary"
+          onClick={pending ? undefined : probe}
+        >
+          {pending ? 'Probando…' : 'Probar conexión EC'}
+        </button>
+      </div>
+      <div className="amule-ec-note">
+        <p className="amule-ec-note-text">
           <strong>Nota:</strong> Es la conexión al daemon aMule por el protocolo EC (eD2k/Kad).
-          No es un indexador Torznab: los indexadores se configuran en la pestaña Indexadores.
+          No es un indexador Torznab: los indexadores se configuran en la pestaña{' '}
+          <a
+            className="amule-ec-note-link"
+            href="#"
+            onClick={(e) => {
+              e.preventDefault()
+              onOpenIndexadores()
+            }}
+          >
+            Indexadores
+          </a>
+          .
         </p>
       </div>
-    </div>
+    </section>
   )
 }
