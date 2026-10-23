@@ -63,3 +63,23 @@ export async function probeService(candidate: ServiceCandidate): Promise<Service
   }
   return result
 }
+
+/** `POST /api/amule/test` — the aMule EC handshake probe (config-submenu S2).
+ *
+ * Lives here beside `testServiceConnections`/`probeService` because it is the
+ * same kind of thing: a read-only connection probe whose verdict is a short
+ * human sentence. The backend always answers HTTP 200 with `{ok, detail}` —
+ * the verdict lives in the body, never in the status — so a rejected answer
+ * here really is a transport failure, not a refused connection. */
+export interface AmuleEcTestResult {
+  ok: boolean
+  detail: string
+}
+
+export async function testAmuleEc(): Promise<AmuleEcTestResult> {
+  const res = await apiFetch('/api/amule/test', { method: 'POST' })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  return (await res.json()) as AmuleEcTestResult
+}

@@ -5,6 +5,7 @@ import { apiFetch } from '../../shared/api/auth.ts'
 import { testServiceConnections, type ServiceTestResult } from '../../shared/api/services.ts'
 import { SharedDirsSection } from './SharedDirsSection.tsx'
 import { IndexadoresSection } from './IndexadoresSection.tsx'
+import { AmuleEcSection, type AmuleEcValues } from './AmuleEcSection.tsx'
 import { Field } from '../../shared/ui/Field.tsx'
 import './Settings.css'
 
@@ -115,11 +116,65 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+/** The form also binds `services.amule.*` (config-submenu S2). The group is
+ *  optional in the payload (its defaults are env-backed and may never have
+ *  been saved), so it is seeded here: `update()` writes nested paths and
+ *  needs the object to exist. */
+type SettingsForm = Settings & { services: Settings['services'] & { amule?: AmuleEcValues } }
+
+function withAmuleEc(data: Settings): SettingsForm {
+  const next = JSON.parse(JSON.stringify(data)) as SettingsForm
+  const amule = next.services.amule
+  next.services.amule = {
+    url: amule?.url ?? '',
+    ec_port: amule?.ec_port ?? '',
+    ec_password: amule?.ec_password ?? '',
+  }
+  return next
+}
+
+/** Doble raíl (S1) — sub-nav «Configuración», estilo Radarr. Los estilos son
+ *  en línea porque `Settings.css` queda fuera de las superficies de edición de
+ *  esta tarea. */
+const subnavStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  alignItems: 'center',
+  margin: '0 0 12px',
+}
+
+function subnavTabStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '8px 14px',
+    borderRadius: 8,
+    border: active ? '1px solid var(--accent, #b48ead)' : '1px solid var(--border)',
+    background: active ? 'var(--surface-1)' : 'transparent',
+    color: active ? 'var(--text)' : 'var(--text-2)',
+    fontWeight: active ? 600 : 500,
+    fontSize: 13,
+    cursor: 'pointer',
+  }
+}
+
+const subnavTagStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: 'var(--text-dim)',
+  fontFamily: 'monospace',
+}
+
+/** Ambos paneles siguen montados (el inactivo, oculto): así la mitad llena de
+ *  un formulario no se pierde al pestañear, y las queries de jsdom siguen
+ *  encontrando lo que ya encontraban. */
+function panelStyle(active: boolean): React.CSSProperties {
+  return active ? {} : { display: 'none' }
+}
+
 export function Settings() {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState<Settings | null>(null)
+  const [form, setForm] = useState<SettingsForm | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [restartFields, setRestartFields] = useState<string[]>([])
+  const [tab, setTab] = useState<'general' | 'indexadores'>('general')
 
   const { data, isPending, error } = useQuery({
     queryKey: ['settings'],
@@ -127,7 +182,7 @@ export function Settings() {
   })
 
   useEffect(() => {
-    if (data && !form) setForm(data)
+    if (data && !form) setForm(withAmuleEc(data))
   }, [data, form])
 
   const testMutation = useMutation({
@@ -193,6 +248,31 @@ export function Settings() {
     <div className="settings-page">
       {toast && <div className="settings-toast">{toast}</div>}
 
+      {/* S1: submenú interno — sin rutas nuevas; la barra lateral no se toca. */}
+      <nav className="settings-subnav" aria-label="Secciones de configuración" style={subnavStyle}>
+        <button
+          type="button"
+          style={subnavTabStyle(tab === 'general')}
+          aria-current={tab === 'general' ? 'page' : undefined}
+          onClick={() => setTab('general')}
+        >
+          General
+        </button>
+        <button
+          type="button"
+          style={subnavTabStyle(tab === 'indexadores')}
+          aria-current={tab === 'indexadores' ? 'page' : undefined}
+          onClick={() => setTab('indexadores')}
+        >
+          Indexadores
+        </button>
+        <span aria-hidden="true" style={subnavTagStyle}>Torznab</span>
+      </nav>
+      <p className="settings-hint">
+        Parámetros operacionales, endpoints locales, demonios multimedia y credenciales de acceso.
+      </p>
+
+      <div hidden={tab !== 'general'} style={panelStyle(tab === 'general')}>
       <Section title="Servicios">
         <div className="settings-group">
           <h4>Radarr</h4>
@@ -264,11 +344,17 @@ export function Settings() {
         )}
       </Section>
 
-      {/* T6/S5 — direct connections: its own SQLite table and its own
-          buttons, so (like SharedDirsSection) it is not part of the form
-          that "Guardar configuración" claims to save. Mounted right after
-          «Estado de las conexiones» — the connection-related block. */}
-      <IndexadoresSection />
+      {/* S2 — «Recuerda que los datos para conectar amule son diferentes a
+          los indexadores de prowlarr y jackett por ejemplo» (Log L1c): su
+          propia tarjeta, aquí en General; los indexadores Torznab viven en la
+          pestaña Indexadores. Form-bindings como los servicios vecinos, pero
+          la contraseña EC llega siempre enmascarada y «vacío/máscara =
+          conservar la guardada» lo aplica el backend. */}
+      <AmuleEcSection
+        values={form.services.amule ?? { url: '', ec_port: '', ec_password: '' }}
+        update={update}
+        isRestarting={isRestarting}
+      />
 
       <Section title="Seguridad">
         <Field label="API Key propia" value={form.security.api_key} onChange={(v) => update('security.api_key', v)} restart={isRestarting('security.api_key')} placeholder="Clave para proteger la API" type="password" />
@@ -330,10 +416,18 @@ export function Settings() {
         </button>
         <button
           className="action-btn"
-          onClick={() => { setForm(data ?? null); setRestartFields([]) }}
+          onClick={() => { setForm(data ? withAmuleEc(data) : null); setRestartFields([]) }}
         >
           Restablecer
         </button>
+      </div>
+      </div>
+
+      <div hidden={tab !== 'indexadores'} style={panelStyle(tab === 'indexadores')}>
+        {/* T6/S5 — direct connections: its own SQLite table and its own
+            buttons, so (like SharedDirsSection) it is not part of the form
+            that "Guardar configuración" claims to save. */}
+        <IndexadoresSection />
       </div>
     </div>
   )
