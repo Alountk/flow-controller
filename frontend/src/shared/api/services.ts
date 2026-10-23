@@ -76,8 +76,32 @@ export interface AmuleEcTestResult {
   detail: string
 }
 
-export async function testAmuleEc(): Promise<AmuleEcTestResult> {
-  const res = await apiFetch('/api/amule/test', { method: 'POST' })
+/** Values typed in the aMule (EC) card but not saved yet (config-1x1 S1).
+ *
+ * The backend mirrors `POST /api/services/test`: what is present overrides the
+ * stored config FOR THIS CALL, and what is absent, empty or masked falls back
+ * to the stored one. A masked secret (`****…`, what GET returns) is never sent
+ * as a candidate — omitting it is what makes the stored value win. */
+export interface AmuleEcCandidate {
+  url?: string
+  ec_port?: string | number
+  ec_password?: string
+}
+
+export async function testAmuleEc(candidate?: AmuleEcCandidate): Promise<AmuleEcTestResult> {
+  // Nothing typed → no body at all: the backend probes the stored config,
+  // byte-identical to the body-less call.
+  const hasCandidate = candidate !== undefined && Object.keys(candidate).length > 0
+  const res = await apiFetch(
+    '/api/amule/test',
+    hasCandidate
+      ? {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(candidate),
+        }
+      : { method: 'POST' },
+  )
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
   }

@@ -11,14 +11,22 @@
  *
  * The probe («Probar conexión EC») is read-only: `POST /api/amule/test` does a
  * connect + EC handshake and closes. Its verdict comes back as `{ok, detail}`
- * and is surfaced with the F-13 toast. The click handler is removed while a
- * probe is pending instead of disabling the button — a guard that also holds
- * under jsdom, where a click on a disabled button still fires handlers.
+ * and is surfaced with the F-13 toast. It probes WHAT THE FORM HOLDS NOW —
+ * the values just typed, before saving them (the `POST /api/services/test`
+ * candidate pattern, config-1x1 S1): an empty or masked field is omitted so
+ * the stored value wins, which is the common path after the first save (the
+ * password field then holds the mask GET returned). The click handler is
+ * removed while a probe is pending instead of disabling the button — a guard
+ * that also holds under jsdom, where a click on a disabled button still fires
+ * handlers.
  */
 
 import { useState } from 'react'
 import { Field } from '../../shared/ui/Field.tsx'
-import { testAmuleEc } from '../../shared/api/services.ts'
+import {
+  testAmuleEc,
+  type AmuleEcCandidate,
+} from '../../shared/api/services.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import './Settings.css'
 
@@ -28,6 +36,25 @@ export interface AmuleEcValues {
    *  stored one. The sibling service fields behave the same way. */
   ec_port: string | number
   ec_password: string
+}
+
+/** What «Probar conexión EC» sends: the CURRENT form values, with the same
+ *  mask/empty rules the backend applies to a save (`_restore_masked_secrets`).
+ *  An empty field is omitted (stored wins); the masked round-trip
+ *  (`****…`, what GET returns for the stored secret) is NEVER a password —
+ *  omitting it is exactly what makes the stored one win. The password is
+ *  never trimmed: spaces are legal in it. */
+function candidateFrom(values: AmuleEcValues): AmuleEcCandidate {
+  const candidate: AmuleEcCandidate = {}
+  const url = values.url.trim()
+  if (url) candidate.url = url
+  const port = String(values.ec_port).trim()
+  if (port) candidate.ec_port = values.ec_port
+  const password = values.ec_password
+  if (password !== '' && !password.startsWith('****')) {
+    candidate.ec_password = password
+  }
+  return candidate
 }
 
 /** The card's distinctive look (mockup: highlighted border + left accent bar).
@@ -63,7 +90,7 @@ export function AmuleEcSection({
   async function probe() {
     setPending(true)
     try {
-      const result = await testAmuleEc()
+      const result = await testAmuleEc(candidateFrom(values))
       toast(result.detail, result.ok ? 'ok' : 'error')
     } catch {
       toast('No se pudo probar la conexión EC con el backend.', 'error')

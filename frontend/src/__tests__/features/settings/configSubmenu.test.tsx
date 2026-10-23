@@ -315,3 +315,98 @@ describe('aMule (EC) card — «Probar conexión EC» (S2)', () => {
     ).toBe('****abcd')
   })
 })
+
+describe('«Probar conexión EC» — sonda de lo ESCRITO (config-1x1 S1/T2)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+
+  it('probes the values just typed in the card, not the stored ones', async () => {
+    let sent: unknown = 'sin llamada'
+    mockFetch({
+      ...baseRoutes,
+      'POST /api/amule/test': (body) => {
+        sent = body
+        return { ok: true, detail: 'conectado' }
+      },
+    })
+    renderSettings()
+
+    const card = await amuleCard()
+    fireEvent.change(within(card).getByLabelText('Host / URL'), {
+      target: { value: 'http://10.0.0.5' },
+    })
+    fireEvent.change(within(card).getByLabelText('Puerto'), {
+      target: { value: '4713' },
+    })
+    fireEvent.change(within(card).getByLabelText('Contraseña EC'), {
+      target: { value: 'clave-nueva-1' },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
+
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: 'conectado', tone: 'ok' }),
+      ),
+    )
+    expect(sent).toEqual({
+      url: 'http://10.0.0.5',
+      ec_port: '4713',
+      ec_password: 'clave-nueva-1',
+    })
+  })
+
+  it('never sends the masked password as a candidate: omitted, stored wins', async () => {
+    let sent: unknown = 'sin llamada'
+    mockFetch({
+      ...baseRoutes,
+      'POST /api/amule/test': (body) => {
+        sent = body
+        return { ok: true, detail: 'conectado' }
+      },
+    })
+    renderSettings()
+
+    // Sin tocar el form: la contraseña del campo es la máscara que devolvió GET.
+    fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
+
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: 'conectado', tone: 'ok' }),
+      ),
+    )
+    expect(sent).toEqual({ url: 'http://192.168.1.10', ec_port: '4712' })
+    expect(sent).not.toHaveProperty('ec_password')
+  })
+
+  it('omits empty fields entirely so the probe falls back to the stored config', async () => {
+    let sent: unknown = 'sin llamada'
+    mockFetch({
+      ...baseRoutes,
+      'POST /api/amule/test': (body) => {
+        sent = body
+        return { ok: true, detail: 'conectado' }
+      },
+    })
+    renderSettings()
+
+    const card = await amuleCard()
+    fireEvent.change(within(card).getByLabelText('Host / URL'), { target: { value: '' } })
+    fireEvent.change(within(card).getByLabelText('Puerto'), { target: { value: '' } })
+    fireEvent.change(within(card).getByLabelText('Contraseña EC'), { target: { value: '' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
+
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: 'conectado', tone: 'ok' }),
+      ),
+    )
+    // Nada escrito → SIN body: la sonda usa la config guardada, como siempre.
+    expect(sent).toBeNull()
+  })
+})
