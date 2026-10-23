@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-22 · **PR #220 (conexión directa a aMule por EC)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1440 backend** / 673 frontend · main pre-#220 = `6a91b37` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-22 · **PR #222 (indexadores directos)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1551 backend / 687 frontend** · main pre-#222 = `5f02ed1` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,9 +16,9 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `94292bb` (post-#220), run `39838355890` **pass** (backend-tests,
+**Verde**: `main` en `bad8b1a` (post-#222), run `39884453860` **pass** (backend-tests,
 frontend-build, docker-verify, e2e y **docker-push** → deploy + Portainer notificado).
-Specs: **1440 backend** / 673 frontend, working tree limpia.
+Specs: **1551 backend / 687 frontend**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -140,6 +140,22 @@ Specs: **1440 backend** / 673 frontend, working tree limpia.
   `operator_disposition` + **RDD clone-local OFF (D)** → merge por política ordinaria.
   Commits `e1ccec4`+`821a6fd`+`9122b96`+`aa99ed1`+`29b87a8`+`4ab904d`, merge `94292bb`.
   Feature doc: `odd/tasks/conexion-directa-amule.md` (S1–S7, T1–T6, Log L1–L8).
+- #222 — **`indexadores-directos` T1–T7** (Steps 3-4 del plan; decisiones L2/L3/L6/L7):
+  cliente **Torznab** propio (`torznab_client.py`: `t=caps`+search, RSS2/`torznab:attr`,
+  `_search_query` espejo, sin cats fijas); tabla SQLite **`indexers`** (SCHEMA v11, API key
+  **cifrada en reposo** con `credentials.encrypt_secret`+`key_salt`, enmascarada en toda
+  respuesta, `indexers_raw()` interno); CRUD **`/api/indexers`** + `POST /{id}/test` (t=caps,
+  200 ok:true/false, 409 duplicados, 503 tienda caída); **`POST /api/indexers/search`**
+  paralelo (torznab habilitados + prowlarr + amule `to_thread`) con `skipped` honesto y
+  **200+ok:false si todo falla** (regla #218 espejo byte-idéntico, `sources`≠`seeders`);
+  **`POST /api/indexers/download`** (ed2k→EC con `AMULE_EC_DIRECT=0`→puente, hash32→
+  `download_search_result`, magnet/http→qbit — enmienda L6: el grab de calendario exige
+  servicio arr+movieId); sección **«Indexadores»** en Configuración (CRUD+«Probar»+caja
+  unificada con chips de fuente, estados por fuente con skipped, toast, guard antidosclick).
+  Suites **1551 backend / 687 frontend** (+111/+14, RED por tarea), tsc/eslint 0, ratchet
+  intacto (3408). PR único ~4501 líneas (divulgado; **Risk item 2**). **Review nativa no
+  corre** (clone-local OFF, D de #220 — disposición mantenida). Commits `28ac75b`…`f7a6d8f`,
+  merge **`bad8b1a`**. Feature doc: `odd/tasks/indexadores-directos.md` (S1–S7, T1–T7, Log L1–L7).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -157,7 +173,7 @@ Specs: **1440 backend** / 673 frontend, working tree limpia.
 la activa `gentle-ai review mode enable --scope clone`). La review nativa operó en
 #214/#216/#218 (approved + autoridad quemada; #218: assess `nativeRisk medium`, 23
 paths/2225 líneas, 3 lentes). En **#220 quedó atascada en collect**: 6 capturas
-rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario.
+rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. El PR **#222** (indexadores) mergeó también bajo esa disposición D.
 Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
 (STATUS fresco antes de cada una) y verificación por tier.
 
@@ -235,12 +251,10 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
    frontend — decisión de producto del BACKLOG:737).
 4. Operaciones: health de Radarr sigue con `RemotePathMappingCheck` (qBittorrent-novpn) y
    carpeta de colección ausente — no es del código, revisar en su Radarr.
-5. **Plan «conexiones directas» — Steps 3-6** (L3/L7 de `conexion-directa-amule.md`):
-   Step 3 cliente Torznab (`t=caps`/`search`/`movie|tvsearch`, parseo RSS) · Step 4 MVP
-   **sección «Indexadores»** (CRUD SQLite `indexers` + caja de búsqueda unificada
-   **Torznab + aMule + Prowlarr** reutilizando `ReleaseSearchModal`) · Step 5 Prowlarr:
-   importar sus 13 indexadores como directos, re-cablear la búsqueda por idioma (#218) y
-   retirarlo · Step 6 Radarr/Sonarr sólo archivos (ahí entra `remove_queue`).
+5. **Plan «conexiones directas» — quedan Steps 5-6** (Steps 3-4 **HECHOS en #222**):
+   Step 5 Prowlarr: importar sus 13 indexadores como conexiones directas en la sección
+   «Indexadores», re-cablear la búsqueda por idioma (#218) a las directas y retirarlo ·
+   Step 6 Radarr/Sonarr sólo archivos (ahí entra `remove_queue` y el resto del arr-REST).
 
 ## Gotchas que costaron esta sesión
 
@@ -298,6 +312,15 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   «The tool call was aborted» NO está colgado — `subagent_list_tasks` (turns/calls crecientes
   = vivo) + `ps` + `git status` primero (Engram 1446); exigir `timeout 30` por fetch externo
   en los task texts para que ninguna red parezca un cuelgue.
+- **`tests_routes.py` corrido SOLO o tras `tests/contracts` falla 8 tests** (`gateways.credentials`
+  capturado `None` porque `routes/settings` se importa antes que `app`); la suite completa lo
+  enmascara (cuenta como verde) — no usar esa corrida aislada para decidir regresiones.
+- **Worker muerto con «assistant reported an error»**: si `git status` está limpio (0 archivos
+  escritos), NO hay nada que reconciliar — `subagent_continue(task_id)` retoma su sesión con
+  lo ya leído (T6 de #222: 21 turns/31 calls leídos, 0 escritos → reanudado a la primera).
+- **Edit atómico: no reconstruir anchors de memoria** — «ok-falso» vs «ok-falsos» o un espacio
+  cancela TODOS los edits del batch; `grep`/`repr()` del texto real primero (costó 3 reintentos
+  en #222).
 - Engram: si `mem_save` falla con "multiple active runtime sessions" → `engram doctor
   --json` y `mem_session_end` de la sesión runtime zombie (funcionó: `ses_ee284984...`).
   Los feature docs viven en el espejo de Engram (p. ej. `odd/stitch-series-tree/tasks`,
@@ -319,4 +342,6 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   specs S1–S7, tareas T1–T6, Log L1–L5 (decisiones de usuario y contrato Prowlarr).
 - `odd/tasks/conexion-directa-amule.md` — **conexión directa EC a aMule**: specs S1–S7,
   tareas T1–T6, Log L1–L8 (decisiones, corrección de tipos EC, ratchet, gotcha de capturas).
+- `odd/tasks/indexadores-directos.md` — **indexadores directos (Torznab)**: specs S1–S7,
+  tareas T1–T7, Log L1–L7 (enmienda L6 del grab, decisiones de contrato HTTP, gate).
 - `prototypes/DESIGN.md` — handoff original de Stitch (tokens C-06 + briefs).

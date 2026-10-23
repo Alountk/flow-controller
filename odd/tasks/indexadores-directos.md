@@ -29,7 +29,7 @@ S7: Verificación — TDD: RED observado antes de cada implementación; suite ba
 | T4 | S4, S7 | worker — `POST /api/indexers/search` paralelo (torznab+prowlarr+amule) con skipped/ok-falso honestos, tests | `c42e02a` |
 | T5 | S5, S7 | worker — `POST /api/indexers/download` (dispatch ed2k→EC / magnet·http→qbit) + tests (enmienda L6) | `948a19b` |
 | T6 | S5, S6, S7 | worker — sección «Indexadores» en Settings + `shared/api/indexers.ts` + caja de búsqueda con combo de fuentes + descarga, tests frontend | `1c8b5e9` |
-| T7 | S7 | parent — gate (backend completo + tsc + eslint + vitest + ratchet), README/docs, PR único con divulgación, merge | gate verificado (abajo); merge al cierre |
+| T7 | S7 | parent — gate (backend completo + tsc + eslint + vitest + ratchet), README/docs, PR único con divulgación, merge | docs `f7a6d8f` + **PR #222 merge `bad8b1a`** (CI verde 4m04s) |
 
 ## Log
 
@@ -55,3 +55,5 @@ L6 (enmienda de spec + decisiones T4 — 2026-10-22):
 - Quirk preexistente probado (NO causado por esta feature): `tests_routes.py` corrido SOLO o tras `tests/contracts` falla 8 tests (`gateways.credentials` capturado `None` por orden de imports: `routes/settings` antes que `app`); la suite completa lo enmascara. Fuera de surfaces — anotado para HANDOFF.
 
 L7 (gate y cierre de T6 — 2026-10-22): **gate observado por el parent**: backend **1551 passed**, frontend **86 files / 687 passed** (base 673 + 14), `tsc -b` 0, `eslint` 0, ratchet sin tocar (rutas nuevas no son legacy). Slice tras T6: **4494 líneas / 6 commits** — estrategia PR único con divulgación (ya registrada en L6 de `conexion-directa-amule` y aquí). Decisiones T6: feedback de descarga por **toast** (superficie documentada F-13), confirm global `window.confirm` (patrón FileManager), guarda antidosclick con `onClick={pending ? undefined : fn}` (jsdom clica en `disabled`), mount tras «Estado de las conexiones», `groupByIndexer`/`selectedIndexer` espejados localmente (módulo-privados en ReleaseSearchModal), labels anti-colisión con los3 tests preexistentes de Settings (cero pérdidas). Incidente: el worker T6 falló 1× con error transitorio del asistente EN FASE DE LECTURA (árbol limpio, 0 archivos) → `subagent_continue` reanudó su sesión sin re-leer. **Review nativa**: el clone-local sigue OFF (razón D de #220) → este PR tampoco pasa review nativa (disposición mantenida; habilitar con `gentle-ai review mode enable --scope clone`).
+
+L8 (cierre — 2026-10-22): docs README+doc (`f7a6d8f`), push, **PR #222** (~4501 líneas / 7 commits, divulgado con Risk item 2) → CI del PR **verde en 4m04s** (backend-tests, frontend-build, docker-verify, e2e, GitGuardian; docker-push skip en PR) → **merge `bad8b1a`**; watcher de main `39884453860` en marcha (deploy → GHCR/Portainer). Cierre documental en PR de HANDOFF. Feature **CERRADA**: T1–T7 completadas.
