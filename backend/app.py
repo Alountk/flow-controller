@@ -28,8 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from application import gateways
 from application.use_cases import downloads_cache, trace_cache
 from infrastructure import amule_service, arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
-from infrastructure import credentials as credentials_module, sqlite_history as history
-from infrastructure import prowlarr_client
+from infrastructure import credentials as credentials_module, prowlarr_client, sqlite_history as history, torznab_client
 from config import FRONTEND_DIST
 from state import _LOG_BUFFER, buf_handler, _load_log_file, close_shared_session, open_shared_session
 
@@ -47,7 +46,7 @@ gateways.bind(
     amule=amule_service,
 )
 
-from interfaces.http.routes import status as status_routes
+from interfaces.http.routes import indexers as indexers_routes, status as status_routes
 from interfaces.http.routes.wanted import router as wanted_router
 from interfaces.http.routes.calendar import router as calendar_router
 from interfaces.http.routes.files import router as files_router
@@ -61,6 +60,7 @@ from interfaces.http.routes.amule_shares import router as amule_shares_router
 from interfaces.http.routes.events import router as events_router
 from interfaces.http.middleware import RequestGuards
 from interfaces.http.routes_mixer import router as mixer_router
+indexers_routes.torznab = torznab_client  # adapter hand-off: delivery may hold one only because this file puts it in its hand
 
 logging.basicConfig(
     level=logging.INFO,
@@ -121,7 +121,7 @@ app.add_middleware(RequestGuards)
 # Mount order preserved; the loop keeps this file's counted lines for the lifespan above.
 for router in (status_routes.router, wanted_router, calendar_router, files_router,
                actions_router, auto_copy_router, downloads_router, mediacover_router,
-               settings_router, amule_shares_router, mixer_router, events_router, activity_router):
+               settings_router, amule_shares_router, mixer_router, events_router, activity_router, indexers_routes.router):
     app.include_router(router)
 
 
