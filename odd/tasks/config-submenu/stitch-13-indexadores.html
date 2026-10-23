@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-background text-on-background" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>FlowController — Configuración — Indexadores</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-primary-fixed": "#0f0069",
+            "surface-container-high": "#eae7eb",
+            "surface": "#fbf8fc",
+            "primary-fixed-dim": "#c3c0ff",
+            "secondary": "#5e5e65",
+            "on-surface": "#1b1b1e",
+            "inverse-on-surface": "#f3f0f4",
+            "surface-bright": "#fbf8fc",
+            "tertiary": "#003fac",
+            "on-primary-container": "#dad7ff",
+            "inverse-primary": "#c3c0ff",
+            "on-primary": "#ffffff",
+            "on-error-container": "#93000a",
+            "on-tertiary-fixed": "#00174b",
+            "surface-container-lowest": "#ffffff",
+            "on-primary-fixed-variant": "#3323cc",
+            "secondary-container": "#e3e1ea",
+            "primary-fixed": "#e2dfff",
+            "on-error": "#ffffff",
+            "surface-dim": "#dcd9dd",
+            "on-tertiary": "#ffffff",
+            "on-background": "#1b1b1e",
+            "surface-container-low": "#f6f2f7",
+            "inverse-surface": "#303033",
+            "on-secondary-container": "#64646b",
+            "tertiary-fixed-dim": "#b4c5ff",
+            "on-tertiary-fixed-variant": "#003ea8",
+            "error-container": "#ffdad6",
+            "primary": "#3525cd",
+            "tertiary-container": "#0555dd",
+            "surface-tint": "#4d44e3",
+            "error": "#ba1a1a",
+            "surface-container-highest": "#e4e1e6",
+            "outline": "#777587",
+            "surface-container": "#f0edf1",
+            "primary-container": "#4f46e5",
+            "on-secondary": "#ffffff",
+            "on-tertiary-container": "#d1daff",
+            "background": "#fbf8fc",
+            "surface-variant": "#e4e1e6",
+            "secondary-fixed": "#e3e1ea",
+            "on-surface-variant": "#464555",
+            "secondary-fixed-dim": "#c7c5ce",
+            "on-secondary-fixed-variant": "#46464d",
+            "tertiary-fixed": "#dbe1ff",
+            "on-secondary-fixed": "#1b1b21",
+            "outline-variant": "#c7c4d8"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "gutter": "1rem",
+            "space-sm": "0.5rem",
+            "space-lg": "1rem",
+            "space-xl": "1.5rem",
+            "space-md": "0.75rem",
+            "margin": "1rem",
+            "space-xs": "0.25rem"
+          },
+          "fontFamily": {
+            "headline-lg": ["Inter", "sans-serif"],
+            "headline-sm": ["Inter", "sans-serif"],
+            "headline-md": ["Inter", "sans-serif"],
+            "code-md": ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+            "code-sm": ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+            "body-md": ["Inter", "sans-serif"],
+            "label-sm": ["Inter", "sans-serif"],
+            "body-lg": ["Inter", "sans-serif"],
+            "body-sm": ["Inter", "sans-serif"],
+            "label-md": ["Inter", "sans-serif"]
+          },
+          "fontSize": {
+            "headline-lg": ["1.5rem", { "lineHeight": "2rem", "fontWeight": "600" }],
+            "headline-sm": ["1.125rem", { "lineHeight": "1.5rem", "fontWeight": "600" }],
+            "headline-md": ["1.25rem", { "lineHeight": "1.75rem", "fontWeight": "600" }],
+            "code-md": ["0.8125rem", { "lineHeight": "1.125rem", "fontWeight": "400" }],
+            "code-sm": ["0.75rem", { "lineHeight": "1rem", "fontWeight": "400" }],
+            "body-md": ["0.875rem", { "lineHeight": "1.25rem", "fontWeight": "400" }],
+            "label-sm": ["0.75rem", { "lineHeight": "1rem", "fontWeight": "500" }],
+            "body-lg": ["0.9375rem", { "lineHeight": "1.375rem", "fontWeight": "400" }],
+            "body-sm": ["0.8125rem", { "lineHeight": "1.125rem", "fontWeight": "400" }],
+            "label-md": ["0.8125rem", { "lineHeight": "1rem", "fontWeight": "500" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1;
+    }
+    /* Utilitarian scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f0edf1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c7c4d8;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #777587;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-background text-on-background flex antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- ========================================== -->
+<!-- 1. SHARED COMPONENT: SideNavBar (Anchored) -->
+<!-- ========================================== -->
+<aside class="flex flex-col justify-between h-full p-space-md w-64 border-r border-outline-variant fixed left-0 top-0 z-40 bg-surface-container-lowest">
+<!-- Brand / Header -->
+<div class="flex flex-col gap-space-lg">
+<div class="flex items-center gap-space-md px-space-sm pt-space-xs">
+<div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm shadow-primary/20">
+<span class="material-symbols-outlined" data-icon="tune" style="font-variation-settings: 'FILL' 1;">tune</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md font-bold text-on-surface tracking-tight leading-none">FlowController</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1 leading-none">Gestor Multimedia</span>
+</div>
+</div>
+<!-- Navigation Tabs (7 tabs per Shared JSON) -->
+<nav aria-label="Navegación principal" class="flex flex-col gap-1">
+<!-- 1. Dashboard -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- 2. Películas -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="movie">movie</span>
+<span>Películas</span>
+</a>
+<!-- 3. Series -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="tv">tv</span>
+<span>Series</span>
+</a>
+<!-- 4. Seguimiento with badge 3 -->
+<a class="flex items-center justify-between px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="notifications">notifications</span>
+<span>Seguimiento</span>
+</div>
+<span class="px-1.5 py-0.5 text-xs font-semibold rounded-full bg-primary-fixed text-on-primary-fixed-variant leading-none">3</span>
+</a>
+<!-- 5. Archivos -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="folder">folder</span>
+<span>Archivos</span>
+</a>
+<!-- 6. Media Mixer -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="tune">tune</span>
+<span>Media Mixer</span>
+</a>
+<!-- 7. Ajustes (ACTIVE TAB per destination) -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm bg-primary-fixed text-on-primary-fixed-variant font-headline-sm text-sm rounded-lg shadow-sm" href="#">
+<span class="material-symbols-outlined" data-icon="settings" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-semibold">Ajustes</span>
+</a>
+</nav>
+</div>
+<!-- Footer Actions (Exact labels/icons from JSON) -->
+<div class="flex flex-col gap-1 pt-space-md border-t border-outline-variant/60">
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 text-left w-full">
+<span class="material-symbols-outlined text-outline" data-icon="sync">sync</span>
+<span>Sincronizar</span>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 text-left w-full">
+<span class="material-symbols-outlined text-outline" data-icon="description">description</span>
+<span>Documentación</span>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 text-left w-full">
+<span class="material-symbols-outlined text-outline" data-icon="restart_alt">restart_alt</span>
+<span>Reiniciar servicios</span>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-error font-label-md rounded-lg hover:bg-error-container/50 transition-colors duration-150 text-left w-full">
+<span class="material-symbols-outlined text-error" data-icon="logout">logout</span>
+<span>Cerrar sesión</span>
+</button>
+</div>
+</aside>
+<!-- ========================================== -->
+<!-- 2. MAIN WORKSPACE WITH TOPNAVBAR           -->
+<!-- ========================================== -->
+<div class="ml-64 flex-1 flex flex-col min-w-0 bg-background">
+<!-- TopNavBar (Shared Component Anchor) -->
+<header class="flex justify-between items-center px-8 py-3 bg-surface-container-lowest border-b border-outline-variant sticky top-0 z-30 shadow-none">
+<div class="flex items-center gap-4">
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">FlowController</h1>
+<span class="text-outline-variant">/</span>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">Configuración de Plataforma</span>
+</div>
+<!-- Live Service Status Badges & Trailing Actions -->
+<div class="flex items-center gap-3">
+<!-- Status Badges -->
+<div class="flex items-center gap-2 pr-4 border-r border-outline-variant">
+<!-- Radarr -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-xs font-medium border border-outline-variant/60" title="Radarr HTTP Socket">
+<span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+<span class="text-on-surface font-mono">Radarr:</span>
+<span class="text-emerald-700 font-semibold">Conectado</span>
+</div>
+<!-- Sonarr -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-xs font-medium border border-outline-variant/60" title="Sonarr HTTP Socket">
+<span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+<span class="text-on-surface font-mono">Sonarr:</span>
+<span class="text-emerald-700 font-semibold">Conectado</span>
+</div>
+<!-- aMule -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-xs font-medium border border-amber-300" title="aMule Protocolo EC">
+<span class="w-2 h-2 rounded-full bg-amber-600"></span>
+<span class="text-on-surface font-mono">aMule:</span>
+<span class="text-amber-800 font-bold">Alerta</span>
+</div>
+</div>
+<!-- Trailing Icon Actions from JSON: ["dns", "cloud_done", "warning"] -->
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all duration-150" title="Estado de DNS y puertos">
+<span class="material-symbols-outlined" data-icon="dns">dns</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all duration-150" title="Sincronización en la nube">
+<span class="material-symbols-outlined" data-icon="cloud_done">cloud_done</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-amber-700 hover:bg-amber-100 transition-all duration-150" title="1 Alerta activa en daemon aMule">
+<span class="material-symbols-outlined" data-icon="warning">warning</span>
+</button>
+</div>
+</header>
+<!-- ========================================== -->
+<!-- 3. CONFIGURATION WORKSPACE (RADARR STYLE)  -->
+<!-- ========================================== -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Sub-Navigation Rail (Left, ~320px) -->
+<aside class="w-80 border-r border-outline-variant bg-surface-container-low/70 p-6 flex flex-col justify-between shrink-0">
+<div class="space-y-6">
+<div>
+<div class="flex items-center gap-2 text-primary font-semibold mb-1">
+<span class="material-symbols-outlined text-primary" data-icon="tune">tune</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Configuración</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Parámetros operacionales, endpoints locales, demonios multimedia y credenciales de acceso.
+            </p>
+</div>
+<!-- Vertical Sub-Nav Items -->
+<nav aria-label="Secciones de configuración" class="space-y-1.5"><!-- 1. General (INACTIVE) -->
+<a class="flex items-center justify-between px-3.5 py-2.5 rounded-lg text-on-surface-variant font-medium hover:bg-surface-container hover:text-on-surface transition-colors duration-150" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-outline" data-icon="tune">tune</span>
+<span class="font-body-md text-sm">General</span>
+</div>
+</a>
+<!-- 2. Indexadores (ACTIVE) -->
+<a class="flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-surface-container-lowest text-primary font-medium shadow-sm border border-outline-variant/80" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="storage" style="font-variation-settings: 'FILL' 1;">storage</span>
+<span class="font-headline-sm text-sm font-semibold">Indexadores</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-code-sm text-code-sm text-primary font-medium">Torznab</span>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+</a></nav>
+</div>
+<!-- Informative Bottom Banner in Subrail -->
+<div class="p-3.5 rounded-lg bg-surface-container border border-outline-variant/80 text-on-surface-variant space-y-2">
+<div class="flex items-center gap-2 text-primary font-semibold text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="info">info</span>
+<span>Sincronización de Daemons</span>
+</div>
+<p class="font-body-sm text-xs leading-relaxed text-secondary">
+            Los perfiles y conexiones críticas se sincronizan directamente con los daemons locales de Node y sockets UNIX. Cualquier cambio surte efecto de forma inmediata sin necesidad de reiniciar el host salvo que se modifique el puerto de escucha.
+          </p>
+</div>
+</aside>
+<!-- Main Config Canvas (Right, Scrollable) -->
+<main class="flex-1 overflow-y-auto p-8 space-y-8 bg-surface">
+<!-- Canvas Header Bar -->
+<div class="flex items-center justify-between pb-6 border-b border-outline-variant"><div>
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface">Indexadores</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">
+    Fuentes Torznab directas para buscar y descargar
+  </p>
+</div>
+<!-- Header Action Buttons -->
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface font-label-md text-label-md hover:bg-surface-container flex items-center gap-2 transition-colors duration-150 shadow-sm">
+<span class="material-symbols-outlined text-base text-secondary" data-icon="download_for_offline">download_for_offline</span>
+<span>Importar de Prowlarr/Jackett…</span>
+</button>
+<button class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md flex items-center gap-2 shadow-sm transition-all duration-150">
+<span class="material-symbols-outlined text-base" data-icon="add">add</span>
+<span>Añadir indexador</span>
+</button>
+</div></div>
+<!-- Stacked Modular Cards Container -->
+<div class="space-y-6 max-w-6xl"><!-- CARD 1: BÚSQUEDA UNIFICADA -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center justify-between mb-5 pb-3 border-b border-outline-variant/60">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary" data-icon="travel_explore">travel_explore</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Búsqueda unificada</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Sondeo en tiempo real a través de fuentes Torznab locales y remotas configuradas.</p>
+</div>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">17 fuentes activas</span>
+</div>
+<!-- Search Input Bar -->
+<div class="flex gap-3 mb-4">
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-outline text-lg pointer-events-none" data-icon="search">search</span>
+<input class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Buscar en todas las fuentes…" type="text" value="Dune Part Two 2024"/>
+</div>
+<button class="px-5 py-2.5 bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md rounded-lg flex items-center gap-2 shadow-sm transition-colors duration-150">
+<span class="material-symbols-outlined text-base" data-icon="search">search</span>
+<span>Buscar</span>
+</button>
+</div>
+<!-- Source Chips Filter -->
+<div class="flex items-center gap-2 pb-4 mb-4 border-b border-outline-variant/50">
+<span class="font-label-sm text-label-sm text-secondary mr-1">Fuentes:</span>
+<button class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary text-on-primary shadow-sm">
+<span>🌐 torznab</span>
+<span class="bg-white/20 px-1.5 py-0.2 rounded-full text-xs">3</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary text-on-primary shadow-sm">
+<span>📥 amule</span>
+<span class="bg-white/20 px-1.5 py-0.2 rounded-full text-xs">1</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary text-on-primary shadow-sm">
+<span>🔍 prowlarr</span>
+<span class="bg-white/20 px-1.5 py-0.2 rounded-full text-xs">13</span>
+</button>
+</div>
+<!-- Grouped Results -->
+<div class="space-y-5">
+<!-- Group 1: Prowlarr (13) -->
+<div class="border border-outline-variant/70 rounded-lg overflow-hidden">
+<div class="bg-surface-container-low px-4 py-2 border-b border-outline-variant/70 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="hub">hub</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface">Resultados de Prowlarr</span>
+<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-primary-fixed text-on-primary-fixed-variant leading-none">13</span>
+</div>
+<span class="font-code-sm text-xs text-secondary">Latencia media: 120ms</span>
+</div>
+<div class="divide-y divide-outline-variant/60 font-body-sm text-body-sm bg-surface-container-lowest">
+<!-- Row 1 -->
+<div class="p-3.5 hover:bg-surface-container-low/40 flex items-center justify-between gap-4 transition-colors">
+<div class="min-w-0 flex-1">
+<p class="font-mono font-medium text-on-surface truncate text-xs md:text-sm">Dune.Part.Two.2024.2160p.UHD.Remux.DV.HDR.HEVC-FLUX</p>
+<div class="flex items-center gap-3 mt-1 text-xs text-secondary">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container font-medium text-on-surface-variant">TorrentLeech</span>
+<span>Añadido: hace 2 horas</span>
+</div>
+</div>
+<div class="flex items-center gap-4 shrink-0">
+<span class="font-code-sm font-semibold text-on-surface">48.2 GB</span>
+<div class="flex items-center gap-1.5 font-code-sm text-xs">
+<span class="text-emerald-700 font-semibold">S: 142</span>
+<span class="text-outline">|</span>
+<span class="text-secondary">L: 18</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-sm text-xs flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="download">download</span>
+<span>Descargar</span>
+</button>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="p-3.5 hover:bg-surface-container-low/40 flex items-center justify-between gap-4 transition-colors">
+<div class="min-w-0 flex-1">
+<p class="font-mono font-medium text-on-surface truncate text-xs md:text-sm">The.Bear.S03E01.1080p.WEBRip.x265-MIX</p>
+<div class="flex items-center gap-3 mt-1 text-xs text-secondary">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container font-medium text-on-surface-variant">HDBits</span>
+<span>Añadido: hace 1 día</span>
+</div>
+</div>
+<div class="flex items-center gap-4 shrink-0">
+<span class="font-code-sm font-semibold text-on-surface">1.4 GB</span>
+<div class="flex items-center gap-1.5 font-code-sm text-xs">
+<span class="text-emerald-700 font-semibold">S: 89</span>
+<span class="text-outline">|</span>
+<span class="text-secondary">L: 4</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-sm text-xs flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="download">download</span>
+<span>Descargar</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Group 2: Torznab (2) -->
+<div class="border border-outline-variant/70 rounded-lg overflow-hidden">
+<div class="bg-surface-container-low px-4 py-2 border-b border-outline-variant/70 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="language">language</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface">Resultados Torznab directos</span>
+<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-primary-fixed text-on-primary-fixed-variant leading-none">2</span>
+</div>
+<span class="font-code-sm text-xs text-secondary">Jackett local</span>
+</div>
+<div class="divide-y divide-outline-variant/60 font-body-sm text-body-sm bg-surface-container-lowest">
+<div class="p-3.5 hover:bg-surface-container-low/40 flex items-center justify-between gap-4 transition-colors">
+<div class="min-w-0 flex-1">
+<p class="font-mono font-medium text-on-surface truncate text-xs md:text-sm">Dune.Parte.Dos.2024.Castellano.2160p.HDR.DDP5.1.mkv</p>
+<div class="flex items-center gap-3 mt-1 text-xs text-secondary">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container font-medium text-on-surface-variant">Jackett / HD-Spain</span>
+<span>Torznab ID: 2000</span>
+</div>
+</div>
+<div class="flex items-center gap-4 shrink-0">
+<span class="font-code-sm font-semibold text-on-surface">22.4 GB</span>
+<div class="flex items-center gap-1.5 font-code-sm text-xs">
+<span class="text-emerald-700 font-semibold">S: 24</span>
+<span class="text-outline">|</span>
+<span class="text-secondary">L: 3</span>
+</div>
+<button class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-sm text-xs flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="download">download</span>
+<span>Descargar</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Group 3: aMule (1) -->
+<div class="border border-amber-300 rounded-lg overflow-hidden bg-amber-50/20">
+<div class="bg-amber-50/70 px-4 py-2 border-b border-amber-300 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-amber-800" data-icon="download">download</span>
+<span class="font-label-md text-label-md font-semibold text-amber-950">Resultados daemon aMule (eD2k/Kad)</span>
+<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-200 text-amber-900 border border-amber-300 leading-none">1</span>
+</div>
+<span class="font-code-sm text-xs text-amber-800 font-medium">Red eD2k activa</span>
+</div>
+<div class="p-3.5 bg-surface-container-lowest flex items-center justify-between gap-4">
+<div class="min-w-0 flex-1">
+<p class="font-mono font-medium text-on-surface truncate text-xs md:text-sm">clasicos_cine_espanol_pack.rar</p>
+<div class="flex items-center gap-3 mt-1 text-xs text-secondary">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-medium">eD2k hash verificado</span>
+<span>Disponibilidad alta</span>
+</div>
+</div>
+<div class="flex items-center gap-4 shrink-0">
+<span class="font-code-sm font-semibold text-on-surface">4.3 GB</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-100 text-amber-900 font-code-sm text-xs font-bold border border-amber-300">
+            fuentes: 12
+          </span>
+<button class="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-sm text-xs flex items-center gap-1 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="download">download</span>
+<span>Descargar</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Subdued Status & Troubleshooting States -->
+<div class="mt-5 pt-4 border-t border-outline-variant/60 space-y-2 font-body-sm text-xs text-on-surface-variant">
+<div class="flex items-center gap-2 text-secondary">
+<span class="material-symbols-outlined text-sm text-outline" data-icon="info">info</span>
+<span><strong>prowlarr:</strong> no está configurado (faltan la URL o la API key) — <span class="text-outline">(fuente omitida)</span></span>
+</div>
+<div class="flex items-center gap-2 text-secondary">
+<span class="material-symbols-outlined text-sm text-outline" data-icon="search_off">search_off</span>
+<span>Sin resultados en fuentes secundarias</span>
+</div>
+<div class="flex items-center gap-2 text-error font-medium">
+<span class="material-symbols-outlined text-sm text-error" data-icon="error">error</span>
+<span>Error: timeout al consultar el indexador Nya</span>
+</div>
+</div>
+</section>
+<!-- CARD 2: INDEXADORES TORZNAB REGISTRADOS -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center justify-between mb-4 pb-3 border-b border-outline-variant/60">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary" data-icon="storage">storage</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Indexadores Torznab registrados</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Servidores y agregadores Torznab estándar para consultas automáticas.</p>
+</div>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">3 registrados</span>
+</div>
+<div class="overflow-hidden border border-outline-variant/70 rounded-lg">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant/70 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+<th class="py-2.5 px-4 font-semibold w-16 text-center">Estado</th>
+<th class="py-2.5 px-4 font-semibold">Nombre</th>
+<th class="py-2.5 px-4 font-semibold">URL</th>
+<th class="py-2.5 px-4 font-semibold">Categorías</th>
+<th class="py-2.5 px-4 font-semibold">API Key</th>
+<th class="py-2.5 px-4 font-semibold text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/60 font-body-sm text-body-sm text-on-surface">
+<!-- Row 1: Jackett (Activo) -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-3 px-4 text-center">
+<button aria-checked="true" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary transition-colors duration-200 ease-in-out focus:outline-none" role="switch" type="button">
+<span class="translate-x-4 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</td>
+<td class="py-3 px-4 font-medium">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span class="font-semibold text-on-surface">Jackett</span>
+</div>
+</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-secondary">http://jackett:9117</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-on-surface-variant">2000, 2040, 2060</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-secondary">••••••••9876</td>
+<td class="py-3 px-4 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-xs font-medium text-on-surface transition-colors" title="Probar conexión">
+                Probar
+              </button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-xs font-medium text-on-surface transition-colors" title="Editar parámetros">
+                Editar
+              </button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-error-container/50 text-xs font-medium text-error transition-colors" title="Eliminar indexador">
+                Eliminar
+              </button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Nya (Activo) -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-3 px-4 text-center">
+<button aria-checked="true" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary transition-colors duration-200 ease-in-out focus:outline-none" role="switch" type="button">
+<span class="translate-x-4 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</td>
+<td class="py-3 px-4 font-medium">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span class="font-semibold text-on-surface">Nya</span>
+</div>
+</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-secondary">https://nya.example</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-outline">— (todas)</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-secondary">••••••••4321</td>
+<td class="py-3 px-4 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-xs font-medium text-on-surface transition-colors">
+                Probar
+              </button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-xs font-medium text-on-surface transition-colors">
+                Editar
+              </button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-error-container/50 text-xs font-medium text-error transition-colors">
+                Eliminar
+              </button>
+</div>
+</td>
+</tr>
+<!-- Row 3: TorrentLeech (Inactivo) -->
+<tr class="hover:bg-surface-container-low/40 transition-colors opacity-70">
+<td class="py-3 px-4 text-center">
+<button aria-checked="false" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-outline-variant transition-colors duration-200 ease-in-out focus:outline-none" role="switch" type="button">
+<span class="translate-x-0 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-surface-container-lowest shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</td>
+<td class="py-3 px-4 font-medium">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="font-medium text-secondary">TorrentLeech</span>
+</div>
+</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-outline">https://torrentleech.org/torznab</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-outline">2000, 2050</td>
+<td class="py-3 px-4 font-code-sm text-code-sm text-outline">••••••••1122</td>
+<td class="py-3 px-4 text-right">
+<div class="inline-flex items-center gap-1.5">
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-xs font-medium text-secondary transition-colors">
+                Probar
+              </button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-xs font-medium text-secondary transition-colors">
+                Editar
+              </button>
+<button class="px-2.5 py-1 rounded border border-outline-variant bg-surface-container-lowest hover:bg-error-container/50 text-xs font-medium text-error transition-colors">
+                Eliminar
+              </button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="mt-4 flex justify-start">
+<button class="inline-flex items-center gap-2 text-primary hover:text-primary-container font-label-md text-sm font-semibold transition-colors">
+<span class="material-symbols-outlined text-base" data-icon="add_circle">add_circle</span>
+<span>+ Añadir indexador</span>
+</button>
+</div>
+</section>
+<!-- CARD 3: NUEVO INDEXADOR (FORMULARIO VISIBLE) -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center gap-2.5 mb-6 pb-3 border-b border-outline-variant/60">
+<span class="material-symbols-outlined text-primary" data-icon="add_box">add_box</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Nuevo indexador</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Configuración de un endpoint Torznab personalizado.</p>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+<!-- Nombre -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Nombre</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Jackett" type="text" value="Jackett"/>
+</div>
+<!-- URL -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">URL</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" placeholder="http://jackett:9117" type="text" value="http://jackett:9117"/>
+</div>
+<!-- API Key -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">API Key</label>
+<div class="relative flex items-center">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="password" value="9876abcdef1234567890"/>
+<button class="absolute right-2.5 text-outline hover:text-on-surface p-1" title="Mostrar u ocultar" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<!-- Categorías -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Categorías</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" placeholder="2000,2040 — vacío = todas" type="text" value="2000, 2040"/>
+</div>
+</div>
+<!-- Form Action Buttons -->
+<div class="mt-6 pt-4 border-t border-outline-variant/60 flex items-center justify-between">
+<p class="font-body-sm text-xs text-on-surface-variant">
+      Prueba la conexión con <code class="font-code-sm bg-surface-container px-1 py-0.5 rounded text-primary">t=caps</code> antes de guardar. La clave se guarda cifrada y nunca se muestra completa.
+    </p>
+<div class="flex items-center gap-3 shrink-0">
+<button class="px-4 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="network_ping">network_ping</span>
+<span>Probar</span>
+</button>
+<button class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md flex items-center gap-1.5 shadow-sm transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="save">save</span>
+<span>Guardar</span>
+</button>
+</div>
+</div>
+</section>
+<!-- CARD 4: CALLOUT INFORMATIVO FINAL -->
+<div class="p-4 rounded-xl bg-primary-fixed/10 border border-primary/30 flex items-start gap-3.5">
+<span class="material-symbols-outlined text-primary shrink-0 text-xl mt-0.5" data-icon="info" style="font-variation-settings: 'FILL' 1;">info</span>
+<p class="font-body-sm text-body-sm text-on-surface leading-relaxed">
+    La conexión a aMule no es un indexador: su host, puerto y contraseña EC se configuran en <a class="text-primary font-semibold underline hover:text-primary-container" href="#">General → aMule (EC directo)</a>. Los resultados de la fuente «amule» salen de esa conexión.
+  </p>
+</div></div>
+<!-- Sticky Bottom Bar for confirmation on 2560x2048 canvas -->
+<div class="pt-6 pb-12 flex justify-between items-center text-xs text-outline border-t border-outline-variant/50 max-w-6xl">
+<span>FlowController v2.4.1 (Build 20241029) — Arquitectura x86_64 Linux 6.6.21-lts</span>
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              SQLite v3.45 WAL Mode
+            </span>
+<span>Uptime: 14d 08h 12m</span>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>
