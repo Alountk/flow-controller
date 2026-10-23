@@ -165,7 +165,13 @@ function buildCategoriesCsv(ids: string[]): string {
   return ordered.join(',')
 }
 
-export function IndexadoresSection() {
+export function IndexadoresSection({
+  onOpenGeneral,
+}: {
+  /** El enlace «General → aMule (EC directo)» del callout conmuta al panel
+   *  General (espejo exacto de `onOpenIndexadores` en AmuleEcSection). */
+  onOpenGeneral: () => void
+}) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<IndexerInput & typeof EMPTY_FORM>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -697,7 +703,7 @@ export function IndexadoresSection() {
           <div className="indexadores-form-grid">
             <div className="settings-field">
               <label className="settings-label" htmlFor="indexer-form-name">
-                Nombre del indexador
+                Nombre
               </label>
               <input
                 id="indexer-form-name"
@@ -709,7 +715,7 @@ export function IndexadoresSection() {
             </div>
             <div className="settings-field">
               <label className="settings-label" htmlFor="indexer-form-url">
-                URL del indexador
+                URL
               </label>
               <input
                 id="indexer-form-url"
@@ -721,7 +727,7 @@ export function IndexadoresSection() {
             </div>
             <div className="settings-field">
               <label className="settings-label" htmlFor="indexer-form-key">
-                API Key del indexador
+                API Key
               </label>
               <div className="indexadores-key-field">
                 <input
@@ -794,31 +800,21 @@ export function IndexadoresSection() {
               >
                 Probar
               </button>
-              {editingId === null ? (
+              <button
+                type="button"
+                className="settings-btn settings-btn-primary"
+                onClick={() => void submitForm()}
+              >
+                Guardar
+              </button>
+              {editingId !== null && (
                 <button
                   type="button"
-                  className="settings-btn settings-btn-primary"
-                  onClick={() => void submitForm()}
+                  className="settings-btn settings-btn-secondary"
+                  onClick={cancelEdit}
                 >
-                  Añadir indexador
+                  Cancelar
                 </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="settings-btn settings-btn-primary"
-                    onClick={() => void submitForm()}
-                  >
-                    Guardar cambios
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-btn settings-btn-secondary"
-                    onClick={cancelEdit}
-                  >
-                    Cancelar
-                  </button>
-                </>
               )}
               {notice && (
                 <span className="indexadores-form-notice" role={noticeRole}>
@@ -839,10 +835,11 @@ export function IndexadoresSection() {
               href="#"
               onClick={(e) => {
                 e.preventDefault()
-                // El estado del tab vive en `Settings.tsx` (fuera de las
-                // superficies de T4): el enlace conmuta al panel General por el
-                // anclaje ARIA estable del raíl (T3). Accionable, no decorativo.
-                document.getElementById('settings-tab-general')?.click()
+                // El estado del tab vive en `Settings.tsx`: el enlace conmuta
+                // al panel General por la prop real `onOpenGeneral` (espejo de
+                // `onOpenIndexadores` en AmuleEcSection). Accionable, no
+                // decorativo.
+                onOpenGeneral()
               }}
             >
               General → aMule (EC directo)

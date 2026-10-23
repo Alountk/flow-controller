@@ -53,11 +53,11 @@ function mockFetch(routes: Record<string, RouteHandler>) {
   return fn
 }
 
-function renderSection() {
+function renderSection(onOpenGeneral: () => void = () => {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <IndexadoresSection />
+      <IndexadoresSection onOpenGeneral={onOpenGeneral} />
     </QueryClientProvider>,
   )
 }

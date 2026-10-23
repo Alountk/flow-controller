@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Settings } from '../../../features/settings/Settings.tsx'
 
@@ -74,7 +74,13 @@ describe('settings API key masking', () => {
 
     // The four services share the label "API Key"; the app's own key is
     // "API Key propia". All five must be masked.
-    const serviceKeys = await screen.findAllByLabelText('API Key')
+    // ADAPTADO (config-1x1 T4, sin aflojar): el formulario «Nuevo indexador»
+    // del panel Indexadores usa ahora los literales cortos del diseño
+    // («URL»/«API Key») y el panel oculto sigue montado en jsdom — la query se
+    // ACOTA al panel «General» (contenedor de los cuatro servicios). Mismo
+    // conteo (4), misma aserción por campo.
+    const general = await screen.findByRole('tabpanel', { name: 'General' })
+    const serviceKeys = await within(general).findAllByLabelText('API Key')
     expect(serviceKeys).toHaveLength(4)
     for (const key of serviceKeys) {
       expect(key).toHaveAttribute('type', 'password')
@@ -86,7 +92,11 @@ describe('settings API key masking', () => {
     mockFetch()
     renderSettings()
 
-    const urls = await screen.findAllByLabelText('URL')
+    // ADAPTADO (config-1x1 T4, sin aflojar): escopado al panel «General» por
+    // la misma colisión de literales cortos («URL» en el formulario de
+    // Indexadores; panel oculto montado en jsdom). Mismo conteo (3).
+    const general = await screen.findByRole('tabpanel', { name: 'General' })
+    const urls = await within(general).findAllByLabelText('URL')
     expect(urls).toHaveLength(3)
     for (const url of urls) {
       expect(url).toHaveAttribute('type', 'text')

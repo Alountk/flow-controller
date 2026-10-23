@@ -627,7 +627,9 @@ describe('callout «La conexión a aMule no es un indexador…» (config-1x1 T4/
 
     // El callout literal del diseño enlaza a «General → aMule (EC directo)» y
     // el enlace es ACCIONABLE (la libertad de T3 de dejar enlaces muertos no
-    // se repite): conmuta al panel General donde vive la tarjeta aMule.
+    // se repite): conmuta al panel General donde vive la tarjeta aMule — por
+    // la prop real `onOpenGeneral` (Settings → setTab('general')), no por el
+    // truco del anclaje DOM. Comportamiento idéntico al pinneado.
     fireEvent.click(within(callout).getByRole('link', { name: 'General → aMule (EC directo)' }))
     expect(await screen.findByText(/aMule — conexión directa \(EC\)/)).toBeVisible()
     expect(callout).not.toBeVisible()

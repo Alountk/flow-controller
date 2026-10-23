@@ -458,7 +458,7 @@ export function Settings() {
         {/* T6/S5 — direct connections: its own SQLite table and its own
             buttons, so (like SharedDirsSection) it is not part of the form
             that "Guardar cambios" claims to save. */}
-        <IndexadoresSection />
+        <IndexadoresSection onOpenGeneral={() => setTab('general')} />
       </div>
     </div>
   )

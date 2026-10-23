@@ -15,9 +15,12 @@ import { IndexadoresSection } from '../../../features/settings/IndexadoresSectio
  * Adaptaciones documentadas (S3 — sólo por el cambio estructural, SIN aflojar):
  *  - el toggle ESTADO es `role="switch"` con aria-checked (antes button con
  *    texto «Sí»/«No»): mismo estado visible por fila, forma del diseño;
- *  - la cabecera del panel añade otro botón «Añadir indexador» (el del
- *    diseño), así que el submit del formulario se localiza dentro de la
- *    tarjeta «Nuevo indexador»: misma acción, mismo payload.
+ *  - la cabecera del panel lleva el «Añadir indexador» (el del diseño) y el
+ *    submit del formulario es «Guardar» (literal del diseño, sin duplicar el
+ *    nombre de la cabecera), localizado dentro de la tarjeta «Nuevo
+ *    indexador»: misma acción, mismo payload;
+ *  - el enlace del callout conmuta a General por la prop real `onOpenGeneral`
+ *    (Settings → setTab('general')), no por el truco del anclaje DOM.
  *
  * What this panel has to get right, in order of how badly it fails otherwise:
  *
@@ -72,11 +75,11 @@ function mockFetch(routes: Record<string, RouteHandler>) {
   return fn
 }
 
-function renderSection() {
+function renderSection(onOpenGeneral: () => void = () => {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <IndexadoresSection />
+      <IndexadoresSection onOpenGeneral={onOpenGeneral} />
     </QueryClientProvider>,
   )
 }
@@ -130,16 +133,18 @@ describe('indexers section — the registry', () => {
     })
     renderSection()
 
-    fireEvent.change(await screen.findByLabelText('Nombre del indexador'), {
+    // Literales EXACTOS del formulario del diseño (stitch-13): «Nombre»,
+    // «URL», «API Key» — sin el sufijo «del indexador» que era una libertad.
+    fireEvent.change(await screen.findByLabelText('Nombre'), {
       target: { value: 'Ivy' },
     })
-    fireEvent.change(screen.getByLabelText('URL del indexador'), {
+    fireEvent.change(screen.getByLabelText('URL'), {
       target: { value: 'http://ivy.test/torznab/api' },
     })
-    fireEvent.change(screen.getByLabelText('API Key del indexador'), {
+    fireEvent.change(screen.getByLabelText('API Key'), {
       target: { value: 'secret-key' },
     })
-    fireEvent.change(screen.getByLabelText('API Key del indexador'), {
+    fireEvent.change(screen.getByLabelText('API Key'), {
       target: { value: 'secret-key' },
     })
     // T4/S3 adaptation (was `fireEvent.change` on the old free-text field
@@ -150,10 +155,11 @@ describe('indexers section — the registry', () => {
     // «(personalizada)») in indexadoresCategorias.test.tsx.
     fireEvent.click(screen.getByRole('checkbox', { name: 'Películas 2000' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Consola 1000' }))
-    // ADAPTADO (config-1x1 T4/S3): la cabecera del panel también tiene un
-    // «Añadir indexador» (el del diseño); el submit del formulario se acota a
-    // la tarjeta «Nuevo indexador». Misma acción, mismo payload exacto.
-    fireEvent.click(within(formCard()).getByRole('button', { name: 'Añadir indexador' }))
+    // ADAPTADO (config-1x1 T4/S2): el submit del formulario es «Guardar» (el
+    // literal del diseño — el «Añadir indexador» vive sólo en la cabecera y no
+    // hay dos botones con el mismo nombre); la query se acota a la tarjeta
+    // «Nuevo indexador». Misma acción, mismo payload exacto.
+    fireEvent.click(within(formCard()).getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => {
       const post = fn.mock.calls.find(
@@ -226,9 +232,11 @@ describe('indexers section — the registry', () => {
     // The secret is never pre-filled: «(sin cambio)» means keep.
     const keyInput = screen.getByPlaceholderText('(sin cambio)')
     expect(keyInput).toHaveValue('')
-    expect(screen.getByLabelText('Nombre del indexador')).toHaveValue('NoNaMe')
+    expect(screen.getByLabelText('Nombre')).toHaveValue('NoNaMe')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    // ADAPTADO (config-1x1 T4/S2): el submit del formulario es «Guardar»
+    // (literal del diseño) en crear Y editar; «Cancelar» se conserva tal cual.
+    fireEvent.click(within(formCard()).getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => {
       const put = fn.mock.calls.find(
@@ -308,10 +316,10 @@ describe('panel «Indexadores» — estructura del diseño (config-1x1 T4/S2)', 
     const heading = await screen.findByRole('heading', { name: 'Indexadores', level: 2 })
     const header = heading.closest('.settings-panel-header') as HTMLElement
     fireEvent.click(within(header).getByRole('button', { name: 'Añadir indexador' }))
-    expect(screen.getByLabelText('Nombre del indexador')).toHaveFocus()
+    expect(screen.getByLabelText('Nombre')).toHaveFocus()
 
     fireEvent.click(screen.getByRole('button', { name: '+ Añadir indexador' }))
-    expect(screen.getByLabelText('Nombre del indexador')).toHaveFocus()
+    expect(screen.getByLabelText('Nombre')).toHaveFocus()
   })
 
   it('stacks the design cards in order with their literal heads', async () => {
@@ -376,9 +384,10 @@ describe('panel «Indexadores» — estructura del diseño (config-1x1 T4/S2)', 
     expect(probe).toBeDisabled()
   })
 
-  it('renders the closing callout literally with an actionable link', async () => {
+  it('renders the closing callout literally and its link drives the onOpenGeneral prop', async () => {
     mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
-    renderSection()
+    const onOpenGeneral = vi.fn()
+    renderSection(onOpenGeneral)
 
     const callout = document.querySelector('.indexadores-callout') as HTMLElement
     expect(callout).toHaveTextContent(
@@ -386,6 +395,12 @@ describe('panel «Indexadores» — estructura del diseño (config-1x1 T4/S2)', 
     )
     const link = within(callout).getByRole('link', { name: 'General → aMule (EC directo)' })
     expect(link).toHaveAttribute('href', '#')
+    // El enlace YA NO depende del truco del anclaje DOM (`#settings-tab-general`):
+    // en este render ese tab ni siquiera existe, y aún así el enlace conmuta —
+    // por la prop real `onOpenGeneral`, su único mecanismo.
+    expect(document.getElementById('settings-tab-general')).toBeNull()
+    fireEvent.click(link)
+    expect(onOpenGeneral).toHaveBeenCalledTimes(1)
   })
 
   it('the new chrome is styled in Settings.css, not with inline styles', async () => {
