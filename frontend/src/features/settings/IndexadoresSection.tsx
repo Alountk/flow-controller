@@ -7,6 +7,24 @@
  * (`SharedDirsSection`) renders its own `settings-section` heading — this
  * follows the mold instead of reaching through a circular import.
  *
+ * config-1x1 T4 (S2): strict 1:1 with `odd/tasks/config-submenu/stitch-13-indexadores.html`
+ * — panel header («Importar de Prowlarr/Jackett…» + «Añadir indexador»),
+ * stacked cards (Búsqueda unificada → Indexadores Torznab registrados →
+ * Nuevo indexador → callout), the registry table and the categories grid in
+ * `Settings.css` (zero inline styles). Rule: diseño → implementación;
+ * imposible → REPORTAR; jamás variante propia. Reported, not invented:
+ *  - «Importar de Prowlarr/Jackett…» (Step 5 does not exist yet): visible,
+ *    honestly disabled with a truthful title — no fake action, not hidden;
+ *  - the in-form «Probar» (probe unsaved values): the backend only probes by
+ *    id (`POST /api/indexers/{id}/test`), so it is visible but honestly
+ *    disabled too (the per-row «Probar» is the real probe);
+ *  - mockup data with no backend source is NOT rendered: «17 fuentes activas»,
+ *    «Latencia media: 120ms», «Jackett local», «Red eD2k activa», the rows'
+ *    «Añadido: …» / «Torznab ID: …» texts, and the bottom build/uptime bar;
+ *  - the rows' «L: …» (leechers) does not exist in `IndexerSearchRow` — only
+ *    «S: …» renders;
+ *  - probe outcomes have no design slot: they report below the table.
+ *
  * Contract notes the UI must honor (from `routes/indexers.py`):
  * - `api_key` arrives MASKED and an empty edit field means KEEP the stored
  *   key (placeholder «(sin cambio)» says so);
@@ -23,7 +41,7 @@
  *   disabled buttons.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   INDEXER_SOURCES,
@@ -46,20 +64,34 @@ import { toast } from '../../shared/utils/toast.ts'
 import './Settings.css'
 
 /**
- * Mirror of `ReleaseSearchModal`'s `groupByIndexer` (module-private there —
- * not exported, and importing the modal would couple Settings to the
- * release-search feature). Same Map mechanics; the fallback key is the row's
- * SOURCE instead of «Desconocido»: a free-search row always knows its source
- * and naming it is honest where «Desconocido» would throw truth away.
+ * stitch-13 agrupa los resultados por FUENTE («Resultados de Prowlarr»,
+ * «Resultados Torznab directos», «Resultados daemon aMule (eD2k/Kad)») y el
+ * indexador de cada fila viaja en su badge. El orden de los grupos es el de
+ * llegada de las filas (el del mockup refleja sus datos, no una regla).
  */
-function groupByIndexer(rows: IndexerSearchRow[]): Map<string, IndexerSearchRow[]> {
+function groupBySource(rows: IndexerSearchRow[]): Map<string, IndexerSearchRow[]> {
   const map = new Map<string, IndexerSearchRow[]>()
   for (const row of rows) {
-    const key = row.indexer || row.source
+    const key = row.source
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(row)
   }
   return map
+}
+
+/** Los títulos de grupo, literales del diseño; fuente desconocida → honesto. */
+const GROUP_TITLE: Record<string, string> = {
+  torznab: 'Resultados Torznab directos',
+  prowlarr: 'Resultados de Prowlarr',
+  amule: 'Resultados daemon aMule (eD2k/Kad)',
+}
+
+/** Emoji del chip de fuente, literal del diseño (decorativo para el nombre
+ *  accesible: el chip se llama «torznab», no «🌐 torznab»). */
+const CHIP_EMOJI: Record<IndexerSearchSource, string> = {
+  torznab: '🌐',
+  amule: '📥',
+  prowlarr: '🔍',
 }
 
 function formatSize(size: number | null): string {
@@ -137,6 +169,7 @@ export function IndexadoresSection() {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<IndexerInput & typeof EMPTY_FORM>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [showKey, setShowKey] = useState(false)
   const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null)
   const [testResults, setTestResults] = useState<Record<number, IndexerTestResult>>({})
   const [selectedSources, setSelectedSources] = useState<Set<IndexerSearchSource>>(
@@ -147,9 +180,9 @@ export function IndexadoresSection() {
   const [search, setSearch] = useState<{
     response: IndexerSearchResponse
     searched: IndexerSearchSource[]
-    filter: 'all' | IndexerSearchSource
   } | null>(null)
   const [downloading, setDownloading] = useState<Set<string>>(new Set())
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   // B-12: the query hands React Query's abort signal to `apiFetch`.
   const list = useQuery({
@@ -161,6 +194,13 @@ export function IndexadoresSection() {
 
   function reload() {
     queryClient.invalidateQueries({ queryKey: ['indexers'] })
+  }
+
+  /** Los botones «Añadir indexador» (cabecera y pie de la tabla) anclan al
+   *  formulario siempre visible del diseño. Sin reseteo: pisar un borrador en
+   *  curso sería pérdida de datos. */
+  function focusForm() {
+    nameInputRef.current?.focus()
   }
 
   function startEdit(row: IndexerRow) {
@@ -232,6 +272,10 @@ export function IndexadoresSection() {
     })
   }
 
+  function selectAllSources() {
+    setSelectedSources(new Set(INDEXER_SOURCES))
+  }
+
   function runSearch() {
     const text = query.trim()
     const sources = INDEXER_SOURCES.filter((source) => selectedSources.has(source))
@@ -245,7 +289,7 @@ export function IndexadoresSection() {
     }
     setSearching(true)
     searchIndexers(text, sources).then((response) => {
-      setSearch({ response, searched: sources, filter: 'all' })
+      setSearch({ response, searched: sources })
       setSearching(false)
     })
   }
@@ -293,327 +337,519 @@ export function IndexadoresSection() {
     setForm((f) => ({ ...f, categories: '' }))
   }
 
+  // Los chips son la «fuente» del diseño: alcance de la búsqueda (aria-pressed)
+  // y filtro de visibilidad de los grupos tras buscar. Los conteos son los
+  // RESULTADOS reales por fuente (jamás datos inventados).
+  const allSelected = INDEXER_SOURCES.every((source) => selectedSources.has(source))
+  const visibleSources = new Set<string>(selectedSources)
+  const visibleGroups = search
+    ? groupBySource(search.response.results.filter((row) => visibleSources.has(row.source)))
+    : new Map<string, IndexerSearchRow[]>()
+  const searchFailed = Boolean(search && !search.response.ok && search.response.detail)
+
   return (
     <div className="settings-section">
-      <h3 className="settings-section-title">Indexadores</h3>
-      <p className="shared-dirs-hint">
-        Conexión directa con indexadores Torznab: se guardan en su propia tabla y actúan al
-        instante (sin «Guardar configuración»). La búsqueda unificada de abajo consulta a la vez
-        Torznab, aMule y Prowlarr.
-      </p>
+      {/* Cabecera del panel (stitch-13): título + subtítulo y las acciones
+          «Importar de Prowlarr/Jackett…» / «Añadir indexador» arriba a la
+          derecha. La importación (Step 5) aún no existe: visible, deshabilitada
+          y con un título honesto — jamás una acción falsa ni un hueco. */}
+      <div className="settings-panel-header">
+        <div>
+          <h2 className="settings-panel-title">Indexadores</h2>
+          <p className="settings-panel-subtitle">Fuentes Torznab directas para buscar y descargar</p>
+        </div>
+        <div className="settings-panel-actions">
+          <button
+            type="button"
+            className="settings-btn settings-btn-secondary"
+            disabled
+            title="Disponible al importar de Prowlarr (próximo paso)"
+          >
+            Importar de Prowlarr/Jackett…
+          </button>
+          <button type="button" className="settings-btn settings-btn-primary" onClick={focusForm}>
+            Añadir indexador
+          </button>
+        </div>
+      </div>
 
       {list.data?.error && <div className="error-box">{list.data.error}</div>}
 
-      <div className="settings-group">
-        <h4>Indexadores registrados</h4>
-        {list.isPending ? (
-          <div className="shared-dirs-empty">Cargando indexadores…</div>
-        ) : indexers.length === 0 ? (
-          <div className="shared-dirs-empty">
-            No hay indexadores registrados. Añade el primero abajo.
-          </div>
-        ) : (
-          <ul className="shared-dirs-list">
-            {indexers.map((row) => {
-              const probeResult = testResults[row.id]
-              return (
-                <li className="shared-dirs-row" key={row.id}>
-                  <code>{row.name}</code>
-                  <span className="shared-dirs-notice">{row.url}</span>
-                  <code>{row.api_key || '(sin clave)'}</code>
-                  {row.categories && (
-                    <span className="shared-dirs-notice">Categorías: {row.categories}</span>
-                  )}
-                  <label className="settings-toggle-label">
-                    <button
-                      type="button"
-                      className={`settings-toggle ${row.enabled ? 'on' : 'off'}`}
-                      aria-label={`Habilitado de ${row.name}`}
-                      onClick={() => void toggleEnabled(row)}
-                    >
-                      {row.enabled ? 'Sí' : 'No'}
-                    </button>
-                    Habilitado
-                  </label>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    aria-label={`Probar ${row.name}`}
-                    onClick={() => void probe(row)}
-                  >
-                    Probar
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    aria-label={`Editar ${row.name}`}
-                    onClick={() => startEdit(row)}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    aria-label={`Eliminar ${row.name}`}
-                    onClick={() => void remove(row)}
-                  >
-                    Eliminar
-                  </button>
-                  {probeResult &&
-                    (probeResult.ok ? (
-                      <div role="status">
-                        ✅ Conectado — capabilities recibidas{capsCategories(probeResult.caps)}
-                      </div>
-                    ) : (
-                      <div role="alert">❌ {probeResult.detail}</div>
-                    ))}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
-
-      <div className="settings-group">
-        <h4>{editingId === null ? 'Añadir indexador' : 'Editar indexador'}</h4>
-        <div className="settings-field">
-          <label className="settings-label" htmlFor="indexer-form-name">
-            Nombre del indexador
-          </label>
-          <input
-            id="indexer-form-name"
-            className="settings-input"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-        </div>
-        <div className="settings-field">
-          <label className="settings-label" htmlFor="indexer-form-url">
-            URL del indexador
-          </label>
-          <input
-            id="indexer-form-url"
-            className="settings-input"
-            value={form.url}
-            placeholder="http://localhost:9117/1/api"
-            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-          />
-        </div>
-        <div className="settings-field">
-          <label className="settings-label" htmlFor="indexer-form-key">
-            API Key del indexador
-          </label>
-          <input
-            id="indexer-form-key"
-            className="settings-input"
-            type="password"
-            value={form.api_key ?? ''}
-            placeholder={editingId === null ? 'Clave del indexador' : '(sin cambio)'}
-            onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
-          />
-        </div>
-        <div className="settings-field">
-          {/* S3: checkbox grid (3-4 columns, labels clickable). The grid style
-              is inline because Settings.css is outside this task's edit
-              surfaces. */}
-          <span className="settings-label" id="indexer-form-categories">
-            Categorías
-          </span>
-          <div
-            role="group"
-            aria-labelledby="indexer-form-categories"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-              gap: '4px 12px',
-            }}
-          >
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={todasChecked} onChange={checkTodas} />
-              Todas (sin filtro)
-            </label>
-            {CATEGORY_ITEMS.map((item) => (
-              <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(item.id)}
-                  onChange={() => toggleCategory(item.id)}
-                />
-                {item.name} {item.id}
-              </label>
-            ))}
-            {customIds.map((id) => (
-              <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input type="checkbox" checked onChange={() => toggleCategory(id)} />
-                {id} (personalizada)
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="settings-logs-controls">
-          {editingId === null ? (
-            <button type="button" className="action-btn" onClick={() => void submitForm()}>
-              Añadir indexador
-            </button>
-          ) : (
-            <>
-              <button type="button" className="action-btn" onClick={() => void submitForm()}>
-                Guardar cambios
-              </button>
-              <button type="button" className="action-btn" onClick={cancelEdit}>
-                Cancelar
-              </button>
-            </>
-          )}
-          {notice && (
-            <span className="shared-dirs-notice" role={noticeRole}>
-              {notice.text}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="settings-group">
-        <h4>Búsqueda unificada</h4>
-        <p className="shared-dirs-hint">
-          Busca a la vez en las fuentes seleccionadas. «Descargar» envía la fila directamente al
-          cliente: ed2k a aMule, magnet/http por el puente de descargas.
-        </p>
-        <div className="settings-field">
-          <label className="settings-label" htmlFor="indexer-search-query">
-            Texto a buscar
-          </label>
-          <input
-            id="indexer-search-query"
-            className="settings-input"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <div className="shared-dirs-add">
-          {INDEXER_SOURCES.map((source) => (
-            <button
-              key={source}
-              type="button"
-              className={`settings-toggle ${selectedSources.has(source) ? 'on' : 'off'}`}
-              aria-pressed={selectedSources.has(source)}
-              onClick={() => toggleSearchSource(source)}
-            >
-              {source}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="action-btn"
-            onClick={searching ? undefined : () => runSearch()}
-          >
-            {searching ? 'Buscando…' : 'Buscar'}
-          </button>
-        </div>
-
-        {search && (
-          <div className="settings-group">
-            <h4>Resultados</h4>
-
-            {/* selectedIndexer's mechanic, mirrored: one selector over the
-                sources that answered, counts included. */}
-            <div className="shared-dirs-add">
-              <button
-                type="button"
-                className={`settings-toggle ${search.filter === 'all' ? 'on' : 'off'}`}
-                aria-pressed={search.filter === 'all'}
-                onClick={() => setSearch((prev) => (prev ? { ...prev, filter: 'all' } : prev))}
-              >
-                Todas ({search.response.results.length})
-              </button>
-              {search.searched.map((source) => (
-                <button
-                  key={source}
-                  type="button"
-                  className={`settings-toggle ${search.filter === source ? 'on' : 'off'}`}
-                  aria-pressed={search.filter === source}
-                  onClick={() => setSearch((prev) => (prev ? { ...prev, filter: source } : prev))}
-                >
-                  {source} ({search.response.results.filter((r) => r.source === source).length})
-                </button>
-              ))}
+      <div className="indexadores-cards">
+        {/* CARD 1: BÚSQUEDA UNIFICADA (stitch-13) */}
+        <section className="indexadores-card">
+          <div className="indexadores-card-head">
+            <div>
+              <h3 className="indexadores-card-title">Búsqueda unificada</h3>
+              <p className="indexadores-card-subtitle">
+                Sondeo en tiempo real a través de fuentes Torznab locales y remotas configuradas.
+              </p>
             </div>
+            {/* «17 fuentes activas» del mockup: dato inventado — REPORTADO,
+                no renderizado. */}
+          </div>
 
-            {!search.response.ok && search.response.detail ? (
-              // Every source failed: the one answer S4 refuses to dress up as
-              // «sin resultados».
-              <div className="error-box" role="alert">
-                Error: {search.response.detail}
-              </div>
-            ) : (
-              <>
-                {/* Per-source honest states: rows, «Sin resultados», or every
-                    skip named with its reason — never a silent empty. */}
-                {(search.filter === 'all' ? search.searched : [search.filter]).map((source) => {
-                  const skips = search.response.skipped.filter((s) => s.source === source)
-                  const count = search.response.results.filter((r) => r.source === source).length
-                  return (
-                    <div key={source}>
-                      {skips.map((skip, i) => (
-                        <div key={i} className="shared-dirs-empty">
-                          {skip.source}: {skip.reason}
-                        </div>
-                      ))}
-                      {skips.length === 0 && count === 0 && (
-                        <div className="shared-dirs-empty">{source}: Sin resultados</div>
-                      )}
-                    </div>
-                  )
-                })}
-                {search.response.results.length === 0 && (
-                  <div className="shared-dirs-empty">Sin resultados</div>
+          <div className="indexadores-search-bar">
+            <input
+              className="indexadores-search-input"
+              type="text"
+              aria-label="Buscar en todas las fuentes…"
+              placeholder="Buscar en todas las fuentes…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button
+              type="button"
+              className="settings-btn settings-btn-primary"
+              onClick={searching ? undefined : () => runSearch()}
+            >
+              {searching ? 'Buscando…' : 'Buscar'}
+            </button>
+          </div>
+
+          {/* Chips de fuente con conteos (literal del diseño) */}
+          <div className="indexadores-source-chips">
+            <span className="indexadores-chips-label">Fuentes:</span>
+            <button
+              type="button"
+              className={`indexadores-chip ${allSelected ? 'active' : ''}`}
+              aria-pressed={allSelected}
+              onClick={selectAllSources}
+            >
+              Todas{' '}
+              {search && (
+                <span className="indexadores-chip-count">{search.response.results.length}</span>
+              )}
+            </button>
+            {INDEXER_SOURCES.map((source) => (
+              <button
+                key={source}
+                type="button"
+                className={`indexadores-chip ${selectedSources.has(source) ? 'active' : ''}`}
+                aria-pressed={selectedSources.has(source)}
+                onClick={() => toggleSearchSource(source)}
+              >
+                <span aria-hidden="true">{CHIP_EMOJI[source]}</span> {source}{' '}
+                {search && (
+                  <span className="indexadores-chip-count">
+                    {search.response.results.filter((r) => r.source === source).length}
+                  </span>
                 )}
+              </button>
+            ))}
+          </div>
 
-                {Array.from(
-                  groupByIndexer(
-                    search.filter === 'all'
-                      ? search.response.results
-                      : search.response.results.filter((r) => r.source === search.filter),
-                  ).entries(),
-                ).map(([key, rows]) => (
-                  <div key={key} className="settings-group">
-                    <h4>
-                      🌐 {key} ({rows.length})
-                    </h4>
-                    <ul className="shared-dirs-list">
-                      {rows.map((row) => {
-                        const rowKey = String(search.response.results.indexOf(row))
-                        const pending = downloading.has(rowKey)
-                        const hasTarget = Boolean(row.link || row.guid)
-                        return (
-                          <li className="shared-dirs-row" key={rowKey}>
-                            <code>{row.name}</code>
-                            <span className="shared-dirs-notice">
-                              {formatSize(row.size)}
-                              {row.seeders != null ? ` · ⬆ ${row.seeders}` : ''}
-                              {row.sources != null ? ` · ${row.sources} fuentes` : ''}
-                            </span>
+          {/* Resultados agrupados por fuente con cabeceras de grupo. */}
+          {search && !searchFailed && (
+            <div className="indexadores-groups">
+              {Array.from(visibleGroups.entries()).map(([source, rows]) => (
+                <div
+                  key={source}
+                  className={`indexadores-group ${source === 'amule' ? 'indexadores-group--amule' : ''}`}
+                >
+                  <div className="indexadores-group-head">
+                    <div className="indexadores-group-head-left">
+                      <span className="indexadores-group-title">
+                        {GROUP_TITLE[source] ?? `Resultados de ${source}`}
+                      </span>
+                      <span className="indexadores-group-count">{rows.length}</span>
+                    </div>
+                    {/* «Latencia media: 120ms» / «Jackett local» / «Red eD2k
+                        activa» del mockup: datos inventados — REPORTADOS. */}
+                  </div>
+                  <div className="indexadores-group-rows">
+                    {rows.map((row) => {
+                      const rowKey = String(search.response.results.indexOf(row))
+                      const pending = downloading.has(rowKey)
+                      const hasTarget = Boolean(row.link || row.guid)
+                      return (
+                        <div className="indexadores-result-row" key={rowKey}>
+                          <div className="indexadores-result-main">
+                            <p className="indexadores-result-name">{row.name}</p>
+                            <div className="indexadores-result-meta">
+                              <span className="indexadores-result-badge">
+                                {row.indexer || row.source}
+                              </span>
+                              {/* «Añadido: …» / «Torznab ID: …» del mockup:
+                                  datos inventados — REPORTADOS. */}
+                            </div>
+                          </div>
+                          <div className="indexadores-result-side">
+                            <span className="indexadores-result-size">{formatSize(row.size)}</span>
+                            {row.seeders != null && (
+                              <span className="indexadores-result-metric">
+                                {/* «L: …» (leechers) no existe en la API — REPORTADO */}
+                                <span className="seeders">S: {row.seeders}</span>
+                              </span>
+                            )}
+                            {row.sources != null && (
+                              <span className="indexadores-result-sources">
+                                fuentes: {row.sources}
+                              </span>
+                            )}
                             {hasTarget ? (
                               <button
                                 type="button"
-                                className="action-btn"
+                                className="indexadores-result-download"
                                 onClick={pending ? undefined : () => handleDownload(row, rowKey)}
                               >
                                 {pending ? 'Descargando…' : 'Descargar'}
                               </button>
                             ) : (
-                              <span className="shared-dirs-empty">Sin enlace</span>
+                              <span className="indexadores-empty">Sin enlace</span>
                             )}
-                          </li>
-                        )
-                      })}
-                    </ul>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                ))}
-              </>
-            )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Estados honestos al pie: fuente omitida con su motivo,
+              «Sin resultados» y «Error: …» — nunca un vacío mudo. */}
+          {search && (
+            <div className="indexadores-search-statuses">
+              {searchFailed ? (
+                <div className="indexadores-status-error" role="alert">
+                  Error: {search.response.detail}
+                </div>
+              ) : (
+                <>
+                  {search.searched.map((source) => {
+                    const skips = search.response.skipped.filter((s) => s.source === source)
+                    const count = search.response.results.filter(
+                      (r) => r.source === source,
+                    ).length
+                    return (
+                      <div key={source}>
+                        {skips.map((skip, i) => (
+                          <div key={i} className="indexadores-status-skip">
+                            <strong>{skip.source}:</strong> {skip.reason} —{' '}
+                            <span className="indexadores-status-muted">(fuente omitida)</span>
+                          </div>
+                        ))}
+                        {skips.length === 0 && count === 0 && (
+                          <div className="indexadores-status-empty">{source}: Sin resultados</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {search.response.results.length === 0 && (
+                    <div className="indexadores-status-empty">Sin resultados</div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* CARD 2: INDEXADORES TORZNAB REGISTRADOS (stitch-13) */}
+        <section className="indexadores-card">
+          <div className="indexadores-card-head">
+            <div>
+              <h3 className="indexadores-card-title">Indexadores Torznab registrados</h3>
+              <p className="indexadores-card-subtitle">
+                Servidores y agregadores Torznab estándar para consultas automáticas.
+              </p>
+            </div>
+            {/* El badge del diseño con el dato REAL del listado. */}
+            <span className="indexadores-card-badge">{indexers.length} registrados</span>
           </div>
-        )}
+
+          {list.isPending ? (
+            <div className="indexadores-empty">Cargando indexadores…</div>
+          ) : indexers.length === 0 ? (
+            <div className="indexadores-empty">
+              No hay indexadores registrados. Añade el primero abajo.
+            </div>
+          ) : (
+            <div className="indexadores-table-wrap">
+              <table className="indexadores-table">
+                <thead>
+                  <tr>
+                    <th className="indexadores-table-state">Estado</th>
+                    <th>Nombre</th>
+                    <th>URL</th>
+                    <th>Categorías</th>
+                    <th>API Key</th>
+                    <th className="indexadores-table-actions">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {indexers.map((row) => (
+                    <tr key={row.id} className={row.enabled ? undefined : 'disabled'}>
+                      <td className="indexadores-table-state">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={Boolean(row.enabled)}
+                          className={`indexadores-switch ${row.enabled ? 'on' : 'off'}`}
+                          aria-label={`Habilitado de ${row.name}`}
+                          onClick={() => void toggleEnabled(row)}
+                        >
+                          <span className="indexadores-switch-knob" aria-hidden="true" />
+                        </button>
+                      </td>
+                      <td>
+                        <div className="indexadores-cell-name">
+                          <span
+                            className={`indexadores-row-dot ${row.enabled ? 'on' : 'off'}`}
+                            aria-hidden="true"
+                          />
+                          <span className="indexadores-row-name">{row.name}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <code className="indexadores-cell-code">{row.url}</code>
+                      </td>
+                      <td>
+                        <code className="indexadores-cell-code">
+                          {row.categories || '— (todas)'}
+                        </code>
+                      </td>
+                      <td>
+                        {/* La máscara llega del backend — el único shape que
+                            viaja; jamás se escribe de vuelta sin tocar. */}
+                        <code className="indexadores-cell-code">{row.api_key || '(sin clave)'}</code>
+                      </td>
+                      <td className="indexadores-table-actions">
+                        <div className="indexadores-row-actions">
+                          <button
+                            type="button"
+                            className="indexadores-row-action"
+                            aria-label={`Probar ${row.name}`}
+                            onClick={() => void probe(row)}
+                          >
+                            Probar
+                          </button>
+                          <button
+                            type="button"
+                            className="indexadores-row-action"
+                            aria-label={`Editar ${row.name}`}
+                            onClick={() => startEdit(row)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="indexadores-row-action danger"
+                            aria-label={`Eliminar ${row.name}`}
+                            onClick={() => void remove(row)}
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Los resultados de «Probar» no tienen hueco en el diseño: se
+              REPORTAN debajo de la tabla, con nombre y verdad (caps/detalle). */}
+          {Object.keys(testResults).length > 0 && (
+            <div className="indexadores-probe-results">
+              {Object.entries(testResults).map(([id, result]) => {
+                const name = indexers.find((r) => r.id === Number(id))?.name ?? `#${id}`
+                return (
+                  <div
+                    key={id}
+                    className="indexadores-probe-result"
+                    role={result.ok ? 'status' : 'alert'}
+                  >
+                    <strong>{name}:</strong>{' '}
+                    {result.ok
+                      ? `✅ Conectado — capabilities recibidas${capsCategories(result.caps)}`
+                      : `❌ ${result.detail}`}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="indexadores-add-row">
+            <button type="button" className="indexadores-add-link" onClick={focusForm}>
+              + Añadir indexador
+            </button>
+          </div>
+        </section>
+
+        {/* CARD 3: NUEVO INDEXADOR (formulario del diseño; la rejilla de
+            categorías conserva la lógica T4-anterior BYTE a BYTE y sólo cambia
+            de presentación — CSS, sin inline styles) */}
+        <section className="indexadores-card indexadores-form-card">
+          <div className="indexadores-card-head">
+            <div>
+              <h3 className="indexadores-card-title">
+                {editingId === null ? 'Nuevo indexador' : 'Editar indexador'}
+              </h3>
+              <p className="indexadores-card-subtitle">
+                Configuración de un endpoint Torznab personalizado.
+              </p>
+            </div>
+          </div>
+
+          <div className="indexadores-form-grid">
+            <div className="settings-field">
+              <label className="settings-label" htmlFor="indexer-form-name">
+                Nombre del indexador
+              </label>
+              <input
+                id="indexer-form-name"
+                className="settings-input"
+                ref={nameInputRef}
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="settings-field">
+              <label className="settings-label" htmlFor="indexer-form-url">
+                URL del indexador
+              </label>
+              <input
+                id="indexer-form-url"
+                className="settings-input"
+                value={form.url}
+                placeholder="http://localhost:9117/1/api"
+                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+              />
+            </div>
+            <div className="settings-field">
+              <label className="settings-label" htmlFor="indexer-form-key">
+                API Key del indexador
+              </label>
+              <div className="indexadores-key-field">
+                <input
+                  id="indexer-form-key"
+                  className="settings-input"
+                  type={showKey ? 'text' : 'password'}
+                  value={form.api_key ?? ''}
+                  placeholder={editingId === null ? 'Clave del indexador' : '(sin cambio)'}
+                  onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+                />
+                {/* «Mostrar u ocultar» del diseño: revela la clave ESCRITA,
+                    nunca la máscara guardada (el campo llega vacío al editar). */}
+                <button
+                  type="button"
+                  className="indexadores-key-toggle"
+                  title="Mostrar u ocultar"
+                  onClick={() => setShowKey((v) => !v)}
+                >
+                  {showKey ? 'Ocultar' : 'Mostrar'}
+                </button>
+              </div>
+            </div>
+            <div className="settings-field indexadores-form-wide">
+              <span className="settings-label" id="indexer-form-categories">
+                Categorías
+              </span>
+              <div
+                role="group"
+                aria-labelledby="indexer-form-categories"
+                className="indexadores-category-grid"
+              >
+                <label className="indexadores-category-item">
+                  <input type="checkbox" checked={todasChecked} onChange={checkTodas} />
+                  Todas (sin filtro)
+                </label>
+                {CATEGORY_ITEMS.map((item) => (
+                  <label key={item.id} className="indexadores-category-item">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(item.id)}
+                      onChange={() => toggleCategory(item.id)}
+                    />
+                    {item.name} {item.id}
+                  </label>
+                ))}
+                {customIds.map((id) => (
+                  <label key={id} className="indexadores-category-item">
+                    <input type="checkbox" checked onChange={() => toggleCategory(id)} />
+                    {id} (personalizada)
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="indexadores-form-foot">
+            <p className="indexadores-form-note">
+              Prueba la conexión con <code>t=caps</code> antes de guardar. La clave se guarda
+              cifrada y nunca se muestra completa.
+            </p>
+            <div className="indexadores-form-actions">
+              {/* La nota pide «probar antes de guardar»; la sonda con valores
+                  sin guardar no existe aún (el backend sólo prueba por id):
+                  visible, honesta y REPORTADA. */}
+              <button
+                type="button"
+                className="settings-btn settings-btn-secondary"
+                disabled
+                title="Disponible al probar los valores escritos (próximo paso)"
+              >
+                Probar
+              </button>
+              {editingId === null ? (
+                <button
+                  type="button"
+                  className="settings-btn settings-btn-primary"
+                  onClick={() => void submitForm()}
+                >
+                  Añadir indexador
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="settings-btn settings-btn-primary"
+                    onClick={() => void submitForm()}
+                  >
+                    Guardar cambios
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-btn settings-btn-secondary"
+                    onClick={cancelEdit}
+                  >
+                    Cancelar
+                  </button>
+                </>
+              )}
+              {notice && (
+                <span className="indexadores-form-notice" role={noticeRole}>
+                  {notice.text}
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* CARD 4: CALLOUT INFORMATIVO FINAL (literal del diseño) */}
+        <div className="indexadores-callout">
+          <p className="indexadores-callout-text">
+            La conexión a aMule no es un indexador: su host, puerto y contraseña EC se configuran
+            en{' '}
+            <a
+              className="indexadores-callout-link"
+              href="#"
+              onClick={(e) => {
+                e.preventDefault()
+                // El estado del tab vive en `Settings.tsx` (fuera de las
+                // superficies de T4): el enlace conmuta al panel General por el
+                // anclaje ARIA estable del raíl (T3). Accionable, no decorativo.
+                document.getElementById('settings-tab-general')?.click()
+              }}
+            >
+              General → aMule (EC directo)
+            </a>
+            . Los resultados de la fuente «amule» salen de esa conexión.
+          </p>
+        </div>
       </div>
     </div>
   )

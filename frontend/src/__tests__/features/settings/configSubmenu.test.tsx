@@ -606,3 +606,30 @@ describe('«Probar conexión EC» — sonda de lo ESCRITO (config-1x1 S1/T2)', (
     expect(sent).toBeNull()
   })
 })
+
+describe('callout «La conexión a aMule no es un indexador…» (config-1x1 T4/S2)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+
+  it('the callout link opens General — the aMule (EC directo) card lives there', async () => {
+    mockFetch(baseRoutes)
+    renderSettings()
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Indexadores' }))
+    const callout = document.querySelector('.indexadores-callout') as HTMLElement
+    expect(callout).toBeVisible()
+
+    // El callout literal del diseño enlaza a «General → aMule (EC directo)» y
+    // el enlace es ACCIONABLE (la libertad de T3 de dejar enlaces muertos no
+    // se repite): conmuta al panel General donde vive la tarjeta aMule.
+    fireEvent.click(within(callout).getByRole('link', { name: 'General → aMule (EC directo)' }))
+    expect(await screen.findByText(/aMule — conexión directa \(EC\)/)).toBeVisible()
+    expect(callout).not.toBeVisible()
+  })
+})

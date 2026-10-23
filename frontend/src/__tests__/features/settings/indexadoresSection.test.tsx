@@ -1,10 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IndexadoresSection } from '../../../features/settings/IndexadoresSection.tsx'
 
 /**
  * «Indexadores» — the CRUD half of the section («indexadores-directos» T6/S5).
+ *
+ * config-1x1 T4 (S2) lleva el panel a fidelidad ESTRICTA 1:1 con
+ * `odd/tasks/config-submenu/stitch-13-indexadores.html`: cabecera del panel
+ * con «Importar de Prowlarr/Jackett…»/«Añadir indexador», cards apilados
+ * (Búsqueda unificada → registrados → Nuevo indexador → callout), la tabla del
+ * diseño y el callout literal. Estilos en `Settings.css` (sin inline styles).
+ *
+ * Adaptaciones documentadas (S3 — sólo por el cambio estructural, SIN aflojar):
+ *  - el toggle ESTADO es `role="switch"` con aria-checked (antes button con
+ *    texto «Sí»/«No»): mismo estado visible por fila, forma del diseño;
+ *  - la cabecera del panel añade otro botón «Añadir indexador» (el del
+ *    diseño), así que el submit del formulario se localiza dentro de la
+ *    tarjeta «Nuevo indexador»: misma acción, mismo payload.
  *
  * What this panel has to get right, in order of how badly it fails otherwise:
  *
@@ -68,6 +81,15 @@ function renderSection() {
   )
 }
 
+/** La tarjeta «Nuevo indexador» del diseño — los submits del formulario se
+ *  localizan dentro de ella (ADAPTADO T4/S3: la cabecera del panel trae otro
+ *  botón «Añadir indexador»). */
+function formCard(): HTMLElement {
+  return screen
+    .getByRole('heading', { name: /Nuevo indexador|Editar indexador/ })
+    .closest('.indexadores-card') as HTMLElement
+}
+
 describe('indexers section — the registry', () => {
   beforeEach(() => vi.unstubAllGlobals())
   afterEach(() => vi.unstubAllGlobals())
@@ -81,9 +103,17 @@ describe('indexers section — the registry', () => {
     // The masked key — the only shape a response may ever carry.
     expect(screen.getByText('****9876')).toBeInTheDocument()
     expect(screen.getByText('http://indexer.test/torznab/api')).toBeInTheDocument()
-    // Enabled state is visible per row.
-    expect(screen.getByRole('button', { name: 'Habilitado de NoNaMe' })).toHaveTextContent('Sí')
-    expect(screen.getByRole('button', { name: 'Habilitado de Elite' })).toHaveTextContent('No')
+    // Enabled state is visible per row. ADAPTADO (config-1x1 T4/S3, sin
+    // aflojar): el toggle del diseño es `role="switch"` con aria-checked
+    // (antes button con texto «Sí»/«No»); el estado por fila se reafirma.
+    expect(screen.getByRole('switch', { name: 'Habilitado de NoNaMe' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.getByRole('switch', { name: 'Habilitado de Elite' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
   })
 
   it('says so plainly when there are no indexers at all', async () => {
@@ -120,7 +150,10 @@ describe('indexers section — the registry', () => {
     // «(personalizada)») in indexadoresCategorias.test.tsx.
     fireEvent.click(screen.getByRole('checkbox', { name: 'Películas 2000' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Consola 1000' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Añadir indexador' }))
+    // ADAPTADO (config-1x1 T4/S3): la cabecera del panel también tiene un
+    // «Añadir indexador» (el del diseño); el submit del formulario se acota a
+    // la tarjeta «Nuevo indexador». Misma acción, mismo payload exacto.
+    fireEvent.click(within(formCard()).getByRole('button', { name: 'Añadir indexador' }))
 
     await waitFor(() => {
       const post = fn.mock.calls.find(
@@ -147,7 +180,8 @@ describe('indexers section — the registry', () => {
     })
     renderSection()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Habilitado de NoNaMe' }))
+    // ADAPTADO (config-1x1 T4/S3): mismo toggle, ahora `role="switch"`.
+    fireEvent.click(await screen.findByRole('switch', { name: 'Habilitado de NoNaMe' }))
 
     await waitFor(() => {
       const put = fn.mock.calls.find(
@@ -235,5 +269,131 @@ describe('indexers section — the registry', () => {
       ).toBeTruthy()
     })
     confirmSpy.mockRestore()
+  })
+})
+
+describe('panel «Indexadores» — estructura del diseño (config-1x1 T4/S2)', () => {
+  beforeEach(() => vi.unstubAllGlobals())
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('renders the design header: title, subtitle and the two top-right actions', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    const heading = await screen.findByRole('heading', { name: 'Indexadores', level: 2 })
+    const header = heading.closest('.settings-panel-header') as HTMLElement
+    within(header).getByText('Fuentes Torznab directas para buscar y descargar')
+
+    // Acciones del diseño, arriba a la derecha: bloque de acciones tras el título.
+    const importBtn = within(header).getByRole('button', { name: 'Importar de Prowlarr/Jackett…' })
+    const addBtn = within(header).getByRole('button', { name: 'Añadir indexador' })
+    expect(header.lastElementChild).toContainElement(importBtn)
+    expect(header.lastElementChild).toContainElement(addBtn)
+  })
+
+  it('the Import action is visible but honestly disabled — its step does not exist yet', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    // Regla de honestidad: elemento visible, SIN acción falsa y SIN ocultarlo.
+    const importBtn = await screen.findByRole('button', { name: 'Importar de Prowlarr/Jackett…' })
+    expect(importBtn).toBeDisabled()
+    expect(importBtn).toHaveAttribute('title', 'Disponible al importar de Prowlarr (próximo paso)')
+  })
+
+  it('the header «Añadir indexador» is an honest anchor into the visible form', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    const heading = await screen.findByRole('heading', { name: 'Indexadores', level: 2 })
+    const header = heading.closest('.settings-panel-header') as HTMLElement
+    fireEvent.click(within(header).getByRole('button', { name: 'Añadir indexador' }))
+    expect(screen.getByLabelText('Nombre del indexador')).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir indexador' }))
+    expect(screen.getByLabelText('Nombre del indexador')).toHaveFocus()
+  })
+
+  it('stacks the design cards in order with their literal heads', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    const search = await screen.findByRole('heading', { name: 'Búsqueda unificada' })
+    const registry = screen.getByRole('heading', { name: 'Indexadores Torznab registrados' })
+    const form = screen.getByRole('heading', { name: 'Nuevo indexador' })
+
+    expect(search.compareDocumentPosition(registry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(registry.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    const searchCard = search.closest('.indexadores-card') as HTMLElement
+    within(searchCard).getByText(
+      'Sondeo en tiempo real a través de fuentes Torznab locales y remotas configuradas.',
+    )
+    const registryCard = registry.closest('.indexadores-card') as HTMLElement
+    within(registryCard).getByText(
+      'Servidores y agregadores Torznab estándar para consultas automáticas.',
+    )
+    // El badge «N registrados» usa el dato REAL del listado (2 en LIST).
+    await within(registryCard).findByText('2 registrados')
+    const formCardEl = form.closest('.indexadores-card') as HTMLElement
+    within(formCardEl).getByText('Configuración de un endpoint Torznab personalizado.')
+
+    // Datos inventados del mockup («17 fuentes activas»): REPORTADOS, jamás
+    // renderizados con números que el backend no devuelve.
+    expect(screen.queryByText(/fuentes activas/)).toBeNull()
+  })
+
+  it('renders the registry as the design table and keeps every CRUD affordance', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    const table = await screen.findByRole('table')
+    for (const col of ['Estado', 'Nombre', 'URL', 'Categorías', 'API Key', 'Acciones']) {
+      within(table).getByRole('columnheader', { name: col })
+    }
+    expect(within(table).getAllByRole('switch')).toHaveLength(2)
+    // La máscara de la API key — el único shape que viaja — sigue visible.
+    within(table).getByText('****9876')
+    // Categorías vacías = «— (todas)», como el diseño.
+    within(table).getByText('— (todas)')
+    within(table).getByRole('button', { name: 'Probar NoNaMe' })
+    within(table).getByRole('button', { name: 'Editar NoNaMe' })
+    within(table).getByRole('button', { name: 'Eliminar NoNaMe' })
+    screen.getByRole('button', { name: '+ Añadir indexador' })
+  })
+
+  it('shows the design note and an honest disabled in-form probe', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    const card = formCard()
+    expect(card).toHaveTextContent(
+      'Prueba la conexión con t=caps antes de guardar. La clave se guarda cifrada y nunca se muestra completa.',
+    )
+    // La nota pide «probar antes de guardar»: la sonda con valores sin guardar
+    // no existe aún en el backend — visible, honesta y REPORTADA, sin acción falsa.
+    const probe = within(card).getByRole('button', { name: 'Probar' })
+    expect(probe).toBeDisabled()
+  })
+
+  it('renders the closing callout literally with an actionable link', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    const callout = document.querySelector('.indexadores-callout') as HTMLElement
+    expect(callout).toHaveTextContent(
+      'La conexión a aMule no es un indexador: su host, puerto y contraseña EC se configuran en General → aMule (EC directo). Los resultados de la fuente «amule» salen de esa conexión.',
+    )
+    const link = within(callout).getByRole('link', { name: 'General → aMule (EC directo)' })
+    expect(link).toHaveAttribute('href', '#')
+  })
+
+  it('the new chrome is styled in Settings.css, not with inline styles', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    const cards = document.querySelector('.indexadores-cards') as HTMLElement
+    expect(cards).not.toBeNull()
+    expect(cards.querySelector('[style]')).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IndexadoresSection } from '../../../features/settings/IndexadoresSection.tsx'
 import { clearToasts, getToasts } from '../../../shared/utils/toast.ts'
@@ -10,6 +10,24 @@ import { clearToasts, getToasts } from '../../../shared/utils/toast.ts'
  * «Descargar» that goes to `POST /api/indexers/download` — NEVER
  * `POST /api/calendar/grab`, which needs an arr service and a movieId the
  * free-search rows do not have.
+ *
+ * config-1x1 T4 (S2) lleva la tarjeta a fidelidad ESTRICTA con
+ * `stitch-13-indexadores.html`: campo con placeholder del diseño, chips de
+ * fuente con conteos, resultados agrupados por FUENTE con los títulos del
+ * diseño y los estados honestos al pie. Comportamiento INTACTO: mismo
+ * endpoint, mismos skipped con su motivo, mismo doble-guard.
+ *
+ * Adaptaciones documentadas (S3 — sólo por el cambio estructural, SIN aflojar):
+ *  - el campo de búsqueda se nombra por el literal del diseño (antes label
+ *    «Texto a buscar»): mismo input, misma cadena de búsqueda;
+ *  - los conteos de los chips viven ahora en su badge del diseño
+ *    («torznab 2», antes texto «torznab (2)»): mismo número, misma fuente;
+ *  - los grupos son por FUENTE con los títulos del diseño (antes por
+ *    indexador, «🌐 NoNaMe (2)»); el indexador de cada fila viaja ahora en su
+ *    badge — misma información, más la agrupación que pide el diseño;
+ *  - el pie del diseño separa la fuente en negrita del motivo y añade
+ *    «(fuente omitida)»: la cadena completa se reafirma sobre textContent
+ *    (mismo patrón que la nota de la tarjeta aMule de T3), SIN aflojar.
  *
  * Honesty rules pinned here:
  * - a skipped source always names itself AND its reason («{fuente}: {razón}»),
@@ -45,7 +63,11 @@ function renderSection() {
 }
 
 async function runSearch(query = 'matrix') {
-  fireEvent.change(await screen.findByLabelText('Texto a buscar'), { target: { value: query } })
+  // ADAPTADO (config-1x1 T4/S3): el campo lleva el literal del diseño
+  // («Buscar en todas las fuentes…») como placeholder y nombre accesible.
+  fireEvent.change(await screen.findByLabelText('Buscar en todas las fuentes…'), {
+    target: { value: query },
+  })
   fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
 }
 
@@ -113,18 +135,33 @@ describe('unified indexer search box', () => {
 
     await runSearch()
 
-    // Count chips per source…
-    expect(await screen.findByText('torznab (2)')).toBeInTheDocument()
-    expect(screen.getByText('amule (1)')).toBeInTheDocument()
-    expect(screen.getByText('prowlarr (1)')).toBeInTheDocument()
-    expect(screen.getByText('Todas (4)')).toBeInTheDocument()
-    // …and grouped rows with their own counts (exact texts: the count chips
-    // above share the `amule (1)` substring with the group headers).
-    expect(await screen.findByText('🌐 NoNaMe (2)')).toBeInTheDocument()
-    expect(screen.getByText('🌐 amule (1)')).toBeInTheDocument()
-    expect(screen.getByText('🌐 prowlarr (1)')).toBeInTheDocument()
+    // Count chips per source — ADAPTADO (T4/S3): el conteo vive en el badge
+    // del chip del diseño (nombre accesible «torznab 2», antes texto
+    // «torznab (2)»): mismo número por fuente, más el total de «Todas».
+    expect(await screen.findByRole('button', { name: 'torznab 2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'amule 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'prowlarr 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Todas 4' })).toBeInTheDocument()
+    // …and grouped rows with their own counts — ADAPTADO (T4/S3): los grupos
+    // son por FUENTE con los títulos del diseño (antes por indexador,
+    // «🌐 NoNaMe (2)»); el indexador de cada fila viaja ahora en su badge.
+    const torznabGroup = (await screen.findByText('Resultados Torznab directos')).closest(
+      '.indexadores-group',
+    ) as HTMLElement
+    expect(within(torznabGroup).getByText('2')).toBeInTheDocument()
+    const amuleGroup = screen
+      .getByText('Resultados daemon aMule (eD2k/Kad)')
+      .closest('.indexadores-group') as HTMLElement
+    expect(within(amuleGroup).getByText('1')).toBeInTheDocument()
+    const prowlarrGroup = screen
+      .getByText('Resultados de Prowlarr')
+      .closest('.indexadores-group') as HTMLElement
+    expect(within(prowlarrGroup).getByText('1')).toBeInTheDocument()
+    expect(screen.getAllByText('NoNaMe')).toHaveLength(2)
     expect(screen.getByText('Matrix 1999 1080p')).toBeInTheDocument()
-    expect(screen.getByText(/4 fuentes/)).toBeInTheDocument()
+    // ADAPTADO (T4/S3): la métrica del diseño nombra primero la fuente
+    // («fuentes: 4», antes «4 fuentes»): mismo número, mismo concepto.
+    expect(screen.getByText('fuentes: 4')).toBeInTheDocument()
   })
 
   it('renders every skipped source with its reason, never a silent empty', async () => {
@@ -143,8 +180,14 @@ describe('unified indexer search box', () => {
 
     await runSearch()
 
-    expect(await screen.findByText('prowlarr: Prowlarr no está configurado')).toBeInTheDocument()
-    expect(screen.getByText('amule: aMule no responde')).toBeInTheDocument()
+    // ADAPTADO (config-1x1 T4/S3): el pie del diseño separa la fuente en
+    // negrita del motivo y añade «(fuente omitida)»; la cadena completa se
+    // reafirma sobre textContent (mismo patrón que T3, sin aflojar): fuente
+    // Y motivo siguen siendo obligatorios.
+    const skipLine = await screen.findByText('prowlarr:')
+    const foot = skipLine.closest('.indexadores-search-statuses') as HTMLElement
+    expect(foot).toHaveTextContent('prowlarr: Prowlarr no está configurado — (fuente omitida)')
+    expect(foot).toHaveTextContent('amule: aMule no responde — (fuente omitida)')
     // The source that DID answer says so instead of hiding behind the skips.
     expect(screen.getByText('torznab: Sin resultados')).toBeInTheDocument()
   })
@@ -237,5 +280,50 @@ describe('unified indexer search box', () => {
 
     gate.resolve({ ok: true, detail: 'Descarga añadida' })
     await waitFor(() => expect(getToasts()).toHaveLength(1))
+  })
+})
+
+describe('búsqueda unificada — estructura del diseño (config-1x1 T4/S2)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+
+  it('renders the design search field, «Buscar» and the source chips with counts', async () => {
+    mockFetch({
+      'GET /api/indexers': () => ({ indexers: [] }),
+      'POST /api/indexers/search': () => HAPPY,
+    })
+    renderSection()
+
+    await screen.findByLabelText('Buscar en todas las fuentes…')
+    expect(screen.getByRole('button', { name: 'Buscar' })).toBeInTheDocument()
+
+    // Chips de fuente con conteos — literal del diseño (emoji decorativo, sin
+    // contaminar el nombre accesible) y label «Fuentes:».
+    const chips = document.querySelector('.indexadores-source-chips') as HTMLElement
+    expect(chips).not.toBeNull()
+    within(chips).getByText('Fuentes:')
+    within(chips).getByText('🌐')
+    within(chips).getByText('📥')
+    within(chips).getByText('🔍')
+    for (const source of ['torznab', 'amule', 'prowlarr']) {
+      expect(within(chips).getByRole('button', { name: source })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    }
+
+    await runSearch()
+
+    // Los conteos son los RESULTADOS de esta búsqueda (esperar a que lleguen).
+    await screen.findByRole('button', { name: 'torznab 2' })
+
+    // El pie de estados honestos del diseño, al final de la tarjeta.
+    expect(document.querySelector('.indexadores-search-statuses')).not.toBeNull()
   })
 })
