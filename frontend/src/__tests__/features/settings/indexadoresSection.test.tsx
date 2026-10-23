@@ -109,9 +109,17 @@ describe('indexers section — the registry', () => {
     fireEvent.change(screen.getByLabelText('API Key del indexador'), {
       target: { value: 'secret-key' },
     })
-    fireEvent.change(screen.getByLabelText('Categorías (separadas por coma)'), {
-      target: { value: '2000,100000' },
+    fireEvent.change(screen.getByLabelText('API Key del indexador'), {
+      target: { value: 'secret-key' },
     })
+    // T4/S3 adaptation (was `fireEvent.change` on the old free-text field
+    // «Categorías (separadas por coma)» with '2000,100000'): the field is now
+    // a checkbox grid, so the interaction is two box clicks. Assertions are
+    // NOT loosened — still an exact payload match. '100000' was a custom id
+    // the free text could type; custom-id survival is now pinned (edit load
+    // «(personalizada)») in indexadoresCategorias.test.tsx.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Películas 2000' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Consola 1000' }))
     fireEvent.click(screen.getByRole('button', { name: 'Añadir indexador' }))
 
     await waitFor(() => {
@@ -127,7 +135,7 @@ describe('indexers section — the registry', () => {
       name: 'Ivy',
       url: 'http://ivy.test/torznab/api',
       api_key: 'secret-key',
-      categories: '2000,100000',
+      categories: '2000,1000',
     })
     expect(await screen.findByRole('status')).toHaveTextContent(/añadido/i)
   })
