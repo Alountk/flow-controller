@@ -21,11 +21,11 @@ S6: Verificación — TDD RED→GREEN por tarea; gate final: backend **≥1551**
 
 | ID | Specs | Ruta | Commit |
 |----|-------|------|--------|
-| T1 | S1-S6 | parent — feature doc + HTMLs de diseño | (este commit) |
-| T2 | S2, S6 | worker — backend: `services.amule.*` editable + enmascarado `ec_password` + `POST /api/amule/test` (handshake EC read-only), tests RED→GREEN | pendiente |
-| T3 | S1, S6 | worker — frontend: doble raíl General│Indexadores en Settings + tarjeta aMule (EC) con Probar, tests adaptadas sin aflojar | pendiente |
-| T4 | S3, S6 | worker — categorías por checkbox con exclusividad «Todas» (alta/edición), tests frontend | pendiente |
-| T5 | S6 | parent — gate (backend+frontend+tsc+eslint+ratchet), docs, PR único con divulgación, merge | pendiente |
+| T1 | S1-S6 | parent — feature doc + HTMLs de diseño | `740b17a` |
+| T2 | S2, S6 | worker — backend: `services.amule.*` editable + enmascarado `ec_password` + `POST /api/amule/test` (handshake EC read-only), tests RED→GREEN | `e88ef5a` |
+| T3 | S1, S6 | worker — frontend: doble raíl General│Indexadores en Settings + tarjeta aMule (EC) con Probar, tests adaptadas sin aflojar | `f482b00` |
+| T4 | S3, S6 | worker — categorías por checkbox con exclusividad «Todas» (alta/edición), tests frontend | `b1779b6` |
+| T5 | S6 | parent — gate (backend+frontend+tsc+eslint+ratchet), docs, PR único con divulgación, merge | gate abajo; PR al cierre |
 
 ## Log
 
@@ -39,3 +39,5 @@ L2 (ajuste + aprobación, literal con sus typos): «las caegorias delos idnexado
 L3 (diseño Stitch): pantallas **12 Configuración — General** (`4cf5538c398846a0ab514737fb02784d`) y **13 Configuración — Indexadores** (`6800944798204ab392aaa62d2e2a8c8a`) en proyecto `4305330220058954866`, DS `assets/5781956853225900110`; QA visual del padre: doble raíl presente, tarjeta aMule (EC) destacada con nota separadora, semillas vs «fuentes: 12» distinguidos, estados honestos, botón «Importar de Prowlarr/Jackett…» (Step 5). HTML guardados (46KB/41KB). Regeneración y `edit_screens` reportaron éxito pero los artefactos quedaron **stale** (mismo `html_6347c573…` byte a byte) — gotcha preexistente de HANDOFF («edit_screens NO edita en situ»); por eso L2 manda en el campo de checkbox. Preferencia «HTML, no screenshots» guardada en Engram **1453**.
 
 L4 (decisiones técnicas): persistencia de aMule EC en `settings.json → services.amule` con defaults desde env (precedente de servicios y `config.py`); enmascarado del `ec_password` en las respuestas (S2) siguiendo `_mask_secrets`; `POST /api/amule/test` read-only con el cliente EC ya verificado en #220 (nunca encola descargas); checkbox → csv en cliente (sin cambios de API); navegación por pestañas internas (sin rutas nuevas) para no tocar la barra lateral.
+
+L5 (gate y cierre de T4 — 2026-10-23): **gate observado por el parent**: backend **1577 passed**, frontend **88 files / 707 passed** (base 687), `tsc -b` 0, `eslint` 0, ratchet intacto (3408; `app.py` net-154 por líneas compartidas). Ampliación aceptada de T2 (Risk item 2): `ec_password` **cifrada en reposo** vía `ENCRYPTED_SECRET_FIELDS` (RED con el secreto en claro antes del fix; matriz de degradación FC_SECRET documentada). Tests: T3 **0 adaptados**; T4 **1 adaptado** (`indexadoresSection` «add form»: texto→dos clicks, aserción `toEqual` estricta intacta y el `100000` custom pasó a estar pinneado en el test nuevo anti-pérdida). Incidente: el worker T3 fue **abortado por el usuario en fase de lectura** (24 turns/40 calls, árbol limpio, `ps` limpio — misma firma de los cuelgues 2 y Engram 1446); mitigación aplicada: `subagent_continue` (leyendas conservadas) + **checkpoint temprano** (fichero RED primero). Slice tras T4: **3217 líneas / 4 commits** — estrategia PR único con divulgación. **Review nativa**: clone-local sigue OFF (D de #220) → este PR sin review nativa (disposición mantenida).
