@@ -5,8 +5,9 @@ treated the same way:
 
 - **The app's own API key** is only ever *compared*, never sent anywhere, so it
   is stored as a hash. A leaked settings.json no longer reveals it.
-- **Radarr/Sonarr/aMuTorrent keys and the aMuTorrent password** must be *sent*
-  to those services, so they cannot be hashed. They are handled separately.
+- **Radarr/Sonarr/aMuTorrent keys, the aMuTorrent password and the aMule EC
+  password** must be *sent* to those services, so they cannot be hashed. They
+  are handled separately.
 
 The hash is HMAC-SHA256 rather than a slow KDF on purpose. `verify_api_key`
 runs on every request, and scrypt/bcrypt are deliberately expensive (tens of
@@ -41,8 +42,8 @@ ENC_SALT_PATH = ("security", "encryption_salt")
 
 # ── Secrets that must survive as-is ──────────────────────────────────────────
 #
-# These are sent to Radarr/Sonarr/aMuTorrent, so unlike the app's own key they
-# cannot be hashed. They are encrypted at rest instead.
+# These are sent to Radarr/Sonarr/aMuTorrent/aMule, so unlike the app's own key
+# they cannot be hashed. They are encrypted at rest instead.
 
 ENCRYPTED_SECRET_FIELDS = (
     ("services", "radarr", "api_key"),
@@ -50,6 +51,10 @@ ENCRYPTED_SECRET_FIELDS = (
     ("services", "amutorrent", "api_key"),
     ("services", "amutorrent", "password"),
     ("services", "opensubtitles", "api_key"),
+    # La contraseña EC va al daemon aMule (handshake y operaciones), así que
+    # cifrado en reposo como sus hermanos. En memoria queda el texto plano que
+    # `config.AMULE_EC_PASSWORD` reparte; el ciphertext jamás sale a una API.
+    ("services", "amule", "ec_password"),
 )
 
 #: Marks a value as ciphertext, so legacy plaintext can still be read.

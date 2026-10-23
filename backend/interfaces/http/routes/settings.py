@@ -1,8 +1,10 @@
 """Settings and prototypes routes."""
 
+import asyncio
 import copy
 import json
 import os
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -16,6 +18,12 @@ from state import http_session
 import config
 
 router = APIRouter()
+
+#: The EC client class behind `POST /api/amule/test`. Routes may not import
+#: `infrastructure/` (`tests_architecture`), so `app.py` — the one file allowed
+#: to hold an adapter — puts it in this module's hand, exactly like
+#: `indexers_routes.torznab`.
+amule_ec_client = None
 
 #: Only what genuinely cannot be picked up at runtime. Services are refilled
 #: in place by `config.rebuild()`, and `security.api_key` is read live by
@@ -91,6 +99,17 @@ def _restore_masked_secrets(incoming: dict, current: dict) -> dict:
         stored_pw = current.get("services", {}).get("amutorrent", {}).get("password", "")
         merged.setdefault("services", {}).setdefault("amutorrent", {})["password"] = stored_pw
 
+    # S2 manda lo contrario para la contraseña EC: «clave vacía en POST =
+    # conservar la guardada». Vacía, ausente del bloque, o con la máscara que el
+    # form devuelve intacto → se conserva la guardada; sólo un valor nuevo la
+    # sustituye. El «vacío borra» del resto de secretos se mantiene tal cual.
+    amule = merged.get("services", {}).get("amule")
+    if isinstance(amule, dict):
+        incoming_ec = amule.get("ec_password", "")
+        if not incoming_ec or _is_mask(incoming_ec):
+            stored_ec = current.get("services", {}).get("amule", {}).get("ec_password", "")
+            merged["services"]["amule"]["ec_password"] = stored_ec
+
     return merged
 
 
@@ -129,6 +148,16 @@ def _mask_secrets(data: dict) -> dict:
     pw = masked.get("services", {}).get("amutorrent", {}).get("password", "")
     if pw:
         masked["services"]["amutorrent"]["password"] = "****"
+    # S2: la contraseña EC se enmascara con el patrón de las claves de
+    # servicio (`****` + últimos 4) y jamás sale en claro por ninguna API. Si
+    # aquí llegara el ciphertext de reposo (`enc:…`), sale la máscara desnuda:
+    # ni un trozo del propio ciphertext se filtra a la respuesta.
+    ec_pw = masked.get("services", {}).get("amule", {}).get("ec_password", "")
+    if ec_pw:
+        if credentials.is_encrypted(ec_pw):
+            masked["services"]["amule"]["ec_password"] = "****"
+        else:
+            masked["services"]["amule"]["ec_password"] = "****" + ec_pw[-4:] if len(ec_pw) > 4 else "****"
     return masked
 
 
@@ -261,6 +290,54 @@ async def test_service_candidate(body: dict, _key: str = Depends(verify_api_key)
     async with http_session() as session:
         result = await test_service_connection(session, candidate)
     return {"results": [result], "ok": bool(result.get("ok"))}
+
+
+# ── Sonda EC directa con aMule (S2) ──────────────────────────────────────────
+
+
+def _ec_host(raw: str) -> str:
+    """Host de `AMULE_URL`, con o sin esquema ni puerto web.
+
+    Misma resolución que `infrastructure.amule_service._host`, replicada aquí
+    porque esta ruta responde con su propio cuerpo en vez de subir el
+    `RuntimeError` «no está configurado» del adapter.
+    """
+    parsed = urlparse(raw if "://" in raw else f"//{raw}")
+    return parsed.hostname or raw
+
+
+def _probe_amule_ec() -> dict:
+    """Connect+handshake EC y cierre, sin más. Jamás busca ni encola nada."""
+    url = config.AMULE_URL
+    password = config.AMULE_EC_PASSWORD
+    if not url or not password:
+        return {"ok": False, "detail": config.service_unavailable_reason("amule", "amule")}
+    try:
+        client = amule_ec_client(_ec_host(url), int(config.AMULE_EC_PORT or "4712"), password)
+        try:
+            version = client.connect()
+        finally:
+            client.close()
+        return {"ok": True, "detail": version or "conectado"}
+    except Exception as exc:
+        # "<Tipo>: <mensaje>" para las excepciones tipadas del cliente EC (y
+        # para cualquier otra). La contraseña se elimina del texto por si un
+        # mensaje la arrastrara: jamás sale por aquí.
+        detail = f"{type(exc).__name__}: {exc}".replace(password, "****")
+        return {"ok": False, "detail": detail}
+
+
+@router.post("/api/amule/test")
+async def test_amule_ec(_key: str = Depends(verify_api_key)):
+    """Prueba la conexión directa con aMule por EC — sólo handshake.
+
+    Responde SIEMPRE HTTP 200 con `{ok, detail}`: el veredicto vive en el
+    cuerpo, no en el código. La configuración se lee en el momento de la
+    llamada (settings/env, como `amule_service._client`) y el socket se cierra
+    en `finally`. La sonda es read-only de verdad: el handshake es lo único
+    que se ejecuta, nunca operaciones de búsqueda o de cola.
+    """
+    return await asyncio.to_thread(_probe_amule_ec)
 
 
 @router.get("/api/services")

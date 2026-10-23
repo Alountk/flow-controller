@@ -83,6 +83,56 @@ function capsCategories(caps: IndexerCaps | undefined): string {
 
 const EMPTY_FORM = { name: '', url: '', api_key: '', categories: '' }
 
+/** S3 («config-submenu» T4/L2): the «Categorías» checkbox grid. Every box
+ * shows name AND id («Películas 2000» = name «Películas», id 2000).
+ * «Todas (sin filtro)» is not in this list: it is the empty csv. */
+const CATEGORY_ITEMS = [
+  { id: '2000', name: 'Películas' },
+  { id: '2010', name: 'Películas HD' },
+  { id: '2020', name: '3D' },
+  { id: '2045', name: 'Remux' },
+  { id: '5000', name: 'Series' },
+  { id: '5010', name: 'Series HD' },
+  { id: '5070', name: 'Anime' },
+  { id: '5040', name: 'Documentales' },
+  { id: '3000', name: 'Música' },
+  { id: '3030', name: 'Audiolibros' },
+  { id: '4000', name: 'Libros' },
+  { id: '1000', name: 'Consola' },
+]
+
+const CATEGORY_IDS = new Set(CATEGORY_ITEMS.map((c) => c.id))
+
+/** Checked ids from the csv, in stored order. `[]` ⇔ «Todas» checked. */
+function parseCategories(csv: string | undefined): string[] {
+  return (csv ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/** Rebuild the csv: standard ids in CATEGORY_ITEMS order, then unknown ids
+ * (custom 100xxx, …) in their stored order — stable regardless of click
+ * order, and a custom id NEVER disappears: dropping a user's stored id would
+ * be data loss (S3 round-trip rule). */
+function buildCategoriesCsv(ids: string[]): string {
+  const ordered: string[] = []
+  const seen = new Set<string>()
+  for (const item of CATEGORY_ITEMS) {
+    if (ids.includes(item.id) && !seen.has(item.id)) {
+      ordered.push(item.id)
+      seen.add(item.id)
+    }
+  }
+  for (const id of ids) {
+    if (!CATEGORY_IDS.has(id) && !seen.has(id)) {
+      ordered.push(id)
+      seen.add(id)
+    }
+  }
+  return ordered.join(',')
+}
+
 export function IndexadoresSection() {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<IndexerInput & typeof EMPTY_FORM>(EMPTY_FORM)
@@ -219,6 +269,30 @@ export function IndexadoresSection() {
 
   const noticeRole = notice?.tone === 'error' ? 'alert' : 'status'
 
+  // «Categorías» checkbox state derives from the csv — the submit shape is
+  // untouched. Empty ⇔ «Todas (sin filtro)»; unknown ids render as extra
+  // «(personalizada)» boxes so the round-trip loses nothing.
+  const selectedIds = parseCategories(form.categories)
+  const selected = new Set(selectedIds)
+  const customIds = selectedIds.filter((id) => !CATEGORY_IDS.has(id))
+  const todasChecked = selectedIds.length === 0
+
+  function toggleCategory(id: string) {
+    setForm((f) => {
+      const ids = parseCategories(f.categories)
+      const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
+      // Unchecking the last specific one lands on '' ⇔ «Todas» checked again:
+      // there is no state where nothing is checked.
+      return { ...f, categories: buildCategoriesCsv(next) }
+    })
+  }
+
+  function checkTodas() {
+    // Exclusive: checking «Todas» wipes every specific one. Clicking the
+    // already-checked box keeps it checked (same empty csv — never empty).
+    setForm((f) => ({ ...f, categories: '' }))
+  }
+
   return (
     <div className="settings-section">
       <h3 className="settings-section-title">Indexadores</h3>
@@ -339,16 +413,42 @@ export function IndexadoresSection() {
           />
         </div>
         <div className="settings-field">
-          <label className="settings-label" htmlFor="indexer-form-categories">
-            Categorías (separadas por coma)
-          </label>
-          <input
-            id="indexer-form-categories"
-            className="settings-input"
-            value={form.categories ?? ''}
-            placeholder="2000,100000"
-            onChange={(e) => setForm((f) => ({ ...f, categories: e.target.value }))}
-          />
+          {/* S3: checkbox grid (3-4 columns, labels clickable). The grid style
+              is inline because Settings.css is outside this task's edit
+              surfaces. */}
+          <span className="settings-label" id="indexer-form-categories">
+            Categorías
+          </span>
+          <div
+            role="group"
+            aria-labelledby="indexer-form-categories"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+              gap: '4px 12px',
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={todasChecked} onChange={checkTodas} />
+              Todas (sin filtro)
+            </label>
+            {CATEGORY_ITEMS.map((item) => (
+              <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(item.id)}
+                  onChange={() => toggleCategory(item.id)}
+                />
+                {item.name} {item.id}
+              </label>
+            ))}
+            {customIds.map((id) => (
+              <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="checkbox" checked onChange={() => toggleCategory(id)} />
+                {id} (personalizada)
+              </label>
+            ))}
+          </div>
         </div>
         <div className="settings-logs-controls">
           {editingId === null ? (

@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-background text-on-background" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>FlowController — Configuración General</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-primary-fixed": "#0f0069",
+            "surface-container-high": "#eae7eb",
+            "surface": "#fbf8fc",
+            "primary-fixed-dim": "#c3c0ff",
+            "secondary": "#5e5e65",
+            "on-surface": "#1b1b1e",
+            "inverse-on-surface": "#f3f0f4",
+            "surface-bright": "#fbf8fc",
+            "tertiary": "#003fac",
+            "on-primary-container": "#dad7ff",
+            "inverse-primary": "#c3c0ff",
+            "on-primary": "#ffffff",
+            "on-error-container": "#93000a",
+            "on-tertiary-fixed": "#00174b",
+            "surface-container-lowest": "#ffffff",
+            "on-primary-fixed-variant": "#3323cc",
+            "secondary-container": "#e3e1ea",
+            "primary-fixed": "#e2dfff",
+            "on-error": "#ffffff",
+            "surface-dim": "#dcd9dd",
+            "on-tertiary": "#ffffff",
+            "on-background": "#1b1b1e",
+            "surface-container-low": "#f6f2f7",
+            "inverse-surface": "#303033",
+            "on-secondary-container": "#64646b",
+            "tertiary-fixed-dim": "#b4c5ff",
+            "on-tertiary-fixed-variant": "#003ea8",
+            "error-container": "#ffdad6",
+            "primary": "#3525cd",
+            "tertiary-container": "#0555dd",
+            "surface-tint": "#4d44e3",
+            "error": "#ba1a1a",
+            "surface-container-highest": "#e4e1e6",
+            "outline": "#777587",
+            "surface-container": "#f0edf1",
+            "primary-container": "#4f46e5",
+            "on-secondary": "#ffffff",
+            "on-tertiary-container": "#d1daff",
+            "background": "#fbf8fc",
+            "surface-variant": "#e4e1e6",
+            "secondary-fixed": "#e3e1ea",
+            "on-surface-variant": "#464555",
+            "secondary-fixed-dim": "#c7c5ce",
+            "on-secondary-fixed-variant": "#46464d",
+            "tertiary-fixed": "#dbe1ff",
+            "on-secondary-fixed": "#1b1b21",
+            "outline-variant": "#c7c4d8"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "gutter": "1rem",
+            "space-sm": "0.5rem",
+            "space-lg": "1rem",
+            "space-xl": "1.5rem",
+            "space-md": "0.75rem",
+            "margin": "1rem",
+            "space-xs": "0.25rem"
+          },
+          "fontFamily": {
+            "headline-lg": ["Inter", "sans-serif"],
+            "headline-sm": ["Inter", "sans-serif"],
+            "headline-md": ["Inter", "sans-serif"],
+            "code-md": ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+            "code-sm": ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+            "body-md": ["Inter", "sans-serif"],
+            "label-sm": ["Inter", "sans-serif"],
+            "body-lg": ["Inter", "sans-serif"],
+            "body-sm": ["Inter", "sans-serif"],
+            "label-md": ["Inter", "sans-serif"]
+          },
+          "fontSize": {
+            "headline-lg": ["1.5rem", { "lineHeight": "2rem", "fontWeight": "600" }],
+            "headline-sm": ["1.125rem", { "lineHeight": "1.5rem", "fontWeight": "600" }],
+            "headline-md": ["1.25rem", { "lineHeight": "1.75rem", "fontWeight": "600" }],
+            "code-md": ["0.8125rem", { "lineHeight": "1.125rem", "fontWeight": "400" }],
+            "code-sm": ["0.75rem", { "lineHeight": "1rem", "fontWeight": "400" }],
+            "body-md": ["0.875rem", { "lineHeight": "1.25rem", "fontWeight": "400" }],
+            "label-sm": ["0.75rem", { "lineHeight": "1rem", "fontWeight": "500" }],
+            "body-lg": ["0.9375rem", { "lineHeight": "1.375rem", "fontWeight": "400" }],
+            "body-sm": ["0.8125rem", { "lineHeight": "1.125rem", "fontWeight": "400" }],
+            "label-md": ["0.8125rem", { "lineHeight": "1rem", "fontWeight": "500" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 20px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1;
+    }
+    /* Utilitarian scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f0edf1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c7c4d8;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #777587;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-background text-on-background flex antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- ========================================== -->
+<!-- 1. SHARED COMPONENT: SideNavBar (Anchored) -->
+<!-- ========================================== -->
+<aside class="flex flex-col justify-between h-full p-space-md w-64 border-r border-outline-variant fixed left-0 top-0 z-40 bg-surface-container-lowest">
+<!-- Brand / Header -->
+<div class="flex flex-col gap-space-lg">
+<div class="flex items-center gap-space-md px-space-sm pt-space-xs">
+<div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm shadow-primary/20">
+<span class="material-symbols-outlined" data-icon="tune" style="font-variation-settings: 'FILL' 1;">tune</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md font-bold text-on-surface tracking-tight leading-none">FlowController</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1 leading-none">Gestor Multimedia</span>
+</div>
+</div>
+<!-- Navigation Tabs (7 tabs per Shared JSON) -->
+<nav aria-label="Navegación principal" class="flex flex-col gap-1">
+<!-- 1. Dashboard -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- 2. Películas -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="movie">movie</span>
+<span>Películas</span>
+</a>
+<!-- 3. Series -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="tv">tv</span>
+<span>Series</span>
+</a>
+<!-- 4. Seguimiento with badge 3 -->
+<a class="flex items-center justify-between px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="notifications">notifications</span>
+<span>Seguimiento</span>
+</div>
+<span class="px-1.5 py-0.5 text-xs font-semibold rounded-full bg-primary-fixed text-on-primary-fixed-variant leading-none">3</span>
+</a>
+<!-- 5. Archivos -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="folder">folder</span>
+<span>Archivos</span>
+</a>
+<!-- 6. Media Mixer -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-outline group-hover:text-on-surface" data-icon="tune">tune</span>
+<span>Media Mixer</span>
+</a>
+<!-- 7. Ajustes (ACTIVE TAB per destination) -->
+<a class="flex items-center gap-space-sm px-space-md py-space-sm bg-primary-fixed text-on-primary-fixed-variant font-headline-sm text-sm rounded-lg shadow-sm" href="#">
+<span class="material-symbols-outlined" data-icon="settings" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-semibold">Ajustes</span>
+</a>
+</nav>
+</div>
+<!-- Footer Actions (Exact labels/icons from JSON) -->
+<div class="flex flex-col gap-1 pt-space-md border-t border-outline-variant/60">
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 text-left w-full">
+<span class="material-symbols-outlined text-outline" data-icon="sync">sync</span>
+<span>Sincronizar</span>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 text-left w-full">
+<span class="material-symbols-outlined text-outline" data-icon="description">description</span>
+<span>Documentación</span>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-on-surface-variant font-label-md rounded-lg hover:bg-surface-container hover:text-on-surface transition-colors duration-150 text-left w-full">
+<span class="material-symbols-outlined text-outline" data-icon="restart_alt">restart_alt</span>
+<span>Reiniciar servicios</span>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-error font-label-md rounded-lg hover:bg-error-container/50 transition-colors duration-150 text-left w-full">
+<span class="material-symbols-outlined text-error" data-icon="logout">logout</span>
+<span>Cerrar sesión</span>
+</button>
+</div>
+</aside>
+<!-- ========================================== -->
+<!-- 2. MAIN WORKSPACE WITH TOPNAVBAR           -->
+<!-- ========================================== -->
+<div class="ml-64 flex-1 flex flex-col min-w-0 bg-background">
+<!-- TopNavBar (Shared Component Anchor) -->
+<header class="flex justify-between items-center px-8 py-3 bg-surface-container-lowest border-b border-outline-variant sticky top-0 z-30 shadow-none">
+<div class="flex items-center gap-4">
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">FlowController</h1>
+<span class="text-outline-variant">/</span>
+<span class="font-label-md text-label-md text-on-surface-variant font-medium">Configuración de Plataforma</span>
+</div>
+<!-- Live Service Status Badges & Trailing Actions -->
+<div class="flex items-center gap-3">
+<!-- Status Badges -->
+<div class="flex items-center gap-2 pr-4 border-r border-outline-variant">
+<!-- Radarr -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-xs font-medium border border-outline-variant/60" title="Radarr HTTP Socket">
+<span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+<span class="text-on-surface font-mono">Radarr:</span>
+<span class="text-emerald-700 font-semibold">Conectado</span>
+</div>
+<!-- Sonarr -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-xs font-medium border border-outline-variant/60" title="Sonarr HTTP Socket">
+<span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+<span class="text-on-surface font-mono">Sonarr:</span>
+<span class="text-emerald-700 font-semibold">Conectado</span>
+</div>
+<!-- aMule -->
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-xs font-medium border border-amber-300" title="aMule Protocolo EC">
+<span class="w-2 h-2 rounded-full bg-amber-600"></span>
+<span class="text-on-surface font-mono">aMule:</span>
+<span class="text-amber-800 font-bold">Alerta</span>
+</div>
+</div>
+<!-- Trailing Icon Actions from JSON: ["dns", "cloud_done", "warning"] -->
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all duration-150" title="Estado de DNS y puertos">
+<span class="material-symbols-outlined" data-icon="dns">dns</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all duration-150" title="Sincronización en la nube">
+<span class="material-symbols-outlined" data-icon="cloud_done">cloud_done</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-amber-700 hover:bg-amber-100 transition-all duration-150" title="1 Alerta activa en daemon aMule">
+<span class="material-symbols-outlined" data-icon="warning">warning</span>
+</button>
+</div>
+</header>
+<!-- ========================================== -->
+<!-- 3. CONFIGURATION WORKSPACE (RADARR STYLE)  -->
+<!-- ========================================== -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Sub-Navigation Rail (Left, ~320px) -->
+<aside class="w-80 border-r border-outline-variant bg-surface-container-low/70 p-6 flex flex-col justify-between shrink-0">
+<div class="space-y-6">
+<div>
+<div class="flex items-center gap-2 text-primary font-semibold mb-1">
+<span class="material-symbols-outlined text-primary" data-icon="tune">tune</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Configuración</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Parámetros operacionales, endpoints locales, demonios multimedia y credenciales de acceso.
+            </p>
+</div>
+<!-- Vertical Sub-Nav Items -->
+<nav aria-label="Secciones de configuración" class="space-y-1.5">
+<!-- 1. General (ACTIVE) -->
+<a class="flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-surface-container-lowest text-primary font-medium shadow-sm border border-outline-variant/80" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="tune" style="font-variation-settings: 'FILL' 1;">tune</span>
+<span class="font-headline-sm text-sm">General</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</a>
+<!-- 2. Indexadores (INACTIVE) -->
+<a class="flex items-center justify-between px-3.5 py-2.5 rounded-lg text-on-surface-variant font-medium hover:bg-surface-container hover:text-on-surface transition-colors duration-150" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-outline" data-icon="storage">storage</span>
+<span class="font-body-md text-sm">Indexadores</span>
+</div>
+<span class="font-code-sm text-code-sm text-outline">Torznab</span>
+</a>
+</nav>
+</div>
+<!-- Informative Bottom Banner in Subrail -->
+<div class="p-3.5 rounded-lg bg-surface-container border border-outline-variant/80 text-on-surface-variant space-y-2">
+<div class="flex items-center gap-2 text-primary font-semibold text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="info">info</span>
+<span>Sincronización de Daemons</span>
+</div>
+<p class="font-body-sm text-xs leading-relaxed text-secondary">
+            Los perfiles y conexiones críticas se sincronizan directamente con los daemons locales de Node y sockets UNIX. Cualquier cambio surte efecto de forma inmediata sin necesidad de reiniciar el host salvo que se modifique el puerto de escucha.
+          </p>
+</div>
+</aside>
+<!-- Main Config Canvas (Right, Scrollable) -->
+<main class="flex-1 overflow-y-auto p-8 space-y-8 bg-surface">
+<!-- Canvas Header Bar -->
+<div class="flex items-center justify-between pb-6 border-b border-outline-variant">
+<div>
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface">General</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-0.5">
+              Ajustes generales del panel y conexiones de los servicios
+            </p>
+</div>
+<!-- Header Action Buttons -->
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface font-label-md text-label-md hover:bg-surface-container transition-colors duration-150">
+              Descartar
+            </button>
+<button class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md flex items-center gap-2 shadow-sm transition-all duration-150">
+<span class="material-symbols-outlined text-base" data-icon="save">save</span>
+<span>Guardar cambios</span>
+</button>
+</div>
+</div>
+<!-- Stacked Modular Cards Container -->
+<div class="space-y-6 max-w-6xl">
+<!-- CARD 1: ESTADO DE LAS CONEXIONES -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center justify-between mb-4 pb-3 border-b border-outline-variant/60">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary" data-icon="swap_horiz">swap_horiz</span>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Estado de las conexiones</h3>
+</div>
+<span class="font-code-sm text-code-sm text-on-surface-variant bg-surface-container px-2 py-0.5 rounded">Polling: 5s</span>
+</div>
+<div class="overflow-hidden border border-outline-variant/70 rounded-lg">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant/70 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+<th class="py-2.5 px-4 font-semibold">Servicio</th>
+<th class="py-2.5 px-4 font-semibold">URL / Endpoint</th>
+<th class="py-2.5 px-4 font-semibold">Estado</th>
+<th class="py-2.5 px-4 font-semibold text-right">Latencia</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/60 font-body-sm text-body-sm text-on-surface">
+<!-- Radarr -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-2.5 px-4 font-medium flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Radarr</span>
+</td>
+<td class="py-2.5 px-4 font-code-sm text-code-sm text-secondary">http://localhost:7878</td>
+<td class="py-2.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                        Conectado
+                      </span>
+</td>
+<td class="py-2.5 px-4 text-right font-code-sm text-code-sm font-medium text-emerald-700">2ms</td>
+</tr>
+<!-- Sonarr -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-2.5 px-4 font-medium flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Sonarr</span>
+</td>
+<td class="py-2.5 px-4 font-code-sm text-code-sm text-secondary">http://localhost:8989</td>
+<td class="py-2.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                        Conectado
+                      </span>
+</td>
+<td class="py-2.5 px-4 text-right font-code-sm text-code-sm font-medium text-emerald-700">1ms</td>
+</tr>
+<!-- aMuTorrent -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-2.5 px-4 font-medium flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>aMuTorrent</span>
+</td>
+<td class="py-2.5 px-4 font-code-sm text-code-sm text-secondary">http://localhost:4000</td>
+<td class="py-2.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                        Conectado
+                      </span>
+</td>
+<td class="py-2.5 px-4 text-right font-code-sm text-code-sm font-medium text-emerald-700">4ms</td>
+</tr>
+<!-- aMule (EC directo) -->
+<tr class="bg-amber-50/40 hover:bg-amber-50/70 transition-colors">
+<td class="py-2.5 px-4 font-medium flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-amber-600"></span>
+<span class="font-semibold text-amber-950">aMule (EC directo)</span>
+</td>
+<td class="py-2.5 px-4 font-code-sm text-code-sm text-secondary">192.168.1.10:4712</td>
+<td class="py-2.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-200 text-amber-900 border border-amber-300">
+                        Alerta de socket
+                      </span>
+</td>
+<td class="py-2.5 px-4 text-right font-code-sm text-code-sm font-medium text-amber-800">Timeout</td>
+</tr>
+<!-- Prowlarr -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-2.5 px-4 font-medium flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+<span>Prowlarr</span>
+</td>
+<td class="py-2.5 px-4 font-code-sm text-code-sm text-secondary">http://localhost:9696</td>
+<td class="py-2.5 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                        Conectado
+                      </span>
+</td>
+<td class="py-2.5 px-4 text-right font-code-sm text-code-sm font-medium text-emerald-700">3ms</td>
+</tr>
+<!-- OpenSubtitles -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="py-2.5 px-4 font-medium flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+<span class="text-secondary">OpenSubtitles</span>
+</td>
+<td class="py-2.5 px-4 font-code-sm text-code-sm text-secondary">api.opensubtitles.com (v1)</td>
+<td class="py-2.5 px-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-container-high text-on-surface-variant">
+                        No configurado
+                      </span>
+</td>
+<td class="py-2.5 px-4 text-right font-code-sm text-code-sm text-outline">—</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- CARD 2: SERVICIOS -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center gap-2.5 mb-6 pb-3 border-b border-outline-variant/60">
+<span class="material-symbols-outlined text-primary" data-icon="hub">hub</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Servicios</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Endpoints y tokens de autenticación para la orquestación arr.</p>
+</div>
+</div>
+<!-- 2-column grid of inputs -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+<!-- Radarr URL -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Radarr: URL</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="http://localhost:7878"/>
+</div>
+<!-- Radarr API Key -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Radarr: API Key</label>
+<div class="relative flex items-center">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="password" value="9b6f849e5d4a4645b23d91c53245f8e1"/>
+<button class="absolute right-2.5 text-outline hover:text-on-surface p-1" title="Mostrar u ocultar" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<!-- Sonarr URL -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Sonarr: URL</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="http://localhost:8989"/>
+</div>
+<!-- Sonarr API Key -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Sonarr: API Key</label>
+<div class="relative flex items-center">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="password" value="7e1c8d5a22bb48f498c5f03d1667b120"/>
+<button class="absolute right-2.5 text-outline hover:text-on-surface p-1" title="Mostrar u ocultar" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<!-- aMuTorrent URL -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">aMuTorrent: URL</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="http://localhost:4000"/>
+</div>
+<!-- aMuTorrent API Key -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">aMuTorrent: API Key</label>
+<div class="relative flex items-center">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="password" value="amutorrent_live_key_907812bcfa7"/>
+<button class="absolute right-2.5 text-outline hover:text-on-surface p-1" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<!-- aMuTorrent Usuario -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">aMuTorrent: Usuario</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="admin"/>
+</div>
+<!-- aMuTorrent Contraseña -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">aMuTorrent: Contraseña</label>
+<div class="relative flex items-center">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="password" value="superSecretDaemonPasswd2024"/>
+<button class="absolute right-2.5 text-outline hover:text-on-surface p-1" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<!-- Prowlarr URL -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Prowlarr: URL</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="http://localhost:9696"/>
+</div>
+<!-- Prowlarr API Key -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Prowlarr: API Key</label>
+<div class="relative flex items-center">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="password" value="44a86f2b3c404cfbb466ecf8df289417"/>
+<button class="absolute right-2.5 text-outline hover:text-on-surface p-1" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<!-- OpenSubtitles API Key (Full row or span 2) -->
+<div class="md:col-span-2 space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">OpenSubtitles: API Key</label>
+<div class="relative flex items-center">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Introduce token VIP / REST (opcional)" type="password"/>
+<button class="absolute right-2.5 text-outline hover:text-on-surface p-1" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- CARD 3: AMULE - CONEXIÓN DIRECTA (EC) -->
+<section class="rounded-xl border-2 border-primary/40 bg-primary-fixed/10 p-6 shadow-none relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+<div class="flex items-center justify-between mb-6 pb-3 border-b border-outline-variant/60">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed text-primary flex items-center justify-center font-bold text-sm">
+<span class="material-symbols-outlined" data-icon="router">router</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">aMule — conexión directa (EC)</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">External Connection (EC) para telemetría directa con el core aMuled.</p>
+</div>
+</div>
+<span class="px-2.5 py-1 text-xs font-semibold rounded-md bg-primary text-on-primary">Protocolo Nativo</span>
+</div>
+<!-- Fields -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+<!-- Host / URL -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Host / URL</label>
+<input class="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="http://192.168.1.10"/>
+</div>
+<!-- Puerto -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Puerto</label>
+<input class="w-full px-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="4712"/>
+</div>
+<!-- Contraseña EC -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Contraseña EC</label>
+<div class="relative flex items-center">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-lowest border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="password" value="amuleEcSecretHash99"/>
+<button class="absolute right-2.5 text-outline hover:text-on-surface p-1" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Action Button for Test Connection -->
+<div class="mt-4 flex justify-end">
+<button class="px-4 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-2 transition-colors duration-150 shadow-sm">
+<span class="material-symbols-outlined text-base text-primary" data-icon="network_ping">network_ping</span>
+<span>Probar conexión EC</span>
+</button>
+</div>
+<!-- Callout Note -->
+<div class="mt-5 p-3.5 rounded-lg bg-surface-container-lowest border border-outline-variant text-secondary flex items-start gap-3">
+<span class="material-symbols-outlined text-primary shrink-0 text-lg mt-0.5" data-icon="info">info</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+<strong>Nota:</strong> Es la conexión al daemon aMule por el protocolo EC (eD2k/Kad). No es un indexador Torznab: los indexadores se configuran en la pestaña <a class="text-primary underline font-medium hover:text-primary-container" href="#">Indexadores</a>.
+              </p>
+</div>
+</section>
+<!-- CARD 4: SEGURIDAD -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center gap-2.5 mb-6 pb-3 border-b border-outline-variant/60">
+<span class="material-symbols-outlined text-primary" data-icon="security">security</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Seguridad</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Autenticación del propio panel FlowController y políticas de integridad.</p>
+</div>
+</div>
+<div class="space-y-6">
+<!-- FlowController API Key -->
+<div class="space-y-1.5 max-w-2xl">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">API Key propia de FlowController</label>
+<div class="flex gap-2">
+<div class="relative flex-1">
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none" readonly="" type="password" value="fc_sec_live_9980a311b5e4c02f788da11"/>
+</div>
+<button class="px-3.5 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors" title="Copiar al portapapeles">
+<span class="material-symbols-outlined text-sm" data-icon="content_copy">content_copy</span>
+<span>Copiar</span>
+</button>
+<button class="px-3.5 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors" title="Generar una nueva clave">
+<span class="material-symbols-outlined text-sm" data-icon="refresh">refresh</span>
+<span>Regenerar</span>
+</button>
+</div>
+</div>
+<!-- Modo Seguro Switch -->
+<div class="flex items-start justify-between p-4 rounded-lg bg-surface-container-low border border-outline-variant/80">
+<div class="space-y-0.5 pr-4">
+<span class="font-label-md text-label-md font-semibold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-emerald-700 text-sm" data-icon="verified_user">verified_user</span>
+                    Modo seguro (bloquea acciones destructivas)
+                  </span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                    Impide el borrado directo de ficheros en disco sin doble confirmación. Protege grabaciones protegidas y seeding en curso.
+                  </p>
+</div>
+<!-- Toggle pill -->
+<button aria-checked="true" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary transition-colors duration-200 ease-in-out focus:outline-none" role="switch" type="button">
+<span class="translate-x-5 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+</div>
+</section>
+<!-- CARD 5: RUTAS -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center gap-2.5 mb-6 pb-3 border-b border-outline-variant/60">
+<span class="material-symbols-outlined text-primary" data-icon="folder_special">folder_special</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Rutas</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Mapeo de almacenamiento en disco, librerías y puntos de montaje ZFS/RAID.</p>
+</div>
+</div>
+<!-- 2-column paths grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Carpeta descargas aMuTorrent</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="/mnt/storage-pool/downloads/amutorrent"/>
+</div>
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Carpeta descargas Torrent</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="/mnt/storage-pool/downloads/torrents"/>
+</div>
+<div class="md:col-span-2 space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Raíces permitidas <span class="text-xs font-normal text-secondary">(separadas por coma)</span></label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="/mnt/storage-pool/media, /mnt/secondary/media"/>
+</div>
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Carpeta de los 4K</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="/mnt/storage-pool/media/peliculas-4k"/>
+</div>
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Carpeta de las 3D</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="text" value="/mnt/storage-pool/media/peliculas-3d"/>
+</div>
+</div>
+</section>
+<!-- CARD 6: INTERVALOS -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center gap-2.5 mb-6 pb-3 border-b border-outline-variant/60">
+<span class="material-symbols-outlined text-primary" data-icon="timer">timer</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Intervalos</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Temporizadores de sondeo, reintentos de red y límites de procesamiento.</p>
+</div>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+<!-- Check interval -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface truncate" title="Check interval (segundos)">Check interval</label>
+<div class="relative">
+<input class="w-full px-3 py-2 pr-8 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="number" value="30"/>
+<span class="absolute right-2.5 top-2 text-xs text-outline font-medium">s</span>
+</div>
+</div>
+<!-- Max reintentos -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface truncate" title="Máximo de reintentos">Max reintentos</label>
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="number" value="5"/>
+</div>
+<!-- Delay entre reintentos -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface truncate" title="Delay entre reintentos">Delay reintentos</label>
+<div class="relative">
+<input class="w-full px-3 py-2 pr-8 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="number" value="10"/>
+<span class="absolute right-2.5 top-2 text-xs text-outline font-medium">s</span>
+</div>
+</div>
+<!-- Timeout peticiones HTTP -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface truncate" title="Timeout peticiones HTTP">Timeout HTTP</label>
+<div class="relative">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="number" value="15000"/>
+<span class="absolute right-2.5 top-2 text-xs text-outline font-medium">ms</span>
+</div>
+</div>
+<!-- Timeout import -->
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface truncate" title="Timeout import">Timeout import</label>
+<div class="relative">
+<input class="w-full px-3 py-2 pr-10 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="number" value="60000"/>
+<span class="absolute right-2.5 top-2 text-xs text-outline font-medium">ms</span>
+</div>
+</div>
+</div>
+</section>
+<!-- BOTTOM 2-COLUMN SECTION: SEGUIMIENTO & SERVIDOR -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- CARD 7: SEGUIMIENTO -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none">
+<div class="flex items-center gap-2.5 mb-5 pb-3 border-b border-outline-variant/60">
+<span class="material-symbols-outlined text-primary" data-icon="task_alt">task_alt</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Seguimiento</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Políticas de retención y limpieza automatizada.</p>
+</div>
+</div>
+<div class="space-y-3">
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Días antes de poder borrar una descarga</label>
+<div class="relative max-w-xs">
+<input class="w-full px-3 py-2 pr-12 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="number" value="7"/>
+<span class="absolute right-3 top-2 text-xs text-outline font-medium">días</span>
+</div>
+</div>
+<p class="font-body-sm text-xs text-on-surface-variant">
+                  Tiempo de retención mínimo para proteger el ratio o el sembrado en trackers privados y redes eD2k.
+                </p>
+</div>
+</section>
+<!-- CARD 8: SERVIDOR -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-none flex flex-col justify-between">
+<div>
+<div class="flex items-center gap-2.5 mb-5 pb-3 border-b border-outline-variant/60">
+<span class="material-symbols-outlined text-primary" data-icon="dns">dns</span>
+<div>
+<h3 class="font-headline-sm text-headline-sm font-semibold text-on-surface">Servidor</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Control del daemon HTTP central de FlowController.</p>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="block font-label-md text-label-md font-semibold text-on-surface">Puerto de escucha Web</label>
+<div class="max-w-xs">
+<input class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" type="number" value="8080"/>
+</div>
+</div>
+</div>
+<div class="pt-6 flex justify-end">
+<button class="px-4 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-md text-label-md flex items-center gap-2 transition-colors duration-150 shadow-sm">
+<span class="material-symbols-outlined text-base text-primary" data-icon="restart_alt">restart_alt</span>
+<span>Reiniciar servicio</span>
+</button>
+</div>
+</section>
+</div>
+</div>
+<!-- Sticky Bottom Bar for confirmation on 2560x2048 canvas -->
+<div class="pt-6 pb-12 flex justify-between items-center text-xs text-outline border-t border-outline-variant/50 max-w-6xl">
+<span>FlowController v2.4.1 (Build 20241029) — Arquitectura x86_64 Linux 6.6.21-lts</span>
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              SQLite v3.45 WAL Mode
+            </span>
+<span>Uptime: 14d 08h 12m</span>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>
