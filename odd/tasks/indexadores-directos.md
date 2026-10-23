@@ -23,13 +23,13 @@ S7: Verificación — TDD: RED observado antes de cada implementación; suite ba
 
 | ID | Specs | Ruta | Commit |
 |----|-------|------|--------|
-| T1 | S1-S7 | parent — feature doc | (este commit) |
-| T2 | S1, S7 | worker — `torznab_client.py`: caps + search + parseo RSS/`torznab:attr`, tests RED→GREEN | pendiente |
-| T3 | S2, S3, S7 | worker — tabla `indexers` + CRUD `/api/indexers` + test-caps, tests (smoke+key automáticos) | pendiente |
-| T4 | S4, S7 | worker — `POST /api/indexers/search` paralelo (torznab+prowlarr+amule) con skipped/ok-falso honestos, tests | pendiente |
-| T5 | S5, S7 | worker — `POST /api/indexers/download` (dispatch ed2k→EC / magnet·http→qbit) + tests (enmienda L6) | pendiente |
-| T6 | S5, S6, S7 | worker — sección «Indexadores» en Settings + `shared/api/indexers.ts` + caja de búsqueda con combo de fuentes + descarga, tests frontend | pendiente |
-| T7 | S7 | parent — gate (backend completo + tsc + eslint + vitest + ratchet), README/docs, PR único con divulgación, merge | pendiente |
+| T1 | S1-S7 | parent — feature doc | `28ac75b` |
+| T2 | S1, S7 | worker — `torznab_client.py`: caps + search + parseo RSS/`torznab:attr`, tests RED→GREEN | `4f84eb3` |
+| T3 | S2, S3, S7 | worker — tabla `indexers` + CRUD `/api/indexers` + test-caps, tests (smoke+key automáticos) | `a8f7e22` |
+| T4 | S4, S7 | worker — `POST /api/indexers/search` paralelo (torznab+prowlarr+amule) con skipped/ok-falso honestos, tests | `c42e02a` |
+| T5 | S5, S7 | worker — `POST /api/indexers/download` (dispatch ed2k→EC / magnet·http→qbit) + tests (enmienda L6) | `948a19b` |
+| T6 | S5, S6, S7 | worker — sección «Indexadores» en Settings + `shared/api/indexers.ts` + caja de búsqueda con combo de fuentes + descarga, tests frontend | `1c8b5e9` |
+| T7 | S7 | parent — gate (backend completo + tsc + eslint + vitest + ratchet), README/docs, PR único con divulgación, merge | gate verificado (abajo); merge al cierre |
 
 ## Log
 
@@ -53,3 +53,5 @@ L6 (enmienda de spec + decisiones T4 — 2026-10-22):
 - Contratos T4 aceptados: filas con claves cerradas (`published` de Torznab y `downloadUrl` de Prowlarr descartados — magnet preferido); `sources: []` = sin filtro (las tres); las `categories` de la fila NO se envían como `cat=` (S1: sólo si `t=caps` lo declara, no evaluable en search).
 - HTTP si fallan todas las fuentes: **200 + `ok:false` + `detail`** (verdad en `ok`/`skipped`/`detail`; 502 queda para fuentes únicas).
 - Quirk preexistente probado (NO causado por esta feature): `tests_routes.py` corrido SOLO o tras `tests/contracts` falla 8 tests (`gateways.credentials` capturado `None` por orden de imports: `routes/settings` antes que `app`); la suite completa lo enmascara. Fuera de surfaces — anotado para HANDOFF.
+
+L7 (gate y cierre de T6 — 2026-10-22): **gate observado por el parent**: backend **1551 passed**, frontend **86 files / 687 passed** (base 673 + 14), `tsc -b` 0, `eslint` 0, ratchet sin tocar (rutas nuevas no son legacy). Slice tras T6: **4494 líneas / 6 commits** — estrategia PR único con divulgación (ya registrada en L6 de `conexion-directa-amule` y aquí). Decisiones T6: feedback de descarga por **toast** (superficie documentada F-13), confirm global `window.confirm` (patrón FileManager), guarda antidosclick con `onClick={pending ? undefined : fn}` (jsdom clica en `disabled`), mount tras «Estado de las conexiones», `groupByIndexer`/`selectedIndexer` espejados localmente (módulo-privados en ReleaseSearchModal), labels anti-colisión con los3 tests preexistentes de Settings (cero pérdidas). Incidente: el worker T6 falló 1× con error transitorio del asistente EN FASE DE LECTURA (árbol limpio, 0 archivos) → `subagent_continue` reanudó su sesión sin re-leer. **Review nativa**: el clone-local sigue OFF (razón D de #220) → este PR tampoco pasa review nativa (disposición mantenida; habilitar con `gentle-ai review mode enable --scope clone`).
