@@ -4,6 +4,7 @@ import type { Settings, SaveSettingsResponse } from '../../shared/types.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import { testServiceConnections, type ServiceTestResult } from '../../shared/api/services.ts'
 import { SharedDirsSection } from './SharedDirsSection.tsx'
+import { IndexadoresSection } from './IndexadoresSection.tsx'
 import { Field } from '../../shared/ui/Field.tsx'
 import './Settings.css'
 
@@ -262,6 +263,12 @@ export function Settings() {
           </div>
         )}
       </Section>
+
+      {/* T6/S5 — direct connections: its own SQLite table and its own
+          buttons, so (like SharedDirsSection) it is not part of the form
+          that "Guardar configuración" claims to save. Mounted right after
+          «Estado de las conexiones» — the connection-related block. */}
+      <IndexadoresSection />
 
       <Section title="Seguridad">
         <Field label="API Key propia" value={form.security.api_key} onChange={(v) => update('security.api_key', v)} restart={isRestarting('security.api_key')} placeholder="Clave para proteger la API" type="password" />

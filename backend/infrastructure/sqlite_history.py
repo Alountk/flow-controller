@@ -22,9 +22,11 @@ import threading
 import time
 from pathlib import Path
 
+from infrastructure import credentials
+
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -186,6 +188,30 @@ CREATE TABLE IF NOT EXISTS amule_downloads (
 CREATE TABLE IF NOT EXISTS blocked_acks (
     key         TEXT PRIMARY KEY,
     acked_at    REAL NOT NULL
+);
+-- v11: the direct Torznab indexer registry («indexadores-directos» T3/S2).
+-- Same migration discipline as v2-v10: `CREATE TABLE IF NOT EXISTS` inside
+-- the script `init_db` runs on every start, so an older file simply gains the
+-- table and the version bump only records it.
+--
+-- `api_key` is the indexer's third-party key: sealed at rest with the
+-- `credentials.py` primitives whenever `FC_SECRET` is set (HANDOFF #209
+-- precedent), plaintext otherwise — the same degradation
+-- `prepare_for_storage` chooses. `key_salt` is the per-row salt it was
+-- sealed with, stored here on purpose: the registry never touches
+-- `settings.json` (S2), so its salt cannot live there either. The salt is
+-- not secret (a password hash's salt never is). Every RESPONSE masks the
+-- key regardless of the cipher — see the indexers section below.
+CREATE TABLE IF NOT EXISTS indexers (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    api_key     TEXT DEFAULT '',
+    key_salt    TEXT DEFAULT '',
+    categories  TEXT DEFAULT '',
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_auto_copy_log_newest ON auto_copy_log (at DESC, id DESC);
 """
@@ -961,6 +987,239 @@ def blocked_acks() -> set[str]:
         except sqlite3.Error as exc:
             log.warning("Could not read blocked acknowledgements: %s", exc)
             return set()
+
+
+# ── indexers — the direct Torznab registry («indexadores-directos» T3) ────────
+#
+# Two views of the same rows, and the difference is load-bearing (risk 2:
+# these are THIRD-PARTY api keys). Everything that builds an API response
+# reads through the masked view; the only function that hands out a plaintext
+# key is `indexers_raw`, which exists for the CALL paths (the `t=caps` probe
+# today, T4's search fan-out next) and must never be used to build a
+# response. No public/list path returns a raw key — that is pinned by tests.
+
+
+def _seal_api_key(raw: str) -> tuple[str, str]:
+    """The stored form of a key and the per-row salt it was sealed with.
+
+    Generic `credentials.py` primitives (the HANDOFF #209 precedent). Without
+    `FC_SECRET` nothing is encrypted — exactly what `prepare_for_storage`
+    chooses — and the key still never leaves in a response, because the mask
+    is independent of the cipher. The salt is per-row, like a password
+    hash's: the registry must not touch `settings.json` (S2), so it cannot
+    borrow `ensure_encryption_salt`'s salt from there either.
+    """
+    if not raw:
+        return "", ""
+    secret = credentials.encryption_secret()
+    if not secret:
+        return raw, ""
+    salt = credentials.new_salt()
+    return credentials.encrypt_secret(raw, secret, salt), salt
+
+
+def _open_api_key(stored: str, salt: str) -> str | None:
+    """The plaintext key, `""` when there is none, `None` when unreadable.
+
+    `None` rather than a wrong value: a rotated `FC_SECRET` must surface as
+    "cannot decrypt", never as a credential sent to an indexer — the
+    `decrypt_secret` contract, where `None` forces the caller to decide.
+    A legacy plaintext row (written before any secret existed) stays
+    readable, same as `prepare_for_use`.
+    """
+    if not stored:
+        return ""
+    if not credentials.is_encrypted(stored):
+        return stored
+    return credentials.decrypt_secret(stored, credentials.encryption_secret(), salt)
+
+
+def _mask_api_key(raw: str | None) -> str:
+    """The `routes/settings.py:122-128` mask: `****` plus the last characters.
+
+    `None` (unreadable ciphertext) masks as a plain `****`: the UI may show
+    that a key EXISTS, never anything derived from what is stored.
+    """
+    if raw is None:
+        return "****"
+    if not raw:
+        return ""
+    return "****" + raw[-4:] if len(raw) > 4 else "****"
+
+
+def _indexer_public(row: sqlite3.Row) -> dict:
+    """One row as every API consumer may see it: key masked, fields explicit.
+
+    The dict is built key by key on purpose — a `dict(row)` would let a
+    future column (a second secret, a token) leak into responses by default.
+    """
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "url": row["url"],
+        "api_key": _mask_api_key(_open_api_key(row["api_key"] or "", row["key_salt"] or "")),
+        "categories": row["categories"] or "",
+        "enabled": int(row["enabled"] or 0),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _indexer_raw_row(row: sqlite3.Row) -> dict:
+    """One row as the CALL path needs it — plaintext key included."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "url": row["url"],
+        "api_key": _open_api_key(row["api_key"] or "", row["key_salt"] or ""),
+        "categories": row["categories"] or "",
+    }
+
+
+def indexers_list() -> list[dict]:
+    """Every registered indexer, api_key MASKED — the public view."""
+    with _lock:
+        if _conn is None:
+            return []
+        try:
+            rows = _conn.execute("SELECT * FROM indexers ORDER BY id").fetchall()
+            return [_indexer_public(row) for row in rows]
+        except sqlite3.Error as exc:
+            log.warning("Could not read indexers: %s", exc)
+            return []
+
+
+def indexer_create(
+    name: str,
+    url: str,
+    api_key: str = "",
+    categories: str = "",
+    enabled: int = 1,
+) -> dict | None:
+    """Register one indexer and answer its MASKED row, or `None`.
+
+    `None` means the row was not written (store down or SQL failure); the
+    route turns that into an honest 503 instead of claiming a save.
+    """
+    stored, salt = _seal_api_key(api_key)
+    now = time.time()
+    with _lock:
+        if _conn is None:
+            return None
+        try:
+            cursor = _conn.execute(
+                "INSERT INTO indexers "
+                "(name, url, api_key, key_salt, categories, enabled, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (name, url, stored, salt, categories, 1 if enabled else 0, now, now),
+            )
+            _conn.commit()
+            row = _conn.execute(
+                "SELECT * FROM indexers WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+            return _indexer_public(row) if row is not None else None
+        except sqlite3.Error as exc:
+            log.warning("Could not create indexer %s: %s", name, exc)
+            return None
+
+
+def indexer_update(
+    indexer_id: int,
+    *,
+    name: str | None = None,
+    url: str | None = None,
+    api_key: str | None = None,
+    categories: str | None = None,
+    enabled: int | None = None,
+) -> dict | None:
+    """Partial update, answering the MASKED row (or `None`).
+
+    `api_key=None` keeps the stored key — the empty/masked-keep rule lives in
+    the route, here "not given" simply means untouched. Passing one re-seals
+    it with a fresh salt. The column names below are this module's own
+    literals, never caller input, so the f-string cannot be an injection.
+    """
+    fields: dict[str, object] = {}
+    if name is not None:
+        fields["name"] = name
+    if url is not None:
+        fields["url"] = url
+    if categories is not None:
+        fields["categories"] = categories
+    if enabled is not None:
+        fields["enabled"] = 1 if enabled else 0
+    if api_key is not None:
+        stored, salt = _seal_api_key(api_key)
+        fields["api_key"] = stored
+        fields["key_salt"] = salt
+    with _lock:
+        if _conn is None:
+            return None
+        try:
+            if _conn.execute(
+                "SELECT id FROM indexers WHERE id = ?", (indexer_id,)
+            ).fetchone() is None:
+                return None
+            assignments = [f"{column} = ?" for column in fields]
+            assignments.append("updated_at = ?")
+            params = [*fields.values(), time.time(), indexer_id]
+            _conn.execute(
+                f"UPDATE indexers SET {', '.join(assignments)} WHERE id = ?", params
+            )
+            _conn.commit()
+            row = _conn.execute(
+                "SELECT * FROM indexers WHERE id = ?", (indexer_id,)
+            ).fetchone()
+            return _indexer_public(row) if row is not None else None
+        except sqlite3.Error as exc:
+            log.warning("Could not update indexer %s: %s", indexer_id, exc)
+            return None
+
+
+def indexer_delete(indexer_id: int) -> bool:
+    """Drop one indexer. `False` when there was nothing to drop."""
+    with _lock:
+        if _conn is None:
+            return False
+        try:
+            cursor = _conn.execute("DELETE FROM indexers WHERE id = ?", (indexer_id,))
+            _conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as exc:
+            log.warning("Could not delete indexer %s: %s", indexer_id, exc)
+            return False
+
+
+def indexers_raw(*, indexer_id: int | None = None) -> list[dict]:
+    """INTERNAL — rows WITH their plaintext api_key: the CALL paths only.
+
+    Without `indexer_id`, the ENABLED rows only — a disabled indexer must
+    never be queried, and this is the list T4 fans searches out to.
+    `indexer_id` is the one deliberate opt-out: the «Probar» button has to
+    work before (re-)enabling, and it answers that single row whatever its
+    state.
+
+    `api_key` is `""` when no key is configured and `None` when stored
+    ciphertext cannot be decrypted (a rotated `FC_SECRET`): callers must
+    treat `None` as a hard failure — never send it, never fall back to the
+    ciphertext. Nothing may build an HTTP response from these rows.
+    """
+    with _lock:
+        if _conn is None:
+            return []
+        try:
+            if indexer_id is not None:
+                rows = _conn.execute(
+                    "SELECT * FROM indexers WHERE id = ?", (indexer_id,)
+                ).fetchall()
+            else:
+                rows = _conn.execute(
+                    "SELECT * FROM indexers WHERE enabled = 1 ORDER BY id"
+                ).fetchall()
+            return [_indexer_raw_row(row) for row in rows]
+        except sqlite3.Error as exc:
+            log.warning("Could not read indexers: %s", exc)
+            return []
 
 
 def mark_interrupted() -> int:

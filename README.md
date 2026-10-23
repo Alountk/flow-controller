@@ -142,6 +142,11 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/wanted/scan` | POST | Escanea carpeta buscando contenido desubicado |
 | `/api/disk` | GET | Uso de disco en volúmenes |
 | `/api/settings` | GET/POST | Configuración persistente |
+| `/api/indexers` | GET/POST | Lista/alta de indexadores directos (Torznab; API key enmascarada en respuestas) |
+| `/api/indexers/{id}` | PUT/DELETE | Editar (clave vacía = conservar la guardada) / eliminar un indexador |
+| `/api/indexers/{id}/test` | POST | Prueba la conexión con `t=caps` sin persistir nada |
+| `/api/indexers/search` | POST | Búsqueda unificada: Torznab + aMule (EC) + Prowlarr, con `skipped` honesto por fuente |
+| `/api/indexers/download` | POST | Descarga una fila: ed2k/hash → EC directo, magnet/http → puente qBittorrent |
 | `/api/amule/shared-dirs` | GET/PUT | Carpetas que aMule comparte (lee/escribe `shareddir*.dat` y recarga) |
 | `/api/mixer/probe` | POST | Analiza dos archivos de video (pistas, compatibilidad) |
 | `/api/mixer/mux` | POST | Mezcla pistas de audio seleccionadas |
