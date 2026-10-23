@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-22 · **PR #222 (indexadores directos)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1551 backend / 687 frontend** · main pre-#222 = `5f02ed1` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-23 · **PR #224 (Configuración con submenú + tarjeta aMule EC)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1577 backend / 707 frontend** · main pre-#224 = `765434d` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,9 +16,9 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `bad8b1a` (post-#222), run `39884453860` **pass** (backend-tests,
+**Verde**: `main` en `8424503` (post-#224), run `39981507173` **pass** (backend-tests,
 frontend-build, docker-verify, e2e y **docker-push** → deploy + Portainer notificado).
-Specs: **1551 backend / 687 frontend**, working tree limpia.
+Specs: **1577 backend / 707 frontend**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -156,6 +156,23 @@ Specs: **1551 backend / 687 frontend**, working tree limpia.
   intacto (3408). PR único ~4501 líneas (divulgado; **Risk item 2**). **Review nativa no
   corre** (clone-local OFF, D de #220 — disposición mantenida). Commits `28ac75b`…`f7a6d8f`,
   merge **`bad8b1a`**. Feature doc: `odd/tasks/indexadores-directos.md` (S1–S7, T1–T7, Log L1–L7).
+- #224 — **`config-submenu` T1–T5** (diseño Stitch aprobado en vivo; decisiones L1-L5):
+  Configuración con **doble raíl General│Indexadores** (estilo Radarr; ambos paneles
+  montados e inactivo oculto — **0 tests adaptados** en T3), **tarjeta «aMule — conexión
+  directa (EC)»** en General (Host/Puerto/Contraseña EC editables con defaults desde env,
+  **ec_password cifrada en reposo** vía `ENCRYPTED_SECRET_FIELDS` + `****`+last4 en toda
+  respuesta, «Probar conexión EC» → **`POST /api/amule/test`** (handshake read-only) con
+  toast F-13), y **categorías por checkbox** (rejilla 4 columnas, «Todas» exclusiva con
+  matriz de 4 transiciones, csv estable sin tocar backend, ids 100xxx personalizados
+  supervivientes; 1 test adaptado SÓLO en interacción). Diseños HTML en
+  `odd/tasks/config-submenu/` — regla del usuario **HTML, no screenshots** (Engram 1453);
+  Stitch NO persistió el checkbox al mockup (3 verificaciones) → la spec L2 manda.
+  Suites **1577 backend / 707 frontend** (+26/+20), tsc/eslint 0, ratchet 3408
+  (`app.py` net-154). Incidente: worker T3 **abortado en fase de lectura** (24 turns/40
+  calls, árbol limpio, ps limpio — firma de los cuelgues 2/3) → `subagent_continue` +
+  **checkpoint temprano del RED** (Engram 1446 rev2). PR único ~3220 líneas (divulgado;
+  **Risk item 2**). Review nativa no corre (D). Commits `740b17a`…`071172a`,
+  merge **`8424503`**. Feature doc: `odd/tasks/config-submenu.md` (S1–S6, T1–T5, Log L1–L5).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -173,7 +190,7 @@ Specs: **1551 backend / 687 frontend**, working tree limpia.
 la activa `gentle-ai review mode enable --scope clone`). La review nativa operó en
 #214/#216/#218 (approved + autoridad quemada; #218: assess `nativeRisk medium`, 23
 paths/2225 líneas, 3 lentes). En **#220 quedó atascada en collect**: 6 capturas
-rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. El PR **#222** (indexadores) mergeó también bajo esa disposición D.
+rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores) y **#224** (config-submenu) mergearon también bajo esa disposición D.
 Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
 (STATUS fresco antes de cada una) y verificación por tier.
 
@@ -312,6 +329,10 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   «The tool call was aborted» NO está colgado — `subagent_list_tasks` (turns/calls crecientes
   = vivo) + `ps` + `git status` primero (Engram 1446); exigir `timeout 30` por fetch externo
   en los task texts para que ninguna red parezca un cuelgue.
+- **Stitch `generate_screen_from_text`/`edit_screens` reportan éxito pero NO persisten** al
+  htmlCode/screenshot (verificado 3× en #224: mismo `html_6347c573…` byte a byte) — verificar
+  siempre con grep/`read` de la captura tras cada edición; si no persiste, la spec del feature
+  doc manda sobre el mockup. Regla del usuario: **HTML, no screenshots** (Engram 1453).
 - **`tests_routes.py` corrido SOLO o tras `tests/contracts` falla 8 tests** (`gateways.credentials`
   capturado `None` porque `routes/settings` se importa antes que `app`); la suite completa lo
   enmascara (cuenta como verde) — no usar esa corrida aislada para decidir regresiones.
@@ -344,4 +365,7 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
   tareas T1–T6, Log L1–L8 (decisiones, corrección de tipos EC, ratchet, gotcha de capturas).
 - `odd/tasks/indexadores-directos.md` — **indexadores directos (Torznab)**: specs S1–S7,
   tareas T1–T7, Log L1–L7 (enmienda L6 del grab, decisiones de contrato HTTP, gate).
+- `odd/tasks/config-submenu.md` — **Configuración con submenú + tarjeta aMule (EC) +
+  categorías checkbox**: specs S1–S6, tareas T1–T5, Log L1–L5; diseños HTML (fuente de
+  verdad) en `odd/tasks/config-submenu/` (Stitch 12/13).
 - `prototypes/DESIGN.md` — handoff original de Stitch (tokens C-06 + briefs).
