@@ -546,6 +546,44 @@
   outline-offset: 1px;
 }
 
+/* T2/S1-S2 — modo alternativa, SIN ruteo: the F-12 destination row is gone
+   and ONE «Descargar» takes its place. It carries the accent the suggested
+   destination used to: it is the row's only action, and it always grabs the
+   normal flow (library, no destination). */
+.release-download {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.release-download-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent-bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.release-download-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.release-download-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.release-download-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* The 3D mark: a suggestion from the title until the operator clicks it, at
    which point it stops being one. Always rendered — offering the control only
    when the heuristic already guessed would leave no way to correct a miss. */
