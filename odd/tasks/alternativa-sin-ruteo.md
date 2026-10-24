@@ -31,7 +31,7 @@ alternativa del Mixer («Buscar y descargar alternativa», S10/T11 de `mixer-red
 | ID | Specs | Ruta | Commit |
 |----|-------|------|--------|
 | T1 | S1-S3 | parent — doc + espejo Engram + branch | este commit |
-| T2 | S1-S3 | worker — modo alternativa sin botones de destino, grab fijo al flujo normal, RED→GREEN + diferencial | pendiente |
+| T2 | S1-S3 | worker — modo alternativa sin botones de destino, grab fijo al flujo normal, RED→GREEN + diferencial | `4560987` |
 | T3 | S1-S3 | parent — gate + docs + PR único + merge | gate abajo; PR al cierre |
 
 ## Log
@@ -49,3 +49,18 @@ alternativa del Mixer («Buscar y descargar alternativa», S10/T11 de `mixer-red
   (`ReleaseSearchModal.tsx:701-712`). Decisión de alcance: fijar el grab al flujo normal
   (`library`) y esconder las opciones **sólo** en modo alternativa; lenguaje de idioma (S6/T4
   «Descargar» directo del modal de idiomas) queda fuera de alcance sin petición explícita.
+- L3 (gate y entrega — 2026-10-23): **gate observado por el parent**: backend **1588
+  passed**, frontend **89 files / 754 passed** (base 743 → +11: 9 tests de
+  `alternativeMode.test.tsx` — 6 de modo alternativa + 3 diferenciales — y 2 pins de
+  wiring en `mixerRedesign`/`mixerIndexerLookup`), `tsc -b` 0, `eslint` 0. T2 `4560987`:
+  prop `alternativeMode` (default off), bloque `.release-dest` completo (los tres
+  botones + highlight `suggest` + tooltips) oculto sólo en alternativa, un «Descargar»
+  acento → `handleGrab(guid,'library')`; payload byte-idéntico al «→ Biblioteca» clásico
+  pinneado como test. Diferencial: pins exactos de payload para 4K
+  (`destination:'/mnt/storage-6tb/4k'`), 3D (`destination+'/is3d:true`) y Biblioteca en
+  usos clásicos. Adapters por scope (colisión «Descargar» con la sección de idioma,
+  «3D» con el chip de título, asíncrono del highlight de folders) — ninguno aflojado.
+  Verificado fuera de alcance (no omitido): `grabCalendarReleaseBatch` no tiene UI
+  consumidora en ningún lado; `mixer-dest-picker` es el destino de SALIDA del mux (no
+  del grab). **Frontera de slice registrada**: 550 líneas / 2 commits → PR único con
+  divulgación. **Review nativa**: clone-local OFF (D) → sin review.
