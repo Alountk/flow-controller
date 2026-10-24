@@ -31,6 +31,28 @@ import { IndexadoresSection } from '../../../features/settings/IndexadoresSectio
  *    `detail` on failure — never a silent button;
  * 3. delete asks for confirmation before anything leaves (repo pattern),
  *    because a deleted indexer silently shrinks every future search.
+ *
+ * config-1x1 T7 (S5) — «Fuentes integradas»: la tarjeta con aMule (EC) y
+ * Prowlarr como fuentes de primer nivel (datos de `GET /api/services`,
+ * presencia de configuración — jamás sondeo de red), ANTES del registro
+ * Torznab. La fila aMule acciona `onOpenGeneral`; la de Prowlarr queda
+ * estática (su importación es el paso 5 — sin acción inventada).
+ *
+ * COLISIONES — cada query se acota a su tarjeta/fila y aquí está el porqué
+ * (regla: nunca aflojar el scope):
+ *  - «Fuentes» suelta colisiona con «Fuentes:» (chips de la búsqueda) y con
+ *    el subtítulo del panel «Fuentes Torznab directas…» → se busca el HEADING
+ *    por nombre exacto «Fuentes integradas» (nivel 3) y todo lo demás se
+ *    acota con `within(sourcesCard())`;
+ *  - «Configurado»/«No configurado» pueden colisionar con cualquier otro
+ *    texto de Settings → `within(sourceRow(...))`, jamás página completa;
+ *  - «aMule (EC)» es substring del callout «General → aMule (EC directo)» →
+ *    texto EXACTO + scope a la tarjeta;
+ *  - «Prowlarr» es substring de «Importar de Prowlarr/Jackett…» (cabecera) y
+ *    del título de grupo «Resultados de Prowlarr» → texto EXACTO + scope;
+ *  - el nombre accesible de la fila aMule contiene el del enlace del callout
+ *    («General → aMule (EC directo)») → se resuelve por ROL (button vs link)
+ *    y nombre completo exacto.
  */
 
 const LIST = [
@@ -410,5 +432,188 @@ describe('panel «Indexadores» — estructura del diseño (config-1x1 T4/S2)', 
     const cards = document.querySelector('.indexadores-cards') as HTMLElement
     expect(cards).not.toBeNull()
     expect(cards.querySelector('[style]')).toBeNull()
+  })
+})
+
+describe('«Fuentes integradas» — fuentes de primer nivel, no registro (config-1x1 T7/S5)', () => {
+  beforeEach(() => vi.unstubAllGlobals())
+  afterEach(() => vi.unstubAllGlobals())
+
+  /** SCOPED (colisión «Fuentes»): el heading exacto, nunca «Fuentes» suelto. */
+  function sourcesCard(): HTMLElement {
+    return screen
+      .getByRole('heading', { name: 'Fuentes integradas', level: 3 })
+      .closest('.indexadores-card') as HTMLElement
+  }
+
+  /** SCOPED (colisiones «aMule (EC)»/«Prowlarr»): texto exacto dentro de la
+   *  tarjeta, y de ahí la fila. */
+  function sourceRow(card: HTMLElement, name: string): HTMLElement {
+    return within(card).getByText(name).closest('.indexadores-source-row') as HTMLElement
+  }
+
+  it('renders before the Torznab registry card and lists exactly aMule (EC) and Prowlarr', async () => {
+    mockFetch({
+      'GET /api/indexers': () => ({ indexers: LIST }),
+      'GET /api/services': () => ({
+        services: [
+          { key: 'radarr', kind: 'arr', url: 'http://radarr.test', configured: true },
+          { key: 'prowlarr', kind: 'prowlarr', url: 'http://prowlarr.test:9696', configured: true },
+          { key: 'amule', kind: 'amule', url: 'http://amule.test:4712', configured: true },
+        ],
+        configured: ['radarr', 'prowlarr', 'amule'],
+      }),
+    })
+    renderSection()
+
+    const card = sourcesCard()
+    const registry = screen.getByRole('heading', { name: 'Indexadores Torznab registrados' })
+    // Estructura/orden: la tarjeta nueva va ANTES del registro (S5).
+    expect(
+      screen
+        .getByRole('heading', { name: 'Fuentes integradas', level: 3 })
+        .compareDocumentPosition(registry) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+
+    // Las dos filas de primer nivel…
+    await within(card).findByText('aMule (EC)')
+    within(card).getByText('Prowlarr')
+    // …y SÓLO ellas: el registro de servicios trae más keys (radarr) que aquí
+    // no pintan nada (triángulo negativo).
+    expect(within(card).queryByText('radarr')).toBeNull()
+  })
+
+  it('status comes from GET /api/services: configured shows the URL, unconfigured tells the truth', async () => {
+    mockFetch({
+      'GET /api/indexers': () => ({ indexers: LIST }),
+      'GET /api/services': () => ({
+        services: [
+          { key: 'prowlarr', kind: 'prowlarr', url: '', configured: false },
+          { key: 'amule', kind: 'amule', url: 'http://127.0.0.1:4712', configured: true },
+        ],
+        configured: ['amule'],
+      }),
+    })
+    renderSection()
+
+    const card = sourcesCard()
+    const amule = await within(card).findByText('aMule (EC)')
+    const amuleRow = amule.closest('.indexadores-source-row') as HTMLElement
+    // SCOPED a la fila (colisión «Configurado»): nunca página completa.
+    within(amuleRow).getByText('Configurado')
+    within(amuleRow).getByText('http://127.0.0.1:4712')
+
+    const prowlarrRow = sourceRow(card, 'Prowlarr')
+    within(prowlarrRow).getByText('No configurado')
+    within(prowlarrRow).getByText('sin configurar')
+  })
+
+  it('the inverse case: unconfigured keeps its URL visible, configured is never sticky', async () => {
+    mockFetch({
+      'GET /api/indexers': () => ({ indexers: LIST }),
+      'GET /api/services': () => ({
+        services: [
+          { key: 'prowlarr', kind: 'prowlarr', url: 'http://prowlarr.test:9696', configured: true },
+          { key: 'amule', kind: 'amule', url: 'http://amule.test:4712', configured: false },
+        ],
+        configured: ['prowlarr'],
+      }),
+    })
+    renderSection()
+
+    const card = sourcesCard()
+    // URL presente AUNQUE no configurado (falta otro dato): la URL se muestra,
+    // el estado dice «No configurado» — jamás se oculta la verdad a medias.
+    await within(card).findByText('aMule (EC)')
+    const amuleRow = sourceRow(card, 'aMule (EC)')
+    within(amuleRow).getByText('No configurado')
+    within(amuleRow).getByText('http://amule.test:4712')
+
+    const prowlarrRow = sourceRow(card, 'Prowlarr')
+    within(prowlarrRow).getByText('Configurado')
+    within(prowlarrRow).getByText('http://prowlarr.test:9696')
+  })
+
+  it('the aMule row is actionable: accessible name and onOpenGeneral on activation', async () => {
+    mockFetch({
+      'GET /api/indexers': () => ({ indexers: LIST }),
+      'GET /api/services': () => ({
+        services: [{ key: 'amule', kind: 'amule', url: 'http://127.0.0.1:4712', configured: true }],
+        configured: ['amule'],
+      }),
+    })
+    const onOpenGeneral = vi.fn()
+    renderSection(onOpenGeneral)
+
+    const card = sourcesCard()
+    // SCOPED por ROL + nombre completo (colisión con el enlace del callout,
+    // «General → aMule (EC directo)», que es substring de este nombre).
+    const row = await within(card).findByRole('button', {
+      name: 'aMule (EC) — Configurar en General → aMule (EC directo)',
+    })
+    expect(row).toHaveAttribute('type', 'button')
+    // Accesible por teclado: elemento enfocable nativo (Enter/Space activan
+    // un <button> por contrato HTML — jsdom no dispara click desde keydown y
+    // user-event no es dependencia del repo).
+    row.focus()
+    expect(row).toHaveFocus()
+
+    fireEvent.click(row)
+    expect(onOpenGeneral).toHaveBeenCalledTimes(1)
+  })
+
+  it('the Prowlarr row stays static: no invented action, click does nothing', async () => {
+    mockFetch({
+      'GET /api/indexers': () => ({ indexers: LIST }),
+      'GET /api/services': () => ({
+        services: [{ key: 'prowlarr', kind: 'prowlarr', url: 'http://prowlarr.test:9696', configured: true }],
+        configured: ['prowlarr'],
+      }),
+    })
+    const onOpenGeneral = vi.fn()
+    renderSection(onOpenGeneral)
+
+    const card = sourcesCard()
+    await within(card).findByText('Prowlarr')
+    const prowlarrRow = sourceRow(card, 'Prowlarr')
+    within(prowlarrRow).getByText('Configurado')
+    // Sin acción inventada: ni botón, ni enlace, ni affordance falsa (su
+    // importación real es el paso 5, ya presente como disabled-honesto en la
+    // cabecera del panel).
+    expect(within(prowlarrRow).queryAllByRole('button')).toHaveLength(0)
+    expect(within(prowlarrRow).queryAllByRole('link')).toHaveLength(0)
+
+    fireEvent.click(prowlarrRow)
+    expect(onOpenGeneral).not.toHaveBeenCalled()
+  })
+
+  it('the copy distinguishes these sources from the Torznab registry', async () => {
+    mockFetch({
+      'GET /api/indexers': () => ({ indexers: LIST }),
+      'GET /api/services': () => ({ services: [], configured: [] }),
+    })
+    renderSection()
+
+    // SCOPED a la tarjeta (colisión «Fuentes»/«Torznab» con el subtítulo del
+    // panel y el registro): frases clave de la distinción honesta.
+    const card = sourcesCard()
+    within(card).getByText(/consulta directamente/)
+    within(card).getByText(/No son endpoints Torznab/)
+    within(card).getByText(/sigue siendo sólo Torznab/)
+  })
+
+  it('a degenerate payload never invents a configured state', async () => {
+    // El mock por defecto responde `{}` a GET /api/services: sin datos no hay
+    // «Configurado» que valga — estado honesto «No configurado» + placeholder.
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: LIST }) })
+    renderSection()
+
+    const card = sourcesCard()
+    await within(card).findByText('aMule (EC)')
+    const amuleRow = sourceRow(card, 'aMule (EC)')
+    within(amuleRow).getByText('No configurado')
+    within(amuleRow).getByText('sin configurar')
+    const prowlarrRow = sourceRow(card, 'Prowlarr')
+    within(prowlarrRow).getByText('No configurado')
   })
 })

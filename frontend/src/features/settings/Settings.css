@@ -619,6 +619,92 @@
   white-space: nowrap;
 }
 
+/* ── Fuentes integradas (config-1x1 T7/S5) ──────────────────────
+   aMule (EC) y Prowlarr como fuentes de primer nivel, no filas del
+   registro Torznab. La fila aMule es un botón nativo (click Y teclado)
+   con hover/focus visibles; la de Prowlarr queda estática. Tokens del
+   repo, sin estilos inline. */
+.indexadores-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.indexadores-source-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+
+button.indexadores-source-row {
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+button.indexadores-source-row:hover {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+
+button.indexadores-source-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.indexadores-source-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.indexadores-source-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indexadores-source-url--empty {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.indexadores-source-status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.indexadores-source-status.on {
+  background: var(--ok-dim);
+  color: var(--ok);
+}
+
+.indexadores-source-status.off {
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-dim);
+}
+
+.indexadores-source-action {
+  color: var(--accent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* ── Búsqueda unificada ─────────────────────────────────────────── */
 .indexadores-search-bar {
   display: flex;
