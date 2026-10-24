@@ -26,6 +26,16 @@
  * as an ACCIONABLE link (liberty #2 of #224 — plain text — is undone) that
  * switches to the Indexadores panel. All styling lives in `Settings.css`
  * (liberty #3 — inline styles — is undone).
+ *
+ * config-1x1 T6 (S4, user amendment): the card gets its OWN «Guardar cambios»
+ * beside «Probar conexión EC» («el boton de probar solo seria para probar la
+ * conexion y si quiero guardar los datos un boton de guardar seria lo más
+ * ideal»). It is the SAME save as the header — `saveMutation` →
+ * `POST /api/settings` → `rebuild()` — reached through the `onSave` callback
+ * (mirror of `onOpenIndexadores`), with the header's pending literal
+ * («Guardando...») driven by `saving`. The probe remains a pure probe: it
+ * never saves, and saving never re-probes (the save→probe chain is the
+ * backend's `config.rebuild()`, not a frontend POST).
  */
 
 import { useState } from 'react'
@@ -69,12 +79,20 @@ export function AmuleEcSection({
   update,
   isRestarting = () => false,
   onOpenIndexadores,
+  onSave,
+  saving = false,
 }: {
   values: AmuleEcValues
   update: (path: string, value: string) => void
   isRestarting?: (path: string) => boolean
   /** El enlace «Indexadores» de la nota conmuta al panel Indexadores. */
   onOpenIndexadores: () => void
+  /** T6/S4 — «Guardar cambios» local: el MISMO guardado que la cabecera
+   *  (`saveMutation` → `POST /api/settings`), nunca una vía aparte. */
+  onSave: () => void
+  /** Estado pendiente del guardado compartido; copia «Guardando...», la de la
+   *  cabecera. */
+  saving?: boolean
 }) {
   const [pending, setPending] = useState(false)
 
@@ -132,6 +150,16 @@ export function AmuleEcSection({
           onClick={pending ? undefined : probe}
         >
           {pending ? 'Probando…' : 'Probar conexión EC'}
+        </button>
+        {/* T6/S4 — el guardado del usuario, junto a la sonda (que sigue sin
+            guardar). Mismo saveMutation que la cabecera, vía onSave. */}
+        <button
+          type="button"
+          className="settings-btn settings-btn-primary"
+          onClick={saving ? undefined : onSave}
+          disabled={saving}
+        >
+          {saving ? 'Guardando...' : 'Guardar cambios'}
         </button>
       </div>
       <div className="amule-ec-note">

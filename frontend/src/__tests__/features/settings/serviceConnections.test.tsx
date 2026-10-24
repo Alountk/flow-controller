@@ -211,7 +211,13 @@ describe('aMule retention window', () => {
     // ahora «Guardar cambios» y vive en la cabecera del panel (antes
     // «Guardar configuración», abajo). Sólo cambia el literal por el del
     // diseño; la aserción sobre el payload es idéntica.
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    // ADAPTADO (config-1x1 T6/S4, sin aflojar): la tarjeta aMule añade un
+    // segundo «Guardar cambios» (enmienda S4) y la búsqueda sin acotar
+    // colisiona; se acota a la CABECERA del panel — mismo botón, misma aserción.
+    const header = screen
+      .getByRole('heading', { name: 'General', level: 2 })
+      .closest('.settings-panel-header') as HTMLElement
+    fireEvent.click(within(header).getByRole('button', { name: /Guardar cambios/ }))
 
     await waitFor(() => {
       const post = fn.mock.calls.find(

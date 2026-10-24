@@ -9,8 +9,8 @@
  *
  * config-1x1 T4 (S2): strict 1:1 with `odd/tasks/config-submenu/stitch-13-indexadores.html`
  * — panel header («Importar de Prowlarr/Jackett…» + «Añadir indexador»),
- * stacked cards (Búsqueda unificada → Indexadores Torznab registrados →
- * Nuevo indexador → callout), the registry table and the categories grid in
+ * stacked cards (Búsqueda unificada → Fuentes integradas (T7/S5) →
+ * Indexadores Torznab registrados → Nuevo indexador → callout), the registry table and the categories grid in
  * `Settings.css` (zero inline styles). Rule: diseño → implementación;
  * imposible → REPORTAR; jamás variante propia. Reported, not invented:
  *  - «Importar de Prowlarr/Jackett…» (Step 5 does not exist yet): visible,
@@ -61,6 +61,7 @@ import {
   type IndexerSearchResponse,
 } from '../../shared/api/indexers.ts'
 import { toast } from '../../shared/utils/toast.ts'
+import { fetchServices } from '../../shared/api/services.ts'
 import './Settings.css'
 
 /**
@@ -165,6 +166,17 @@ function buildCategoriesCsv(ids: string[]): string {
   return ordered.join(',')
 }
 
+/** T7/S5 — «Fuentes integradas»: fuentes de primer nivel que la búsqueda
+ *  unificada consulta directamente (el fan-out ya las llama en paralelo).
+ *  NO son endpoints Torznab ni filas del registro (éste sigue siendo sólo
+ *  Torznab): aMule se configura en General (fila accionable → onOpenGeneral) y
+ *  Prowlarr llegará con la importación del paso 5 (fila estática — aquí NO se
+ *  inventa una acción; su affordance disabled-honesto es el de la cabecera). */
+const INTEGRATED_SOURCES = [
+  { key: 'amule', name: 'aMule (EC)', action: 'Configurar en General → aMule (EC directo)' },
+  { key: 'prowlarr', name: 'Prowlarr', action: null },
+] as const
+
 export function IndexadoresSection({
   onOpenGeneral,
 }: {
@@ -195,6 +207,10 @@ export function IndexadoresSection({
     queryKey: ['indexers'],
     queryFn: ({ signal }) => fetchIndexers(signal),
   })
+  // T7/S5 — presencia de configuración («sin salir a la red»), jamás sondeo:
+  // para eso está /api/services/test. Misma query key que
+  // `useConfiguredServices` (mismo endpoint y payload, un solo cache entry).
+  const services = useQuery({ queryKey: ['services'], queryFn: () => fetchServices() })
   // `?? []` because settings-page fixtures mock this endpoint with `{}`.
   const indexers: IndexerRow[] = list.data?.indexers ?? []
 
@@ -552,7 +568,80 @@ export function IndexadoresSection({
           )}
         </section>
 
-        {/* CARD 2: INDEXADORES TORZNAB REGISTRADOS (stitch-13) */}
+        {/* CARD 2: FUENTES INTEGRADAS (config-1x1 T7/S5) — aMule (EC) y
+            Prowlarr como fuentes de primer nivel, ANTES del registro. Datos
+            de GET /api/services (presencia de configuración, sin sondeo de
+            red); estados honestos «Configurado»/«No configurado» y la URL (o
+            el placeholder «sin configurar» cuando no hay ninguna). */}
+        <section className="indexadores-card">
+          <div className="indexadores-card-head">
+            <div>
+              <h3 className="indexadores-card-title">Fuentes integradas</h3>
+              <p className="indexadores-card-subtitle">
+                Fuentes de primer nivel que la búsqueda unificada consulta directamente. No son
+                endpoints Torznab y no se añaden al registro, que sigue siendo sólo Torznab.
+              </p>
+            </div>
+          </div>
+
+          {services.isPending ? (
+            <div className="indexadores-empty">Cargando fuentes…</div>
+          ) : services.isError ? (
+            <div className="indexadores-empty" role="alert">
+              No se pudo consultar la configuración de las fuentes.
+            </div>
+          ) : (
+            <div className="indexadores-sources">
+              {INTEGRATED_SOURCES.map((source) => {
+                const listed = services.data?.services?.find((s) => s.key === source.key)
+                // Sin fila en el payload (degenerado) → nada configurado: se
+                // reporta lo conocido, jamás se inventa un «Configurado».
+                const configured = listed
+                  ? listed.configured
+                  : (services.data?.configured ?? []).includes(source.key)
+                const url = listed?.url?.trim() ? listed.url : ''
+                const body = (
+                  <>
+                    <span className="indexadores-source-name">{source.name}</span>
+                    {url ? (
+                      <code className="indexadores-source-url">{url}</code>
+                    ) : (
+                      <span className="indexadores-source-url indexadores-source-url--empty">
+                        sin configurar
+                      </span>
+                    )}
+                    <span className={`indexadores-source-status ${configured ? 'on' : 'off'}`}>
+                      {configured ? 'Configurado' : 'No configurado'}
+                    </span>
+                    {source.action && (
+                      <span className="indexadores-source-action">{source.action}</span>
+                    )}
+                  </>
+                )
+                // La fila aMule es accionable (click Y teclado: botón nativo)
+                // → onOpenGeneral, la misma prop del callout: salta al panel
+                // General, donde vive la tarjeta aMule (EC).
+                return source.action ? (
+                  <button
+                    key={source.key}
+                    type="button"
+                    className="indexadores-source-row indexadores-source-row--actionable"
+                    aria-label={`${source.name} — ${source.action}`}
+                    onClick={onOpenGeneral}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div key={source.key} className="indexadores-source-row">
+                    {body}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* CARD 3: INDEXADORES TORZNAB REGISTRADOS (stitch-13) */}
         <section className="indexadores-card">
           <div className="indexadores-card-head">
             <div>
@@ -685,7 +774,7 @@ export function IndexadoresSection({
           </div>
         </section>
 
-        {/* CARD 3: NUEVO INDEXADOR (formulario del diseño; la rejilla de
+        {/* CARD 4: NUEVO INDEXADOR (formulario del diseño; la rejilla de
             categorías conserva la lógica T4-anterior BYTE a BYTE y sólo cambia
             de presentación — CSS, sin inline styles) */}
         <section className="indexadores-card indexadores-form-card">
@@ -825,7 +914,7 @@ export function IndexadoresSection({
           </div>
         </section>
 
-        {/* CARD 4: CALLOUT INFORMATIVO FINAL (literal del diseño) */}
+        {/* CARD 5: CALLOUT INFORMATIVO FINAL (literal del diseño) */}
         <div className="indexadores-callout">
           <p className="indexadores-callout-text">
             La conexión a aMule no es un indexador: su host, puerto y contraseña EC se configuran

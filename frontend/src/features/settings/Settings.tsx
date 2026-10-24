@@ -142,6 +142,13 @@ const TABS = {
 export function Settings() {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<SettingsForm | null>(null)
+  /** T6/S4 — el estado «dirty» del aviso de la cabecera compara `form` contra
+   *  `baseline`, el último estado que se sabe persistido/cargado: la config al
+   *  cargar (`withAmuleEc(data)`), el payload recién guardado tras un guardado
+   *  exitoso, y lo restaurado por «Descartar». Todo el form es JSON puro y
+   *  `update()`/`updateList()` copian por JSON (orden de claves estable), así
+   *  que la comparación es `JSON.stringify`. */
+  const [baseline, setBaseline] = useState<SettingsForm | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [restartFields, setRestartFields] = useState<string[]>([])
   const [tab, setTab] = useState<'general' | 'indexadores'>('general')
@@ -152,7 +159,11 @@ export function Settings() {
   })
 
   useEffect(() => {
-    if (data && !form) setForm(withAmuleEc(data))
+    if (data && !form) {
+      const seeded = withAmuleEc(data)
+      setForm(seeded)
+      setBaseline(seeded)
+    }
   }, [data, form])
 
   const testMutation = useMutation({
@@ -160,8 +171,14 @@ export function Settings() {
   })
 
   const saveMutation = useMutation({
-    mutationFn: () => saveSettings(form!),
-    onSuccess: (result) => {
+    mutationFn: (payload: SettingsForm) => saveSettings(payload),
+    onSuccess: (result, payload) => {
+      // Un guardado exitoso limpia el aviso dirty: lo guardado ES el nuevo
+      // baseline (explícito, sin depender del refetch — el GET puede seguir
+      // devolviendo enmascarados/valores que difieren del form). Es el MISMO
+      // mutation para el «Guardar cambios» de la cabecera y el de la tarjeta
+      // aMule (T6/S4), así ambos caminos limpian el aviso.
+      setBaseline(payload)
       setRestartFields(result.restart_required || [])
       setToast(result.restart_required?.length
         ? `Guardado. Reinicia para aplicar: ${result.restart_required.join(', ')}`
@@ -175,6 +192,14 @@ export function Settings() {
   if (isPending) return <div className="wanted-loading">Cargando configuración...</div>
   if (error) return <div className="error-box">Error cargando configuración</div>
   if (!form) return null
+
+  const dirty = baseline !== null && JSON.stringify(form) !== JSON.stringify(baseline)
+
+  /** El MISMO guardado para la cabecera y la tarjeta aMule (T6/S4):
+   *  `saveMutation` → `POST /api/settings` → `rebuild()`. */
+  function doSave() {
+    if (form) saveMutation.mutate(form)
+  }
 
   function update(path: string, value: string) {
     setForm((prev) => {
@@ -286,7 +311,11 @@ export function Settings() {
       {/* Cabecera del panel (stitch-12): título + subtítulo y las acciones
           «Guardar cambios» / «Descartar» arriba a la derecha. «Descartar»
           hereda la semántica del antiguo «Restablecer» (recarga lo guardado y
-          limpia los avisos de reinicio); sólo cambian sitio y nombre. */}
+          limpia los avisos de reinicio); sólo cambian sitio y nombre.
+          T6/S4: mientras `form` difiera del baseline se muestra el aviso
+          «cambios sin guardar» y el «Guardar cambios» marca estado dirty
+          (`.settings-btn-dirty`, Settings.css); lo limpian un guardado
+          exitoso y «Descartar». */}
       <div className="settings-panel-header">
         <div>
           <h2 className="settings-panel-title">General</h2>
@@ -295,17 +324,23 @@ export function Settings() {
           </p>
         </div>
         <div className="settings-panel-actions">
+          {dirty && <span className="settings-unsaved-badge">cambios sin guardar</span>}
           <button
             type="button"
             className="settings-btn settings-btn-secondary"
-            onClick={() => { setForm(data ? withAmuleEc(data) : null); setRestartFields([]) }}
+            onClick={() => {
+              const restored = data ? withAmuleEc(data) : null
+              setForm(restored)
+              setBaseline(restored)
+              setRestartFields([])
+            }}
           >
             Descartar
           </button>
           <button
             type="button"
-            className="settings-btn settings-btn-primary"
-            onClick={() => saveMutation.mutate()}
+            className={`settings-btn settings-btn-primary${dirty ? ' settings-btn-dirty' : ''}`}
+            onClick={doSave}
             disabled={saveMutation.isPending || !form}
           >
             {saveMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
@@ -394,6 +429,8 @@ export function Settings() {
         update={update}
         isRestarting={isRestarting}
         onOpenIndexadores={() => setTab('indexadores')}
+        onSave={doSave}
+        saving={saveMutation.isPending}
       />
 
       <Section title="Seguridad">

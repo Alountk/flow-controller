@@ -1,5 +1,35 @@
 import { apiFetch } from './auth.ts'
 
+/** One row of `GET /api/services` — config PRESENCE, never a network probe
+ *  (the endpoint's documented contract: «sin salir a la red»). The keys the
+ *  backend lists go beyond `ServiceKey` (radarr/sonarr/amutorrent): `amule`
+ *  (kind `amule`) and `prowlarr` (kind `prowlarr`) live here too, so `key` is
+ *  a plain string on purpose — narrowing it would lie about the payload. */
+export interface ServiceListing {
+  key: string
+  kind: string
+  url: string
+  configured: boolean
+}
+
+export interface ServicesListResponse {
+  services: ServiceListing[]
+  configured: string[]
+}
+
+/** `GET /api/services` — which services are configured, without probing them.
+ *
+ * Same endpoint `useConfiguredServices` reads (that hook inlines its fetch and
+ * only keeps the `configured` keys; this returns the whole payload — rows with
+ * their `url` — for «Fuentes integradas», config-1x1 T7/S5). */
+export async function fetchServices(): Promise<ServicesListResponse> {
+  const res = await apiFetch('/api/services')
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  return (await res.json()) as ServicesListResponse
+}
+
 export interface ServiceTestResult {
   key: string
   kind: string
