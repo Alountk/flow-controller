@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-23 · **PR #228 (config-1x1-fixes S4/S5: guardar en la tarjeta EC + «Fuentes integradas»)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1588 backend / 743 frontend** · main pre-#228 = `b783d65` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-24 · **PR #230 (mixer: alternativa sin ruteo — un solo «Descargar» al flujo normal)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1588 backend / 754 frontend** · main pre-#230 = `06298d0` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,9 +16,9 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `083d624` (post-#228), run `40117107149` **pass** (backend-tests,
+**Verde**: `main` en `c84d3ae` (post-#230), run `40136089795` **pass** (backend-tests,
 frontend-build, docker-verify, e2e y **docker-push** → deploy por webhook de Portainer,
-política verificada de la saga). Specs: **1588 backend / 743 frontend**, working tree limpia.
+política verificada de la saga). Specs: **1588 backend / 754 frontend**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -214,6 +214,18 @@ política verificada de la saga). Specs: **1588 backend / 743 frontend**, workin
   registrada → PR único con divulgación. Review nativa no corre (D). Commits
   `bab93b1`…`e011068`, merge **`083d624`** (CI main verde `40117107149`). Feature doc:
   `odd/tasks/config-1x1-fixes.md` (S1–S5, T1–T8, Log L1–L8).
+- #230 — **mixer: alternativa sin ruteo** (petición del usuario L1 verbatim): el modal de
+  alternativa ya no muestra →Biblioteca/→4K/→3D ni sugerencia 4k para 2160p — un solo
+  «Descargar» con `library:true` y sin `destination` → camino arr (el único donde
+  `alternativeStatus` llega `ready` y auto-coloca); el ruteo a `path_4k/path_3d` era
+  descarga **directa** («el arr no la verá ni la importará», `grab_release.py:318-333`)
+  que jamás llega a `ready` y deja el fichero junto a las copias existentes (el
+  «machacar» del usuario). Prop explícita `alternativeMode` (default off) —
+  Películas/Series byte-idénticos con pins diferenciales de payload. Backend intacto.
+  Suites **1588 / 754** (+11: 9 alt-mode + 2 wiring, cero pérdidas), tsc/eslint 0.
+  Frontera **565/3** → PR único (divulgado). Review nativa no corre (D). Commits
+  `1e7f0f2`+`4560987`+`adf0c7c`, merge **`c84d3ae`** (CI main verde `40136089795`).
+  Feature doc: `odd/tasks/alternativa-sin-ruteo.md` (S1–S3, T1–T3, Log L1–L3).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -231,7 +243,7 @@ política verificada de la saga). Specs: **1588 backend / 743 frontend**, workin
 la activa `gentle-ai review mode enable --scope clone`). La review nativa operó en
 #214/#216/#218 (approved + autoridad quemada; #218: assess `nativeRisk medium`, 23
 paths/2225 líneas, 3 lentes). En **#220 quedó atascada en collect**: 6 capturas
-rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu), **#226** y **#228** (config-1x1-fixes y su enmienda S4/S5) mergearon también bajo esa disposición D.
+rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu), **#226** y **#228** (config-1x1-fixes y su enmienda S4/S5) y **#230** (alternativa sin ruteo) mergearon también bajo esa disposición D.
 Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
 (STATUS fresco antes de cada una) y verificación por tier.
 
@@ -409,4 +421,7 @@ cd frontend && ./node_modules/.bin/vite --host   # proxy /api → :8000
 - `odd/tasks/config-submenu.md` — **Configuración con submenú + tarjeta aMule (EC) +
   categorías checkbox**: specs S1–S6, tareas T1–T5, Log L1–L5; diseños HTML (fuente de
   verdad) en `odd/tasks/config-submenu/` (Stitch 12/13).
+- `odd/tasks/alternativa-sin-ruteo.md` — **mixer sin ruteo en alternativas**: specs S1–S3
+  (petición verbatim del usuario), tareas T1–T3, Log L1–L3 (diagnóstico de la descarga
+  directa fuera de raíces arr, gate y frontera de slice).
 - `prototypes/DESIGN.md` — handoff original de Stitch (tokens C-06 + briefs).
