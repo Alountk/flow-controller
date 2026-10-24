@@ -20,9 +20,10 @@ S3: Sin regresiones — todo lo ya construido se conserva (card aMule con campos
 | ID | Specs | Ruta | Commit |
 |----|-------|------|--------|
 | T1 | S1-S3 | parent — feature doc | (este commit) |
-| T2 | S1, S3 | worker — probe con body opcional + envío desde el formulario + test de la cadena save→probe, RED→GREEN | pendiente |
-| T3 | S2, S3 | worker — rework 1:1: sub-raíl vertical + cabecera + badge/enlace de la tarjeta + rejilla en CSS (surface ampliada: Settings.css), RED→GREEN | pendiente |
-| T4 | S3 | parent — gate + docs + PR único con divulgación + merge | pendiente |
+| T2 | S1, S3 | worker — probe con body opcional + envío desde el formulario + test de la cadena save→probe, RED→GREEN | `76ad49d` |
+| T3 | S2, S3 | worker — rework 1:1 **pantalla 12**: sub-raíl vertical + cabecera Guardar/Descartar + tarjeta aMule (badge/enlace) con CSS en Settings.css, RED→GREEN | `ba491dc` |
+| T4 | S2, S3 | worker — rework 1:1 **pantalla 13** + 4b (literales de formulario y callout por prop): IndexadoresSection al `stitch-13`, rejilla en CSS, decisiones reportadas, RED→GREEN | `e50b808` + `6567025` |
+| T5 | S3 | parent — gate + docs + PR único con divulgación + merge | gate abajo; PR al cierre |
 
 ## Log
 
@@ -33,3 +34,7 @@ L2 (queja 2, literal): «aparte los diseños no son 1:1. Te has tomado libertade
 L3 (diagnóstico): `config.rebuild()` SÍ se ejecuta tras guardar (`routes/settings.py:180`) y la persistencia profunda de `services.amule` está probada — la cadena save→probe es sólida en código; el fallo del usuario es que **la sonda sólo lee config guardada y no lo escrito en la tarjeta** (patrón candidato de `POST /api/services/test` no aplicado). Despliegue: `docker-compose.deploy.yml` no inyecta `AMULE_*` (ni `FC_SECRET`) — en prod la vía natural es la tarjeta. Preferencia durable guardada: **implementación estricta 1:1, sin libertades** (Engram 1457, con la lección de conceder surfaces de CSS de entrada). Libertades concretas de #224 a corregir (del informe de T3): tabs horizontales en vez de raíl vertical, estilos inline, enlace «Indexadores» convertido en texto plano, acciones de guardado fuera de la cabecera del diseño.
 
 L4 (frontera de alcance): se respeta el diseño 1:1 en TODO lo que es delta de esta feature; las secciones preexistentes conservan sus campos/estados actuales pero se acomodan al raíl del diseño. Elementos del mockup que exigen datos nuevos (columna LATENCIA + chip «Polling: 5s» de «Estado de las conexiones») NO se implementan con datos inventados — se reportan como candidato a feature aparte (regla de honestidad de datos del repo).
+
+L5 (reparto de tareas): el rework 1:1 se divide en **T3 = pantalla 12** (raíl vertical + cabecera + tarjeta aMule) y **T4 = pantalla 13** (IndexadoresSection + rejilla), gate → T5; T2 cerrado con `76ad49d` (11+3 tests; fuga de la contraseña candidata encontrada en RED y corregida — redacción unificada).
+
+L6 (cierre de T4/4b y gate — 2026-10-23): **gate observado por el parent**: backend **1588 passed**, frontend **88 files / 730 passed** (base 707 → +23), `tsc -b` 0, `eslint` 0. Entregas: T3 `ba491dc` (checklist 1:1 pantalla 12; libertades corregidas: tabs→raíl vertical, inline→Settings.css, enlace→accionable, acciones→cabecera; 18 cadenas contrastadas carácter a carácter), T4 `e50b808` (pantalla 13; datos inventados del mockup NO renderizados con test negativo pinneado; «Importar» y «Probar» del formulario **disabled-honestos** con motivo real), 4b `6567025` (literales «Nombre/URL/API Key» + submit «Guardar» en ambos modos; callout por prop `onOpenGeneral`; colisiones por scope — `apiKeyMask` autorizado prosaicamente). Imposibilidades reportadas (jamás improvisadas): iconos Material Symbols (fuentes no cargadas; requeriría `index.html`), latencias/polling/uptime/estado de socket del mockup (datos inexistentes → L4, candidato a feature aparte), barra inferior del build. Decisiones ratificadas: tabla de 6 columnas (HTML manda sobre mi enumeración de 5), «Guardar» en edición (botón único del diseño). Slice: **3264 líneas / 5 commits** — PR único con divulgación. **Review nativa**: clone-local OFF (D) → sin review (disposición mantenida).
