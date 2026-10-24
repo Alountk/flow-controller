@@ -1467,6 +1467,10 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
             alternateTitles: altModal.alternateTitles,
             movieId: altModal.movieId,
           }}
+          // T2/S1-S2 «alternativa sin ruteo»: THIS mount is the only one that
+          // turns the routing options off — one «Descargar», the normal flow
+          // (the arr path S10 waits on). Every other consumer stays as-is.
+          alternativeMode
           onClose={() => setAltModal(null)}
           onGrabStarted={() => {
             // The grab became a job: this slot goes into ESPERA. The modal

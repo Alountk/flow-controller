@@ -13,11 +13,21 @@ import type { ReleaseSearchItem } from '../../features/release-search/ReleaseSea
  * error surface already in the page.
  */
 
-const modalSpy = vi.hoisted(() => ({ items: [] as ReleaseSearchItem[] }))
+const modalSpy = vi.hoisted(() => ({
+  items: [] as ReleaseSearchItem[],
+  alternativeModes: [] as (boolean | undefined)[],
+}))
 
 vi.mock('../../features/release-search/ReleaseSearchModal.tsx', () => ({
-  ReleaseSearchModal: ({ item }: { item: ReleaseSearchItem }) => {
+  ReleaseSearchModal: ({
+    item,
+    alternativeMode,
+  }: {
+    item: ReleaseSearchItem
+    alternativeMode?: boolean
+  }) => {
     modalSpy.items.push(item)
+    modalSpy.alternativeModes.push(alternativeMode)
     return <div data-testid="release-search-modal">{item.title}</div>
   },
 }))
@@ -143,6 +153,7 @@ async function driveToResults(languageCheck: LanguageCheck, lookup: LookupReply)
 describe('mixer — «Buscar en el indexador» when a required language is missing (S7)', () => {
   beforeEach(() => {
     modalSpy.items.length = 0
+    modalSpy.alternativeModes.length = 0
   })
 
   afterEach(() => {
@@ -188,6 +199,27 @@ describe('mixer — «Buscar en el indexador» when a required language is missi
     expect(modalSpy.items).toEqual([IN_LIBRARY_ITEM])
     const lookupCall = calls.find((c) => c.url.includes('/api/mixer/lookup'))
     expect(lookupCall?.body).toEqual({ filename: FILE_A })
+  })
+
+  it('opens the S7 modal WITHOUT alternative mode — destinos Normal/4K/3D intactos (T2/S3 pin)', async () => {
+    await driveToResults(
+      { ok: false, missing: ['spa'], required: ['spa'] },
+      {
+        status: 200,
+        body: {
+          ok: true,
+          title: 'Dune Parte Dos 2024',
+          movie: { id: 7, title: 'Dune Parte Dos', year: 2024, source: 'radarr' },
+        },
+      },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar en el indexador' }))
+
+    // T2/S2: the exclusion is ONLY the alternative modal's. This mount passes
+    // nothing — every other consumer keeps today's three destinations.
+    await screen.findByTestId('release-search-modal')
+    expect(modalSpy.alternativeModes).toEqual([undefined])
   })
 
   it('answers «añádela primero» with the derived title when the movie is not in the library', async () => {

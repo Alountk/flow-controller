@@ -255,6 +255,18 @@ export type ReleaseSearchModalProps = {
    *  Series and every other mount pass nothing and the modal renders exactly
    *  what it always did (S5 «Sólo en alternativa»). */
   languageSearch?: LanguageSearchContext
+  /** T2/S1-S2 «alternativa sin ruteo»: the alternative modal downloads through
+   *  the NORMAL flow ONLY — the three F-12 destination buttons (→ Biblioteca /
+   *  → 4K / → 3D) and their quality suggestion (`destinationFor` → 4K for
+   *  2160p) give way to ONE «Descargar» that grabs with `library: true` and no
+   *  destination: the arr path, the only one `alternativeStatus` reaches
+   *  `ready` through so S10 auto-places the file. A `path_4k`/`path_3d`
+   *  destination is a DIRECT grab the arr never imports — the file lands in
+   *  the routing folder BESIDE the copies S1 keeps isolated («esto machacaria
+   *  los archivos que aislados»), and never becomes ready. Default OFF:
+   *  every other mount (Películas, Series, calendario, panel, the mixer's own
+   *  S7 lookup) renders the three destinations byte-identically (S3). */
+  alternativeMode?: boolean
 } & (
   | { presentation?: 'overlay'; onClose: () => void }
   | { presentation: 'panel'; onClose?: undefined }
@@ -265,6 +277,7 @@ export function ReleaseSearchModal({
   onClose,
   onGrabStarted,
   languageSearch,
+  alternativeMode = false,
   presentation = 'overlay',
 }: ReleaseSearchModalProps) {
   const inPanel = presentation === 'panel'
@@ -1244,6 +1257,23 @@ export function ReleaseSearchModal({
                               3D
                             </button>
                           </div>
+                          {alternativeMode ? (
+                            /* T2/S1-S2 — modo alternativa, SIN ruteo: un solo
+                               «Descargar», el flujo normal (`library`, sin
+                               destino ni ruta derivada de la calidad). La
+                               sugerencia de destino vive en los botones que
+                               este modo no renderiza. */
+                            <div className="release-download">
+                              <button
+                                type="button"
+                                className="release-download-btn"
+                                onClick={() => void handleGrab(r.guid, 'library')}
+                                disabled={isProcessing}
+                              >
+                                Descargar
+                              </button>
+                            </div>
+                          ) : (
                           <div className="release-dest">
                             <button
                               type="button"
@@ -1273,6 +1303,7 @@ export function ReleaseSearchModal({
                               → 3D
                             </button>
                           </div>
+                          )}
                         </div>
                       </div>
                     ))}

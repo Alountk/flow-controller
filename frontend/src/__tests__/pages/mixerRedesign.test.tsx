@@ -16,11 +16,16 @@ vi.mock('../../features/release-search/ReleaseSearchModal.tsx', () => ({
   ReleaseSearchModal: ({
     item,
     onGrabStarted,
+    alternativeMode,
   }: {
     item: ReleaseSearchItem
     onGrabStarted?: (taskId: string) => void
+    alternativeMode?: boolean
   }) => (
-    <div data-testid="release-search-modal">
+    <div
+      data-testid="release-search-modal"
+      data-alternative-mode={alternativeMode ? 'true' : 'false'}
+    >
       <span>{item.title}</span>
       <span data-testid="modal-languages">{(item.languages ?? []).join(',')}</span>
       <button type="button" onClick={() => onGrabStarted?.('grab-1')}>
@@ -684,6 +689,18 @@ describe('mixer — descarga de alternativa (S10/T11)', () => {
     expect(calls.find((c) => c.url.includes('/api/mixer/alternatives/lookup'))?.body).toEqual({
       path: PATH_A,
     })
+  })
+
+  it('opens the alternative modal in alternative mode — sin Normal/4K/3D (T2/S1)', async () => {
+    await driveToOneSlot('a', altRoutes(lookupBody(), statusBody()))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
+
+    // T2/S2: THIS mount is the one that turns the routing options off — the
+    // only change to this page's wiring; the altWait/auto-place contract
+    // (the tests above) is untouched.
+    const modal = await screen.findByTestId('release-search-modal')
+    expect(modal.getAttribute('data-alternative-mode')).toBe('true')
   })
 
   it('keeps the T7 «añádela primero en Radarr» notice when the lookup finds no library movie', async () => {
