@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-23 · **PR #224 (Configuración con submenú + tarjeta aMule EC)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1577 backend / 707 frontend** · main pre-#224 = `765434d` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-23 · **PR #226 (config-1x1-fixes: sonda EC + 1:1 estricto)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1588 backend / 730 frontend** · main pre-#226 = `15340ef` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,9 +16,9 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `8424503` (post-#224), run `39981507173` **pass** (backend-tests,
-frontend-build, docker-verify, e2e y **docker-push** → deploy + Portainer notificado).
-Specs: **1577 backend / 707 frontend**, working tree limpia.
+**Verde**: `main` en `26ecdd6` (post-#226), run `40106967441` **pass** (backend-tests,
+frontend-build, docker-verify, e2e y **docker-push** → deploy + Portainer notificado y
+redeploy verificado). Specs: **1588 backend / 730 frontend**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -173,6 +173,28 @@ Specs: **1577 backend / 707 frontend**, working tree limpia.
   **checkpoint temprano del RED** (Engram 1446 rev2). PR único ~3220 líneas (divulgado;
   **Risk item 2**). Review nativa no corre (D). Commits `740b17a`…`071172a`,
   merge **`8424503`**. Feature doc: `odd/tasks/config-submenu.md` (S1–S6, T1–T5, Log L1–L5).
+- #226 — **`config-1x1-fixes` T1–T5** (dos quejas verbatim tras #224; L1-L6): (a) **sonda
+  EC con lo escrito** — `POST /api/amule/test` acepta body opcional `{url, ec_port,
+  ec_password}` (patrón `test_service_candidate`), el formulario envía sus valores
+  actuales (vacío/enmascarado ⇒ manda lo guardado; sin body ⇒ camino guardado intacto),
+  cadena save→probe pinneada, y **fuga real de la contraseña candidata** encontrada en
+  RED (el `detail` filtraba la candidata) → redacción unificada con tests de no-fuga sobre
+  respuestas y `caplog`; (b) **1:1 estricto de las dos pantallas** (Engram 1457:
+  diseño→implementación, imposible→reportar, nunca variante) — pantalla 12: sub-raíl
+  vertical + cabecera Guardar/Descartar + tarjeta aMule (badge «Protocolo Nativo», nota
+  con enlace accionable a Indexadores); pantalla 13 al `stitch-13`: header con
+  «Importar de Prowlarr/Jackett…» **disabled-honesto** (Step 5), chips+grupos por fuente
+  con métricas reales, tabla de 6 col, rejilla de categorías en CSS (lógica intacta),
+  callout por prop `onOpenGeneral`; **cero inline styles**; datos inexistentes del mockup
+  NO renderizados (test negativo) y reportados (iconos Material Symbols — haría falta
+  `index.html` —, latencias/polling/uptime, barra de build). **Disclosure operativo**:
+  `docker-compose.deploy.yml` NO inyecta `AMULE_*` (Portainer pone el env) → en prod la
+  vía de configuración es la tarjeta. Suites **1588 backend / 730 frontend** (+37/+23),
+  tsc/eslint 0, ratchet 3408. Adaptaciones estructurales documentadas (12+5+10; ninguna
+  aflojada; colisiones de labels por scope al contenedor). PR único ~3270 líneas
+  (divulgado; **Risk item 2**). Review nativa no corre (D). Commits `c952ec8`…`2bad668`,
+  merge **`26ecdd6`** (CI main verde + Portainer redeploy). Feature doc:
+  `odd/tasks/config-1x1-fixes.md` (S1–S3, T1–T5, Log L1–L6).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -190,7 +212,7 @@ Specs: **1577 backend / 707 frontend**, working tree limpia.
 la activa `gentle-ai review mode enable --scope clone`). La review nativa operó en
 #214/#216/#218 (approved + autoridad quemada; #218: assess `nativeRisk medium`, 23
 paths/2225 líneas, 3 lentes). En **#220 quedó atascada en collect**: 6 capturas
-rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores) y **#224** (config-submenu) mergearon también bajo esa disposición D.
+rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu) y **#226** (config-1x1-fixes) mergearon también bajo esa disposición D.
 Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
 (STATUS fresco antes de cada una) y verificación por tier.
 
