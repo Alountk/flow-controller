@@ -306,29 +306,59 @@ def _ec_host(raw: str) -> str:
     return parsed.hostname or raw
 
 
-def _probe_amule_ec() -> dict:
-    """Connect+handshake EC y cierre, sin más. Jamás busca ni encola nada."""
-    url = config.AMULE_URL
-    password = config.AMULE_EC_PASSWORD
+def _candidate_or_stored(body: dict | None, field: str, stored):
+    """El valor ESCRITO para `field`, o el guardado si aquél no sirve.
+
+    Mismo espíritu que `test_service_candidate` (lo del body manda para esta
+    llamada, lo ausente cae a lo guardado) con las reglas de
+    `_restore_masked_secrets` encima: vacío = ausente, y un valor enmascarado
+    (lo que GET devuelve para un secreto guardado) también — la máscara que el
+    form devuelve intacta NUNCA es una contraseña, es «conserva la guardada».
+    """
+    if not isinstance(body, dict) or field not in body:
+        return stored
+    value = body[field]
+    if value is None:
+        return stored
+    text = value if isinstance(value, str) else str(value)
+    if text == "" or _is_mask(text):
+        return stored
+    return text
+
+
+def _probe_amule_ec(body: dict | None = None) -> dict:
+    """Connect+handshake EC y cierre, sin más. Jamás busca ni encola nada.
+
+    Con `body` (`{url?, ec_port?, ec_password?}`), lo escrito en la tarjeta
+    manda para ESTA llamada — la sonda de «lo que el usuario acaba de
+    escribir» de `POST /api/services/test`; sin body (o con campos
+    vacíos/enmascarados) manda la config guardada/env, como siempre.
+    """
+    url = _candidate_or_stored(body, "url", config.AMULE_URL)
+    port = _candidate_or_stored(body, "ec_port", config.AMULE_EC_PORT)
+    password = _candidate_or_stored(body, "ec_password", config.AMULE_EC_PASSWORD)
     if not url or not password:
         return {"ok": False, "detail": config.service_unavailable_reason("amule", "amule")}
+    password = str(password)
     try:
-        client = amule_ec_client(_ec_host(url), int(config.AMULE_EC_PORT or "4712"), password)
+        client = amule_ec_client(_ec_host(url), int(port or "4712"), password)
         try:
             version = client.connect()
         finally:
             client.close()
-        return {"ok": True, "detail": version or "conectado"}
+        ok, detail = True, version or "conectado"
     except Exception as exc:
         # "<Tipo>: <mensaje>" para las excepciones tipadas del cliente EC (y
-        # para cualquier otra). La contraseña se elimina del texto por si un
-        # mensaje la arrastrara: jamás sale por aquí.
-        detail = f"{type(exc).__name__}: {exc}".replace(password, "****")
-        return {"ok": False, "detail": detail}
+        # para cualquier otra).
+        ok, detail = False, f"{type(exc).__name__}: {exc}"
+    # La contraseña USADA — la escrita o, si no, la guardada — se elimina del
+    # texto vaya donde vaya: mensaje de error que la arrastre, detalle de
+    # versión, lo que sea. Jamás sale por aquí.
+    return {"ok": ok, "detail": detail.replace(password, "****")}
 
 
 @router.post("/api/amule/test")
-async def test_amule_ec(_key: str = Depends(verify_api_key)):
+async def test_amule_ec(body: dict | None = None, _key: str = Depends(verify_api_key)):
     """Prueba la conexión directa con aMule por EC — sólo handshake.
 
     Responde SIEMPRE HTTP 200 con `{ok, detail}`: el veredicto vive en el
@@ -336,8 +366,14 @@ async def test_amule_ec(_key: str = Depends(verify_api_key)):
     llamada (settings/env, como `amule_service._client`) y el socket se cierra
     en `finally`. La sonda es read-only de verdad: el handshake es lo único
     que se ejecuta, nunca operaciones de búsqueda o de cola.
+
+    Body OPCIONAL `{url?, ec_port?, ec_password?}` (patrón candidato de
+    `POST /api/services/test`): lo escrito en la tarjeta manda para esta
+    llamada; lo ausente, vacío o enmascarado cae a la config guardada. La
+    contraseña del body viaja por la misma superficie confiable que el
+    guardado y jamás se refleja ni se loguea.
     """
-    return await asyncio.to_thread(_probe_amule_ec)
+    return await asyncio.to_thread(_probe_amule_ec, body)
 
 
 @router.get("/api/services")

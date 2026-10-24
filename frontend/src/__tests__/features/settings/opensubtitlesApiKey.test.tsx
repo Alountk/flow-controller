@@ -90,7 +90,11 @@ describe('OpenSubtitles API key in settings', () => {
 
     const field = await screen.findByPlaceholderText('Clave API de OpenSubtitles')
     fireEvent.change(field, { target: { value: 'nueva-clave' } })
-    fireEvent.click(screen.getByRole('button', { name: /Guardar configuración/ }))
+    // ADAPTADO (config-1x1 T3/S3, sin aflojar): el mismo guardado se llama
+    // ahora «Guardar cambios» y vive en la cabecera del panel (antes
+    // «Guardar configuración», abajo). Sólo cambia el literal por el del
+    // diseño; la aserción sobre el payload es idéntica.
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
 
     await waitFor(() => expect(saved).toHaveLength(1))
     expect((saved[0] as typeof settings).services.opensubtitles.api_key).toBe('nueva-clave')

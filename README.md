@@ -147,7 +147,7 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/indexers/{id}/test` | POST | Prueba la conexión con `t=caps` sin persistir nada |
 | `/api/indexers/search` | POST | Búsqueda unificada: Torznab + aMule (EC) + Prowlarr, con `skipped` honesto por fuente |
 | `/api/indexers/download` | POST | Descarga una fila: ed2k/hash → EC directo, magnet/http → puente qBittorrent |
-| `/api/amule/test` | POST | Prueba la conexión EC a aMule (sólo handshake de lectura, nunca encola) |
+| `/api/amule/test` | POST | Prueba la conexión EC a aMule (lo escrito en Configuración o lo guardado; sólo handshake, nunca encola) |
 | `/api/amule/shared-dirs` | GET/PUT | Carpetas que aMule comparte (lee/escribe `shareddir*.dat` y recarga) |
 | `/api/mixer/probe` | POST | Analiza dos archivos de video (pistas, compatibilidad) |
 | `/api/mixer/mux` | POST | Mezcla pistas de audio seleccionadas |

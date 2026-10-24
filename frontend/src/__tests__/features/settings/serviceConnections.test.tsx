@@ -207,7 +207,11 @@ describe('aMule retention window', () => {
     // Changing the window has to reach the backend as retention.amule_days —
     // the group the endpoint reads (config: RETENTION_AMULE_DAYS).
     fireEvent.change(field, { target: { value: '14' } })
-    fireEvent.click(screen.getByRole('button', { name: /Guardar configuración/ }))
+    // ADAPTADO (config-1x1 T3/S3, sin aflojar): el mismo guardado se llama
+    // ahora «Guardar cambios» y vive en la cabecera del panel (antes
+    // «Guardar configuración», abajo). Sólo cambia el literal por el del
+    // diseño; la aserción sobre el payload es idéntica.
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
 
     await waitFor(() => {
       const post = fn.mock.calls.find(

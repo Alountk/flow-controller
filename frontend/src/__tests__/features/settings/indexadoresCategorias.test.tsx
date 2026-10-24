@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IndexadoresSection } from '../../../features/settings/IndexadoresSection.tsx'
 
@@ -19,8 +19,15 @@ import { IndexadoresSection } from '../../../features/settings/IndexadoresSectio
  *    and ids outside the standard list (custom 100xxx) SURVIVE — rendered as
  *    «{id} (personalizada)» and kept in the submitted csv. Dropping a user's
  *    stored id would be data loss;
- * 4. «Probar»/«Guardar cambios» flows keep working and the save payload still
+ * 4. «Probar»/«Guardar» flows keep working and the save payload still
  *    carries `{categories}`.
+ *
+ * config-1x1 T4 (S2): la rejilla conserva esta lógica BYTE a BYTE y sólo
+ * cambia de presentación — clases en `Settings.css` (4 columnas, casilla +
+ * nombre + id), CERO inline styles. Adaptaciones documentadas (S3, sin
+ * aflojar): la cabecera del panel lleva el «Añadir indexador» (el del
+ * diseño) y el submit del formulario se llama «Guardar» (literal del diseño)
+ * dentro de la tarjeta «Nuevo indexador», sin ambigüedad de nombres.
  */
 
 type RouteHandler = (body: Record<string, unknown> | null) => unknown
@@ -39,11 +46,11 @@ function mockFetch(routes: Record<string, RouteHandler>) {
   return fn
 }
 
-function renderSection() {
+function renderSection(onOpenGeneral: () => void = () => {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <IndexadoresSection />
+      <IndexadoresSection onOpenGeneral={onOpenGeneral} />
     </QueryClientProvider>,
   )
 }
@@ -80,6 +87,17 @@ function row(overrides: Partial<Record<string, unknown>> = {}) {
     updated_at: 1700000000,
     ...overrides,
   }
+}
+
+/** ADAPTADO (config-1x1 T4/S2): el submit del formulario vive dentro de la
+ *  tarjeta «Nuevo indexador» y se llama «Guardar» (literal del diseño) — la
+ *  cabecera del panel lleva el «Añadir indexador», sin ambigüedad de nombres.
+ *  Misma acción, mismo payload. */
+function clickSubmit() {
+  const card = screen
+    .getByRole('heading', { name: /Nuevo indexador|Editar indexador/ })
+    .closest('.indexadores-card') as HTMLElement
+  fireEvent.click(within(card).getByRole('button', { name: 'Guardar' }))
 }
 
 describe('indexadores — «Categorías» checkbox grid (T4/S3)', () => {
@@ -144,6 +162,20 @@ describe('indexadores — «Categorías» checkbox grid (T4/S3)', () => {
     expect(box('Todas (sin filtro)')).toBeChecked()
   })
 
+  it('renders the grid as design CSS classes — 4 columnas, casilla + nombre + id', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: [] }) })
+    renderSection()
+
+    const group = await screen.findByRole('group', { name: 'Categorías' })
+    expect(group).toHaveClass('indexadores-category-grid')
+    // «casilla + nombre + id» en cada etiqueta (ya pinneado arriba por nombre).
+    expect(box('Películas 2000')).toBeInTheDocument()
+    expect(box('Consola 1000')).toBeInTheDocument()
+    // CERO inline styles en la tarjeta nueva (la rejilla deja de ser plan B).
+    const card = group.closest('.indexadores-card') as HTMLElement
+    expect(card.querySelector('[style]')).toBeNull()
+  })
+
   it('submitting with only «Todas» sends categories: ""', async () => {
     const fn = mockFetch({
       'GET /api/indexers': () => ({ indexers: [] }),
@@ -151,7 +183,7 @@ describe('indexadores — «Categorías» checkbox grid (T4/S3)', () => {
     })
     renderSection()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Añadir indexador' }))
+    clickSubmit()
 
     const post = fn.mock.calls.find(
       ([input, init]) => String(input) === '/api/indexers' && init?.method === 'POST',
@@ -176,7 +208,7 @@ describe('indexadores — «Categorías» checkbox grid (T4/S3)', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Consola 1000' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Anime 5070' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Películas 2000' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Añadir indexador' }))
+    clickSubmit()
 
     const post = fn.mock.calls.find(
       ([input, init]) => String(input) === '/api/indexers' && init?.method === 'POST',
@@ -212,7 +244,9 @@ describe('indexadores — «Categorías» checkbox grid (T4/S3)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Editar NoNaMe' }))
     // Re-checking another box and saving must not evict the custom id.
     fireEvent.click(screen.getByRole('checkbox', { name: 'Series 5000' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    // ADAPTADO (config-1x1 T4/S2): el submit es «Guardar» (literal del
+    // diseño), acotado a la tarjeta «Nuevo indexador» (clickSubmit).
+    clickSubmit()
 
     const put = fn.mock.calls.find(
       ([input, init]) => String(input) === '/api/indexers/1' && init?.method === 'PUT',
@@ -236,7 +270,7 @@ describe('indexadores — «Categorías» checkbox grid (T4/S3)', () => {
     expect(box('Películas 2000')).not.toBeChecked()
   })
 
-  it('«Probar» still probes and «Guardar cambios» sends {categories} from the grid', async () => {
+  it('«Probar» still probes and «Guardar» sends {categories} from the grid', async () => {
     const fn = mockFetch({
       'GET /api/indexers': () => ({ indexers: [row({ categories: '2000' })] }),
       'POST /api/indexers/1/test': () => ({
@@ -258,7 +292,7 @@ describe('indexadores — «Categorías» checkbox grid (T4/S3)', () => {
       ),
     ).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    clickSubmit()
     const put = fn.mock.calls.find(
       ([input, init]) => String(input) === '/api/indexers/1' && init?.method === 'PUT',
     )
