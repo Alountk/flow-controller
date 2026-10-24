@@ -26,7 +26,12 @@ import { clearToasts, getToasts } from '../../../shared/utils/toast.ts'
  *    (la tarjeta ES el card del diseño, sin wrapper intermedio);
  *  - la segunda frase de la nota ahora contiene un enlace anidado, y
  *    `getByText` sólo ve nodos de texto directos: la frase literal completa se
- *    reafirma sobre `textContent` de la tarjeta (misma cadena, sin aflojar).
+ *    reafirma sobre `textContent` de la tarjeta (misma cadena, sin aflojar);
+ *  - T6/S4: la tarjeta aMule añade su PROPIO «Guardar cambios» (enmienda S4),
+ *    por lo que (a) el recuento exacto de botones «Guardar cambios» pasa de 1
+ *    a 2, cada uno localizado en su sitio (cabecera/tarjeta) — aserción más
+ *    fuerte, no más floja —, y (b) las búsquedas sin acotar del guardado se
+ *    acotan a la cabecera del panel (mismo botón, misma aserción).
  *
  * Cero pérdidas: los comportamientos existentes se reafirman en su nueva
  * ubicación; los tests de los demás ficheros de Settings no se tocan salvo el
@@ -108,6 +113,13 @@ async function rail(): Promise<HTMLElement> {
 async function amuleCard(): Promise<HTMLElement> {
   const title = await screen.findByText(/aMule — conexión directa \(EC\)/)
   return title.closest('.amule-ec-card') as HTMLElement
+}
+
+/** La cabecera del panel «General»: donde viven «Guardar cambios»/«Descartar»
+ *  y (T6/S4) el aviso de cambios sin guardar. */
+async function panelHeader(): Promise<HTMLElement> {
+  const heading = await screen.findByRole('heading', { name: 'General', level: 2 })
+  return heading.closest('.settings-panel-header') as HTMLElement
 }
 
 describe('sub-raíl vertical de Configuración (config-1x1 T3/S2)', () => {
@@ -224,7 +236,11 @@ describe('cabecera del panel «General» — Guardar cambios / Descartar (config
 
     // El guardado ya no vive abajo (era «Guardar configuración» en .settings-actions).
     expect(document.querySelector('.settings-actions')).toBeNull()
-    expect(screen.getAllByRole('button', { name: 'Guardar cambios' })).toHaveLength(1)
+    // ADAPTADO (config-1x1 T6/S4, sin aflojar): la enmienda S4 añade un
+    // segundo «Guardar cambios» en la tarjeta aMule, así que el total pasa de
+    // 1 a 2 EXACTOS — y cada uno está en su sitio (cabecera y tarjeta).
+    expect(screen.getAllByRole('button', { name: 'Guardar cambios' })).toHaveLength(2)
+    within(await amuleCard()).getByRole('button', { name: 'Guardar cambios' })
   })
 
   it('«Descartar» discards the typed edits and restores the fetched settings without saving', async () => {
@@ -479,8 +495,10 @@ describe('aMule (EC) card — «Probar conexión EC» (S2)', () => {
     fireEvent.change(within(card).getByLabelText('Contraseña EC'), {
       target: { value: '' },
     })
-    // ADAPTADO (S3): el guardado es ahora «Guardar cambios» (cabecera).
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    // ADAPTADO (S3; T6/S4 acota a la cabecera): el guardado es ahora
+    // «Guardar cambios» (cabecera); la tarjeta aMule añade un segundo botón
+    // homónimo (S4), así que la búsqueda se acota a la cabecera — mismo botón.
+    fireEvent.click(within(await panelHeader()).getByRole('button', { name: 'Guardar cambios' }))
 
     await waitFor(() => expect(saved).not.toBeNull())
     expect((saved as unknown as { services: { amule: unknown } }).services.amule).toEqual({
@@ -501,8 +519,10 @@ describe('aMule (EC) card — «Probar conexión EC» (S2)', () => {
     })
     renderSettings()
 
-    // ADAPTADO (S3): literal «Guardar cambios» en la cabecera del panel.
-    fireEvent.click(await screen.findByRole('button', { name: 'Guardar cambios' }))
+    // ADAPTADO (S3; T6/S4 acota a la cabecera): literal «Guardar cambios» de
+    // la cabecera del panel; la tarjeta aMule tiene ahora un segundo botón
+    // homónimo (S4), así que la búsqueda se acota a la cabecera.
+    fireEvent.click(within(await panelHeader()).getByRole('button', { name: 'Guardar cambios' }))
 
     await waitFor(() => expect(saved).not.toBeNull())
     expect(
@@ -633,5 +653,193 @@ describe('callout «La conexión a aMule no es un indexador…» (config-1x1 T4/
     fireEvent.click(within(callout).getByRole('link', { name: 'General → aMule (EC directo)' }))
     expect(await screen.findByText(/aMule — conexión directa \(EC\)/)).toBeVisible()
     expect(callout).not.toBeVisible()
+  })
+})
+
+describe('tarjeta aMule — «Guardar cambios» local (config-1x1 T6/S4)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+
+  it('the card «Guardar cambios» posts the same POST /api/settings payload as the header button', async () => {
+    const bodies: Array<Record<string, unknown>> = []
+    const fn = mockFetch({
+      ...baseRoutes,
+      'POST /api/settings': (body) => {
+        bodies.push(body as Record<string, unknown>)
+        return { ok: true, restart_required: [] }
+      },
+    })
+    renderSettings()
+
+    const card = await amuleCard()
+    // S4: el nuevo guardado vive junto a «Probar conexión EC», en la misma
+    // fila de acciones de la tarjeta.
+    const actions = card.querySelector('.amule-ec-actions') as HTMLElement
+    within(actions).getByRole('button', { name: 'Probar conexión EC' })
+    const cardSave = within(actions).getByRole('button', { name: 'Guardar cambios' })
+
+    fireEvent.change(within(card).getByLabelText('Host / URL'), {
+      target: { value: 'http://10.0.0.9' },
+    })
+    fireEvent.click(cardSave)
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    // El guardado de la tarjeta persiste lo escrito, como el de la cabecera.
+    expect(
+      (bodies[0] as { services: { amule: { url: string } } }).services.amule.url,
+    ).toBe('http://10.0.0.9')
+
+    // MISMO guardado que la cabecera: mismo endpoint y payload idéntico.
+    fireEvent.click(within(await panelHeader()).getByRole('button', { name: 'Guardar cambios' }))
+    await waitFor(() => expect(bodies).toHaveLength(2))
+    expect(bodies[1]).toEqual(bodies[0])
+    expect(
+      fn.mock.calls.filter(
+        ([input, init]) =>
+          String(input).includes('/api/settings') && init?.method === 'POST',
+      ),
+    ).toHaveLength(2)
+  })
+
+  it('the card save shows the same pending state as the header («Guardando...»)', async () => {
+    let resolveSave!: (value: unknown) => void
+    const pending = new Promise((r) => {
+      resolveSave = r
+    })
+    mockFetch({
+      ...baseRoutes,
+      'POST /api/settings': () => pending,
+    })
+    renderSettings()
+
+    const card = await amuleCard()
+    fireEvent.click(within(card).getByRole('button', { name: 'Guardar cambios' }))
+
+    // Pendiente en la tarjeta Y en la cabecera, con el mismo literal que ya
+    // usa el botón de cabecera (estado compartido: saveMutation). El estado
+    // pendiente llega en microtarea (notifyManager de TanStack Query), se
+    // espera a que se pinte — misma aserción, await correcto.
+    await within(card).findByRole('button', { name: 'Guardando...' })
+    await within(await panelHeader()).findByRole('button', { name: 'Guardando...' })
+
+    resolveSave({ ok: true, restart_required: [] })
+    await waitFor(() =>
+      expect(within(card).getByRole('button', { name: 'Guardar cambios' })).toBeVisible(),
+    )
+  })
+
+  it('«Probar conexión EC» never saves, and the card save never re-probes', async () => {
+    const fn = mockFetch({
+      ...baseRoutes,
+      'POST /api/amule/test': () => ({ ok: true, detail: 'conectado' }),
+      'POST /api/settings': () => ({ ok: true, restart_required: [] }),
+    })
+    renderSettings()
+    const settingsPosts = () =>
+      fn.mock.calls.filter(
+        ([input, init]) =>
+          String(input).includes('/api/settings') && init?.method === 'POST',
+      )
+    const amuleProbes = () =>
+      fn.mock.calls.filter(([input]) => String(input).includes('/api/amule/test'))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: 'conectado', tone: 'ok' }),
+      ),
+    )
+    // La sonda sigue siendo SÓLO sonda: jamás dispara POST /api/settings.
+    expect(settingsPosts()).toHaveLength(0)
+
+    const card = await amuleCard()
+    fireEvent.click(within(card).getByRole('button', { name: 'Guardar cambios' }))
+    await waitFor(() => expect(settingsPosts()).toHaveLength(1))
+    // Guardar no re-sondea: la cadena save→probe es del backend (rebuild()),
+    // no un POST de sonda del frontend.
+    expect(amuleProbes()).toHaveLength(1)
+  })
+})
+
+describe('aviso de cambios sin guardar en la cabecera (config-1x1 T6/S4)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    clearToasts()
+  })
+
+  it('is absent on load: no marker and no dirty class on «Guardar cambios»', async () => {
+    mockFetch(baseRoutes)
+    renderSettings()
+
+    const header = await panelHeader()
+    expect(within(header).queryByText('cambios sin guardar')).toBeNull()
+    expect(
+      within(header).getByRole('button', { name: 'Guardar cambios' }),
+    ).not.toHaveClass('settings-btn-dirty')
+  })
+
+  it('appears on any field edit (marker + dirty class) and «Descartar» clears both', async () => {
+    mockFetch(baseRoutes)
+    renderSettings()
+
+    const header = await panelHeader()
+    const save = within(header).getByRole('button', { name: 'Guardar cambios' })
+
+    // Campo de la tarjeta aMule.
+    fireEvent.change(await screen.findByLabelText('Host / URL'), {
+      target: { value: 'http://cambiado' },
+    })
+    expect(within(header).getByText('cambios sin guardar')).toBeVisible()
+    expect(save).toHaveClass('settings-btn-dirty')
+
+    fireEvent.click(within(header).getByRole('button', { name: 'Descartar' }))
+    expect(within(header).queryByText('cambios sin guardar')).toBeNull()
+    expect(save).not.toHaveClass('settings-btn-dirty')
+
+    // Campo fuera de la tarjeta: cualquier edición del form marca dirty.
+    fireEvent.change(await screen.findByLabelText('Check interval (segundos)'), {
+      target: { value: '20' },
+    })
+    expect(within(header).getByText('cambios sin guardar')).toBeVisible()
+    expect(save).toHaveClass('settings-btn-dirty')
+  })
+
+  it('a successful save clears marker + dirty class (header save and card save)', async () => {
+    mockFetch(baseRoutes)
+    renderSettings()
+
+    const header = await panelHeader()
+    const save = within(header).getByRole('button', { name: 'Guardar cambios' })
+
+    fireEvent.change(await screen.findByLabelText('Host / URL'), {
+      target: { value: 'http://uno' },
+    })
+    expect(within(header).getByText('cambios sin guardar')).toBeVisible()
+    expect(save).toHaveClass('settings-btn-dirty')
+
+    fireEvent.click(save)
+    // El refetch devuelve SIEMPRE el fixture original (GET estático): el aviso
+    // debe limpiarse por el guardado exitoso, no por casualidades del refetch.
+    await waitFor(() => expect(within(header).queryByText('cambios sin guardar')).toBeNull())
+    expect(save).not.toHaveClass('settings-btn-dirty')
+
+    // El guardado de la tarjeta limpia el MISMO estado (saveMutation común).
+    fireEvent.change(await screen.findByLabelText('Host / URL'), {
+      target: { value: 'http://dos' },
+    })
+    expect(within(header).getByText('cambios sin guardar')).toBeVisible()
+    const card = await amuleCard()
+    fireEvent.click(within(card).getByRole('button', { name: 'Guardar cambios' }))
+    await waitFor(() => expect(within(header).queryByText('cambios sin guardar')).toBeNull())
+    expect(save).not.toHaveClass('settings-btn-dirty')
   })
 })

@@ -163,6 +163,25 @@
   gap: 12px;
 }
 
+/* T6/S4 — estado dirty (cambios sin guardar). El repo no tenía diseño para
+   este estado: se elige una píldora ámbar (token `--warn`, el de los estados
+   de aviso) para el marcador, y un anillo ámbar sobre el «Guardar cambios»
+   de cabecera. Mismo lenguaje de tokens que los badges vecinos. */
+.settings-unsaved-badge {
+  padding: 4px 10px;
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.settings-btn-primary.settings-btn-dirty {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
 .settings-btn {
   display: inline-flex;
   align-items: center;
@@ -399,6 +418,7 @@
 .amule-ec-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 12px;
   margin-top: 16px;
 }
 
