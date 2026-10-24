@@ -30,7 +30,7 @@ S5 (consulta resuelta por decisión del usuario, verbatim L7): «hay que agregar
 | T5 | S3 | parent — gate + docs + PR único con divulgación + merge | gate abajo; PR al cierre |
 | T6 | S3, S4 | worker — «Guardar cambios» en la tarjeta aMule + aviso dirty en cabecera, RED→GREEN | `c122cfd` |
 | T7 | S3, S5 | worker — sección «Fuentes integradas» (`GET /api/services`, fila aMule → General), RED→GREEN | `d39f15e` |
-| T8 | S3-S5 | parent — gate + docs + PR único + merge | gate abajo; PR al cierre |
+| T8 | S3-S5 | parent — gate + docs + PR único + merge | `e011068` (PR #228 merge `083d624`) |
 
 ## Log
 

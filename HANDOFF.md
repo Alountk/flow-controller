@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-23 · **PR #226 (config-1x1-fixes: sonda EC + 1:1 estricto)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1588 backend / 730 frontend** · main pre-#226 = `15340ef` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-23 · **PR #228 (config-1x1-fixes S4/S5: guardar en la tarjeta EC + «Fuentes integradas»)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1588 backend / 743 frontend** · main pre-#228 = `b783d65` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,9 +16,9 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `26ecdd6` (post-#226), run `40106967441` **pass** (backend-tests,
-frontend-build, docker-verify, e2e y **docker-push** → deploy + Portainer notificado y
-redeploy verificado). Specs: **1588 backend / 730 frontend**, working tree limpia.
+**Verde**: `main` en `083d624` (post-#228), run `40117107149` **pass** (backend-tests,
+frontend-build, docker-verify, e2e y **docker-push** → deploy por webhook de Portainer,
+política verificada de la saga). Specs: **1588 backend / 743 frontend**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -195,6 +195,25 @@ redeploy verificado). Specs: **1588 backend / 730 frontend**, working tree limpi
   (divulgado; **Risk item 2**). Review nativa no corre (D). Commits `c952ec8`…`2bad668`,
   merge **`26ecdd6`** (CI main verde + Portainer redeploy). Feature doc:
   `odd/tasks/config-1x1-fixes.md` (S1–S3, T1–T5, Log L1–L6).
+- #228 — **`config-1x1-fixes` S4/S5** (enmienda decidida en vivo tras #226; L7 verbatim):
+  (a) **«Probar» prueba, «Guardar» guarda** — «Guardar cambios» propio en la tarjeta
+  aMule (mismo `saveMutation` vía `onSave`/`saving`, patrón de props del módulo), píldora
+  ámbar **«cambios sin guardar»** + estado dirty en la cabecera (`form` vs baseline con
+  reset EXPLÍCITO en éxito de guardado y en «Descartar» — inmune al refetch enmascarado);
+  triangulado: la sonda jamás dispara `POST /api/settings` y el guardado jamás re-sondea;
+  elección visual propia del worker (no existe diseño para este estado → tokens del repo,
+  reportada); (b) tarjeta **«Fuentes integradas»** en Indexadores antes del registro —
+  aMule (EC) + Prowlarr desde `GET /api/services` (presencia de configuración, **sin
+  sondeo de red**), estados honestos «Configurado/No configurado» + URL, copy que las
+  distingue del registro («no son endpoints Torznab y no se añaden al registro» —
+  respuesta a la consulta: **aMule NO es ni se agrega como indexador**), fila de aMule
+  accionable → `onOpenGeneral`, Prowlarr estático (sin acción inventada; el «Importar»
+  disabled del header porta el Step 5). Suites **1588 backend / 743 frontend** (+13:
+  6 de S4 + 7 de S5, cero pérdidas; colisiones resueltas por scope documentado),
+  tsc/eslint 0, ratchet 3408 (cero cambios de backend). Frontera de slice **770/4**
+  registrada → PR único con divulgación. Review nativa no corre (D). Commits
+  `bab93b1`…`e011068`, merge **`083d624`** (CI main verde `40117107149`). Feature doc:
+  `odd/tasks/config-1x1-fixes.md` (S1–S5, T1–T8, Log L1–L8).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -212,7 +231,7 @@ redeploy verificado). Specs: **1588 backend / 730 frontend**, working tree limpi
 la activa `gentle-ai review mode enable --scope clone`). La review nativa operó en
 #214/#216/#218 (approved + autoridad quemada; #218: assess `nativeRisk medium`, 23
 paths/2225 líneas, 3 lentes). En **#220 quedó atascada en collect**: 6 capturas
-rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu) y **#226** (config-1x1-fixes) mergearon también bajo esa disposición D.
+rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu), **#226** y **#228** (config-1x1-fixes y su enmienda S4/S5) mergearon también bajo esa disposición D.
 Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
 (STATUS fresco antes de cada una) y verificación por tier.
 
