@@ -226,6 +226,15 @@ política verificada de la saga). Specs: **1588 backend / 754 frontend**, workin
   Frontera **565/3** → PR único (divulgado). Review nativa no corre (D). Commits
   `1e7f0f2`+`4560987`+`adf0c7c`, merge **`c84d3ae`** (CI main verde `40136089795`).
   Feature doc: `odd/tasks/alternativa-sin-ruteo.md` (S1–S3, T1–T3, Log L1–L3).
+- #232 — **limpieza SDD (decisión del usuario «limpia»)**: eliminados del repo los
+  restos de la era SDD (previa a ODD): `openspec/` (config `sdd-init` con su
+  `strict_tdd: false` + 3 cambios históricos de septiembre, 20 ficheros) y
+  `sdd/media-mixer/`. Sin referencias en CI/README/BACKLOG/.gitignore. El historial git
+  conserva todo; los Logs de `odd/tasks/` que citan `origen sdd-init/flow-controller`
+  quedan intactos como registro histórico. Preferencia global Engram **1464**: nunca SDD
+  por defecto en ningún proyecto (por defecto ODD); restos globales (skill `sdd-verify`,
+  symlinks de harness, entradas `sdd-*` en gentle state, rol `sdd-spec`) limpiados en el
+  entorno con backup.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
