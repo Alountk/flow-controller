@@ -3,10 +3,6 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { addCalendarItem } from '../../shared/api/calendar.ts'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
 import {
-  LanguageSearchSection,
-  type LanguageSearchContext,
-} from './LanguageSearchSection.tsx'
-import {
   startCalendarReleaseSearch,
   fetchReleaseSearchStatus,
   type Release,
@@ -245,28 +241,6 @@ function baseName(path: string): string {
  */
 export type ReleaseSearchModalProps = {
   item: ReleaseSearchItem
-  /** T11/S10: fired ONCE when a grab becomes a job — the POST returned a
-   *  `task_id` and the status poll owns the rest. Purely additive: nothing
-   *  about the modal's own flow changes when the prop is absent. */
-  onGrabStarted?: (taskId: string) => void
-  /** T3/S4/S5: the «Búsqueda en idioma» section's data from the alternative
-   *  lookup. This prop's PRESENCE is the `enableLanguageSearch` gate — only
-   *  «Buscar y descargar alternativa» (MediaMixer) passes it; Películas,
-   *  Series and every other mount pass nothing and the modal renders exactly
-   *  what it always did (S5 «Sólo en alternativa»). */
-  languageSearch?: LanguageSearchContext
-  /** T2/S1-S2 «alternativa sin ruteo»: the alternative modal downloads through
-   *  the NORMAL flow ONLY — the three F-12 destination buttons (→ Biblioteca /
-   *  → 4K / → 3D) and their quality suggestion (`destinationFor` → 4K for
-   *  2160p) give way to ONE «Descargar» that grabs with `library: true` and no
-   *  destination: the arr path, the only one `alternativeStatus` reaches
-   *  `ready` through so S10 auto-places the file. A `path_4k`/`path_3d`
-   *  destination is a DIRECT grab the arr never imports — the file lands in
-   *  the routing folder BESIDE the copies S1 keeps isolated («esto machacaria
-   *  los archivos que aislados»), and never becomes ready. Default OFF:
-   *  every other mount (Películas, Series, calendario, panel, the mixer's own
-   *  S7 lookup) renders the three destinations byte-identically (S3). */
-  alternativeMode?: boolean
 } & (
   | { presentation?: 'overlay'; onClose: () => void }
   | { presentation: 'panel'; onClose?: undefined }
@@ -275,9 +249,6 @@ export type ReleaseSearchModalProps = {
 export function ReleaseSearchModal({
   item,
   onClose,
-  onGrabStarted,
-  languageSearch,
-  alternativeMode = false,
   presentation = 'overlay',
 }: ReleaseSearchModalProps) {
   const inPanel = presentation === 'panel'
@@ -747,9 +718,6 @@ export function ReleaseSearchModal({
       release?.size || undefined,
     )
     if (result.task_id) {
-      // T11/S10: the grab is now a job — tell the caller ONCE, here and never
-      // again from the settle effect below (a poll is not a new grab).
-      onGrabStarted?.(result.task_id)
       // async-grab: the POST only starts the job. The outcome arrives
       // through the status poll above and is applied by the effect — the
       // step stays 'grabbing' (busy, re-click blocked) until it does.
@@ -941,11 +909,6 @@ export function ReleaseSearchModal({
             </div>
           </div>
           )}
-
-          {/* T3/S4/S5 — «Búsqueda en idioma»: ONLY the alternative flow
-              passes `languageSearch`, so the section lives here and nowhere
-              else. Independent of the step machine — it owns its own search. */}
-          {languageSearch && <LanguageSearchSection context={languageSearch} />}
 
           {/* Indexer selector. Overlay: only on the initial step, as always.
               Panel: persistent — changing it re-runs the search, the ONE
@@ -1257,23 +1220,6 @@ export function ReleaseSearchModal({
                               3D
                             </button>
                           </div>
-                          {alternativeMode ? (
-                            /* T2/S1-S2 — modo alternativa, SIN ruteo: un solo
-                               «Descargar», el flujo normal (`library`, sin
-                               destino ni ruta derivada de la calidad). La
-                               sugerencia de destino vive en los botones que
-                               este modo no renderiza. */
-                            <div className="release-download">
-                              <button
-                                type="button"
-                                className="release-download-btn"
-                                onClick={() => void handleGrab(r.guid, 'library')}
-                                disabled={isProcessing}
-                              >
-                                Descargar
-                              </button>
-                            </div>
-                          ) : (
                           <div className="release-dest">
                             <button
                               type="button"
@@ -1303,7 +1249,6 @@ export function ReleaseSearchModal({
                               → 3D
                             </button>
                           </div>
-                          )}
                         </div>
                       </div>
                     ))}

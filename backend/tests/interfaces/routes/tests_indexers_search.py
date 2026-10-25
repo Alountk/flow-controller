@@ -727,3 +727,199 @@ class TestUnicode:
             resp = _search({"query": "el niño", "sources": ["torznab"]})
 
         assert [row["name"] for row in resp.json()["results"]] == ["El.Niño.2024.1080p"]
+
+
+# ── T2/S3: the optional per-row subset of the registry ────────────────────────
+
+
+class TestIndexerIdsValidation:
+    """The optional `indexer_ids` body field: 400s are the caller's, in the
+    repo's Spanish shape — one bad entry must never silently widen or narrow
+    the search (the `sources` honesty style)."""
+
+    def test_indexer_ids_must_be_a_list(self, store):
+        for raw in ("3", {"3": 1}, 3):
+            resp = _search({"query": "Arthur", "indexer_ids": raw})
+
+            assert resp.status_code == 400, raw
+            assert resp.json() == {"detail": "indexer_ids debe ser una lista de ids"}
+
+    def test_bool_float_and_str_ids_are_400_naming_the_value(self, store):
+        """`True`, `1.5` and `"3"` are NOT ids — the offender travels named,
+        mirroring the `fuente desconocida: «…»` style."""
+        for bad in (True, 1.5, "3"):
+            resp = _search({"query": "Arthur", "indexer_ids": [1, bad]})
+
+            assert resp.status_code == 400, bad
+            assert resp.json() == {"detail": f"id de indexador no válido: «{bad}»"}
+
+    def test_zero_and_negative_ids_are_400_naming_the_value(self, store):
+        for bad in (0, -2):
+            resp = _search({"query": "Arthur", "indexer_ids": [bad]})
+
+            assert resp.status_code == 400, bad
+            assert resp.json() == {"detail": f"id de indexador no válido: «{bad}»"}
+
+
+class TestTheIndexerIdSubset:
+    """The Torznab fan-out honors the selection — enabled-only, never wider.
+    The other sources (`amule`, `prowlarr`) behave exactly as today."""
+
+    def test_absent_null_and_empty_keep_the_default_of_every_enabled_row(self, store):
+        """Pinned decision (the `sources` precedent): absent, null and `[]`
+        all mean «no filter» — byte-identical to today for every caller."""
+        _seed("Indexador A", URL_A)
+        _seed("Indexador B", URL_B)
+        stub = _TorznabStub(
+            answers={
+                URL_A: [_torznab_raw(guid="t-1", size=1, title="Arthur 2006")],
+                URL_B: [_torznab_raw(guid="t-2", size=1, title="Arthur 2006")],
+            }
+        )
+        with _torznab(stub), _amule(), _prowlarr():
+            absent = _search({"query": "Arthur", "sources": ["torznab"]})
+            null = _search(
+                {"query": "Arthur", "sources": ["torznab"], "indexer_ids": None}
+            )
+            empty = _search(
+                {"query": "Arthur", "sources": ["torznab"], "indexer_ids": []}
+            )
+
+        assert absent.text == null.text == empty.text
+        assert [row["guid"] for row in absent.json()["results"]] == ["t-1", "t-2"]
+        assert [call["url"] for call in stub.calls] == [
+            URL_A,
+            URL_B,
+            URL_A,
+            URL_B,
+            URL_A,
+            URL_B,
+        ]
+
+    def test_only_the_selected_rows_are_queried(self, store):
+        _seed("Indexador A", URL_A)
+        row_b = _seed("Indexador B", URL_B)
+        stub = _TorznabStub(
+            answers={
+                URL_A: [_torznab_raw(guid="t-1", size=1, title="Arthur 2006")],
+                URL_B: [_torznab_raw(guid="t-2", size=1, title="Arthur 2006")],
+            }
+        )
+        with (
+            _torznab(stub),
+            _amule(answer=[_amule_raw(name="Arthur 2006")]),
+            _prowlarr(answer=[_prowlarr_raw(title="Arthur 2006")]),
+        ):
+            resp = _search({"query": "Arthur", "indexer_ids": [row_b["id"]]})
+
+        body = resp.json()
+        assert body["ok"] is True
+        assert [call["url"] for call in stub.calls] == [URL_B]
+        assert [row["source"] for row in body["results"]] == [
+            "torznab",
+            "amule",
+            "prowlarr",
+        ]
+        assert body["results"][0] == {
+            "source": "torznab",
+            "indexer": "Indexador B",
+            "name": "Arthur 2006",
+            "size": 1,
+            "guid": "t-2",
+        }
+        assert body["skipped"] == []
+
+    def test_a_disabled_id_is_simply_not_in_the_intersection(self, store):
+        row_a = _seed("Indexador A", URL_A)
+        paused = _seed("Pausada", URL_B, enabled=0)
+        stub = _TorznabStub(
+            answers={URL_A: [_torznab_raw(guid="t-1", size=1, title="Arthur 2006")]}
+        )
+        with _torznab(stub), _amule(), _prowlarr():
+            resp = _search(
+                {
+                    "query": "Arthur",
+                    "sources": ["torznab"],
+                    "indexer_ids": [paused["id"], row_a["id"]],
+                }
+            )
+
+        body = resp.json()
+        assert body["skipped"] == []
+        assert [call["url"] for call in stub.calls] == [URL_A]
+        assert [row["indexer"] for row in body["results"]] == ["Indexador A"]
+
+    def test_a_selection_matching_no_enabled_row_skips_torznab_honestly(self, store):
+        """L6e: never a 400 — a disabled or concurrently deleted indexer must
+        not break the search — and never a silent «0 resultados» either."""
+        _seed("Indexador A", URL_A)
+        paused = _seed("Pausada", URL_B, enabled=0)
+        stub = _TorznabStub()
+        with _torznab(stub), _amule(), _prowlarr():
+            resp = _search(
+                {
+                    "query": "Arthur",
+                    "sources": ["torznab"],
+                    "indexer_ids": [paused["id"], 4242],
+                }
+            )
+
+        body = resp.json()
+        assert resp.status_code == 200
+        assert stub.calls == []
+        assert body["ok"] is False
+        assert body["results"] == []
+        assert body["skipped"] == [
+            {
+                "source": "torznab",
+                "reason": "ningún indexador de los seleccionados está habilitado",
+            }
+        ]
+        assert "detail" in body, "un 0 silencioso jamás se disfraza de «sin resultados»"
+
+    def test_a_concurrently_deleted_id_never_breaks_the_other_sources(self, store):
+        """The row was gone by the time the search ran: Torznab is skipped
+        honestly while `amule` and `prowlarr` answer exactly as today."""
+        _seed("Indexador A", URL_A)
+        stub = _TorznabStub()
+        with (
+            _torznab(stub),
+            _amule(answer=[_amule_raw(name="Arthur 2006")]),
+            _prowlarr(answer=[_prowlarr_raw(title="Arthur 2006")]),
+        ):
+            resp = _search({"query": "Arthur", "indexer_ids": [4242]})
+
+        body = resp.json()
+        assert resp.status_code == 200
+        assert stub.calls == []
+        assert body["ok"] is True
+        assert [row["source"] for row in body["results"]] == ["amule", "prowlarr"]
+        assert body["skipped"] == [
+            {
+                "source": "torznab",
+                "reason": "ningún indexador de los seleccionados está habilitado",
+            }
+        ]
+
+    def test_the_relevance_filter_still_applies_to_the_subset(self, store):
+        row_b = _seed("Indexador B", URL_B)
+        stub = _TorznabStub(
+            answers={
+                URL_B: [
+                    _torznab_raw(title="Arthur 2006", guid="real", size=1),
+                    _torznab_raw(
+                        title="[rutor] Случайный.Фильм.2006", guid="junk", size=1
+                    ),
+                ]
+            }
+        )
+        with _torznab(stub), _amule(), _prowlarr():
+            resp = _search(
+                {
+                    "query": "Arthur",
+                    "sources": ["torznab"],
+                    "indexer_ids": [row_b["id"]],
+                }
+            )
+
+        assert [row["guid"] for row in resp.json()["results"]] == ["real"]

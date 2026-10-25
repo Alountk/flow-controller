@@ -12,24 +12,51 @@ import type { ReleaseSearchItem } from '../../features/release-search/ReleaseSea
  * ffprobe's absolute `index`).
  */
 
+/**
+ * Both modal mounts are mocked. The «Simular descarga» button is an S5
+ * regression probe: it fires whatever download-start notification the wiring
+ * hands the modal (the removed `onGrabStarted`), and NONE of those may ever
+ * start a watch — the S5 test presses it and then proves no
+ * `/api/mixer/alternatives/status` request ever happens.
+ */
 vi.mock('../../features/release-search/ReleaseSearchModal.tsx', () => ({
   ReleaseSearchModal: ({
     item,
     onGrabStarted,
-    alternativeMode,
   }: {
     item: ReleaseSearchItem
     onGrabStarted?: (taskId: string) => void
-    alternativeMode?: boolean
+  }) => (
+    <div data-testid="release-search-modal">
+      <span>{item.title}</span>
+      <button type="button" onClick={() => onGrabStarted?.('grab-1')}>
+        Simular descarga
+      </button>
+    </div>
+  ),
+}))
+
+vi.mock('../../features/alternative/AlternativeModal.tsx', () => ({
+  AlternativeModal: (props: {
+    title: string
+    originalTitle: string | null
+    alternateTitles: { title: string; language: string | null }[]
+    movieId: number
+    audioLanguages: string[]
+    onClose: () => void
+    /** S5 probe — see above. The real component has no such prop. */
+    onGrabStarted?: (taskId: string) => void
   }) => (
     <div
-      data-testid="release-search-modal"
-      data-alternative-mode={alternativeMode ? 'true' : 'false'}
+      data-testid="alternative-modal"
+      data-movie-id={String(props.movieId)}
+      data-original-title={props.originalTitle ?? ''}
+      data-alternate-titles={props.alternateTitles.map((t) => t.title).join(',')}
     >
-      <span>{item.title}</span>
-      <span data-testid="modal-languages">{(item.languages ?? []).join(',')}</span>
-      <button type="button" onClick={() => onGrabStarted?.('grab-1')}>
-        Simular grab
+      <span data-testid="alt-modal-title">{props.title}</span>
+      <span data-testid="alt-modal-languages">{props.audioLanguages.join(',')}</span>
+      <button type="button" onClick={() => props.onGrabStarted?.('grab-1')}>
+        Simular descarga
       </button>
     </div>
   ),
@@ -512,20 +539,20 @@ describe('mixer — audio ordenado (S2/S5, L18)', () => {
   })
 })
 
-/* ── S10/T11 — descarga de alternativa desde los slots ───────────────────── */
+/* ── S5/S6/T4 — descarga de alternativa desde los slots ──────────────────── */
 
-describe('mixer — descarga de alternativa (S10/T11)', () => {
+describe('mixer — descarga de alternativa (S5/S6/T4)', () => {
   const ALT_TITLE = 'Dune Parte Dos 2024'
-  const ALT_PATH = '/mnt/dl/Dune.Parte.Dos.2024.mkv'
-  const ALT_BASENAME = 'Dune.Parte.Dos.2024.mkv'
 
-  /** The exact JSON shapes of T11's contract. */
+  /** The exact JSON shapes of the alternative lookup contract. */
   function lookupBody(over: Obj = {}): Obj {
     return {
       ok: true,
       title: ALT_TITLE,
       movie: { id: 7, title: 'Dune: Part Two', year: 2024, source: 'radarr' },
       audio_languages: ['spa', 'eng'],
+      original_title: 'Dune: Part Two',
+      alternate_titles: [{ title: 'Dune: Deuxième Partie', language: 'fr' }],
       ...over,
     }
   }
@@ -534,7 +561,9 @@ describe('mixer — descarga de alternativa (S10/T11)', () => {
     return { state: 'unknown', progress: null, path: null, allowed: false, ...over }
   }
 
-  function altRoutes(lookup: Obj, status: Obj): Route[] {
+  /** `status` stays routed even though S5 removed its consumer — the tests
+   *  prove it is NEVER called (the route exists so a stray call is visible). */
+  function altRoutes(lookup: Obj, status: Obj = statusBody()): Route[] {
     return [
       ['/api/mixer/alternatives/lookup', () => ({ body: lookup })],
       ['/api/mixer/alternatives/status', () => ({ body: status })],
@@ -554,13 +583,6 @@ describe('mixer — descarga de alternativa (S10/T11)', () => {
     renderMixer()
     await selectFile(filled === 'a' ? 0 : 1, filled === 'a' ? FILE_A : FILE_B)
     return calls
-  }
-
-  /** Click the slot button → wait for the modal → fire its grab. */
-  async function startGrab() {
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
-    await screen.findByTestId('release-search-modal')
-    fireEvent.click(screen.getByRole('button', { name: 'Simular grab' }))
   }
 
   it('offers «Buscar y descargar alternativa» only on the empty slot when the other holds a file', async () => {
@@ -587,130 +609,56 @@ describe('mixer — descarga de alternativa (S10/T11)', () => {
     expect(within(card).getByText('Archivo A')).toBeInTheDocument()
   })
 
-  it('puts the slot in the wait state when the grab starts, polling only while waiting', async () => {
+  it('mounts AlternativeModal with the lookup data — title, movieId, titles, audio languages (S7)', async () => {
     const calls = await driveToOneSlot(
       'a',
-      altRoutes(lookupBody(), statusBody({ state: 'downloading', progress: 37 })),
+      altRoutes(lookupBody({ audio_languages: ['spa', 'eng', 'rus'] })),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
 
+    const modal = await screen.findByTestId('alternative-modal')
+    expect(screen.getByTestId('alt-modal-title').textContent).toBe(ALT_TITLE)
+    expect(modal.getAttribute('data-movie-id')).toBe('7')
+    expect(modal.getAttribute('data-original-title')).toBe('Dune: Part Two')
+    expect(modal.getAttribute('data-alternate-titles')).toBe('Dune: Deuxième Partie')
+    expect(screen.getByTestId('alt-modal-languages').textContent).toBe('spa,eng,rus')
     // The lookup takes the OTHER slot's path — the title comes from that file.
-    await waitFor(() =>
-      expect(calls.some((c) => c.url.includes('/api/mixer/alternatives/lookup'))).toBe(true),
-    )
     expect(calls.find((c) => c.url.includes('/api/mixer/alternatives/lookup'))?.body).toEqual({
       path: PATH_A,
     })
+  })
 
-    await screen.findByTestId('release-search-modal')
-    // Honesty: no status poll before the wait starts.
+  it('opens the modal even when the lookup returns no library movie (movieId 0) — S6: no gate', async () => {
+    await driveToOneSlot('a', altRoutes(lookupBody({ movie: null })))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
+
+    const modal = await screen.findByTestId('alternative-modal')
+    expect(modal.getAttribute('data-movie-id')).toBe('0')
+    expect(screen.getByTestId('alt-modal-title').textContent).toBe(ALT_TITLE)
+    // The «añádela primero» notice belongs to the S7 flow alone — never here.
+    expect(
+      screen.queryByText(`${ALT_TITLE} no está en la librería — añádela primero en Radarr`),
+    ).toBeNull()
+  })
+
+  it('never polls /api/mixer/alternatives/status and shows no wait machinery — S5: manual post-download', async () => {
+    const calls = await driveToOneSlot('a', altRoutes(lookupBody(), statusBody()))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
+    // The S5 probe (both modal mocks render it): whatever a download start
+    // could notify, the page must never begin watching the download.
+    fireEvent.click(await screen.findByRole('button', { name: 'Simular descarga' }))
+    await new Promise((resolve) => {
+      setTimeout(resolve, 20)
+    })
+
     expect(calls.some((c) => c.url.includes('/api/mixer/alternatives/status'))).toBe(false)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Simular grab' }))
-
-    expect(await screen.findByText(`Descargando… ${ALT_TITLE}`)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Dejar de esperar' })).toBeInTheDocument()
-    await waitFor(() =>
-      expect(calls.some((c) => c.url.includes('/api/mixer/alternatives/status'))).toBe(true),
-    )
-    expect(await screen.findByText('37%')).toBeInTheDocument()
-  })
-
-  it('auto-places the ready file in the waiting slot with the «Colocado automáticamente» notice', async () => {
-    await driveToOneSlot(
-      'a',
-      altRoutes(
-        lookupBody(),
-        statusBody({ state: 'ready', progress: null, path: ALT_PATH, allowed: true }),
-      ),
-    )
-
-    await startGrab()
-
-    expect(
-      await screen.findByText(`Colocado automáticamente: ${ALT_BASENAME}`),
-    ).toBeInTheDocument()
-    // The slot took the path (its onSelect) and the wait is over.
-    expect(screen.getByTitle(ALT_PATH)).toBeInTheDocument()
     expect(screen.queryByText(/Descargando…/)).toBeNull()
-  })
-
-  it('warns without placing when the ready file is outside allowed_roots', async () => {
-    await driveToOneSlot(
-      'a',
-      altRoutes(
-        lookupBody(),
-        statusBody({ state: 'ready', progress: null, path: ALT_PATH, allowed: false }),
-      ),
-    )
-
-    await startGrab()
-
-    expect(
-      await screen.findByText(
-        `El fichero quedó en ${ALT_PATH} — añade esa carpeta a allowed_roots`,
-      ),
-    ).toBeInTheDocument()
-    // Nothing was placed and nothing else was touched.
-    expect(screen.queryByText(/Colocado automáticamente/)).toBeNull()
-    expect(screen.getByText('Sin seleccionar')).toBeInTheDocument()
-    expect(screen.getByTitle(PATH_A)).toBeInTheDocument()
-  })
-
-  it('«Dejar de esperar» returns to the initial button and touches nothing else', async () => {
-    await driveToOneSlot(
-      'a',
-      altRoutes(lookupBody(), statusBody({ state: 'downloading', progress: 10 })),
-    )
-
-    await startGrab()
-    await screen.findByText(/Descargando…/)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Dejar de esperar' }))
-
-    expect(screen.queryByText(/Descargando…/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Dejar de esperar' })).toBeNull()
+    // The slot keeps its initial button — nothing waited, nothing placed.
     expect(altButtons()).toHaveLength(1)
-    expect(screen.getByTitle(PATH_A)).toBeInTheDocument()
     expect(screen.getByText('Sin seleccionar')).toBeInTheDocument()
-  })
-
-  it('opens the modal with the lookup movie and item.languages from audio_languages', async () => {
-    const calls = await driveToOneSlot(
-      'a',
-      altRoutes(lookupBody({ audio_languages: ['spa', 'eng', 'rus'] }), statusBody()),
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
-
-    const modal = await screen.findByTestId('release-search-modal')
-    expect(within(modal).getByText('Dune: Part Two')).toBeInTheDocument()
-    expect(screen.getByTestId('modal-languages').textContent).toBe('spa,eng,rus')
-    expect(calls.find((c) => c.url.includes('/api/mixer/alternatives/lookup'))?.body).toEqual({
-      path: PATH_A,
-    })
-  })
-
-  it('opens the alternative modal in alternative mode — sin Normal/4K/3D (T2/S1)', async () => {
-    await driveToOneSlot('a', altRoutes(lookupBody(), statusBody()))
-
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
-
-    // T2/S2: THIS mount is the one that turns the routing options off — the
-    // only change to this page's wiring; the altWait/auto-place contract
-    // (the tests above) is untouched.
-    const modal = await screen.findByTestId('release-search-modal')
-    expect(modal.getAttribute('data-alternative-mode')).toBe('true')
-  })
-
-  it('keeps the T7 «añádela primero en Radarr» notice when the lookup finds no library movie', async () => {
-    await driveToOneSlot('a', altRoutes(lookupBody({ movie: null }), statusBody()))
-
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar y descargar alternativa' }))
-
-    expect(
-      await screen.findByText(`${ALT_TITLE} no está en la librería — añádela primero en Radarr`),
-    ).toBeInTheDocument()
-    expect(screen.queryByTestId('release-search-modal')).toBeNull()
   })
 })

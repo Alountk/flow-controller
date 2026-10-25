@@ -30,7 +30,8 @@ The T4/S4 unified search (`POST /api/indexers/search`) lives here too: one
 query fans out over the ENABLED Torznab rows plus `prowlarr_search` and
 `gateways.amule_search` in parallel, and one source's failure never discards
 another's results — every absence is a `skipped` entry with an honest reason,
-never a silent `[]`.
+never a silent `[]`. The optional `indexer_ids` body field (T2/S3) narrows
+the Torznab fan-out to a per-row subset of the registry.
 
 The T5/S5 download (`POST /api/indexers/download`, the L6 amendment) is the
 free search's «Descargar»: `POST /api/calendar/grab` needs an arr service and
@@ -300,6 +301,28 @@ def _selected_sources(raw) -> list[str]:
     return [source for source in SOURCES if source in raw]
 
 
+def _selected_indexer_ids(raw) -> frozenset[int] | None:
+    """The per-row subset of the Torznab registry — or a Spanish 400 (T2/S3).
+
+    Absent, null and `[]` all mean «no filter» and query every enabled row —
+    the `_selected_sources` default precedent, byte-identical to today.
+    Anything else must be a LIST of positive integer ids: `bool`, `float`,
+    `str`, zero and negatives are NOT ids, and one bad entry is a 400 naming
+    it (the `_selected_sources` honesty style) — never a silently widened or
+    narrowed search. Ids that match no enabled row are NOT this validator's
+    business (L6e: a concurrently deleted indexer must not break the
+    search): the fan-out answers them with an honest `skipped` entry.
+    """
+    if raw is None or raw == []:
+        return None
+    if not isinstance(raw, list):
+        raise HTTPException(400, "indexer_ids debe ser una lista de ids")
+    for item in raw:
+        if isinstance(item, bool) or not isinstance(item, int) or item < 1:
+            raise HTTPException(400, f"id de indexador no válido: «{item}»")
+    return frozenset(raw)
+
+
 def _torznab_row(indexer: str, raw: dict) -> dict:
     """One T2 row merged into the shared shape — only what really exists."""
     row = {
@@ -396,9 +419,29 @@ async def _torznab_row_call(query: str, row: dict) -> dict:
     return {"rows": [_torznab_row(name, raw) for raw in found], "ok": True, "skipped": []}
 
 
-async def _search_torznab(query: str) -> dict:
-    """Every ENABLED row in parallel — one bad indexer never drops the rest."""
+async def _search_torznab(
+    query: str, indexer_ids: frozenset[int] | None = None
+) -> dict:
+    """Every ENABLED row in parallel — one bad indexer never drops the rest.
+
+    `indexer_ids` narrows the fan-out to a per-row subset of the registry
+    (T2/S3): a disabled id is simply not in the intersection, and a selection
+    whose intersection with the enabled rows is empty is SKIPPED with its own
+    honest reason — never a 400 (L6e: a concurrently deleted indexer must not
+    break the search) and never a silent zero dressed up as «sin resultados».
+    """
     rows = await asyncio.to_thread(history.indexers_raw)
+    if indexer_ids is not None:
+        rows = [row for row in rows if row.get("id") in indexer_ids]
+        if not rows:
+            return {
+                "rows": [],
+                "ok": False,
+                "skipped": [{
+                    "source": "torznab",
+                    "reason": "ningún indexador de los seleccionados está habilitado",
+                }],
+            }
     if not rows:
         return {
             "rows": [],
@@ -471,14 +514,29 @@ _SOURCE_TASKS = {
 }
 
 
+def _source_task(source: str, query: str, indexer_ids: frozenset[int] | None):
+    """Bind the per-row filter to the only per-row source.
+
+    `indexer_ids` narrows the Torznab REGISTRY fan-out (T2/S3); `amule` and
+    `prowlarr` are single services, not registry rows, so the selection can
+    never narrow them — they run exactly as today.
+    """
+    if source == "torznab":
+        return _search_torznab(query, indexer_ids)
+    return _SOURCE_TASKS[source](query)
+
+
 @router.post("/api/indexers/search")
 async def search_indexers(body: dict, _key: str = Depends(verify_api_key)):
     """T4/S4 — ONE query over Torznab + aMule + Prowlarr, in parallel.
 
-    Body `{query, sources?}`; every selected source runs concurrently
-    (`asyncio.gather(..., return_exceptions=True)` per source) and answers its
-    own rows and its own `skipped` entries, so one source's failure or absence
-    NEVER discards another's results. The answer is `{"ok", "results",
+    Body `{query, sources?, indexer_ids?}`; every selected source runs
+    concurrently (`asyncio.gather(..., return_exceptions=True)` per source)
+    and answers its own rows and its own `skipped` entries, so one source's
+    failure or absence NEVER discards another's results. `indexer_ids`
+    (T2/S3) narrows the Torznab fan-out to a per-row subset of the registry;
+    absent, null and `[]` query every enabled row, byte-identical to today.
+    The answer is `{"ok", "results",
     "skipped"}` — plus a `detail` summary when EVERY selected source failed,
     because a silent `[]` disguised as «sin resultados» is the one answer S4
     refuses to give. The status stays 200 in that case, like every honest
@@ -491,9 +549,10 @@ async def search_indexers(body: dict, _key: str = Depends(verify_api_key)):
     if not query:
         raise HTTPException(400, "query is required")
     selected = _selected_sources(body.get("sources"))
+    indexer_ids = _selected_indexer_ids(body.get("indexer_ids"))
 
     outcomes = await asyncio.gather(
-        *(_SOURCE_TASKS[source](query) for source in selected),
+        *(_source_task(source, query, indexer_ids) for source in selected),
         return_exceptions=True,
     )
     results: list[dict] = []

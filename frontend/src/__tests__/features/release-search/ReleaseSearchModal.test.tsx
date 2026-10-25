@@ -3,7 +3,6 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { ReleaseSearchModal } from '../../../features/release-search/ReleaseSearchModal.tsx'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Release } from '../../../shared/api/releases.ts'
-import { clearToasts } from '../../../shared/utils/toast.ts'
 
 /**
  * Wiring-level tests for the release filter bar.
@@ -53,8 +52,6 @@ interface MockOptions {
   path4k?: string
   /** Replace the canned results, for the cases that need a different mix. */
   releases?: Release[]
-  /** T11: the grab POST's body — defaults to the async shape (`task_id`). */
-  grabStart?: Record<string, unknown>
 }
 
 function mockFetch(options: MockOptions = {}) {
@@ -86,9 +83,7 @@ function mockFetch(options: MockOptions = {}) {
       if (init?.method === 'POST') {
         return Promise.resolve({
           ok: true,
-          json: async () =>
-            options.grabStart ??
-            ({ ok: true, task_id: 'grab-1', status: 'running', detail: 'Descarga lanzada' }),
+          json: async () => ({ ok: true, task_id: 'grab-1', status: 'running', detail: 'Descarga lanzada' }),
         } as Response)
       }
       return Promise.resolve({
@@ -274,6 +269,8 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
     })
     await openResults()
 
+    // One destination block per row (migrated from alternativeMode.test.tsx).
+    expect(document.querySelectorAll('.release-dest')).toHaveLength(2)
     const row = document.querySelectorAll('.release-dest')[0] as HTMLElement
     // The folders arrive with the settings read: enabled means they answered.
     await waitFor(() => expect(within(row).getByRole('button', { name: /4K/ })).toBeEnabled())
@@ -330,6 +327,9 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
     const body = grabBodies(fn)[0]
     expect(body.destination).toBe('/mnt/storage/6tb/3d')
     expect(body.is3d).toBe(true)
+    // Migrated from alternativeMode.test.tsx: a routed grab is never a
+    // library grab — `library` and `destination` are exclusive flags.
+    expect(body).not.toHaveProperty('library')
   })
 
   it('an unconfigured 4K folder disables its button instead of lying', async () => {
@@ -445,67 +445,4 @@ describe('ReleaseSearchModal 3D routing', () => {
     expect(grabBodies(fn)[0].is3d).toBe(true)
   })
 
-})
-
-/**
- * T11/S10 — `onGrabStarted`: the mixer's slot wait hangs on this callback, so
- * it must fire exactly ONCE per grab that becomes a job (the POST's
- * `task_id`), never again when the status poll settles the same job, and
- * never on a synchronous refusal (no task_id → nothing was started).
- */
-describe('ReleaseSearchModal onGrabStarted (T11/S10)', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    clearToasts()
-  })
-
-  async function openResultsAndGrab(onGrabStarted: (taskId: string) => void) {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <ReleaseSearchModal
-          item={{ type: 'movie', id: 411, title: 'Everything Everywhere All at Once', source: 'radarr' }}
-          onClose={() => {}}
-          onGrabStarted={onGrabStarted}
-        />
-      </QueryClientProvider>,
-    )
-    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
-    await waitFor(() =>
-      expect(screen.getByPlaceholderText('Filtrar por título...')).toBeInTheDocument(),
-    )
-    pressDest('Biblioteca')
-  }
-
-  it('invokes onGrabStarted once with the task_id when the grab returns one', async () => {
-    const onGrabStarted = vi.fn()
-    mockFetch()
-
-    await openResultsAndGrab(onGrabStarted)
-
-    await waitFor(() => expect(onGrabStarted).toHaveBeenCalledTimes(1))
-    expect(onGrabStarted).toHaveBeenCalledWith('grab-1')
-  })
-
-  it('does not invoke it again when the grab job settles', async () => {
-    const onGrabStarted = vi.fn()
-    mockFetch()
-
-    await openResultsAndGrab(onGrabStarted)
-
-    await waitFor(() => expect(onGrabStarted).toHaveBeenCalledTimes(1))
-    // The settle arrives through the status poll — the callback is not a poll.
-    await screen.findByText('Descarga iniciada')
-    expect(onGrabStarted).toHaveBeenCalledTimes(1)
-  })
-
-  it('never invokes it when the grab is refused without a task_id', async () => {
-    const onGrabStarted = vi.fn()
-    mockFetch({ grabStart: { ok: false, detail: 'Petición rechazada' } })
-
-    await openResultsAndGrab(onGrabStarted)
-
-    await screen.findByText('Petición rechazada')
-    expect(onGrabStarted).not.toHaveBeenCalled()
-  })
 })
