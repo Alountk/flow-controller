@@ -167,3 +167,12 @@ ingero S7 6 intactos en comportamiento. RED observado (3 fallos). Parent: reglas
 huérfanas `.release-download*` de `ReleaseSearchModal.css` eliminadas (único consumidor =
 rama `alternativeMode`), README `indexers/search` documenta `indexer_ids`. Gate parent:
 backend **1597** / frontend **754/89** / tsc 0 / eslint 0.
+
+**L12 — CIERRE:** gate final parent (1597 / 754-89 / tsc 0 / eslint 0 / `npm run build` OK),
+assessor `reviewDue:false` (riesgo medio, RDD off → self-verification, sin verificador
+independiente), **PR #233** con divulgación de tamaño (2665 líneas/4 commits, corte L10),
+CI verde (backend-tests, frontend-build, e2e 2m23s, docker-verify; docker-push → deploy
+automático por webhook Portainer) y **merge `d51b6bc`** (`--merge --delete-branch`).
+Risk del PR: **item 3** (contratos compartidos `indexers/search`+`ReleaseSearchModal` —
+verificados con los 29 tests preexistentes de search y los pins diferenciales de los
+otros mounts). Tareas T1–T5 completadas; feature CERRADA.

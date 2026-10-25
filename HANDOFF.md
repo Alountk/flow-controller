@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-24 · **PR #230 (mixer: alternativa sin ruteo — un solo «Descargar» al flujo normal)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1588 backend / 754 frontend** · main pre-#230 = `06298d0` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-25 · **PR #233 (alternativa-indexadores — «Buscar y descargar alternativa» sobre LOS indexadores del proyecto: checklist → título precargado → resultados → descargar)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1597 backend / 754 frontend** · main pre-#233 = `039d9c9` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,9 +16,10 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `c84d3ae` (post-#230), run `40136089795` **pass** (backend-tests,
-frontend-build, docker-verify, e2e y **docker-push** → deploy por webhook de Portainer,
-política verificada de la saga). Specs: **1588 backend / 754 frontend**, working tree limpia.
+**Verde**: `main` en `d51b6bc` (post-#233), run `40182056939` (post-merge) · PR #233 CI
+verde previo `40181771327` **pass** (backend-tests, frontend-build, docker-verify, e2e;
+docker-push → deploy por webhook de Portainer, política verificada de la saga).
+Specs: **1597 backend / 754 frontend**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -226,6 +227,27 @@ política verificada de la saga). Specs: **1588 backend / 754 frontend**, workin
   Frontera **565/3** → PR único (divulgado). Review nativa no corre (D). Commits
   `1e7f0f2`+`4560987`+`adf0c7c`, merge **`c84d3ae`** (CI main verde `40136089795`).
   Feature doc: `odd/tasks/alternativa-sin-ruteo.md` (S1–S3, T1–T3, Log L1–L3).
+- #233 — **alternativa-indexadores** (petición del usuario L1 verbatim, Log L1): el flujo
+  «Buscar y descargar alternativa» del mixer busca en LOS INDEXADORES DEL PROYECTO
+  (registro Torznab + aMule EC) en vez de Radarr/Sonarr: S1 checklist (filas del
+  registro con deshabilitadas visibles/no marcables, marcadas por defecto, «aMule (EC)»;
+  sin Prowlarr — queda en «Búsqueda en idioma») → S2 título precargado editable del
+  filename → S3 `POST /api/indexers/search` con **`indexer_ids`** nuevo (fan-out Torznab
+  restringido; 400 «id de indexador no válido» / skipped «ningún indexador de los
+  seleccionados está habilitado»; sin filtro = byte-idéntico) → S4 fila →
+  `POST /api/indexers/download` mostrando `detail`. Decisiones usuario: **S5 manual MVP**
+  (fuera `altWait`/polling/auto-place/`onGrabStarted`; backend `/alternatives/status`
+  intacto), **S6 sin gate de biblioteca** (movieId 0; aviso «añádela primero» sólo
+  fuera del alternativo), **S7 modal sustituido** (lista de releases de Radarr fuera;
+  `alternativeMode`/`languageSearch`/`onGrabStarted` retirados de `ReleaseSearchModal`).
+  L5: el dispatch qBittorrent YA existía (ed2k/hash→EC, magnet/http→
+  `amutorrent_add_download` categoría `flow`; único cliente = aMuTorrent `kind:"qbit"`).
+  Suites **1597 / 754** (+9 backend RED, +19 frontend con −19 contabilizados bajo
+  S5/S6/S7 y 2 pins migrados; cero pérdidas), tsc/eslint 0, build OK. Frontend de 770
+  (post-T3) a 754 por retires autorizados. Frontera **2665/4** → PR único (divulgado).
+  Assessor `reviewDue:false` (riesgo medio, RDD off → self-verification). Commits
+  `e9e16a4`+`d425091`+`585aadf`+`5ee00f5`, merge **`d51b6bc`** (CI verde `40181771327`).
+  Feature doc: `odd/tasks/alternativa-indexadores.md` (S1–S8, T1–T5, Log L1–L12).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -243,7 +265,7 @@ política verificada de la saga). Specs: **1588 backend / 754 frontend**, workin
 la activa `gentle-ai review mode enable --scope clone`). La review nativa operó en
 #214/#216/#218 (approved + autoridad quemada; #218: assess `nativeRisk medium`, 23
 paths/2225 líneas, 3 lentes). En **#220 quedó atascada en collect**: 6 capturas
-rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu), **#226** y **#228** (config-1x1-fixes y su enmienda S4/S5) y **#230** (alternativa sin ruteo) mergearon también bajo esa disposición D.
+rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu), **#226** y **#228** (config-1x1-fixes y su enmienda S4/S5) y **#230** (alternativa sin ruteo) y **#233** (alternativa-indexadores; assess `reviewDue:false`, riesgo medio, self-verification) mergearon también bajo esa disposición D.
 Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
 (STATUS fresco antes de cada una) y verificación por tier.
 
