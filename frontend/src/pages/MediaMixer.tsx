@@ -8,7 +8,6 @@ import {
   getTask,
   searchTaskSubtitles,
   alternativeLookup,
-  alternativeStatus,
 } from '../shared/api/mixer.ts'
 import type {
   ProbeResult,
@@ -26,6 +25,7 @@ import { browsePath, fetchRoots } from '../shared/api/files.ts'
 import { apiFetch } from '../shared/api/auth.ts'
 import { toast } from '../shared/utils/toast.ts'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
+import { AlternativeModal } from '../features/alternative/AlternativeModal.tsx'
 import type { MixerLookupResponse } from '../shared/types.ts'
 import './MediaMixer.css'
 
@@ -168,40 +168,30 @@ type Phase = 'idle' | 'results'
 type AltSlot = 'a' | 'b'
 
 /** What `FilePicker` needs to render its slot's «Buscar y descargar
- *  alternativa» button / wait state (S10: per-slot, empty slot only). */
+ *  alternativa» button (S10: per-slot, empty slot only). */
 interface SlotAlternative {
   /** The OTHER slot holds a file — the only case the button makes sense. */
   enabled: boolean
   /** The lookup POST is in flight. */
   busy: boolean
-  /** Non-null while this slot waits for the alternative download. */
-  waiting: { title: string; progress: number | null } | null
   onSearch: () => void
-  onStopWaiting: () => void
 }
 
-/** The modal the alternative lookup opened: the item carries the languages
- *  (L28) and the wait it starts hangs on `onGrabStarted`. The T3/S4 titles
- *  ride along for «Búsqueda en idioma» — this modal is the ONLY mount that
- *  gets them (S5 «Sólo en alternativa»). */
+/** The modal the alternative lookup opened (T4/S7): `AlternativeModal`, the
+ *  checklist → title → results → download flow over OUR indexadores. The
+ *  T3/S4 titles ride along for «Búsqueda en idioma» (S7 keeps it inside the
+ *  new modal), and S8 passes the lookup's audio languages as chips. */
 interface AltModalState {
-  slot: AltSlot
-  item: ReleaseSearchItem
-  /** The lookup's derived title (L26 — it comes from the other slot's file):
-   *  the wait copy and the status endpoint's `title`. */
+  /** S2: the lookup's derived title (L26 — it comes from the other slot's
+   *  file): the modal's prefilled, editable search term. */
   title: string
-  /** `movie.id` — the status endpoint's `movie_id`. */
+  /** `movie.id` — 0 when the movie is not in the library (S6: no gate). */
   movieId: number
-  /** T3/S4: Radarr's `originalTitle`/`alternateTitles` from the lookup. */
+  /** S8: three-letter audio codes, informational chips. */
+  audioLanguages: string[]
+  /** T3/S4: Radarr's `originalTitle` from the lookup. */
   originalTitle: string | null
   alternateTitles: AlternativeTitle[]
-}
-
-/** The ESPERA: this slot is waiting for its alternative download. */
-interface AltWait {
-  slot: AltSlot
-  title: string
-  movieId: number
 }
 
 /* ── File picker (reusable for both panes) ─────────────────────────────────── */
@@ -300,19 +290,9 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
         </div>
         {/* S10/T11 — the alternative download lives in the SLOT: the button
             only on an empty slot whose sibling holds the file the title is
-            derived from (L26); the wait state while that download runs. */}
-        {alternative?.waiting ? (
-          <div className="mixer-alt-wait">
-            <span className="mixer-alt-wait-text">Descargando… {alternative.waiting.title}</span>
-            {alternative.waiting.progress != null && (
-              <span className="mixer-alt-progress">{Math.round(alternative.waiting.progress)}%</span>
-            )}
-            <button type="button" className="mixer-btn-secondary" onClick={alternative.onStopWaiting}>
-              Dejar de esperar
-            </button>
-          </div>
-        ) : (
-          alternative &&
+            derived from (L26). S5: no wait state — the post-download is
+            manual (L2), nothing is watched or auto-placed. */}
+        {alternative &&
           !value &&
           alternative.enabled && (
             <button
@@ -323,8 +303,7 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
             >
               Buscar y descargar alternativa
             </button>
-          )
-        )}
+          )}
       </div>
 
       {open && (
@@ -645,9 +624,8 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   const [lookupNotice, setLookupNotice] = useState<string | null>(null)
   const [releaseSearchItem, setReleaseSearchItem] = useState<ReleaseSearchItem | null>(null)
   // S10/T11 — the alternative download per empty slot: the modal the lookup
-  // opened, and the wait itself once its grab becomes a job.
+  // opened (T4/S7: `AlternativeModal`, no wait machinery — S5).
   const [altModal, setAltModal] = useState<AltModalState | null>(null)
-  const [altWait, setAltWait] = useState<AltWait | null>(null)
 
   // Selection state: video = row key (`file:ordinal`), audio = row keys
   // (L18 — ordinals, never the absolute ffprobe `index`).
@@ -923,67 +901,28 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   })
 
   // S10/T11 — «Buscar y descargar alternativa» (L26): the title and the
-  // audio languages come from the OTHER slot's file; an in-library movie
-  // opens the modal with them, anything else is the same «añádela primero»
-  // notice (T7), and a failure lands on the same error surface.
+  // audio languages come from the OTHER slot's file. S6 (L3 «Quitarlo»): NO
+  // library gate — the modal opens even when `movie` is null (`movieId` 0),
+  // for any file whether or not Radarr knows it; a lookup failure lands on
+  // the same error surface as every other call in this page.
   const altLookupMut = useMutation({
     mutationFn: (slot: AltSlot): Promise<AlternativeLookupResponse> =>
       alternativeLookup(slot === 'a' ? pathB : pathA),
-    onSuccess: (data, slot) => {
+    onSuccess: (data) => {
       setError(null)
-      if (data.movie) {
-        setLookupNotice(null)
-        setAltModal({
-          slot,
-          item: {
-            type: 'movie',
-            id: data.movie.id,
-            title: data.movie.title,
-            year: data.movie.year,
-            source: data.movie.source,
-            languages: data.audio_languages,
-            idKind: 'movie',
-          },
-          title: data.title,
-          movieId: data.movie.id,
-          originalTitle: data.original_title ?? null,
-          alternateTitles: data.alternate_titles ?? [],
-        })
-      } else {
-        setLookupNotice(`${data.title} no está en la librería — añádela primero en Radarr`)
-      }
+      setLookupNotice(null)
+      setAltModal({
+        title: data.title,
+        movieId: data.movie?.id ?? 0,
+        audioLanguages: data.audio_languages,
+        originalTitle: data.original_title ?? null,
+        alternateTitles: data.alternate_titles ?? [],
+      })
     },
     onError: (err: Error) => {
       setError(err.message)
     },
   })
-
-  // S10/T11 — the alternative download's status, polled ~5 s and ONLY while
-  // a slot waits (the `enabled` flag is the honesty gate). `downloading` and
-  // `unknown` just keep the wait alive — no automatic timeout (L27).
-  const { data: altStatus } = useQuery({
-    queryKey: ['mixer-alt-status', altWait?.movieId, altWait?.title],
-    queryFn: () => alternativeStatus(altWait!.movieId, altWait!.title),
-    enabled: !!altWait,
-    refetchInterval: 5000,
-  })
-
-  // S10/L27 — `ready && allowed` auto-places through the slot's own setter
-  // (the `onSelect` its picker got); `ready && !allowed` warns with the path
-  // and places NOTHING.
-  useEffect(() => {
-    if (!altWait || !altStatus || altStatus.state !== 'ready') return
-    const { slot } = altWait
-    const path = altStatus.path
-    if (altStatus.allowed && path) {
-      setAltWait(null)
-      setLookupNotice(`Colocado automáticamente: ${baseName(path)}`)
-      if (slot === 'a') setPathA(path)
-      else setPathB(path)
-    } else {
-      setLookupNotice(`El fichero quedó en ${path ?? ''} — añade esa carpeta a allowed_roots`)
-    }
-  }, [altWait, altStatus])
 
   // S6 — «Buscar subtítulos»: only the entries extraction could not give,
   // narrowed to their three-letter codes; the task refresh flips the chips.
@@ -1015,7 +954,6 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
     setLookupNotice(null)
     setReleaseSearchItem(null)
     setAltModal(null)
-    setAltWait(null)
     setSelectedVideoKey(null)
     setCheckedAudio(new Set())
     setMarkedSpanish(new Set())
@@ -1082,12 +1020,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
               alternative={{
                 enabled: pathB !== '',
                 busy: altLookupMut.isPending,
-                waiting:
-                  altWait?.slot === 'a'
-                    ? { title: altWait.title, progress: altStatus?.progress ?? null }
-                    : null,
                 onSearch: () => altLookupMut.mutate('a'),
-                onStopWaiting: () => setAltWait(null),
               }}
             />
             <FilePicker
@@ -1098,12 +1031,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
               alternative={{
                 enabled: pathA !== '',
                 busy: altLookupMut.isPending,
-                waiting:
-                  altWait?.slot === 'b'
-                    ? { title: altWait.title, progress: altStatus?.progress ?? null }
-                    : null,
                 onSearch: () => altLookupMut.mutate('b'),
-                onStopWaiting: () => setAltWait(null),
               }}
             />
           </div>
@@ -1455,28 +1383,16 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
         <ReleaseSearchModal item={releaseSearchItem} onClose={() => setReleaseSearchItem(null)} />
       )}
 
-      {/* ── Releases of the alternative lookup (S10/T11) ──────────────── */}
+      {/* ── the alternative lookup's modal (T4/S7): checklist de indexadores → título →
+          resultados → descargar + «Búsqueda en idioma» (S5: post-download manual) ──────────────── */}
       {altModal && (
-        <ReleaseSearchModal
-          item={altModal.item}
-          // T3/S4/S5 — the `enableLanguageSearch` gate: THIS mount is the only
-          // one that passes it, so «Búsqueda en idioma» lives in the
-          // alternative flow and nowhere else.
-          languageSearch={{
-            originalTitle: altModal.originalTitle,
-            alternateTitles: altModal.alternateTitles,
-            movieId: altModal.movieId,
-          }}
-          // T2/S1-S2 «alternativa sin ruteo»: THIS mount is the only one that
-          // turns the routing options off — one «Descargar», the normal flow
-          // (the arr path S10 waits on). Every other consumer stays as-is.
-          alternativeMode
+        <AlternativeModal
+          title={altModal.title}
+          originalTitle={altModal.originalTitle}
+          alternateTitles={altModal.alternateTitles}
+          movieId={altModal.movieId}
+          audioLanguages={altModal.audioLanguages}
           onClose={() => setAltModal(null)}
-          onGrabStarted={() => {
-            // The grab became a job: this slot goes into ESPERA. The modal
-            // keeps its own UX — this prop is a notification, never a close.
-            setAltWait({ slot: altModal.slot, title: altModal.title, movieId: altModal.movieId })
-          }}
         />
       )}
     </section>

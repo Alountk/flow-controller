@@ -77,7 +77,7 @@ Superficies permitidas por tarea (heading `## Allowed edit surfaces` en el hando
 
 - T2: `backend/interfaces/http/routes/indexers.py` · `backend/tests/interfaces/routes/tests_indexers_search.py`
 - T3: `frontend/src/features/alternative/**` · `frontend/src/__tests__/features/alternative/**` · `frontend/src/shared/api/indexers.ts`
-- T4: `frontend/src/pages/MediaMixer.tsx` · `frontend/src/features/release-search/ReleaseSearchModal.tsx` · `frontend/src/shared/api/mixer.ts` · `frontend/src/__tests__/pages/mixerRedesign.test.tsx` · `frontend/src/__tests__/features/release-search/**`
+- T4: `frontend/src/pages/MediaMixer.tsx` · `frontend/src/pages/MediaMixer.css` · `frontend/src/features/release-search/ReleaseSearchModal.tsx` · `frontend/src/shared/api/mixer.ts` · `frontend/src/__tests__/pages/mixerRedesign.test.tsx` · `frontend/src/__tests__/features/release-search/**`
 
 ## Log
 
@@ -131,3 +131,39 @@ borrada concurrente de un indexador no debe romper la búsqueda); (f) el backend
 `/api/mixer/alternatives/lookup` no cambia ( sólo se retira el gate en el frontend, S6).
 
 **L7 — T1:** feature doc creado (este fichero) + espejo Engram `odd/alternativa-indexadores/tasks`.
+
+**L8 — T2 completado (worker `mvn2j07u-1-6ofk`):** `indexer_ids` opcional en
+`POST /api/indexers/search`: validación (no lista/bool/float/str/≤0 → 400 español
+«id de indexador no válido: «{v}»»), intersección con filas habilitadas, intersección
+vacía → skipped honesto «ningún indexador de los seleccionados está habilitado» (nunca 400,
+nunca silencioso), `absent/null/[]` byte-idéntico al default. RED observado (6 fallos),
+9 tests nuevos, **backend 1597** (1588+9). Mensajes elegidos aquí: T3/README deben reflejarlos.
+
+**L9 — T3 completado (workers `mvn2j07w-2-b4u8` + continue `mvn2yxs2-3-k9ht`):**
+`AlternativeModal.tsx` + `AlternativeModal.css` + 16 tests (RED observado: import del
+componente inexistente), `searchIndexers(query, sources, indexerIds?)` con body legacy
+byte-idéntico. **frontend 770/90, tsc 0, eslint 0.** Libertades visuales (L6d, reportadas):
+cromos `scan-modal` reetiquetados con prefijo `alt-modal-`, copy nuevo («Dónde buscar»,
+«Fuentes omitidas», «Descargado ✓», «Sin enlace», «deshabilitado»), fallo total como
+aviso «Error: …»; `lang-search-*` se estiliza desde `ReleaseSearchModal.css` (no duplicado).
+Superficie T4 ampliada con `MediaMixer.css` (huérfanos del banner `mixer-alt-wait`).
+
+**L10 — Commits y corte de slice (estrategia de entrega: PR único con divulgación):**
+`e9e16a4` doc T1 · `d425091` backend T2 (404 líneas → **corte de slice aquí**: a partir de
+este commit el PR excede ~400 líneas autoras y se declara en el cuerpo del PR) · `585aadf`
+frontend T3 (1587 líneas autoras acumuladas en 3 commits al cerrar T3). T4 y T5 siguen en
+la misma rama/PR.
+
+**L11 — T4 completado (worker `mvn342st-4-dtym`) + limpieza parent:** `altModal` monta
+`AlternativeModal` (S7), gate de biblioteca fuera del alternativo (S6 — `movieId: 0`, el
+aviso «añádela primero» SOLO se retira del alternativo; el S7 `lookupMut` lo conserva),
+maquinaria `altWait`/polling/auto-place/banners `onGrabStarted` eliminada (S5 — backend
+`/alternatives/status` intacto, `alternativeStatus`+tipo borrados de `mixer.ts` sin otros
+importadores), props `alternativeMode`/`languageSearch`/`onGrabStarted` fuera de
+`ReleaseSearchModal`. Contabilidad de tests: 770 → **754/89** = 770 − 19 (7 altWait→S5/S6/S7
+recolocados en 3 nuevos, 9 de `alternativeMode.test.tsx`→S7 obsoletos/duplicados con 2
+migraciones marcadas, 3 `onGrabStarted`→S5/S7) + 3 nuevos; `languageSearchSection` 13 y
+ingero S7 6 intactos en comportamiento. RED observado (3 fallos). Parent: reglas CSS
+huérfanas `.release-download*` de `ReleaseSearchModal.css` eliminadas (único consumidor =
+rama `alternativeMode`), README `indexers/search` documenta `indexer_ids`. Gate parent:
+backend **1597** / frontend **754/89** / tsc 0 / eslint 0.
