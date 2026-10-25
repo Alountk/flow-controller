@@ -108,3 +108,17 @@ Rama: `feat/qbit-nativo` desde main `c5fc4c7`. SDD fuera (ODD por mandato).
   autoverificación + focos revisados por el padre: regla de éxito 200+Ok./"", split
   `_download_bridge_legacy`, blanqueo `/api/services` a 4 campos, ratchet). Contrato
   `service` (no `key`) cruzado padre↔frontend. Feature CERRADA.
+- **L8 — regresión de producción reportada por el usuario (2026-10-25):** «al entrar a
+  configuración sale la pantalla de algo salió mal, cannot read properties of undefined
+  (reading 'url'), mira a ver que has roto». **Reproducida** antes de decidir:
+  `GET /api/settings` con un `settings.json` precaracterística no contenía `services.qbit`
+  (`qbit en payload: False`) → la tarjeta lee `form.services.qbit.url` sobre `undefined` →
+  ErrorBoundary. **Causa raíz:** `DEFAULTS["services"]` de `settings_store.py` no incluía
+  `qbit` (omisión del brief T2 del padre; el worker T3 asumió «los trae el backend» y sus
+  fixtures con `qbit` ENMASCARARON el hueco). **Fix TDD:** RED observado (`KeyError: 'qbit'`
+  en tests_settings y en tests_routes con archivo LEGADO cargado por el loader real, status
+  200) → GREEN añadiendo `"qbit": {url,user,password}` vacíos a `DEFAULTS` (precedente:
+  prowlarr/opensubtitles/amutorrent). Backend **1633 → 1635**. **Lección:** `DEFAULTS` ES el
+  contrato de payload de toda tarjeta de servicios — el brief de un servicio nuevo debe
+  nombrarlo, y fixtures de frontend que modelan el contrato pueden ocultar un default faltante
+  del servidor.

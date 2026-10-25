@@ -2614,6 +2614,47 @@ _TEST_APP_KEY = "clave-de-test-para-el-suite"
 _TEST_APP_SALT = "salt-de-test"
 
 
+class TestQbitDefaultsInSettingsPayload:
+    """`GET /api/settings` SIEMPRE lleva `services.qbit` completo.
+
+    Regresión de producción (qbit-nativo): un `settings.json` anterior a la
+    feature no tiene `services.qbit` y `DEFAULTS` tampoco lo contenía, así que
+    el payload llegaba incompleto y la tarjeta de Configuración leía
+    `form.services.qbit.url` sobre `undefined` → ErrorBoundary «algo salió
+    mal» («cannot read properties of undefined (reading 'url')»). El test
+    carga un archivo LEGADO de verdad por el loader real (no un dict falso):
+    es el camino de producción.
+    """
+
+    LEGACY = {
+        "services": {"radarr": {"url": "http://legacy:7878", "api_key": "llave-legada"}},
+        "security": {
+            "api_key_hash": credentials.hash_api_key(_TEST_APP_KEY, _TEST_APP_SALT),
+            "api_key_salt": _TEST_APP_SALT,
+            "safe_mode": True,
+        },
+        "developer": False,
+    }
+
+    def test_a_file_written_before_the_qbit_service_still_delivers_it(self, tmp_path, monkeypatch):
+        import json
+        from infrastructure import settings_store
+
+        cfg = tmp_path / "config"
+        cfg.mkdir()
+        (cfg / "settings.json").write_text(json.dumps(self.LEGACY))
+        monkeypatch.setattr(settings_store, "SETTINGS_FILE", str(cfg / "settings.json"))
+        monkeypatch.setattr(settings_store, "_settings", {})
+        settings_store.load_settings()
+
+        resp = client.get("/api/settings", headers={"X-Api-Key": _TEST_APP_KEY})
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["services"]["qbit"] == {"url": "", "user": "", "password": ""}, (
+            "el payload que consume la tarjeta salió sin services.qbit"
+        )
+
+
 class TestMaskedSecretsRoundTrip:
     """The UI receives secrets masked and posts the form back unchanged.
 
