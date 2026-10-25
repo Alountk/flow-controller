@@ -93,3 +93,9 @@ Rama: `feat/qbit-nativo` desde main `c5fc4c7`. SDD fuera (ODD por mandato).
 - **L5 — riesgo previsto:** item 2 (credenciales nuevas de qBittorrent en settings.json — mismo
   patrón enmascarado de `amutorrent`, password nunca en claro por API). Item 3 no aplica (API
   aditiva; strings internos). e2e intacto.
+- **L6 — estrategia de entrega (corte de slice registrado en `1bcdbd6`, T2):** PR ÚNICO con
+  divulgación, precedente L10 de `alternativa-indexadores` — la feature excede ~400 líneas/slice
+  (T2 backend solo = ~1100 líneas con tests); el corte queda registrado aquí y el cuerpo del PR
+  lo disclosea. Ratchet: `MAX_LEGACY_LOC` intacto en 3408 — +6 líneas de `config.py` compensadas
+  con compactación de envolturas (−6); técnica a divulgar también en el PR (alternativa
+  descartada: subir a 3414 como el precedente prowlarr).
