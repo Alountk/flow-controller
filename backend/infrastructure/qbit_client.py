@@ -8,7 +8,10 @@ qBittorrent como la habla qBittorrent mismo (D2, verificado en vivo, Log L3):
   ``Referer``) → cookie SID. Bearer devuelve **403** en el build real, así que
   la sesión autenticada por login es ÚNICA vía;
 - ``POST /api/v2/torrents/add`` (form ``urls``+``category``, headers
-  ``Referer``/``Origin``) en la MISMA sesión — la cookie SID es la auth;
+  ``Referer``/``Origin``) en la MISMA sesión — la cookie SID es la auth y,
+  porque el jar por defecto de aiohttp descarta cookies de hosts IP (L10),
+  viaja además EN MANO en la cabecera ``Cookie``: sin ella el add llega sin
+  autenticar y qBittorrent responde **403** (reportado en producción);
 - SIN paso de categoría (D4): ``createCategories`` responde 404 en este build
   y el ``add`` auto-crea `flow`. Un `ensure_category` rompería cada add con
   una falsa alarma.
@@ -87,8 +90,10 @@ def _refused(base: str, detail: str) -> dict:
 
 
 async def _post(session: aiohttp.ClientSession, url: str, timeout: aiohttp.ClientTimeout, **kwargs):
+    # `resp.cookies` sale también (L10): la SID que el login fija viaja a
+    # mano al add — el jar por defecto de aiohttp la descarta en hosts IP.
     async with session.post(url, timeout=timeout, **kwargs) as resp:
-        return resp.status, await resp.text()
+        return resp.status, await resp.text(), resp.cookies
 
 
 async def qbit_add_download(
@@ -111,7 +116,7 @@ async def qbit_add_download(
     timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * _TIMEOUT_BUDGET)
     log.info("qbit_add_download category=%s link=%s", category, url[:48])
     try:
-        status, text = await _post(
+        status, text, cookies = await _post(
             session,
             f"{base}/api/v2/auth/login",
             timeout,
@@ -126,13 +131,24 @@ async def qbit_add_download(
             return {"ok": False, "detail": f"qBittorrent rechazó las credenciales ({base})"}
         return _refused(base, f"HTTP {status}: {text}")
 
+    # L10: el jar POR DEFECTO de aiohttp descarta las cookies de hosts IP
+    # («Don't accept cookies from IPs», cookiejar.py) — la sesión compartida
+    # de producción no lleva jar unsafe, la SID se tiraba y el add llegaba
+    # sin autenticar → qBittorrent respondió 403 (reportado; la sonda pasa
+    # porque el login NO necesita la cookie). La cabecera Cookie viaja a mano:
+    # aiohttp no la pisa cuando el jar está vacío (client_reqrep: «if not
+    # cookies: return») y con jar poblado fusiona el mismo SID sin efecto.
+    headers = {"Referer": base, "Origin": base}
+    sid = cookies.get("SID")
+    if sid is not None:
+        headers["Cookie"] = f"SID={sid.value}"
     try:
-        status, text = await _post(
+        status, text, _cookies = await _post(
             session,
             f"{base}/api/v2/torrents/add",
             timeout,
             data={"urls": url, "category": category},
-            headers={"Referer": base, "Origin": base},
+            headers=headers,
         )
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return _refused(base, _empty_answer_detail(exc, timeout))
@@ -165,7 +181,7 @@ async def qbit_login_probe(
         return {"ok": False, "detail": _UNCONFIGURED, "error_kind": "auth"}
     timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
     try:
-        status, text = await _post(
+        status, text, _cookies = await _post(
             session,
             f"{url}/api/v2/auth/login",
             timeout,

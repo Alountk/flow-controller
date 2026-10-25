@@ -11,6 +11,7 @@ Not collected by pytest: `python_files = tests*.py` does not match `_stubs`.
 
 import asyncio
 import json
+from http.cookies import SimpleCookie
 from urllib.parse import urlencode
 
 import aiohttp
@@ -70,6 +71,10 @@ class _StubResponse:
     def __init__(self, status: int = 503, payload: dict | None = None):
         self.status = status
         self._payload = payload if payload is not None else {}
+        # The real ClientResponse exposes `.cookies` (Set-Cookie parsed);
+        # `qbit_client` reads the login's SID from it (L10). Empty by
+        # default: no scripted route sets one unless a test asks for it.
+        self.cookies = SimpleCookie()
 
     async def json(self, content_type=None):
         return self._payload

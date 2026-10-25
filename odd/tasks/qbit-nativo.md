@@ -140,3 +140,29 @@ Rama: `feat/qbit-nativo` desde main `c5fc4c7`. SDD fuera (ODD por mandato).
   la URL del cliente en el borde del cliente (barra final es entrada de usuario legítima); el
   botón de test por tarjeta existía como patrón (aMule EC / wizard) pero no estaba cableado en
   Servicios.
+
+- **L10 — 403 en la descarga tras el fix de la barra (2026-10-25, usuario):** «ahora me
+  devuelve un 403» / «ahora el test pasa pero en descargar me devuelve un 403». **Reproducido
+  ANTES de decidir** (dos vidas): (a) en vivo el intento resultó INVÁLIDO — la pass de
+  `.env.local` está entre comillas y el `Fails.` fue artefacto mío, no de la credencial; (b)
+  **repro fiel local**: WebUI falso en `127.0.0.1` (una IP, como la tarjeta real) con el
+  contrato honesto de qBittorrent (login → `Ok.`+Set-Cookie SID; add → 200 sólo con SID, si no
+  **403**) y el `qbit_add_download` REAL sobre una sesión con el jar POR DEFECTO → detalle
+  exacto del reporte: «no aceptó la descarga: HTTP 403: Forbidden»; control `unsafe=True` → ok.
+  **Causa raíz (fuente aiohttp 3.14.4):** `cookiejar.py` descarta cookies de hosts IP con el
+  jar por defecto («Don't accept cookies from IPs», `:530/555`, y `filter_cookies` `:731-739`
+  tampoco las envía); la sesión compartida (`state.py:153`) no lleva jar → la SID del login se
+  tiraba y el add llegaba sin autenticar. **La sonda pasa porque el login NO necesita la
+  cookie — sólo el add.** qBittorrent respondía correctamente. **Fix TDD:** RED (test
+  integrado con WebUI falso en 127.0.0.1 + sesión default jar → `HTTP 403: Forbidden` exacto)
+  → GREEN **autocontenido en `qbit_client`** (S1): `_post` devuelve `resp.cookies` y el add
+  manda la cabecera **`Cookie: SID=…` a mano** — verificado en la fuente que `client_reqrep`
+  no la pisa cuando el jar está vacío («if not cookies: return»); `_StubResponse` gana
+  `.cookies = SimpleCookie()` (el doble refleja el campo real). Sesión compartida INTACTA (no
+  se toca infraestructura compartida; precedente `arr_client:323` con `unsafe=True` queda
+  documentado pero sin usar). Gates: backend **1637 → 1638**, frontend **763**/92, tsc 0,
+  eslint 0, build OK (dist_fresh falló 1× por mtime tras el checkout del merge de #240 —
+  `npm run build` lo repuso). **Lección:** cookies de hosts IP NO sobreviven al jar por
+  defecto de aiohttp — con clientes cuya URL es IP, la autenticación por cookie debe viajar
+  explícita en cabecera (o jar `unsafe=True` en la creación de la sesión) y verificarse con
+  transporte REAL, nunca sólo con stubs.

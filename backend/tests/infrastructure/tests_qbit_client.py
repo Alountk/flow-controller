@@ -26,6 +26,7 @@ import logging
 
 import aiohttp
 import pytest
+from aiohttp import web
 
 import config
 from infrastructure.qbit_client import (
@@ -293,3 +294,60 @@ def test_the_login_probe_strips_a_trailing_slash_from_the_url(qbit):
     (url, _kw) = session.post_kwargs[0]
     assert url == LOGIN, f"la barra final duplicó la barra del path: {url}"
     assert result["ok"] is True, result
+
+
+# ── the SID through a REAL aiohttp session to an IP host (L10) ──────────────
+
+
+def test_the_download_carries_the_sid_to_an_ip_host(monkeypatch):
+    """Production L10: la tarjeta apunta a un host IP (`http://111.111.111.111:8088/`)
+    y `state.http_session()` entrega una sesión con el CookieJar POR DEFECTO de
+    aiohttp, que descarta las cookies de origen IP («Don't accept cookies from
+    IPs», cookiejar.py): la SID que acaba de fijar el login nunca llega al add
+    y qBittorrent responde honestamente **HTTP 403: Forbidden** — reproducido
+    con el detalle exacto del reporte del usuario. La sonda pasa porque el
+    login NO necesita la cookie; sólo el add la exige.
+
+    El WebUI falso de abajo es el contrato real sobre 127.0.0.1 (también una
+    IP): login → 200 `Ok.` + Set-Cookie SID; add → 200 `Ok.` SOLO con la SID,
+    si no → 403. Nada de esto se ve con `_StubSession`: el transporte real de
+    aiohttp ES el problema.
+    """
+    sid = "sid-l10"
+
+    async def login(request):
+        form = await request.post()
+        if form.get("username") == QBIT_USER and form.get("password") == QBIT_PASSWORD:
+            resp = web.Response(text="Ok.")
+            resp.set_cookie("SID", sid)
+            return resp
+        return web.Response(text="Fails.")
+
+    async def add(request):
+        if request.cookies.get("SID") == sid:
+            return web.Response(text="Ok.")
+        return web.Response(status=403, text="Forbidden.")
+
+    async def scenario():
+        app = web.Application()
+        app.router.add_post("/api/v2/auth/login", login)
+        app.router.add_post("/api/v2/torrents/add", add)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        try:
+            port = site._server.sockets[0].getsockname()[1]
+            monkeypatch.setattr(config, "QBIT_URL", f"http://127.0.0.1:{port}")
+            monkeypatch.setattr(config, "QBIT_USER", QBIT_USER)
+            monkeypatch.setattr(config, "QBIT_PASSWORD", QBIT_PASSWORD)
+            # El ensamblaje de producción: sesión con el jar por defecto.
+            async with aiohttp.ClientSession() as session:
+                return await qbit_add_download(session, MAGNET)
+        finally:
+            await runner.cleanup()
+
+    result = asyncio.run(scenario())
+
+    assert result["ok"] is True, result["detail"]
+    assert "HTTP 403" not in result["detail"]
