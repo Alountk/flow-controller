@@ -21,6 +21,13 @@ DEFAULTS: dict[str, Any] = {
         # URL ni clave el servicio queda "no configurado" y nunca se le llama.
         "prowlarr": {"url": "", "api_key": ""},
         "amutorrent": {"url": "http://localhost:4000", "api_key": "", "user": "admin", "password": ""},
+        # Cliente qBittorrent nativo (qbit-nativo S3). Vacío a propósito: sin
+        # URL/usuario la descarga magnet/http responde el rechazo honesto. El
+        # grupo va SIEMPRE en el payload de GET /api/settings: la tarjeta de
+        # Configuración lee `services.qbit.url` sin guardas — un settings.json
+        # anterior a la feature lo dejaba ausente y crasheaba la pantalla
+        # (regresión de producción del cierre, Log L8).
+        "qbit": {"url": "", "user": "", "password": ""},
         "opensubtitles": {"api_key": ""},
     },
     "security": {"api_key_hash": "", "api_key_salt": "", "safe_mode": True},

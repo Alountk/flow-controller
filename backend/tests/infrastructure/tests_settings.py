@@ -87,6 +87,18 @@ class TestTheFileWinsAfterwards:
         # Not in the file, so the default applies.
         assert settings.get_setting("intervals", "check") == 15
 
+    def test_a_file_written_before_the_qbit_service_still_falls_back(self, cfg):
+        """qbit-nativo producción: un `settings.json` anterior a la feature no
+        tiene `services.qbit`. Sin este fill el payload de GET /api/settings
+        salía incompleto y la tarjeta de Configuración crasheaba leyendo
+        `form.services.qbit.url` sobre `undefined` («cannot read properties of
+        undefined (reading 'url')»)."""
+        (cfg / "settings.json").write_text(json.dumps({"services": {"radarr": {"url": "http://x:1"}}}))
+
+        settings.load_settings()
+
+        assert settings.get_settings()["services"]["qbit"] == {"url": "", "user": "", "password": ""}
+
 
 class TestMixerRequiredLanguages:
     def test_default_is_solo_castellano(self, cfg):
