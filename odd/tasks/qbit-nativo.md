@@ -99,3 +99,12 @@ Rama: `feat/qbit-nativo` desde main `c5fc4c7`. SDD fuera (ODD por mandato).
   lo disclosea. Ratchet: `MAX_LEGACY_LOC` intacto en 3408 — +6 líneas de `config.py` compensadas
   con compactación de envolturas (−6); técnica a divulgar también en el PR (alternativa
   descartada: subir a 3414 como el precedente prowlarr).
+- **L7 — cierre (2026-10-25):** PR **#236** «qbit-nativo: descargas magnet/http nativas a
+  qBittorrent, sin aMuTorrent de intermediario» — CI verde (backend-tests, frontend-build,
+  docker-verify, e2e; `docker-push` skipped en rama; sólo anotaciones de deprecación) →
+  merge `--merge --delete-branch` → main **`a742b16`**, árbol limpio. Gates finales por el
+  padre: backend **1633/0**, frontend **760/91**, tsc 0, eslint 0, build OK, ratchet 3408
+  intacto, S7 intacto (180). Assess: medium, `reviewDue:false` (under budget, RDD off →
+  autoverificación + focos revisados por el padre: regla de éxito 200+Ok./"", split
+  `_download_bridge_legacy`, blanqueo `/api/services` a 4 campos, ratchet). Contrato
+  `service` (no `key`) cruzado padre↔frontend. Feature CERRADA.
