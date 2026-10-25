@@ -31,13 +31,13 @@ from media_mixer import (
 )
 from task_manager import mux_tasks
 from application.gateways import (
-    amutorrent_add_download,
     arr_movie_exists,
     arr_movie_file,
     arr_movie_lookup,
     download_subtitle,
     get_setting,
     prowlarr_search,
+    qbit_add_download,
     search_subtitles,
 )
 from application.ports import OpenSubtitlesError
@@ -603,12 +603,14 @@ async def mixer_alternatives_language_download(
     """S7: send one Prowlarr row straight to the download client.
 
     «Descargar» on a «Búsqueda en idioma» row — the add is a single fast POST
-    (`amutorrent_add_download`: magnet or a direct .torrent URL, no Torznab
-    resolve), so this endpoint answers synchronously with `{ok, detail?}`.
-    A client refusal is a 200 `{ok: false, detail}` — the calendar grab
-    answers a refusal the same way; the detail IS the message. The only 400s
-    are the contract's own, in Spanish like the UI that shows them: an empty
-    url, or one that is neither a magnet nor an http(s) link.
+    (`qbit_add_download`: the NATIVE qBittorrent client, S4 — magnet or a
+    direct .torrent URL, no Torznab resolve), so this endpoint answers
+    synchronously with `{ok, detail?}`. A client refusal is a 200
+    `{ok: false, detail}` — the calendar grab answers a refusal the same way;
+    the detail is the client's own PASSTHROUGH (S5/S6): it already names the
+    destination in Spanish (S2), so «aMuTorrent» never appears here again.
+    The only 400s are the contract's own, in Spanish like the UI that shows
+    them: an empty url, or one that is neither a magnet nor an http(s) link.
     """
     url = (req.url or "").strip()
     if not url:
@@ -620,12 +622,9 @@ async def mixer_alternatives_language_download(
 
     log.debug("language-download title=%r url=%s", req.title, url[:48])
     async with http_session() as session:
-        added = await amutorrent_add_download(session, url)
+        added = await qbit_add_download(session, url)
     if not added.get("ok"):
-        return {
-            "ok": False,
-            "detail": f"aMuTorrent no aceptó la descarga: {added.get('detail', '')}",
-        }
+        return {"ok": False, "detail": added.get("detail", "")}
     return {"ok": True, "detail": added.get("detail", "")}
 
 

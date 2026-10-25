@@ -181,14 +181,13 @@ def rebuild() -> None:
     global RADARR_URL, SONARR_URL, PROWLARR_URL, AMUTORRENT_URL
     global AMULE_URL, AMULE_EC_PORT, AMULE_EC_PASSWORD
     global RADARR_API_KEY, SONARR_API_KEY, PROWLARR_API_KEY, AMUTORRENT_API_KEY
-    global AMUTORRENT_USER, AMUTORRENT_PASSWORD
+    global AMUTORRENT_USER, AMUTORRENT_PASSWORD, QBIT_URL, QBIT_USER, QBIT_PASSWORD
     global CHECK_INTERVAL, MAX_RETRIES, RETRY_DELAY, REQUEST_TIMEOUT
     global IMPORT_POLL_TIMEOUT, TRACE_LIMIT
     global SAFE_MODE, DEVELOPER
     global FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT
     global RETENTION_AMULE_DAYS
-    global PATH_4K
-    global PATH_3D
+    global PATH_4K, PATH_3D
 
     RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
     SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:7878")
@@ -199,9 +198,7 @@ def rebuild() -> None:
     # hash md5 que NUNCA se copia a la lista `SERVICES` (se expone la API key).
     AMULE_URL = get_setting("services", "amule", "url", default=os.getenv("AMULE_URL", ""))
     AMULE_EC_PORT = get_setting("services", "amule", "ec_port", default=os.getenv("AMULE_EC_PORT", "4712"))
-    AMULE_EC_PASSWORD = get_setting(
-        "services", "amule", "ec_password", default=os.getenv("AMULE_EC_PASSWORD", "")
-    )
+    AMULE_EC_PASSWORD = get_setting("services", "amule", "ec_password", default=os.getenv("AMULE_EC_PASSWORD", ""))
 
     RADARR_API_KEY = get_setting("services", "radarr", "api_key", default="")
     SONARR_API_KEY = get_setting("services", "sonarr", "api_key", default="")
@@ -213,6 +210,9 @@ def rebuild() -> None:
 
     AMUTORRENT_USER = get_setting("services", "amutorrent", "user", default="admin")
     AMUTORRENT_PASSWORD = get_setting("services", "amutorrent", "password", default="")
+    QBIT_URL = get_setting("services", "qbit", "url", default="")
+    QBIT_USER = get_setting("services", "qbit", "user", default="")
+    QBIT_PASSWORD = get_setting("services", "qbit", "password", default="")
 
     CHECK_INTERVAL = int(get_setting("intervals", "check", default=15))
     MAX_RETRIES = int(get_setting("intervals", "max_retries", default=3))
@@ -226,12 +226,8 @@ def rebuild() -> None:
     SAFE_MODE = get_setting("security", "safe_mode", default=True)
     DEVELOPER = get_setting("developer", default=False)
 
-    FOLDER_DOWNLOAD_AMULE = get_setting(
-        "paths", "download_amule", default="/mnt/storage-6tb/shared-downloads/amule"
-    )
-    FOLDER_DOWNLOAD_TORRENT = get_setting(
-        "paths", "download_torrent", default="/mnt/storage/downloads/qbittorrent/completed"
-    )
+    FOLDER_DOWNLOAD_AMULE = get_setting("paths", "download_amule", default="/mnt/storage-6tb/shared-downloads/amule")
+    FOLDER_DOWNLOAD_TORRENT = get_setting("paths", "download_torrent", default="/mnt/storage/downloads/qbittorrent/completed")
 
     # In place on purpose: rebinding the NAME would never reach a module that
     # did `from config import ALLOWED_ROOTS`.
@@ -299,6 +295,10 @@ def rebuild() -> None:
             "api_key": "",
             "configured": bool(AMULE_URL and AMULE_EC_PASSWORD),
         },
+        # Cliente qBittorrent nativo (S3/S4): kind `qbittorrent` ≠ el `qbit` de la fachada; user/password sólo para la sonda de login — ninguna API devuelve la entrada entera (tests_qbit_service).
+        {"key": "qbit", "kind": "qbittorrent", "url": QBIT_URL, "api_key": "",
+         "user": QBIT_USER, "password": QBIT_PASSWORD,
+         "configured": bool(QBIT_URL and QBIT_USER and QBIT_PASSWORD)},
     ]
 
 
