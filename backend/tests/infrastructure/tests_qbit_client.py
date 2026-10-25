@@ -28,7 +28,11 @@ import aiohttp
 import pytest
 
 import config
-from infrastructure.qbit_client import DIRECT_DOWNLOAD_CATEGORY, qbit_add_download
+from infrastructure.qbit_client import (
+    DIRECT_DOWNLOAD_CATEGORY,
+    qbit_add_download,
+    qbit_login_probe,
+)
 from tests._stubs import _StubSession
 
 QBIT_URL = "http://qbit.test:8080"
@@ -261,3 +265,31 @@ def test_an_unconfigured_service_refuses_without_any_http_call(monkeypatch, miss
 
     assert result == {"ok": False, "detail": UNCONFIGURED}
     assert session.calls == [], "sin configurar no hay ni un POST que fallar"
+
+
+# ── a base URL typed WITH a trailing slash (production L9) ───────────────────
+
+
+def test_the_add_never_builds_a_double_slash_from_a_trailing_slash(qbit, monkeypatch):
+    """Production: la tarjeta guardó `http://host:8088/` (barra final) y el
+    join `f"{base}/api/v2/…"` picó `//api/v2/…` → el WebUI embebido respondió
+    404, reportado como «qBittorrent (http://host:8088/) no aceptó la
+    descarga: HTTP 404: Not Found»."""
+    monkeypatch.setattr(config, "QBIT_URL", QBIT_URL + "/")
+    session = _session()
+
+    asyncio.run(qbit_add_download(session, MAGNET))
+
+    (url, _kw) = session.post_kwargs[0]
+    assert url == LOGIN, f"la barra final duplicó la barra del path: {url}"
+
+
+def test_the_login_probe_strips_a_trailing_slash_from_the_url(qbit):
+    """El mismo join dentro de la sonda que usa «Probar conexión»."""
+    session = _session()
+
+    result = asyncio.run(qbit_login_probe(session, QBIT_URL + "/", QBIT_USER, QBIT_PASSWORD))
+
+    (url, _kw) = session.post_kwargs[0]
+    assert url == LOGIN, f"la barra final duplicó la barra del path: {url}"
+    assert result["ok"] is True, result

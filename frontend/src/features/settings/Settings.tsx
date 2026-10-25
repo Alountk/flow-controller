@@ -2,7 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Settings, SaveSettingsResponse } from '../../shared/types.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
-import { testServiceConnections, type ServiceTestResult } from '../../shared/api/services.ts'
+import {
+  probeService,
+  testServiceConnections,
+  type ServiceCandidate,
+  type ServiceTestResult,
+} from '../../shared/api/services.ts'
+import { toast } from '../../shared/utils/toast.ts'
 import { SharedDirsSection } from './SharedDirsSection.tsx'
 import { IndexadoresSection } from './IndexadoresSection.tsx'
 import { AmuleEcSection, type AmuleEcValues } from './AmuleEcSection.tsx'
@@ -138,6 +144,57 @@ const TABS = {
   general: { id: 'settings-tab-general', panel: 'settings-panel-general' },
   indexadores: { id: 'settings-tab-indexadores', panel: 'settings-panel-indexadores' },
 } as const
+
+/** «Probar conexión» de cada tarjeta de Servicios — sondea LO QUE EL FORM
+ *  CONTIENE AHORA con `POST /api/services/test` (patrón candidato de la tarjeta
+ *  aMule EC): sin guardar y sin disparar descargas. Un campo vacío o
+ *  enmascarado (`****…`, lo que GET devuelve para un secreto guardado) se
+ *  OMITE para que mande el valor guardado — la misma regla de
+ *  `_restore_masked_secrets` en el backend. El veredicto sale como toast con
+ *  el `detail` del backend, que siempre incluye la URL intentada (L9: esa URL
+ *  a un clic es exactamente lo que faltaba cuando «http://host:8088/» volvió
+ *  «HTTP 404» en una descarga real). */
+function ServiceProbeButton({
+  service,
+  values,
+}: {
+  service: string
+  values: Omit<ServiceCandidate, 'service'>
+}) {
+  const [pending, setPending] = useState(false)
+
+  async function probe() {
+    setPending(true)
+    try {
+      const candidate: ServiceCandidate = { service }
+      const url = (values.url ?? '').trim()
+      if (url) candidate.url = url
+      const apiKey = (values.api_key ?? '').trim()
+      if (apiKey && !apiKey.startsWith('****')) candidate.api_key = apiKey
+      const user = (values.user ?? '').trim()
+      if (user) candidate.user = user
+      // Nunca se trimmea: los espacios son legales en una contraseña.
+      const password = values.password ?? ''
+      if (password !== '' && !password.startsWith('****')) candidate.password = password
+      const result = await probeService(candidate)
+      toast(result.detail, result.ok ? 'ok' : 'error')
+    } catch {
+      toast('No se pudo probar la conexión con el backend.', 'error')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className="settings-btn settings-btn-secondary"
+      onClick={pending ? undefined : probe}
+    >
+      {pending ? 'Probando…' : 'Probar conexión'}
+    </button>
+  )
+}
 
 export function Settings() {
   const queryClient = useQueryClient()
@@ -352,11 +409,23 @@ export function Settings() {
           <h4>Radarr</h4>
           <Field label="URL" value={form.services.radarr.url} onChange={(v) => update('services.radarr.url', v)} restart={isRestarting('services.radarr.url')} placeholder="http://localhost:7878" />
           <Field label="API Key" value={form.services.radarr.api_key} onChange={(v) => update('services.radarr.api_key', v)} restart={isRestarting('services.radarr.api_key')} placeholder="Tu API key de Radarr" type="password" />
+          <div className="settings-group-actions">
+            <ServiceProbeButton
+              service="radarr"
+              values={{ url: form.services.radarr.url, api_key: form.services.radarr.api_key }}
+            />
+          </div>
         </div>
         <div className="settings-group">
           <h4>Sonarr</h4>
           <Field label="URL" value={form.services.sonarr.url} onChange={(v) => update('services.sonarr.url', v)} restart={isRestarting('services.sonarr.url')} placeholder="http://localhost:8989" />
           <Field label="API Key" value={form.services.sonarr.api_key} onChange={(v) => update('services.sonarr.api_key', v)} restart={isRestarting('services.sonarr.api_key')} placeholder="Tu API key de Sonarr" type="password" />
+          <div className="settings-group-actions">
+            <ServiceProbeButton
+              service="sonarr"
+              values={{ url: form.services.sonarr.url, api_key: form.services.sonarr.api_key }}
+            />
+          </div>
         </div>
         <div className="settings-group">
           <h4>aMuTorrent</h4>
@@ -364,16 +433,40 @@ export function Settings() {
           <Field label="API Key" value={form.services.amutorrent.api_key} onChange={(v) => update('services.amutorrent.api_key', v)} restart={isRestarting('services.amutorrent.api_key')} placeholder="Tu API key" type="password" />
           <Field label="Usuario" value={form.services.amutorrent.user} onChange={(v) => update('services.amutorrent.user', v)} restart={isRestarting('services.amutorrent.user')} />
           <Field label="Contraseña" value={form.services.amutorrent.password} onChange={(v) => update('services.amutorrent.password', v)} restart={isRestarting('services.amutorrent.password')} type="password" />
+          <div className="settings-group-actions">
+            <ServiceProbeButton
+              service="amutorrent"
+              values={{
+                url: form.services.amutorrent.url,
+                api_key: form.services.amutorrent.api_key,
+                user: form.services.amutorrent.user,
+                password: form.services.amutorrent.password,
+              }}
+            />
+          </div>
         </div>
         <div className="settings-group">
           <h4>qBittorrent</h4>
           <Field label="URL" value={form.services.qbit.url} onChange={(v) => update('services.qbit.url', v)} restart={isRestarting('services.qbit.url')} placeholder="http://localhost:8080" />
           <Field label="Usuario" value={form.services.qbit.user} onChange={(v) => update('services.qbit.user', v)} restart={isRestarting('services.qbit.user')} />
           <Field label="Contraseña" value={form.services.qbit.password} onChange={(v) => update('services.qbit.password', v)} restart={isRestarting('services.qbit.password')} type="password" />
+          <div className="settings-group-actions">
+            <ServiceProbeButton
+              service="qbit"
+              values={{
+                url: form.services.qbit.url,
+                user: form.services.qbit.user,
+                password: form.services.qbit.password,
+              }}
+            />
+          </div>
         </div>
         <div className="settings-group">
           <h4>OpenSubtitles</h4>
           <Field label="API Key" value={form.services.opensubtitles.api_key} onChange={(v) => update('services.opensubtitles.api_key', v)} restart={isRestarting('services.opensubtitles.api_key')} placeholder="Clave API de OpenSubtitles" type="password" />
+          <div className="settings-group-actions">
+            <ServiceProbeButton service="opensubtitles" values={{ api_key: form.services.opensubtitles.api_key }} />
+          </div>
         </div>
       </Section>
 

@@ -255,6 +255,12 @@
   font-weight: 500;
 }
 
+/* «Probar conexión» de cada tarjeta: el veredicto va como toast (mismo
+   patrón que la tarjeta aMule EC); aquí sólo la separación del botón. */
+.settings-group-actions {
+  margin-top: 10px;
+}
+
 .settings-logs-controls {
   display: flex;
   align-items: center;
