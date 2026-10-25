@@ -2,7 +2,7 @@ import { apiFetch } from './auth.ts'
 
 /** One row of `GET /api/services` — config PRESENCE, never a network probe
  *  (the endpoint's documented contract: «sin salir a la red»). The keys the
- *  backend lists go beyond `ServiceKey` (radarr/sonarr/amutorrent): `amule`
+ *  backend lists go beyond `ServiceKey` (radarr/sonarr/amutorrent/qbit): `amule`
  *  (kind `amule`) and `prowlarr` (kind `prowlarr`) live here too, so `key` is
  *  a plain string on purpose — narrowing it would lie about the payload. */
 export interface ServiceListing {

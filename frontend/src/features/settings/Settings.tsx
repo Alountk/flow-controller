@@ -366,6 +366,12 @@ export function Settings() {
           <Field label="Contraseña" value={form.services.amutorrent.password} onChange={(v) => update('services.amutorrent.password', v)} restart={isRestarting('services.amutorrent.password')} type="password" />
         </div>
         <div className="settings-group">
+          <h4>qBittorrent</h4>
+          <Field label="URL" value={form.services.qbit.url} onChange={(v) => update('services.qbit.url', v)} restart={isRestarting('services.qbit.url')} placeholder="http://localhost:8080" />
+          <Field label="Usuario" value={form.services.qbit.user} onChange={(v) => update('services.qbit.user', v)} restart={isRestarting('services.qbit.user')} />
+          <Field label="Contraseña" value={form.services.qbit.password} onChange={(v) => update('services.qbit.password', v)} restart={isRestarting('services.qbit.password')} type="password" />
+        </div>
+        <div className="settings-group">
           <h4>OpenSubtitles</h4>
           <Field label="API Key" value={form.services.opensubtitles.api_key} onChange={(v) => update('services.opensubtitles.api_key', v)} restart={isRestarting('services.opensubtitles.api_key')} placeholder="Clave API de OpenSubtitles" type="password" />
         </div>
@@ -373,7 +379,7 @@ export function Settings() {
 
       <Section title="Estado de las conexiones">
         <p className="settings-hint">
-          Comprueba que Radarr, Sonarr y aMuTorrent responden con la configuración
+          Comprueba que Radarr, Sonarr, aMuTorrent y qBittorrent responden con la configuración
           actual. Útil antes y después de mover los servicios de sitio: muestra la
           URL con la que se intenta conectar y distingue una clave rechazada de
           un servicio inalcanzable.
