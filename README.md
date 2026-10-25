@@ -145,7 +145,7 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/indexers` | GET/POST | Lista/alta de indexadores directos (Torznab; API key enmascarada en respuestas) |
 | `/api/indexers/{id}` | PUT/DELETE | Editar (clave vacía = conservar la guardada) / eliminar un indexador |
 | `/api/indexers/{id}/test` | POST | Prueba la conexión con `t=caps` sin persistir nada |
-| `/api/indexers/search` | POST | Búsqueda unificada: Torznab + aMule (EC) + Prowlarr, con `skipped` honesto por fuente |
+| `/api/indexers/search` | POST | Búsqueda unificada: Torznab + aMule (EC) + Prowlarr, con `skipped` honesto por fuente; `indexer_ids` opcional restringe el fan-out Torznab a filas concretas del registro |
 | `/api/indexers/download` | POST | Descarga una fila: ed2k/hash → EC directo, magnet/http → puente qBittorrent |
 | `/api/amule/test` | POST | Prueba la conexión EC a aMule (lo escrito en Configuración o lo guardado; sólo handshake, nunca encola) |
 | `/api/amule/shared-dirs` | GET/PUT | Carpetas que aMule comparte (lee/escribe `shareddir*.dat` y recarga) |
