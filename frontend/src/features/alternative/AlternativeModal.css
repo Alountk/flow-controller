@@ -1,0 +1,350 @@
+/* ── AlternativeModal — «Buscar y descargar alternativa» sobre NUESTROS
+   indexadores («alternativa-indexadores» T3, L6d) ─────────────────────────
+   No design mockup exists for this modal (L6d): the chrome mirrors the
+   `scan-modal` overlay of `ReleaseSearchModal` and the row rhythm of
+   `IndexadoresSection`, restated under the `alt-modal-` prefix in its OWN
+   stylesheet. No inline styles. */
+
+.alt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.alt-modal {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.alt-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.alt-modal-heading {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.alt-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.alt-modal-close:hover {
+  color: var(--text);
+}
+
+.alt-modal-body {
+  overflow-y: auto;
+  padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.alt-modal-section-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── S8: audio languages — informational chips (never controls) ─────────── */
+
+.alt-modal-audio-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.alt-modal-audio-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+/* ── S1: the indexer checklist ──────────────────────────────────────────── */
+
+.alt-modal-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.alt-modal-source-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.alt-modal-source-row--amule {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.alt-modal-source-row:has(input:disabled) {
+  opacity: 0.6;
+}
+
+.alt-modal-source-row:has(input:disabled) .alt-modal-source-name {
+  color: var(--text-3);
+}
+
+.alt-modal-source-off {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+/* ── S2: the prefilled, editable title ──────────────────────────────────── */
+
+.alt-modal-query {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alt-modal-query-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.alt-modal-query-input {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.alt-modal-query-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* ── S3: the explicit search ────────────────────────────────────────────── */
+
+.alt-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alt-modal-search-btn {
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.alt-modal-search-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-fill);
+}
+
+.alt-modal-search-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.alt-modal-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.alt-modal-error {
+  font-size: 12px;
+  color: var(--bad);
+}
+
+.alt-modal-search-notice {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.alt-modal-search-notice--ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.alt-modal-search-notice--error {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+/* ── S3/S4: results and their per-row download ──────────────────────────── */
+
+.alt-modal-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alt-modal-empty {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.alt-modal-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alt-modal-result-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.alt-modal-result-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.alt-modal-result-name {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.alt-modal-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.alt-modal-result-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.alt-modal-result-size {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.alt-modal-result-seeders {
+  font-size: 11px;
+  color: var(--ok);
+}
+
+.alt-modal-result-sources {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.alt-modal-result-download {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.alt-modal-result-download:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-fill);
+}
+
+.alt-modal-result-download:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.alt-modal-result-nolink {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* S4: the server's own `detail` — visible for acceptance AND refusal. */
+.alt-modal-result-detail {
+  flex-basis: 100%;
+  font-size: 11px;
+}
+
+.alt-modal-result-detail--ok {
+  color: var(--ok);
+}
+
+.alt-modal-result-detail--error {
+  color: var(--bad);
+}
+
+/* ── S3: skipped sources, each naming itself and its reason ─────────────── */
+
+.alt-modal-skipped {
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+.alt-modal-skipped-title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.alt-modal-skipped-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text-2);
+}

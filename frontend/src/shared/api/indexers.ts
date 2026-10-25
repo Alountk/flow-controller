@@ -184,14 +184,24 @@ export async function testIndexer(id: number): Promise<IndexerTestResult> {
   }
 }
 
+/**
+ * `POST /api/indexers/search` — the unified free search. The optional third
+ * argument is the «alternativa-indexadores» T3/S3 amendment: when provided,
+ * `indexer_ids` rides the body (the registry rows the alternative checklist
+ * picked). When omitted — every Settings caller — the body is byte-identical
+ * to the pre-amendment `{query, sources}` one.
+ */
 export async function searchIndexers(
   query: string,
   sources: IndexerSearchSource[],
+  indexerIds?: number[],
 ): Promise<IndexerSearchResponse> {
   try {
+    const payload: Record<string, unknown> = { query, sources }
+    if (indexerIds) payload.indexer_ids = indexerIds
     const res = await apiFetch('/api/indexers/search', {
       method: 'POST',
-      body: JSON.stringify({ query, sources }),
+      body: JSON.stringify(payload),
     })
     if (!res.ok) {
       return { ok: false, results: [], skipped: [], detail: await readDetail(res) }
