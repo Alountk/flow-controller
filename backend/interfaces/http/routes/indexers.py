@@ -634,14 +634,16 @@ def _download_target(body: dict) -> str:
 
 
 async def _download_ed2k(link: str) -> dict:
-    """An ed2k link: the direct EC seam by default, the bridge under rollback.
+    """An ed2k link: the direct EC seam by default, the LEGACY aMuTorrent
+    bridge under rollback (`_download_bridge_legacy` — S7: aMule's domain,
+    never qBittorrent's).
 
     The EC adapter is SYNC, so the add rides `asyncio.to_thread` (the
     `grab_release._ec_add_link` precedent) and the tests hold it off the loop.
     A refusal is a dict, never a raise.
     """
     if not _ec_direct():
-        return await _download_bridge(link)
+        return await _download_bridge_legacy(link)
     try:
         await asyncio.to_thread(gateways.amule_add_ed2k, link)
     except Exception as exc:  # noqa: BLE001 — la negativa «no configurado» + errores EC tipados
@@ -666,13 +668,31 @@ async def _download_hash(file_hash: str) -> dict:
 
 
 async def _download_bridge(link: str) -> dict:
-    """`routes_mixer.py:591-631`'s language-download shape, mirrored: one
-    `http_session()` per call, the adapter's dict mapped to `{ok, detail}`.
+    """magnet/http(s) → the NATIVE qBittorrent client (S4/S5): one
+    `http_session()` per call, the client's dict mapped to `{ok, detail}`.
 
-    A refusal keeps the adapter's own detail (prefixed exactly as there) and a
-    raised transport error keeps `_skip_reason`'s short text. Either way the
-    `apikey=` value a direct .torrent URL may carry is REDACTED first (risk 2):
-    no secret ever reaches a response.
+    PASSTHROUGH, no prefix (S5/S6): the native client's Spanish details
+    already name the destination (S2 — «Descarga añadida en qBittorrent
+    (URL), categoría flow» / «qBittorrent (URL) no aceptó la descarga: …»),
+    so nothing is re-worded here. A raised transport error keeps
+    `_skip_reason`'s short text. Either way the `apikey=` value a direct
+    .torrent URL may carry is REDACTED first (risk 2): no secret ever reaches
+    a response.
+    """
+    try:
+        async with http_session() as session:
+            added = await gateways.qbit_add_download(session, link)
+        detail = _redact(str(added.get("detail", "")), "")
+        return {"ok": bool(added.get("ok")), "detail": detail}
+    except Exception as exc:  # noqa: BLE001 — la negativa del puente + errores de transporte
+        return {"ok": False, "detail": _redact(_skip_reason(exc), "")}
+
+
+async def _download_bridge_legacy(link: str) -> dict:
+    """The aMuTorrent bridge — ONLY for the `AMULE_EC_DIRECT=0` rollback (S7).
+
+    Byte-identical legacy shape: one `http_session()` per call, and a refusal
+    keeps the «aMuTorrent no aceptó la descarga: …» prefix of always.
     """
     try:
         async with http_session() as session:
@@ -690,10 +710,11 @@ async def download_indexer(body: dict, _key: str = Depends(verify_api_key)):
     """T5/S5 (enmienda L6) — one free-search row straight to a client.
 
     Body `{link?, guid?}` — at least one, dispatched by the target's shape:
-    `ed2k://` → the direct EC seam (the legacy bridge under the
+    `ed2k://` → the direct EC seam (the legacy aMuTorrent bridge under the
     `AMULE_EC_DIRECT=0` rollback), a 32-hex aMule hash →
     `amule_download_search_result` (an honest refusal under the rollback),
-    `magnet:`/`http(s)` → the aMuTorrent bridge. No persistence, no query, and
+    `magnet:`/`http(s)` → the NATIVE qBittorrent client (S4/S5, destination
+    named in the detail per S2). No persistence, no query, and
     200 `{ok, detail}` in BOTH directions — the only 400s are the body's own
     (no link AND no guid, or a non-string), all of them in Spanish.
     """

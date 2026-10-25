@@ -88,16 +88,17 @@ def _restore_masked_secrets(incoming: dict, current: dict) -> dict:
     """
     merged = copy.deepcopy(incoming)
 
-    for svc in ("radarr", "sonarr", "amutorrent"):
+    for svc in ("radarr", "sonarr", "amutorrent", "qbit"):
         incoming_key = merged.get("services", {}).get(svc, {}).get("api_key")
         if _is_mask(incoming_key):
             stored = current.get("services", {}).get(svc, {}).get("api_key", "")
             merged.setdefault("services", {}).setdefault(svc, {})["api_key"] = stored
 
-    incoming_pw = merged.get("services", {}).get("amutorrent", {}).get("password")
-    if _is_mask(incoming_pw):
-        stored_pw = current.get("services", {}).get("amutorrent", {}).get("password", "")
-        merged.setdefault("services", {}).setdefault("amutorrent", {})["password"] = stored_pw
+    for svc in ("amutorrent", "qbit"):
+        incoming_pw = merged.get("services", {}).get(svc, {}).get("password")
+        if _is_mask(incoming_pw):
+            stored_pw = current.get("services", {}).get(svc, {}).get("password", "")
+            merged.setdefault("services", {}).setdefault(svc, {})["password"] = stored_pw
 
     # S2 manda lo contrario para la contraseña EC: «clave vacía en POST =
     # conservar la guardada». Vacía, ausente del bloque, o con la máscara que el
@@ -137,7 +138,7 @@ def _apply_app_key_change(body: dict, data: dict) -> dict:
 
 def _mask_secrets(data: dict) -> dict:
     masked = copy.deepcopy(data)
-    for svc in ("radarr", "sonarr", "amutorrent"):
+    for svc in ("radarr", "sonarr", "amutorrent", "qbit"):
         key = masked.get("services", {}).get(svc, {}).get("api_key", "")
         if key:
             masked["services"][svc]["api_key"] = "****" + key[-4:] if len(key) > 4 else "****"
@@ -145,9 +146,10 @@ def _mask_secrets(data: dict) -> dict:
     # needs to know whether one is set, so an untouched field stays masked.
     if credentials.app_key_is_set(masked):
         masked["security"]["api_key"] = credentials.MASK_PREFIX
-    pw = masked.get("services", {}).get("amutorrent", {}).get("password", "")
-    if pw:
-        masked["services"]["amutorrent"]["password"] = "****"
+    for svc in ("amutorrent", "qbit"):
+        pw = masked.get("services", {}).get(svc, {}).get("password", "")
+        if pw:
+            masked["services"][svc]["password"] = "****"
     # S2: la contraseña EC se enmascara con el patrón de las claves de
     # servicio (`****` + últimos 4) y jamás sale en claro por ninguna API. Si
     # aquí llegara el ciphertext de reposo (`enc:…`), sale la máscara desnuda:

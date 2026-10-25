@@ -2233,15 +2233,25 @@ class TestServiceConnectionTester:
 
     def test_the_endpoint_lists_every_service(self):
         routes = {
+            # Primero: sólo casa la URL exacta del login de qBittorrent (S4).
+            "/api/v2/auth/login": (200, "Ok."),
             "/api/v3/system/status": (200, {"version": "1.0"}),
             "/api/v2/app/version": (200, "v5.1.4"),
             "/api": (200, {"current": "v1"}),
         }
-        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+        # El entry real de qbit puede no estar configurado en esta máquina:
+        # el listado completo lo prueba CONFIGURADO (login stubbeado).
+        services = [dict(s) for s in SERVICES]
+        for s in services:
+            if s["key"] == "qbit":
+                s.update({"url": "http://qbit.test:8080", "user": "chan", "password": "x", "configured": True})
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)), patch(
+            "interfaces.http.routes.settings.SERVICES", services
+        ):
             resp = client.get("/api/services/test")
 
         body = resp.json()
-        assert {r["key"] for r in body["results"]} == ARR_KEYS | {"amutorrent", "prowlarr"}
+        assert {r["key"] for r in body["results"]} == ARR_KEYS | {"amutorrent", "prowlarr", "qbit"}
         assert body["ok"] is True
 
     def test_prowlarr_is_probed_with_its_own_v1_api(self):
@@ -2623,6 +2633,11 @@ class TestMaskedSecretsRoundTrip:
                 "user": "admin",
                 "password": "REAL-PASSWORD-SECRETO",
             },
+            "qbit": {
+                "url": "http://q:8080",
+                "user": "chan",
+                "password": "REAL-QBIT-PASSWORD",
+            },
         },
         "security": {
             "api_key_hash": credentials.hash_api_key(_TEST_APP_KEY, _TEST_APP_SALT),
@@ -2663,6 +2678,23 @@ class TestMaskedSecretsRoundTrip:
         assert saved["services"]["sonarr"]["api_key"] == "REAL-SONARR-5678"
         assert saved["services"]["amutorrent"]["api_key"] == "REAL-AMU-9012"
         assert saved["services"]["amutorrent"]["password"] == "REAL-PASSWORD-SECRETO"
+        assert saved["services"]["qbit"]["password"] == "REAL-QBIT-PASSWORD"
+
+    def test_the_qbit_password_is_masked_and_the_mask_round_trips(self, stored):
+        """S3: el patrón de máscara existente llega a `services.qbit.password`.
+
+        Los dos lados cuentan: si NO se enmascara, la API devuelve el secreto
+        en claro; y si se enmascara pero `_restore_masked_secrets` no lo
+        conoce, el guardar la destruye y la clave se BORRA (la regresión de
+        credenciales que S3 llama explícitamente)."""
+        form = self._masked_form()
+        assert form["services"]["qbit"]["password"].startswith("****"), (
+            "la contraseña qbit viaja enmascarada por la API"
+        )
+
+        saved = self._save(form)
+
+        assert saved["services"]["qbit"]["password"] == "REAL-QBIT-PASSWORD"
 
     def test_the_users_own_key_is_not_touched_by_an_untouched_form(self, stored):
         """This is what locked the user out: the key became its own mask."""

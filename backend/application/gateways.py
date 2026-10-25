@@ -132,6 +132,11 @@ def amutorrent_add_download(*args, **kwargs):
     return _arr.amutorrent_add_download(*args, **kwargs)
 
 
+def qbit_add_download(*args, **kwargs):
+    """Delegate to the bound adapter (the NATIVE qBittorrent add, S4)."""
+    return _arr.qbit_add_download(*args, **kwargs)
+
+
 def amutorrent_reload_shared_dirs(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.amutorrent_reload_shared_dirs(*args, **kwargs)

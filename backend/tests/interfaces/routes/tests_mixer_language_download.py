@@ -2,10 +2,10 @@
 
 Every «Búsqueda en idioma» row offers «Descargar»: the row's `magnet_url` OR
 `download_url` (exactly one non-null from T2's normalization) goes to the
-`application.gateways.amutorrent_add_download` seam — the same direct add the
-routed-grab work uses. A magnet or a direct .torrent link needs no Torznab
-resolve, so the qBittorrent add is one fast POST and the endpoint answers
-synchronously with `{ok, detail?}`.
+`application.gateways.qbit_add_download` seam — the NATIVE qBittorrent client
+(S4: login+SID, no aMuTorrent facade). A magnet or a direct .torrent link
+needs no Torznab resolve, so the add is one fast POST and the endpoint
+answers synchronously with `{ok, detail?}`.
 
 The contract:
 
@@ -15,7 +15,8 @@ The contract:
    NOTHING is sent to the client;
 4. a client refusal surfaces `{ok: false, detail}` on the established 200
    (the calendar grab answers a refusal the same way) — the detail is the
-   message, never a stack trace;
+   message PASSTHROUGH: the native client already names the destination in
+   its own Spanish text (S2/S5), so «aMuTorrent» never appears here again;
 5. the endpoint is behind the shared `verify_api_key` like every sibling.
 
 The seam is mocked where the ROUTE reads it — the exact `tests_calendar_direct`
@@ -37,11 +38,17 @@ TORRENT_URL = "https://prowlarr.test:9696/getnzb/1"
 TITLE = "Артур и минипуты (2006) BDRip"
 
 #: Where the route reads its collaborators — patched there, never upstream.
-ADD = "interfaces.http.routes_mixer.amutorrent_add_download"
+ADD = "interfaces.http.routes_mixer.qbit_add_download"
 SESSION = "interfaces.http.routes_mixer.http_session"
 
-_ACCEPTED = {"ok": True, "detail": "Descarga añadida (categoría flow)", "category": "flow"}
-_REFUSED = {"ok": False, "detail": "HTTP 400: magnet no soportado"}
+#: The native client's strings (S2: el detalle nombra el destino).
+QBIT_URL = "http://qbit.test:8080"
+_ACCEPTED_DETAIL = f"Descarga añadida en qBittorrent ({QBIT_URL}), categoría flow"
+_ACCEPTED = {"ok": True, "detail": _ACCEPTED_DETAIL, "category": "flow"}
+_REFUSED = {
+    "ok": False,
+    "detail": f"qBittorrent ({QBIT_URL}) no aceptó la descarga: HTTP 400: Fail.",
+}
 
 
 def _post(body):
@@ -60,7 +67,7 @@ class TestAlternativesLanguageDownloadEndpoint:
         resp = _post({"url": MAGNET, "title": TITLE})
 
         assert resp.status_code == 200
-        assert resp.json() == {"ok": True, "detail": "Descarga añadida (categoría flow)"}
+        assert resp.json() == {"ok": True, "detail": _ACCEPTED_DETAIL}
         add.assert_awaited_once()
         assert add.await_args.args[0] is stub, "the seam takes the route's own session"
         assert add.await_args.args[1] == MAGNET, "a magnet is added as-is, no Torznab resolve"
@@ -73,7 +80,7 @@ class TestAlternativesLanguageDownloadEndpoint:
         resp = _post({"url": TORRENT_URL, "title": TITLE})
 
         assert resp.status_code == 200
-        assert resp.json() == {"ok": True, "detail": "Descarga añadida (categoría flow)"}
+        assert resp.json() == {"ok": True, "detail": _ACCEPTED_DETAIL}
         add.assert_awaited_once()
         assert add.await_args.args[1] == TORRENT_URL, "the .torrent link is added as-is"
 
@@ -104,11 +111,11 @@ class TestAlternativesLanguageDownloadEndpoint:
         resp = _post({"url": MAGNET, "title": TITLE})
 
         # The established {ok, detail} code: the calendar grab answers a
-        # client refusal on 200 the same way — the detail IS the message.
+        # client refusal on 200 the same way — and the detail is the client's
+        # own self-describing text (S2/S5): «aMuTorrent» no longer appears.
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["ok"] is False
-        assert "aMuTorrent" in body["detail"] and "HTTP 400" in body["detail"]
+        assert resp.json() == _REFUSED
+        assert "aMuTorrent" not in resp.text
 
     @patch("infrastructure.settings_store.auth_required", return_value=True)
     @patch(SESSION)
