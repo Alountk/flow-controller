@@ -122,3 +122,21 @@ Rama: `feat/qbit-nativo` desde main `c5fc4c7`. SDD fuera (ODD por mandato).
   contrato de payload de toda tarjeta de servicios — el brief de un servicio nuevo debe
   nombrarlo, y fixtures de frontend que modelan el contrato pueden ocultar un default faltante
   del servidor.
+
+- **L9 — regresión 2 y botón de test (2026-10-25, usuario):** «ok habría que poner el boton
+  de test en los servicios, porque estoy mandando la descarga y me devuelve esto: {"ok":
+  false, "detail": "qBittorrent (http://111.111.111.111:8088/) no aceptó la descarga: HTTP
+  404: Not Found"}». **Reproducido ANTES de decidir:** (a) la tarjeta guardó la URL CON barra
+  final y `f"{base}/api/v2/…"` picó `//api/v2/…` → el WebUI embebido responde **404**
+  (curl exacto: `//api/v2/auth/login` → 404, sin barra → 200); (b) en `:8088` hay OTRO
+  qBittorrent WebUI real cuya contraseña NO es la de aMuTorrent (`Fails.` en claro) — la
+  instancia verificada que funciona con esa contraseña es `:8080`. **Fix TDD:** RED (2 tests
+  backend: doble barra en add y en sonda; 3 tests frontend: botón ausente) → GREEN: `rstrip("/")`
+  sobre la base en `qbit_add_download` y `qbit_login_probe` + **«Probar conexión» en las 5
+  tarjetas de Servicios** (`ServiceProbeButton`: sonda candidata de `POST /api/services/test`
+  con LO QUE EL FORM CONTIENE, omitiendo campos vacíos/enmascarados como la tarjeta aMule EC,
+  veredicto por toast con el detalle que incluye la URL intentada). Gates: backend
+  **1635 → 1637**, frontend **760 → 763**/92, tsc 0, eslint 0, build OK. **Lección:** normalizar
+  la URL del cliente en el borde del cliente (barra final es entrada de usuario legítima); el
+  botón de test por tarjeta existía como patrón (aMule EC / wizard) pero no estaba cableado en
+  Servicios.

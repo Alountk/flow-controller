@@ -100,7 +100,11 @@ async def qbit_add_download(
     login fija es lo que autentica el add, y las dos llamadas tienen que
     verla. Devuelve `{ok, detail}` (+ `category` en éxito) — nunca lanza.
     """
-    base, user, password = config.QBIT_URL, config.QBIT_USER, config.QBIT_PASSWORD
+    # L9: la tarjeta admite «http://host:8080/» (barra final escrita a mano);
+    # sin normalizar, el join siguiente pega `//api/v2/…` y el WebUI embebido
+    # responde 404 — reproducido en producción con «HTTP 404: Not Found».
+    base = (config.QBIT_URL or "").rstrip("/")
+    user, password = config.QBIT_USER, config.QBIT_PASSWORD
     if not (base and user and password):
         return {"ok": False, "detail": _UNCONFIGURED}
 
@@ -154,6 +158,9 @@ async def qbit_login_probe(
     estado lea igual que la de los demás servicios. SIN versión ni meta: en el
     build real el login ES la prueba (D2: Bearer → 403).
     """
+    # Misma normalización que `qbit_add_download` (L9): «Probar conexión»
+    # sondea la URL tal cual está en la tarjeta, barra final incluida.
+    url = (url or "").rstrip("/")
     if not (url and user and password):
         return {"ok": False, "detail": _UNCONFIGURED, "error_kind": "auth"}
     timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
