@@ -11,6 +11,7 @@ import {
 import { grabCalendarRelease, fetchGrabStatus, type GrabTask } from '../../shared/api/grabs.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import { fetchIndexers } from '../../shared/api/indexers.ts'
+import { fetchRoots, browsePath } from '../../shared/api/files.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
 import { looksThreeD } from '../../shared/utils/threeD.ts'
 import { toast } from '../../shared/utils/toast.ts'
@@ -300,6 +301,14 @@ export function ReleaseSearchModal({
   // task id and this holds it while the status poll runs — null whenever no
   // grab is in flight (and after every settle).
   const [grabJob, setGrabJob] = useState<{ task_id: string; status: string } | null>(null)
+  // The «→ Carpeta» navigator: open flag, where it stands ('' = roots view),
+  // and the row it would grab into.
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerPath, setPickerPath] = useState('')
+  const [pickerGuid, setPickerGuid] = useState('')
+  // Session memory: reopening lands where the operator last was, not back at
+  // the roots — a ref so navigating never costs a render.
+  const lastPickerPath = useRef('')
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Once-per-mount guard for the panel's 🔍 button: a second click in the
@@ -318,10 +327,19 @@ export function ReleaseSearchModal({
 
   useEffect(() => {
     if (inPanel) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose?.() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      // Escape sheds the top layer: the open navigator closes first, the
+      // dialog it belongs to only once the navigator is gone.
+      if (pickerOpen) {
+        setPickerOpen(false)
+        return
+      }
+      onClose?.()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, inPanel])
+  }, [onClose, inPanel, pickerOpen])
 
   // Our own Torznab registry — the checkbox list's rows. The backend's
   // empty-with-reason answer is a FAILURE here, never "no sites": an
@@ -477,6 +495,22 @@ export function ReleaseSearchModal({
       if (data && data.status && TERMINAL_STATUSES.includes(data.status)) return false
       return 1500
     },
+  })
+
+  // The navigator's two listings, the ScanModal pattern: the roots while it
+  // stands at '', the directory's own while it stands inside one.
+  const pickerRootsQuery = useQuery({
+    queryKey: ['roots'],
+    queryFn: fetchRoots,
+    enabled: pickerOpen,
+  })
+  const pickerBrowseQuery = useQuery({
+    queryKey: ['picker-browse', pickerPath],
+    queryFn: () => browsePath(pickerPath),
+    enabled: pickerOpen && pickerPath !== '',
+    // The listing mirrors the disk: a cache here hides a folder a download
+    // just created — the same 0 window ScanModal gives its browse.
+    staleTime: 0,
   })
 
   /**
@@ -723,7 +757,11 @@ export function ReleaseSearchModal({
     return LIBRARY
   }
 
-  async function handleGrab(guid: string, target: 'library' | '4k' | '3d') {
+  async function handleGrab(
+    guid: string,
+    target: 'library' | '4k' | '3d' | 'folder',
+    folderDestination?: string,
+  ) {
     setStep('grabbing')
     setNotice('')
     // The resolve can legitimately take ~30-60 s (the ED2K search is
@@ -732,7 +770,8 @@ export function ReleaseSearchModal({
     // message stays until the settled detail replaces it.
     setMessage('Enviando la descarga al servidor… el indexador de aMule puede tardar hasta un minuto.')
     const release = releases.find(r => r.guid === guid)
-    const destination = target === '4k' ? path4k : target === '3d' ? path3d : undefined
+    const destination =
+      target === 'folder' ? folderDestination : target === '4k' ? path4k : target === '3d' ? path3d : undefined
     const is3d = target === '3d' ? true : release ? isThreeD(release) : undefined
     const result = await grabCalendarRelease(
       item.source,
@@ -760,6 +799,29 @@ export function ReleaseSearchModal({
     // No task id = a synchronous refusal (transport failure or a request
     // that could never run): the same detail the endpoint always carried.
     applyGrabOutcome(result)
+  }
+
+  /** Open the navigator on the last folder visited (roots on a first open). */
+  function openPicker(guid: string) {
+    setPickerGuid(guid)
+    setPickerPath(lastPickerPath.current)
+    setPickerOpen(true)
+  }
+
+  function visitFolder(path: string) {
+    lastPickerPath.current = path
+    setPickerPath(path)
+  }
+
+  function closePicker() {
+    setPickerOpen(false)
+  }
+
+  /** Confirm is just another `handleGrab`: same grab, chosen destination. */
+  function confirmPicker() {
+    lastPickerPath.current = pickerPath
+    setPickerOpen(false)
+    void handleGrab(pickerGuid, 'folder', pickerPath)
   }
 
   const isProcessing = step === 'searching' || step === 'adding' || step === 'grabbing'
@@ -1296,6 +1358,14 @@ export function ReleaseSearchModal({
                             >
                               → 3D
                             </button>
+                            <button
+                              type="button"
+                              className="release-dest-btn"
+                              onClick={() => openPicker(r.guid)}
+                              disabled={isProcessing}
+                            >
+                              → Carpeta
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1334,6 +1404,55 @@ export function ReleaseSearchModal({
                 {dismissLabel}
               </button>
             </div>
+          )}
+
+          {/* Folder navigator — inside `body`, so both presentations get it.
+              Files never render: only directories are destinations. */}
+          {pickerOpen && (
+            <>
+              <div className="folder-picker-backdrop" onClick={closePicker} />
+              <div className="folder-picker" role="dialog" aria-label="Elegir carpeta de destino">
+                <div className="folder-picker-path">{pickerPath}</div>
+                <div className="folder-picker-rows">
+                  {pickerPath === ''
+                    ? (pickerRootsQuery.data?.roots ?? []).map((root) => (
+                        <button
+                          key={root.path}
+                          type="button"
+                          className="folder-picker-row"
+                          onClick={() => visitFolder(root.path)}
+                        >
+                          {root.name}
+                        </button>
+                      ))
+                    : (pickerBrowseQuery.data?.items ?? [])
+                        .filter((entry) => entry.is_dir)
+                        .map((entry) => (
+                          <button
+                            key={entry.path}
+                            type="button"
+                            className="folder-picker-row"
+                            onClick={() => visitFolder(entry.path)}
+                          >
+                            {entry.name}
+                          </button>
+                        ))}
+                </div>
+                <div className="folder-picker-actions">
+                  <button
+                    type="button"
+                    className="folder-picker-choose"
+                    onClick={confirmPicker}
+                    disabled={pickerPath === ''}
+                  >
+                    Elegir esta carpeta
+                  </button>
+                  <button type="button" className="folder-picker-cancel" onClick={closePicker}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </div>
   )
