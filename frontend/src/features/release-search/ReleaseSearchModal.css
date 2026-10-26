@@ -75,10 +75,10 @@
   color: var(--text-secondary);
 }
 
-.calendar-indexer-select {
+.calendar-sites {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 16px;
   padding: 10px 12px;
   background: var(--surface);
@@ -86,56 +86,35 @@
   border-radius: 8px;
 }
 
-.calendar-indexer-label {
+.calendar-sites-label {
   font-size: 13px;
   color: var(--text-secondary);
-  white-space: nowrap;
 }
 
-.calendar-indexer-dropdown {
-  flex: 1;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.calendar-indexer-dropdown:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.calendar-indexer-error {
-  font-size: 11px;
-  color: var(--bad);
+.calendar-sites-list {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.calendar-site {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
-}
-
-.calendar-indexer-retry {
-  font-size: 11px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
+  font-size: 13px;
   color: var(--text);
   cursor: pointer;
-  white-space: nowrap;
 }
 
-.calendar-indexer-retry:hover {
-  border-color: var(--accent);
-}
-
-.calendar-indexer-count {
+.calendar-sites-error {
   font-size: 11px;
+  color: var(--bad);
+}
+
+.release-detail-note {
+  font-size: 12px;
   color: var(--text-secondary);
-  white-space: nowrap;
+  margin: 4px 0 8px;
 }
 
 .calendar-modal-progress {

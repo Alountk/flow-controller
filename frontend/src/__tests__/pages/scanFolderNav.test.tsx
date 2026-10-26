@@ -280,7 +280,10 @@ describe('"En carpeta" navigator', () => {
 
     fireEvent.click(screen.getByText(/Buscar "Your Name\." en esta carpeta/))
     await screen.findByText(/coincidencia/i)
-    fireEvent.click(screen.getByRole('checkbox'))
+    // Scope past the modal's own site checkboxes to the queue selector.
+    fireEvent.click(
+      screen.getAllByRole('checkbox').find((box) => !box.closest('.calendar-sites'))!,
+    )
     fireEvent.click(screen.getByRole('button', { name: /Colocar 1 archivos en la cola/ }))
 
     // The whole point: `move` renames the download away and the hardlink the

@@ -77,13 +77,16 @@ export async function startCalendarReleaseSearch(
   type: string,
   id: number,
   title: string,
+  selection?: { sources?: string[]; indexer_ids?: number[] },
 ): Promise<ReleaseSearchStart> {
   try {
     // `title` is the query over OUR sources (S1) and the backend requires it:
     // a blank one is refused synchronously («Falta el título del ítem…»).
+    // `selection` rides only when something was unchecked: absent keys keep
+    // the backend's full fan-out (JSON.stringify drops undefined values).
     const res = await apiFetch('/api/calendar/releases', {
       method: 'POST',
-      body: JSON.stringify({ source, type, id, title }),
+      body: JSON.stringify({ source, type, id, title, ...selection }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({})) as Record<string, unknown>

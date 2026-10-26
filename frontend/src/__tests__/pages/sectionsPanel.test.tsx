@@ -364,13 +364,10 @@ describe('sections · the release search in the panel', () => {
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(searchCalls()).toBe(1)
 
-    // Trigger 3: picking an indexer re-runs it — exactly one NEW search,
-    // under the newly chosen value (and the select is labelled for
-    // assistive tech, so the change is addressable by role). Not before:
-    // the count was 1 through both triggers above.
-    const indexerSelect = screen.getByRole('combobox', { name: /Indexador/ }) as HTMLSelectElement
-    const next = indexerSelect.value === 'all' ? '1' : 'all'
-    fireEvent.change(indexerSelect, { target: { value: next } })
+    // Trigger 3: toggling a site re-runs it — exactly one NEW search, under
+    // the newly marked set. Not before: the count was 1 through both
+    // triggers above.
+    fireEvent.click(screen.getByLabelText('aMule'))
     await waitFor(() => expect(searchCalls()).toBe(2))
     await screen.findByPlaceholderText('Filtrar por título...')
 

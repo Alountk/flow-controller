@@ -10,6 +10,7 @@ import {
 } from '../../shared/api/releases.ts'
 import { grabCalendarRelease, fetchGrabStatus, type GrabTask } from '../../shared/api/grabs.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
+import { fetchIndexers } from '../../shared/api/indexers.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
 import { looksThreeD } from '../../shared/utils/threeD.ts'
 import { toast } from '../../shared/utils/toast.ts'
@@ -23,13 +24,6 @@ import {
   type ReleaseFilters,
 } from '../../shared/utils/releaseFilters.ts'
 import './ReleaseSearchModal.css'
-
-interface Indexer {
-  id: number
-  name: string
-  implementation: string
-  enableSearch: boolean
-}
 
 /** Which kind of id a `ReleaseSearchItem.id` carries — the three the grabs
  *  history can be asked under, one query parameter each. */
@@ -209,7 +203,7 @@ async function fetchRoutingListing(folder: string): Promise<FileItem[]> {
  */
 const panelResults = new Map<
   string,
-  { indexer: string; releases: Release[]; threeDOverrides: Record<string, boolean> }
+  { detail: string; releases: Release[]; threeDOverrides: Record<string, boolean> }
 >()
 
 const LIBRARY = 'Biblioteca (la del arr)'
@@ -287,8 +281,11 @@ export function ReleaseSearchModal({
   // search/step feedback ("Buscando releases…"), and a results render must
   // never show that stale string as if it were news.
   const [notice, setNotice] = useState('')
-  const [selectedIndexer, setSelectedIndexer] = useState<string>(restored?.indexer ?? 'all')
+  // The sites NOT selected for the next search — empty = all checked, which
+  // keeps the default valid while the registry list is still arriving.
+  const [unchecked, setUnchecked] = useState<Set<string>>(new Set())
   const [releases, setReleases] = useState<Release[]>(restored?.releases ?? [])
+  const [searchDetail, setSearchDetail] = useState(restored?.detail ?? '')
   const [filters, setFilters] = useState<ReleaseFilters>(NO_RELEASE_FILTERS)
   // Per-row corrections to the 3D suggestion. An absent guid means "no human
   // has spoken, trust the title"; present means "this is what I said".
@@ -303,10 +300,6 @@ export function ReleaseSearchModal({
   // task id and this holds it while the status poll runs — null whenever no
   // grab is in flight (and after every settle).
   const [grabJob, setGrabJob] = useState<{ task_id: string; status: string } | null>(null)
-  // The indexer choice of the in-flight search: `handleSearch` receives it as
-  // a parameter, and the results must be filtered under THAT choice when the
-  // job completes, not under whatever the select says by then.
-  const pendingChoice = useRef<string>('all')
   const modalRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Once-per-mount guard for the panel's 🔍 button: a second click in the
@@ -330,29 +323,21 @@ export function ReleaseSearchModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, inPanel])
 
-  // Cached per SOURCE. Asking Radarr once must not ask it again a few minutes
-  // later, and Sonarr's list is a different list — that separation is the cache
-  // key. The previous behaviour (a bare `useEffect` with `.catch(() => {})`)
-  // threw the failure away, so a Radarr timeout looked exactly like "there are
-  // no indexers": `[]` in, `[]` out, nothing on screen.
-  const indexersQuery = useQuery({
-    queryKey: ['indexers', item.source],
+  // Our own Torznab registry — the checkbox list's rows. The backend's
+  // empty-with-reason answer is a FAILURE here, never "no sites": an
+  // unreadable store must say so while aMule and Prowlarr still render.
+  const registryQuery = useQuery({
+    queryKey: ['indexers-registry'],
     queryFn: async () => {
-      const res = await apiFetch(`/api/calendar/indexers?source=${item.source}`, {})
-      const data = (await res.json()) as { indexers?: Indexer[]; error?: string }
-      // The backend reports its own failures in the body, so HTTP 200 can still
-      // mean "I could not ask Radarr". Either way this must NOT become an empty
-      // list: an empty list means "none configured" and is shown as such.
-      if (!res.ok || data.error) {
-        throw new Error(data.error || `HTTP ${res.status}`)
-      }
-      return data.indexers ?? []
+      const answer = await fetchIndexers()
+      if (answer.error) throw new Error(answer.error)
+      return answer.indexers.filter((row) => row.enabled === 1)
     },
     staleTime: 5 * 60_000,
     retry: 1,
     placeholderData: keepPreviousData,
   })
-  const indexers = indexersQuery.data ?? []
+  const registryRows = registryQuery.data ?? []
 
 
   // The routing folders behind the readout: only the results step shows it, so
@@ -428,19 +413,19 @@ export function ReleaseSearchModal({
 
   // NO MOUNT TRIGGER — selecting a row never searches: the operator presses
   // 🔍 Buscar Releases below (or the has-file block's "Buscar versiones", or
-  // an id 0 item's ➕). The one remaining automatic trigger is the indexer
-  // <select>: changing it re-runs the search (PR B's requirement).
+  // an id 0 item's ➕). The one remaining automatic trigger is the SITE
+  // checkboxes: in the panel, toggling one re-runs the search.
 
   // Keep the cached state of this item truthful while the panel changes it,
   // so the next tab switch restores what the operator actually left behind.
   useEffect(() => {
     if (!inPanel || step !== 'results' || releases.length === 0) return
     panelResults.set(`${item.source}:${item.type}:${item.id}`, {
-      indexer: selectedIndexer,
+      detail: searchDetail,
       releases,
       threeDOverrides,
     })
-  }, [inPanel, step, item.source, item.type, item.id, selectedIndexer, releases, threeDOverrides])
+  }, [inPanel, step, item.source, item.type, item.id, searchDetail, releases, threeDOverrides])
 
   // Timer for loading state
   useEffect(() => {
@@ -495,31 +480,23 @@ export function ReleaseSearchModal({
   })
 
   /**
-   * What `handleSearch` used to do with the POST's answer, applied identically
-   * to whatever the job delivers: filter by the chosen indexer, render the
-   * results, or land on the error step with the backend's own detail. The
-   * payload itself (`releases` + `detail`) is unchanged from the synchronous
-   * contract, so this logic did not have to learn anything new.
+   * What `handleSearch` used to do with the POST's answer, applied
+   * identically to whatever the job delivers: render the results, or land on
+   * the error step with the backend's own detail — which the results step
+   * keeps visible too (searchDetail), so a source that contributed nothing
+   * always says why.
    */
-  function applyReleaseResult(result: { releases: Release[]; detail: string }, choice: string) {
-    // The choice IS a row label (the select offers the rows' own labels):
-    // filtering is the same read `groupByIndexer` groups with.
-    const filtered = choice === 'all'
-      ? result.releases
-      : result.releases.filter((r) => releaseLabel(r) === choice)
-    if (filtered.length > 0) {
-      setReleases(filtered)
+  function applyReleaseResult(result: { releases: Release[]; detail: string }) {
+    if (result.releases.length > 0) {
+      setReleases(result.releases)
+      setSearchDetail(result.detail)
       // A new search is a new list: whatever was corrected against the old
       // rows would otherwise be applied, silently, to different releases.
       setThreeDOverrides({})
       setStep('results')
     } else {
       setStep('error')
-      if (choice !== 'all' && result.releases.length > 0) {
-        setMessage(`${choice}: 0 releases encontrados. Hay ${result.releases.length} releases en total en otros indexadores.`)
-      } else {
-        setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
-      }
+      setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
     }
   }
 
@@ -539,9 +516,8 @@ export function ReleaseSearchModal({
       return
     }
     if (data.status === 'done') {
-      const choice = pendingChoice.current
       setReleaseJob(null)
-      applyReleaseResult({ releases: data.releases ?? [], detail: data.detail ?? '' }, choice)
+      applyReleaseResult({ releases: data.releases ?? [], detail: data.detail ?? '' })
     } else if (data.status === 'error') {
       // The job's `detail` is the exact `Error interno: ...` string the
       // synchronous POST used to return — same error channel, same step.
@@ -619,32 +595,77 @@ export function ReleaseSearchModal({
   }, [grabJobQuery.data, grabJob])
 
   /**
-   * `choice` is the indexer the search runs under. It is a real parameter,
-   * not state, because the panel's auto-search on an indexer change fires in
-   * the same tick as setSelectedIndexer — reading state there would search
-   * under the PREVIOUS choice. The overlay passes nothing (its button always
-   * searches what the select already shows).
+   * The POST's selection from the checked sites: absent fields = the full
+   * fan-out (the contract's default). A partial registry rides as
+   * `indexer_ids`; nothing unchecked sends nothing extra.
    */
-  async function handleSearch(choice: string = selectedIndexer) {
+  function sitePayload(next: Set<string>) {
+    const checkedIds = registryRows
+      .filter((row) => !next.has(`reg:${row.id}`))
+      .map((row) => row.id)
+    const amule = !next.has('src:amule')
+    const prowlarr = !next.has('src:prowlarr')
+    const sources: string[] = []
+    if (checkedIds.length > 0) sources.push('torznab')
+    if (amule) sources.push('amule')
+    if (prowlarr) sources.push('prowlarr')
+    const fullRegistry = registryRows.length > 0 && checkedIds.length === registryRows.length
+    return {
+      count: checkedIds.length + (amule ? 1 : 0) + (prowlarr ? 1 : 0),
+      body:
+        next.size === 0
+          ? {}
+          : {
+              sources,
+              ...(checkedIds.length > 0 && !fullRegistry ? { indexer_ids: checkedIds } : {}),
+            },
+    }
+  }
+
+  function toggleSite(key: string) {
+    const next = new Set(unchecked)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    setUnchecked(next)
+    // PANEL ONLY: the toggle IS the re-run trigger, and it must see the NEXT
+    // selection — state still holds the old one in this tick.
+    if (inPanel && autoSearchable) void handleSearch(next)
+  }
+
+  /**
+   * The search runs under the checked sites. `next` is a real parameter,
+   * not state: the panel's toggle re-run fires in the same tick as
+   * setUnchecked — reading state there would search under the OLD set.
+   */
+  async function handleSearch(next: Set<string> = unchecked) {
+    const payload = sitePayload(next)
+    if (payload.count === 0) return
     setStep('searching')
     // A new search is a new list: the previous grab's ack belongs to the old
     // one and must not ride above results that have not been fetched yet.
     setNotice('')
-    const idxName = choice !== 'all' ? choice : ''
-    setMessage(`Buscando releases${idxName ? ` en ${idxName}` : ' en todos los indexadores'}...`)
+    setSearchDetail('')
+    setMessage(
+      `Buscando releases en ${next.size === 0 ? 'todos los sitios' : 'los sitios marcados'}...`,
+    )
     try {
-      const started = await startCalendarReleaseSearch(item.source, item.type, item.id, item.title)
+      const started = await startCalendarReleaseSearch(
+        item.source,
+        item.type,
+        item.id,
+        item.title,
+        payload.body,
+      )
       if (started.task_id) {
         // C-10: the POST only starts the job. The results arrive through the
-        // status poll above and are applied by the effect with THIS choice.
-        pendingChoice.current = choice
+        // status poll above and are applied by the effect.
         setReleaseJob({ task_id: started.task_id, status: started.status ?? 'running' })
         return
       }
       // No task id = a request that never became a job: the backend's own
       // refusal (unknown service or type) or a transport failure, answered
       // with the same detail the synchronous endpoint always carried.
-      applyReleaseResult({ releases: started.releases ?? [], detail: started.detail ?? '' }, choice)
+      applyReleaseResult({ releases: started.releases ?? [], detail: started.detail ?? '' })
     } catch (err) {
       setStep('error')
       setMessage(`Error inesperado: ${err}`)
@@ -748,10 +769,6 @@ export function ReleaseSearchModal({
   // never sent contributes nothing (S5) — never the string "undefined".
   const qualityOptions = collectQualities(releases).filter((quality) => Boolean(quality))
   const languageOptions = collectLanguages(releases).filter((language) => Boolean(language))
-  // The indexer select's options are the rows' own labels — the same ones the
-  // groups below print (S5). The arr's indexer list can never match these
-  // rows, which is exactly how the filter used to empty the results.
-  const indexerOptions = [...new Set(releases.map(releaseLabel))]
   const visibleReleases = filterReleases(releases, filters)
   const filtersActive = hasActiveFilters(filters)
   const isSearching = step === 'searching'
@@ -928,52 +945,57 @@ export function ReleaseSearchModal({
           </div>
           )}
 
-          {/* Indexer selector. Overlay: only on the initial step, as always.
-              Panel: persistent — changing it re-runs the search, the ONE
-              automatic trigger left (🔍 starts the first one), so the
-              operator can re-route while results are on screen. `disabled`
-              never bites the overlay: its select only exists when no search
-              is processing. */}
+          {/* Our sites. Overlay: initial step, as the select was. Panel:
+              persistent — toggling re-runs the search, the ONE automatic
+              trigger left (🔍 starts the first one). */}
           {(inPanel || step === 'initial') && (
-            <div className="calendar-indexer-select">
-              <label className="calendar-indexer-label" htmlFor="release-indexer">Indexador:</label>
-              <select
-                id="release-indexer"
-                className="calendar-indexer-dropdown"
-                value={selectedIndexer}
-                disabled={isProcessing}
-                onChange={(e) => {
-                  // A programmatic value no option carries resolves to "" —
-                  // that is "no filter", never a filter that hides everything.
-                  const next = e.target.value || 'all'
-                  setSelectedIndexer(next)
-                  // PANEL ONLY: changing the indexer IS the trigger now.
-                  if (inPanel && autoSearchable) void handleSearch(next)
-                }}
-              >
-                <option value="all">Todos los indexadores</option>
-                {indexerOptions.map((label) => (
-                  <option key={label} value={label}>{label}</option>
+            <div className="calendar-sites">
+              <span className="calendar-sites-label">Sitios de búsqueda:</span>
+              <div className="calendar-sites-list">
+                {registryRows.map((row) => (
+                  <label key={`reg:${row.id}`} className="calendar-site">
+                    <input
+                      type="checkbox"
+                      checked={!unchecked.has(`reg:${row.id}`)}
+                      disabled={isProcessing}
+                      onChange={() => toggleSite(`reg:${row.id}`)}
+                    />
+                    {row.name}
+                  </label>
                 ))}
-              </select>
-              {indexersQuery.isError ? (
-                <span className="calendar-indexer-error" role="alert">
-                  ⚠️ No se pudo consultar {item.source}:{' '}
-                  {indexersQuery.error instanceof Error
-                    ? indexersQuery.error.message
-                    : 'error desconocido'}
-                  <button
-                    type="button"
-                    className="calendar-indexer-retry"
-                    onClick={() => indexersQuery.refetch()}
-                  >
-                    Reintentar
-                  </button>
+                <label className="calendar-site">
+                  <input
+                    type="checkbox"
+                    checked={!unchecked.has('src:amule')}
+                    disabled={isProcessing}
+                    onChange={() => toggleSite('src:amule')}
+                  />
+                  aMule
+                </label>
+                <label className="calendar-site">
+                  <input
+                    type="checkbox"
+                    checked={!unchecked.has('src:prowlarr')}
+                    disabled={isProcessing}
+                    onChange={() => toggleSite('src:prowlarr')}
+                  />
+                  Prowlarr
+                </label>
+              </div>
+              {registryQuery.isError && (
+                <span className="calendar-sites-error" role="alert">
+                  ⚠️{' '}
+                  <span>
+                    {registryQuery.error instanceof Error
+                      ? registryQuery.error.message
+                      : 'error desconocido'}
+                  </span>
                 </span>
-              ) : (
-                indexers.length > 0 && (
-                  <span className="calendar-indexer-count">{indexers.length} configurados</span>
-                )
+              )}
+              {sitePayload(unchecked).count === 0 && (
+                <span className="calendar-sites-error" role="alert">
+                  Selecciona al menos un sitio para buscar
+                </span>
               )}
             </div>
           )}
@@ -1121,6 +1143,12 @@ export function ReleaseSearchModal({
                   </button>
                 </div>
               </div>
+
+              {/* The fetcher only ever appends ' — ' when a source has
+                  something to say: a bare count would duplicate the header. */}
+              {searchDetail.includes(' — ') && (
+                <div className="release-detail-note">{searchDetail}</div>
+              )}
 
               <div className="release-filters">
                 <input

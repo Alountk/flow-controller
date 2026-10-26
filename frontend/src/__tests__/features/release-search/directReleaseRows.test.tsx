@@ -135,26 +135,6 @@ function renderModal() {
   )
 }
 
-/** The panel keeps its indexer select on the results (the overlay's is gone
- *  by then), so the select/filter flow is a panel scenario. */
-function renderPanelModal(id: number) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
-    <QueryClientProvider client={client}>
-      <ReleaseSearchModal
-        item={{
-          type: 'movie',
-          id,
-          title: 'Everything Everywhere All at Once',
-          source: 'radarr',
-          has_file: false,
-        }}
-        presentation="panel"
-      />
-    </QueryClientProvider>,
-  )
-}
-
 async function openResults() {
   const view = renderModal()
   fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
@@ -253,41 +233,5 @@ describe('ReleaseSearchModal grab payload on direct rows (S5)', () => {
     expect(body).not.toHaveProperty('link')
     expect(body.guid).toBe('a1b2c3d4e5f60718293a4b5c6d7e8f90')
     expect(body.indexerId).toBe(0)
-  })
-})
-
-describe('ReleaseSearchModal indexer select on direct rows (S5)', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  it('offers the rows own labels as options and filters with them', async () => {
-    mockFetch([torznabRow, amuleRow])
-    renderPanelModal(777)
-    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
-    await waitFor(() => expect(document.querySelector('.calendar-releases')).not.toBeNull())
-    expect(rows()).toHaveLength(2)
-
-    // The options ARE the labels the groups below print — the row's indexer,
-    // else its source. An arr-derived list can never match these rows.
-    const select = within(
-      document.querySelector('.calendar-indexer-select') as HTMLElement,
-    ).getByRole('combobox') as HTMLSelectElement
-    expect([...select.options].map((option) => option.textContent)).toEqual([
-      'Todos los indexadores',
-      'TorrentLeech',
-      'amule',
-    ])
-
-    // Selecting a label keeps only its group…
-    fireEvent.change(select, { target: { value: 'amule' } })
-    await waitFor(() => expect(rows()).toHaveLength(1))
-    expect(
-      within(rows()[0] as HTMLElement).getByText('Otra Película 2021'),
-    ).toBeInTheDocument()
-
-    // …and Todos deselects the filter, bringing every row back.
-    fireEvent.change(select, { target: { value: 'all' } })
-    await waitFor(() => expect(rows()).toHaveLength(2))
   })
 })

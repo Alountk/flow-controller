@@ -154,10 +154,9 @@ describe('the operator initiates · selection searches nothing', () => {
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(searchCalls(fn)).toBe(1)
 
-    // Trigger 3 — the INDEXER, and never before this moment: the count was 1
-    // above, and it becomes exactly 2 now (PR B's requirement, kept).
-    const select = screen.getByRole('combobox', { name: /Indexador/ }) as HTMLSelectElement
-    fireEvent.change(select, { target: { value: '1' } })
+    // Trigger 3 — a SITE toggle, and never before this moment: the count was
+    // 1 above, and it becomes exactly 2 now (the panel's re-run trigger).
+    fireEvent.click(screen.getByLabelText('aMule'))
     await waitFor(() => expect(searchCalls(fn)).toBe(2))
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(searchCalls(fn)).toBe(2)
