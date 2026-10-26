@@ -30,6 +30,16 @@ services:
       retries: 15
 
   flow-controller:
+    # compose.ci.yml strips every host mount, so /app/config is the image's
+    # root-owned 755 directory while the base compose runs the app as
+    # 1000:1000: settings degrade to in-memory and history.db never opens
+    # (observed in CI run 40303480742: "[Errno 13] Permission denied:
+    # /app/config/settings.json.tmp", "History database unavailable ...
+    # unable to open database file") — POST /api/indexers then answers 503.
+    # The seed step needs a real store, and this container is throwaway
+    # (`down -v`), so phase 2 runs it as root and the image directory is
+    # writable. The bare phase keeps 1000:1000: its specs never write.
+    user: "0:0"
     # `up` blocks on fake-arr's health before starting the app, so the first
     # /api/v3/* probe can never race an unlistening stub.
     depends_on:

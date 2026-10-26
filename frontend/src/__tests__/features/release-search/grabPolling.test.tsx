@@ -19,20 +19,17 @@ import { clearToasts, getToasts } from '../../../shared/utils/toast.ts'
  * refusal (no task id) keeps today's handling without ever polling.
  */
 
+/** A direct-source release row, exactly as `POST /api/calendar/releases`
+ *  serves it (S5): never the arr era's quality/languages/indexerId. */
 function makeRelease(overrides: Partial<Release> = {}): Release {
   return {
     guid: 'en-1',
     title: 'Everything Everywhere All at Once 2022 1080p BluRay',
     size: 10_000_000_000,
-    quality: 'Bluray-1080p',
     indexer: 'aMuTorrent',
-    indexerId: 1,
-    indexerFlags: '',
+    source: 'torznab',
+    link: 'https://idx.test/download/en-1.torrent',
     seeders: 10,
-    leechers: 1,
-    protocol: 'torrent',
-    releaseGroup: '',
-    languages: ['English'],
     ...overrides,
   }
 }

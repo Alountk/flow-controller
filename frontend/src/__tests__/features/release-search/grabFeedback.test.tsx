@@ -12,19 +12,15 @@ import type { Release } from '../../../shared/api/releases.ts'
  * the surface that reaches an operator who already looked away.
  */
 
+/** A direct-source release row (S5): never the arr era's fields. */
 const release: Release = {
   guid: 'guid-1',
   title: 'Everything Everywhere All at Once 2022 1080p BluRay',
   size: 10_000_000_000,
-  quality: 'Bluray-1080p',
   indexer: 'aMuTorrent',
-  indexerId: 1,
-  indexerFlags: '',
+  source: 'torznab',
+  link: 'https://idx.test/download/guid-1.torrent',
   seeders: 10,
-  leechers: 1,
-  protocol: 'torrent',
-  releaseGroup: '',
-  languages: ['English'],
 }
 
 function deferred<T>() {

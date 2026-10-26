@@ -93,6 +93,7 @@ export interface GrabTask {
 export async function grabCalendarRelease(
   source: string,
   guid: string,
+  link?: string,
   indexerId: number = 0,
   movieId: number = 0,
   episodeId: number = 0,
@@ -110,6 +111,10 @@ export async function grabCalendarRelease(
   // reads `quality` only when no destination was chosen: it routes, it never
   // overrides a folder the operator picked.
   const body: Record<string, unknown> = { source, guid, indexerId, movieId, episodeId }
+  // S2: the dispatch target is `link or guid` — the client sends `link` when
+  // the row has one (it is the row's built link, never a re-search) and the
+  // backend falls back to the guid otherwise.
+  if (link) body.link = link
   if (destination) body.destination = destination
   if (quality) body.quality = quality
   if (is3d) body.is3d = true

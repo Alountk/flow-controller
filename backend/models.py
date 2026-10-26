@@ -33,11 +33,13 @@ class CalendarReleasesRequest(BaseModel):
     source: str  # "radarr" or "sonarr"
     type: str  # "movie" or "episode"
     id: int  # Radarr movie ID or Sonarr episode ID
+    title: str = ""  # the item's title — the query over our own sources (S1)
 
 
 class CalendarGrabRequest(BaseModel):
     source: str  # "radarr" or "sonarr"
     guid: str
+    link: str = ""  # the row's built link; the grab target is `link or guid` (S2)
     indexerId: int = 0
     movieId: int = 0
     episodeId: int = 0
@@ -55,6 +57,7 @@ class CalendarGrabRequest(BaseModel):
 class CalendarGrabBatchRequest(BaseModel):
     source: str  # "radarr" or "sonarr"
     guids: list[str]
+    links: list[str] = []  # aligned by index with `guids`; a missing entry falls back to its guid (S2)
     indexerIds: list[int] = []
     movieId: int = 0
     episodeId: int = 0

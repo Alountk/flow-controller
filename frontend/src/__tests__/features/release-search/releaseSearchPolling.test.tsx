@@ -18,20 +18,17 @@ import type { Release } from '../../../shared/api/releases.ts'
  * step a failed POST always used.
  */
 
+/** A direct-source release row, exactly as `POST /api/calendar/releases`
+ *  serves it (S5): never the arr era's quality/languages/indexerId. */
 function makeRelease(overrides: Partial<Release> = {}): Release {
   return {
     guid: 'en-1',
     title: 'Everything Everywhere All at Once 2022 1080p BluRay',
     size: 10_000_000_000,
-    quality: 'Bluray-1080p',
     indexer: 'aMuTorrent',
-    indexerId: 1,
-    indexerFlags: '',
+    source: 'torznab',
+    link: 'https://idx.test/download/en-1.torrent',
     seeders: 10,
-    leechers: 1,
-    protocol: 'torrent',
-    releaseGroup: '',
-    languages: ['English'],
     ...overrides,
   }
 }
@@ -41,8 +38,6 @@ const releases: Release[] = [
   makeRelease({
     guid: 'es-1',
     title: 'Todo a la vez en todas partes 2022 1080p',
-    quality: 'WEBDL-1080p',
-    languages: ['Spanish'],
   }),
 ]
 
@@ -105,6 +100,26 @@ function renderModal() {
       <ReleaseSearchModal
         item={{ type: 'movie', id: 411, title: 'Everything Everywhere All at Once', source: 'radarr' }}
         onClose={() => {}}
+      />
+    </QueryClientProvider>,
+  )
+}
+
+/** The panel keeps its select ON the results, so the choice-on-results flow
+ *  (S5: the options are the rows' own labels) is a panel scenario. */
+function renderPanelModal() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <ReleaseSearchModal
+        item={{
+          type: 'movie',
+          id: 511,
+          title: 'Everything Everywhere All at Once',
+          source: 'radarr',
+          has_file: false,
+        }}
+        presentation="panel"
       />
     </QueryClientProvider>,
   )
@@ -194,10 +209,12 @@ describe('Release search polling (C-10)', () => {
   })
 
   it('applies the chosen indexer to the results the poll delivers', async () => {
-    // The choice is captured when the search STARTS (the select is disabled
+    // S5: the select offers the labels the ROWS themselves carry, so the
+    // choice is made on the results and re-runs the search (PR B's trigger).
+    // The choice is captured when that search STARTS (the select is disabled
     // while the job runs) and must filter the payload the poll brings back —
     // not whatever the select says by then.
-    mockPollingFetch({
+    const fn = mockPollingFetch({
       statusBodies: [
         { ok: true, id: 'rel-job-1', status: 'running', detail: 'Búsqueda de releases lanzada' },
         {
@@ -212,15 +229,20 @@ describe('Release search polling (C-10)', () => {
         },
       ],
     })
-    renderModal()
+    renderPanelModal()
 
-    // The options come from the async indexers query: changing the select
-    // before they render would write a value no option has.
+    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
+    await waitFor(
+      () => expect(screen.getByText('2 releases encontrados')).toBeInTheDocument(),
+      { timeout: 4000 },
+    )
+
+    // The options ARE the rows' labels; choosing one re-runs the search and
+    // the choice rides THAT job to the poll.
     await screen.findByRole('option', { name: 'aMuTorrent' })
     fireEvent.change(document.getElementById('release-indexer') as HTMLSelectElement, {
-      target: { value: '1' },
+      target: { value: 'aMuTorrent' },
     })
-    fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
 
     await waitFor(
       () => expect(screen.getByText('1 releases encontrados')).toBeInTheDocument(),
@@ -232,5 +254,6 @@ describe('Release search polling (C-10)', () => {
     expect(titles).toHaveLength(1)
     expect(titles[0]).toContain('Everything Everywhere')
     expect(titles.join(' ')).not.toContain('Solo en OtherIndexer')
+    expect(postCalls(fn)).toHaveLength(2)
   })
 })

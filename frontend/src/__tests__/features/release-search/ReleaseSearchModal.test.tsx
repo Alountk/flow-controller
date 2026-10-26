@@ -13,20 +13,17 @@ import type { Release } from '../../../shared/api/releases.ts'
  * on rows the user cannot see.
  */
 
+/** A direct-source release row, exactly as `POST /api/calendar/releases`
+ *  serves it (S5): never the arr era's quality/languages/indexerId. */
 function makeRelease(overrides: Partial<Release> = {}): Release {
   return {
     guid: 'en-1',
     title: 'Everything Everywhere All at Once 2022 1080p BluRay',
     size: 10_000_000_000,
-    quality: 'Bluray-1080p',
     indexer: 'aMuTorrent',
-    indexerId: 1,
-    indexerFlags: '',
+    source: 'torznab',
+    link: 'https://idx.test/download/en-1.torrent',
     seeders: 10,
-    leechers: 1,
-    protocol: 'torrent',
-    releaseGroup: '',
-    languages: ['English'],
     ...overrides,
   }
 }
@@ -36,8 +33,6 @@ const releases: Release[] = [
   makeRelease({
     guid: 'es-1',
     title: 'Todo a la vez en todas partes 2022 1080p',
-    quality: 'WEBDL-1080p',
-    languages: ['Spanish'],
   }),
 ]
 
@@ -193,27 +188,21 @@ describe('ReleaseSearchModal filter bar', () => {
     expect(releaseTitles()).toHaveLength(0)
   })
 
-  it('offers a chip per quality and per language present in the results', async () => {
+  it('offers no quality or language chips when the rows carry none (S5)', async () => {
     await openResults()
 
-    expect(screen.getByRole('button', { name: 'Bluray-1080p' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'WEBDL-1080p' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Spanish' })).toBeInTheDocument()
+    // Direct rows never carry quality/languages: the chip groups must not
+    // render at all, and an absent value must never surface as text.
+    expect(screen.queryByText('Calidad')).toBeNull()
+    expect(screen.queryByText('Idioma')).toBeNull()
+    expect(within(releasesRegion()).queryByText('undefined')).toBeNull()
   })
 
-  it('filters by a language chip', async () => {
+  it('a row without seeders is unknown, not zero: it survives the seeders floor', async () => {
+    mockFetch({ releases: [makeRelease({ guid: 'no-seed', seeders: undefined })] })
     await openResults()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Spanish' }))
-
-    expect(screen.getByText('1 de 2 releases')).toBeInTheDocument()
-    expect(releaseTitles()).toEqual(['Todo a la vez en todas partes 2022 1080p'])
-  })
-
-  it('filters by a quality chip', async () => {
-    await openResults()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Bluray-1080p' }))
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '50' } })
 
     expect(releaseTitles()).toEqual(['Everything Everywhere All at Once 2022 1080p BluRay'])
   })
@@ -263,8 +252,8 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
   it('offers the three destinations and highlights the one the rules pick', async () => {
     mockFetch({
       releases: [
-        makeRelease({ guid: '4k-1', quality: 'Bluray-2160p' }),
-        makeRelease({ guid: 'hd-1', title: 'Plain Movie 2022 1080p BluRay', quality: 'Bluray-1080p' }),
+        makeRelease({ guid: '3d-1', title: 'Película 2020 3D HSBS 1080p BluRay' }),
+        makeRelease({ guid: 'hd-1', title: 'Plain Movie 2022 1080p BluRay' }),
       ],
     })
     await openResults()
@@ -276,9 +265,10 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
     await waitFor(() => expect(within(row).getByRole('button', { name: /4K/ })).toBeEnabled())
     expect(within(row).getByRole('button', { name: /Biblioteca/ })).toBeEnabled()
     expect(within(row).getByRole('button', { name: /3D/ })).toBeEnabled()
-    // 2160p + a configured folder: the routing rules say → 4K, and the row says so.
-    expect(within(row).getByRole('button', { name: /4K/ })).toHaveClass('suggest')
-    // …and a plain 1080p row suggests the library.
+    // A 3D title + the configured folder: the rules say → 3D, and the row
+    // says so (S5 rows carry no quality class to route by).
+    expect(within(row).getByRole('button', { name: /3D/ })).toHaveClass('suggest')
+    // …and a row with no class to claim suggests the library.
     const plain = document.querySelectorAll('.release-dest')[1] as HTMLElement
     expect(within(plain).getByRole('button', { name: /Biblioteca/ })).toHaveClass('suggest')
   })
@@ -293,7 +283,6 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
     const body = grabBodies(fn)[0]
     expect(body).not.toHaveProperty('destination')
     expect(body.library).toBe(true)
-    expect(body.quality).toBe('Bluray-1080p')
   })
 
   it('the 4K button sends the configured folder', async () => {
@@ -356,24 +345,23 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
 })
 
 /**
- * The release's quality class is what routes it to its own folder when nobody
- * picked a destination by hand. What is asserted here is only the wire — the
- * server owns the actual mapping — and the one case where claiming a class
- * would be a lie: a batch holding more than one.
+ * What the grab body may claim. The release quality used to ride the wire so
+ * the server could route by it; a direct row never carries one (S5), and the
+ * body must say so by omission rather than invent a class.
  */
-describe('ReleaseSearchModal quality routing', () => {
+describe('ReleaseSearchModal grab body honesty', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('sends the release quality on a single grab', async () => {
-    const fn = mockFetch({ releases: [makeRelease({ guid: '4k-1', quality: 'Bluray-2160p' })] })
+  it('a direct row has no quality: the body never invents one', async () => {
+    const fn = mockFetch({ releases: [makeRelease({ guid: 'no-q-1' })] })
     await openResults()
 
     pressDest('Biblioteca')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
-    expect(grabBodies(fn)[0].quality).toBe('Bluray-2160p')
+    expect(grabBodies(fn)[0]).not.toHaveProperty('quality')
   })
 
 })
@@ -394,12 +382,10 @@ describe('ReleaseSearchModal 3D routing', () => {
   const suggested = makeRelease({
     guid: 'sug-1',
     title: 'Película 2020 3D HSBS 1080p BluRay',
-    quality: 'Bluray-1080p',
   })
   const plain = makeRelease({
     guid: 'plain-1',
     title: 'Otra Película 2022 1080p BluRay',
-    quality: 'Bluray-1080p',
   })
 
   it('sends is3d when the title suggests it', async () => {

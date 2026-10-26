@@ -480,6 +480,7 @@ import threading
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from application import gateways
 from application.use_cases.grab_release import grab_tasks
 from application.use_cases.release_search import release_tasks
 from tests._stubs import post_grab_and_settle
@@ -719,69 +720,207 @@ class TestCalendarAdd:
 
 
 class TestCalendarReleases:
-    """C-10 — the POST starts a job; the search runs in a worker.
+    """C-10 keeps its job machinery; S1 (calendario-directo) changes WHO the
+    job asks: our own sources, never the arr.
 
     The synchronous version of this endpoint awaited Radarr × 20 indexers for
     91.6 s inside the request — longer than the proxy's ~60 s cut, so the
     client got a 504 before any release could come back (masked once by
     raising `proxy_read_timeout` to 250 s by hand in nginx). Now the POST
     answers with a task id, `GET /api/calendar/releases/{task_id}` serves the
-    payload the old handler used to return, and the arr is only ever asked by
-    the worker.
+    payload the old handler used to return, and the worker runs the fan-out
+    over the project's direct sources (Torznab registry + aMule EC +
+    Prowlarr) with the item's title as query — `arr_fetch_releases` is out of
+    this path entirely (S1).
     """
 
-    @patch("application.use_cases.release_search.arr_fetch_releases", new_callable=AsyncMock)
-    def test_post_starts_a_job_without_running_the_search_inline(self, mock_fetch):
-        mock_fetch.return_value = {
-            "releases": [{"guid": "g1", "title": "Rel1", "indexer": "Torznab"}],
-            "detail": "1 releases",
-        }
-        gate = threading.Event()
-        with patch(
-            "interfaces.http.routes.calendar.http_session",
-            lambda: _gated_worker_session(gate),
-        ):
-            resp = client.post(
-                "/api/calendar/releases",
-                json={"source": "radarr", "type": "movie", "id": 42},
-            )
-            assert resp.status_code == 200
-            data = resp.json()
-            # A task id NOW, status running, and no payload — where the old
-            # handler would still be awaiting Radarr.
-            assert data["ok"] is True
-            assert data["task_id"]
-            assert data["status"] == "running"
-            assert "releases" not in data
-            # The worker is held at the session gate, so this call could only
-            # have come from the handler: the inline search C-10 removes.
-            mock_fetch.assert_not_called()
-            task = release_tasks.get(data["task_id"])
-            assert task is not None
-            assert task["status"] == "running"
-            release_tasks._tasks.pop(data["task_id"], None)
-        gate.set()
+    @staticmethod
+    def _await_release(task_id: str, timeout: float = 2.0) -> dict:
+        """Poll the release registry until the worker settles. The app's loop
+        runs in the TestClient's portal thread, so the shared registry is the
+        only surface this thread reads."""
+        import time
 
-    @patch("application.use_cases.release_search.arr_fetch_releases", new_callable=AsyncMock)
-    def test_episode_post_starts_a_job(self, mock_fetch):
-        mock_fetch.return_value = {"releases": [], "detail": "0 releases"}
-        gate = threading.Event()
-        with patch(
-            "interfaces.http.routes.calendar.http_session",
-            lambda: _gated_worker_session(gate),
-        ):
-            resp = client.post(
-                "/api/calendar/releases",
-                json={"source": "sonarr", "type": "episode", "id": 99},
-            )
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["ok"] is True
-            assert data["task_id"]
-            assert data["status"] == "running"
-            mock_fetch.assert_not_called()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            task = release_tasks.get(task_id)
+            if task and task.get("status") in ("done", "error"):
+                return task
+            time.sleep(0.01)
+        raise AssertionError(
+            f"release job {task_id} never settled: {release_tasks.get(task_id)}"
+        )
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_post_starts_a_job_over_our_own_sources(self, mock_sources):
+        """T1/S1 — the POST still answers a task id immediately; the worker
+        calls OUR fan-out once with the item's title, and its rows are what
+        the status endpoint serves."""
+        mock_sources.return_value = {
+            "ok": True,
+            "results": [{
+                "source": "torznab",
+                "indexer": "Mi Indexador",
+                "name": "Blade Runner 1982 (1982) 1080p BluRay",
+                "size": 12345,
+                "seeders": 7,
+                "guid": "https://t.example/1",
+                "link": "magnet:?xt=urn:btih:aa",
+            }],
+            "skipped": [],
+        }
+        resp = client.post(
+            "/api/calendar/releases",
+            json={
+                "source": "radarr",
+                "type": "movie",
+                "id": 42,
+                "title": "Blade Runner 1982",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["task_id"]
+        assert data["status"] == "running"
+        assert "releases" not in data
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["status"] == "done"
+            assert mock_sources.await_count == 1
+            assert mock_sources.await_args.args == ("Blade Runner 1982",)
+            assert task["releases"] == [{
+                "title": "Blade Runner 1982 (1982) 1080p BluRay",
+                "guid": "https://t.example/1",
+                "link": "magnet:?xt=urn:btih:aa",
+                "size": 12345,
+                "seeders": 7,
+                "indexer": "Mi Indexador",
+                "source": "torznab",
+            }]
+            assert task["detail"] == "1 releases"
+        finally:
             release_tasks._tasks.pop(data["task_id"], None)
-        gate.set()
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_episode_post_starts_a_job(self, mock_sources):
+        """T1/S1 — `type: episode` rides the same direct fan-out."""
+        mock_sources.return_value = {"ok": True, "results": [], "skipped": []}
+        resp = client.post(
+            "/api/calendar/releases",
+            json={"source": "sonarr", "type": "episode", "id": 99, "title": "Via Láctea"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["task_id"]
+        assert data["status"] == "running"
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["status"] == "done"
+            assert mock_sources.await_args.args == ("Via Láctea",)
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_rows_carry_what_the_sources_said_and_invent_nothing(self, mock_sources):
+        """S1: the mapping keeps every fact the source stated (title, guid,
+        link, size, seeders when present, indexer/source) and NEVER invents
+        the arr fields the direct sources don't have — no quality, languages,
+        indexerId, leechers, protocol, releaseGroup or indexerFlags keys."""
+        mock_sources.return_value = {
+            "ok": True,
+            "results": [
+                {
+                    "source": "amule",
+                    "name": "Otra Pelicula (2020)",
+                    "size": 9,
+                    "guid": "0123456789abcdef0123456789abcdef",
+                    "link": "ed2k://|file|x.mkv|9|0123456789abcdef0123456789abcdef|/",
+                    "sources": 12,
+                },
+                {
+                    "source": "prowlarr",
+                    "name": "Tercer Titulo S01E02",
+                    "size": 5,
+                    "link": "magnet:?xt=urn:btih:bb",
+                },
+            ],
+            "skipped": [{"source": "torznab", "reason": "sin indexadores habilitados"}],
+        }
+        resp = client.post(
+            "/api/calendar/releases",
+            json={"source": "sonarr", "type": "episode", "id": 7, "title": "Tercer Titulo"},
+        )
+        data = resp.json()
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["status"] == "done"
+            first, second = task["releases"]
+            assert set(first) == {"title", "guid", "link", "size", "indexer", "source"}
+            assert first == {
+                "title": "Otra Pelicula (2020)",
+                "guid": "0123456789abcdef0123456789abcdef",
+                "link": "ed2k://|file|x.mkv|9|0123456789abcdef0123456789abcdef|/",
+                "size": 9,
+                "indexer": "amule",
+                "source": "amule",
+            }
+            assert set(second) == {"title", "guid", "link", "size", "indexer", "source"}
+            assert second["title"] == "Tercer Titulo S01E02"
+            assert second["link"] == "magnet:?xt=urn:btih:bb"
+            # guid falls back to the link so the grab always has a target.
+            assert second["guid"] == "magnet:?xt=urn:btih:bb"
+            # An answered fan-out with skips stays a success whose detail is
+            # honest about what it never saw.
+            assert "fuentes omitidas" in task["detail"]
+            assert "torznab: sin indexadores habilitados" in task["detail"]
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_every_source_failing_settles_the_job_as_an_error(self, mock_sources):
+        """S1: when every source failed the job settles as ERROR carrying the
+        fan-out's reasons — never done + empty releases, which would read as
+        «sin resultados»."""
+        reasons = (
+            "todas las fuentes seleccionadas fallaron — "
+            "amule: no está configurado; torznab: sin indexadores habilitados"
+        )
+        mock_sources.return_value = {
+            "ok": False,
+            "results": [],
+            "skipped": [
+                {"source": "amule", "reason": "no está configurado"},
+                {"source": "torznab", "reason": "sin indexadores habilitados"},
+            ],
+            "detail": reasons,
+        }
+        resp = client.post(
+            "/api/calendar/releases",
+            json={"source": "radarr", "type": "movie", "id": 3, "title": "Dune 2021"},
+        )
+        data = resp.json()
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["status"] == "error"
+            assert task["detail"] == reasons
+            assert task["releases"] == []
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+    def test_a_missing_title_refuses_synchronously_without_a_job(self):
+        """S1: the query IS the item's title — without it there is no honest
+        search, and validation keeps answering in the old synchronous shape:
+        `releases: []` + detail, no task id."""
+        resp = client.post(
+            "/api/calendar/releases",
+            json={"source": "radarr", "type": "movie", "id": 42},
+        )
+        data = resp.json()
+        assert data["releases"] == []
+        assert "Falta el título" in data["detail"]
+        assert "task_id" not in data
 
     def test_release_status_endpoint_serves_the_task(self):
         """The collect endpoint answers in the `{"ok": True, **task}` shape
@@ -840,9 +979,9 @@ class TestCalendarGrab:
     only ever asked by the worker.
     """
 
-    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
-    def test_post_starts_a_job_without_running_the_grab_inline(self, mock_grab):
-        mock_grab.return_value = {"ok": True, "detail": "Release encolado"}
+    @patch("interfaces.http.routes.calendar.dispatch_direct", new_callable=AsyncMock)
+    def test_post_starts_a_job_without_running_the_grab_inline(self, mock_dispatch):
+        mock_dispatch.return_value = {"ok": True, "detail": "Release encolado"}
         gate = threading.Event()
         with patch(
             "interfaces.http.routes.calendar.http_session",
@@ -863,25 +1002,25 @@ class TestCalendarGrab:
             # The worker is held at the session gate, so this call could only
             # have come from the HANDLER itself — the inline grab async-grab
             # removes.
-            mock_grab.assert_not_called()
+            mock_dispatch.assert_not_awaited()
             task = grab_tasks.get(data["task_id"])
             assert task is not None
             assert task["status"] == "running"
             grab_tasks._tasks.pop(data["task_id"], None)
         gate.set()
 
-    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
-    def test_grab_ok(self, mock_grab):
-        mock_grab.return_value = {"ok": True, "detail": "Release encolado"}
+    @patch("interfaces.http.routes.calendar.dispatch_direct", new_callable=AsyncMock)
+    def test_grab_ok(self, mock_dispatch):
+        mock_dispatch.return_value = {"ok": True, "detail": "Release encolado"}
         body = post_grab_and_settle({"source": "radarr", "guid": "some-guid-123"})
         assert body["ok"] is True
         assert body["status"] == "done"
         assert body["detail"] == "Release encolado"
-        mock_grab.assert_called_once()
+        mock_dispatch.assert_awaited_once()
 
-    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
-    def test_grab_error(self, mock_grab):
-        mock_grab.return_value = {"ok": False, "detail": "HTTP 404: not found"}
+    @patch("interfaces.http.routes.calendar.dispatch_direct", new_callable=AsyncMock)
+    def test_grab_error(self, mock_dispatch):
+        mock_dispatch.return_value = {"ok": False, "detail": "HTTP 404: not found"}
         body = post_grab_and_settle({"source": "radarr", "guid": "bad-guid"})
         assert body["ok"] is False
         assert body["status"] == "done"
@@ -911,8 +1050,8 @@ class TestCalendarGrab:
         data = client.get("/api/calendar/grab/no-such-task").json()
         assert data == {"ok": False, "error": "tarea no encontrada"}
 
-    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
-    def test_unknown_service_refuses_without_starting_a_job(self, mock_grab):
+    @patch("interfaces.http.routes.calendar.dispatch_direct", new_callable=AsyncMock)
+    def test_unknown_service_refuses_without_starting_a_job(self, mock_dispatch):
         """Validation still answers synchronously, exactly as before: no job
         id for a request that could never run."""
         resp = client.post(
@@ -922,10 +1061,10 @@ class TestCalendarGrab:
         data = resp.json()
         assert data == {"ok": False, "detail": "servicio desconocido: pluto"}
         assert "task_id" not in data
-        mock_grab.assert_not_called()
+        mock_dispatch.assert_not_awaited()
 
-    @patch("application.use_cases.grab_release.arr_grab_release", new_callable=AsyncMock)
-    def test_destination_not_allowed_refuses_without_starting_a_job(self, mock_grab):
+    @patch("interfaces.http.routes.calendar.dispatch_direct", new_callable=AsyncMock)
+    def test_destination_not_allowed_refuses_without_starting_a_job(self, mock_dispatch):
         resp = client.post(
             "/api/calendar/grab",
             json={"source": "radarr", "guid": "g1", "destination": "/etc/not-allowed"},
@@ -933,7 +1072,149 @@ class TestCalendarGrab:
         data = resp.json()
         assert data == {"ok": False, "detail": "Destino no permitido: /etc/not-allowed"}
         assert "task_id" not in data
-        mock_grab.assert_not_called()
+        mock_dispatch.assert_not_awaited()
+
+    # ── T2 (calendario-directo S2-S4): the grab dispatches DIRECT, by shape ──
+    #
+    # The five RED tests of T2: `POST /api/calendar/grab` adds by the SHAPE of
+    # the target exactly like `POST /api/indexers/download`, the category is
+    # chosen by DESTINATION (S3), and no flow touches `arr_grab_release` (S2).
+    # `arr_grab_release`/`arr_root_folders` are patched with `create=True`
+    # because S2-S4 DELETES those seams from the worker: the patch keeps
+    # "never called" assertable in both worlds.
+
+    def test_a_library_grab_adds_to_qbit_under_the_arrs_watched_category(self, monkeypatch):
+        """S2/S3: destination None (library) → the NATIVE qBittorrent add with
+        the category the arr watches (`radarr` for source radarr — Radarr
+        imports and organises as before). No `arr_grab_release` anywhere (S2),
+        and the own-grab row is `direct=True` on every success (S2)."""
+        monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
+        link = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Some.Movie.2024"
+        calls = []
+
+        async def fake_qbit(session, url, category=None):
+            calls.append({"url": url, "category": category})
+            return {
+                "ok": True,
+                "detail": f"Descarga añadida en qBittorrent (stub), categoría {category}",
+            }
+
+        with patch.object(gateways, "qbit_add_download", fake_qbit), \
+                patch(
+                    "application.use_cases.grab_release.arr_grab_release",
+                    new=AsyncMock(return_value={"ok": True, "detail": "encolado"}),
+                    create=True,
+                ) as arr, \
+                patch("application.use_cases.grab_release.record_own_grab", new=MagicMock()) as record:
+            body = post_grab_and_settle(
+                {"source": "radarr", "guid": "g1", "link": link, "movieId": 855}
+            )
+
+        assert body["ok"] is True
+        assert calls == [{"url": link, "category": "radarr"}]
+        arr.assert_not_awaited(), "S2: el grab ya no pasa por el arr"
+        assert record.call_args.kwargs["direct"] is True
+
+    def test_an_explicit_destination_adds_under_the_direct_category(self, monkeypatch):
+        """S3: an explicit destination leaves the library → category `flow`
+        (our own client category; the arr neither sees nor imports it) and the
+        success detail keeps the honesty suffix. `arr_root_folders` is not
+        consulted anymore: nothing passes through the arr (S3)."""
+        monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
+        link = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Some.Movie.2024"
+        calls = []
+
+        async def fake_qbit(session, url, category=None):
+            calls.append({"url": url, "category": category})
+            return {
+                "ok": True,
+                "detail": f"Descarga añadida en qBittorrent (stub), categoría {category}",
+            }
+
+        with patch.object(gateways, "qbit_add_download", fake_qbit), \
+                patch(
+                    "application.use_cases.grab_release.arr_grab_release",
+                    new=AsyncMock(return_value={"ok": True, "detail": "encolado"}),
+                    create=True,
+                ) as arr, \
+                patch(
+                    "application.use_cases.grab_release.arr_root_folders",
+                    new=AsyncMock(return_value=["/mnt/storage/movies"]),
+                    create=True,
+                ) as roots, \
+                patch("application.use_cases.grab_release.record_own_grab", new=MagicMock()) as record:
+            body = post_grab_and_settle(
+                {
+                    "source": "radarr",
+                    "guid": "g1",
+                    "link": link,
+                    "movieId": 855,
+                    "destination": "/mnt/storage/movies/_manual",
+                }
+            )
+
+        assert body["ok"] is True
+        assert calls == [{"url": link, "category": "flow"}]
+        assert "directa" in body["detail"], "S2: el detalle de éxito lo dice"
+        assert body["direct"] is True
+        arr.assert_not_awaited()
+        roots.assert_not_awaited()
+        assert record.call_args.kwargs["direct"] is True
+        assert record.call_args.kwargs["destination"] == "/mnt/storage/movies/_manual"
+
+    def test_an_ed2k_target_is_added_by_the_ec_seam_and_never_the_arr(self, monkeypatch):
+        """S2: `ed2k://` dispatches to the direct EC add (AMULE_EC_DIRECT's
+        default) — NO re-search, the row already carries the link — and the
+        arr is never told."""
+        monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
+        link = (
+            "ed2k://|file Your.Name.2016.1080p.BluRay.x264-GRP.mkv"
+            "|8589934592|ABCDEF0123456789ABCDEF0123456789|/"
+        )
+        calls = []
+
+        def fake_add(ed2k_link):
+            calls.append(ed2k_link)
+
+        with patch.object(gateways, "amule_add_ed2k", fake_add), \
+                patch.object(gateways, "qbit_add_download", new=AsyncMock()) as qbit, \
+                patch(
+                    "application.use_cases.grab_release.arr_grab_release",
+                    new=AsyncMock(return_value={"ok": True, "detail": "encolado"}),
+                    create=True,
+                ) as arr, \
+                patch("application.use_cases.grab_release.record_own_grab", new=MagicMock()) as record:
+            body = post_grab_and_settle(
+                {"source": "radarr", "guid": link, "movieId": 855}
+            )
+
+        assert body["ok"] is True
+        assert calls == [link]
+        qbit.assert_not_awaited(), "el ed2k es dominio de aMule, nunca de qBittorrent"
+        arr.assert_not_awaited()
+        assert record.call_args.kwargs["direct"] is True
+
+    def test_a_malformed_target_settles_an_honest_refusal(self):
+        """The dispatch refuses what it cannot recognise and the refusal
+        PROPAGATES as the settled {ok: False, detail} — the `_BAD_SCHEME`
+        honesty of `POST /api/indexers/download`, byte for byte."""
+        with patch(
+            "application.use_cases.grab_release.arr_grab_release",
+            new=AsyncMock(return_value={"ok": True, "detail": "encolado"}),
+            create=True,
+        ) as arr, \
+                patch("application.use_cases.grab_release.record_own_grab", new=MagicMock()) as record:
+            body = post_grab_and_settle(
+                {"source": "radarr", "guid": "not-a-link", "movieId": 855}
+            )
+
+        assert body["status"] == "done", "una negativa del worker, no un job fallido"
+        assert body["ok"] is False
+        assert body["detail"] == (
+            "link no válido: se espera ed2k://, magnet:, http(s) o un hash de aMule (32 hex)"
+        )
+        arr.assert_not_awaited()
+        record.assert_not_called()
 
 
 class TestCalendarIndexers:
