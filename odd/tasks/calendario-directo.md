@@ -165,3 +165,28 @@ requisitos no pedidos.
   Nota: los episodios envían el TÍTULO DEL EPISODIO (S1: «título del ítem»); si el
   filtro de relevancia ruidoso, ajuste de query fuera de este alcance. Gates:
   vitest **763/92 → 772/95**, tsc 0, eslint 0 — verificados por el padre.
+- **L6 — e2e de CI roto por S5 y adaptado (2026-10-25, T4):** el run 40295562604 de
+  PR #242 falló sólo en e2e: `flow-release-search.spec.ts:77` esperaba la opción
+  «Torznab» PRE-búsqueda (el select listaba los indexadores de Radarr = exactamente
+  lo que S5 cambió). Diagnóstico completo: en e2e sólo existía `RADARR_URL` (fan-out
+  nuevo = torznab+amule+prowlarr, Radarr ya no es fuente) → search→error y grab sin
+  cliente, y el spec fijaba además «Release encolado para descarga» (texto de
+  `arr_grab_release`, huérfano desde T2). Fix en inline (el launcher rechazó la
+  delegación por unidad sin backstop medido): (a) spec reescrito al contrato S5 —
+  **RED observado**: `:81 «3 releases encontrados»` inexistente con el stub viejo;
+  (b) `fake-arr` habla ahora `GET /torznab/api` (Atom de `releases.json`, enclosure
+  http + `torznab:attr seeders`) y el qB Web API (login `test/test` → 200 "Ok." +
+  cookie SID; `torrents/add` → 200 "Ok." registrando `urls`+`category`); (c) sembrado
+  vía API — registry con name exacto **«Torznab»** (la etiqueta de la opción/filas) y
+  `services.qbit` vía GET→merge→POST (contrato `DEFAULTS["services"]`); (d) step de
+  CI `Phase 2 — seed our sources (Torznab registry + qbit service)` insertado entre
+  health-check y auth-contract (200/409 idempotente; `jq` preinstalado en
+  ubuntu-latest) + `e2e/README.md` (fases, curls verbatim, endpoints nuevos).
+  Evidencia GREEN: smoke Atom ✅; seed verificado (indexer id=1 enabled; qbit url
+  127.0.0.1:4400/user test); grab local `qbit add … category=radarr` ✅; **paridad-CI
+  fase2 (trio) 6/6 en 2.7s con 0×429**. Artefactos locales diagnosticados SIN fix
+  (documentados en README): `dashboard-bare` corre en CI fase 1 sin seed (correr
+  fases juntas localmente contra instancia sembrada lo rompe) y el fallo inicial de
+  `kanban:119` fue rate-limit 429 por apilar RED+fase1+fase2 en una sola app.
+  Gates: backend 1628/0, frontend 772/95, tsc 0, eslint 0, `node --check` ✅.
+  Superficies: spec+stub (padre, inline); ci.yml+README (worker mvp2pvz9-g-zt2e).
