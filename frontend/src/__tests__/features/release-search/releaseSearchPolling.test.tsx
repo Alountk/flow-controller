@@ -42,7 +42,9 @@ const releases: Release[] = [
 ]
 
 const indexers = {
-  indexers: [{ id: 1, name: 'aMuTorrent', implementation: 'Torznab', enableSearch: true }],
+  indexers: [
+    { id: 1, name: 'aMuTorrent', implementation: 'Torznab', enableSearch: true, enabled: 1 },
+  ],
 }
 
 const STARTED_JOB = { ok: true, task_id: 'rel-job-1', status: 'running', detail: 'Búsqueda de releases lanzada' }
@@ -67,6 +69,10 @@ function mockPollingFetch(options: PollOptions = {}) {
   const state = { statusCalls: 0 }
   const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
+    if (url.includes('/api/indexers')) {
+      // our own registry — the modal's site checkboxes
+      return Promise.resolve({ ok: true, json: async () => indexers } as Response)
+    }
     if (url.includes('/api/calendar/indexers')) {
       return Promise.resolve({ ok: true, json: async () => indexers } as Response)
     }
@@ -105,8 +111,8 @@ function renderModal() {
   )
 }
 
-/** The panel keeps its select ON the results, so the choice-on-results flow
- *  (S5: the options are the rows' own labels) is a panel scenario. */
+/** The panel keeps its site checkboxes ON the results, so the re-run-on-
+ *  toggle flow is a panel scenario. */
 function renderPanelModal() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -208,27 +214,10 @@ describe('Release search polling (C-10)', () => {
     expect(statusCalls(fn)).toHaveLength(0)
   })
 
-  it('applies the chosen indexer to the results the poll delivers', async () => {
-    // S5: the select offers the labels the ROWS themselves carry, so the
-    // choice is made on the results and re-runs the search (PR B's trigger).
-    // The choice is captured when that search STARTS (the select is disabled
-    // while the job runs) and must filter the payload the poll brings back —
-    // not whatever the select says by then.
-    const fn = mockPollingFetch({
-      statusBodies: [
-        { ok: true, id: 'rel-job-1', status: 'running', detail: 'Búsqueda de releases lanzada' },
-        {
-          ok: true,
-          id: 'rel-job-1',
-          status: 'done',
-          detail: '2 releases encontrados',
-          releases: [
-            makeRelease({ guid: 'mu-1', indexer: 'aMuTorrent' }),
-            makeRelease({ guid: 'other-1', indexer: 'OtherIndexer', title: 'Solo en OtherIndexer 2022 1080p' }),
-          ],
-        },
-      ],
-    })
+  it('re-runs under the checked sites and the subset rides that job', async () => {
+    // The panel's site toggle is the re-run trigger, and the selection is
+    // SERVER-SIDE: it rides the POST (`sources`), never a client filter.
+    const fn = mockPollingFetch()
     renderPanelModal()
 
     fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
@@ -237,23 +226,19 @@ describe('Release search polling (C-10)', () => {
       { timeout: 4000 },
     )
 
-    // The options ARE the rows' labels; choosing one re-runs the search and
-    // the choice rides THAT job to the poll.
-    await screen.findByRole('option', { name: 'aMuTorrent' })
-    fireEvent.change(document.getElementById('release-indexer') as HTMLSelectElement, {
-      target: { value: 'aMuTorrent' },
-    })
+    fireEvent.click(screen.getByLabelText('aMule'))
+    await waitFor(() => expect(postCalls(fn)).toHaveLength(2))
+    const secondBody = JSON.parse(
+      String((postCalls(fn)[1][1] as RequestInit).body),
+    ) as Record<string, unknown>
+    expect(secondBody.sources).toEqual(['torznab', 'prowlarr'])
 
+    // The second job's payload renders exactly as delivered: the sites
+    // decided on the server, so no client-side row filtering survives.
     await waitFor(
-      () => expect(screen.getByText('1 releases encontrados')).toBeInTheDocument(),
+      () => expect(document.querySelectorAll('.release-title')).toHaveLength(2),
       { timeout: 4000 },
     )
-    // Scope to the rows: the modal header repeats the item title, so a
-    // document-wide query would match it too.
-    const titles = [...document.querySelectorAll('.release-title')].map((el) => el.textContent ?? '')
-    expect(titles).toHaveLength(1)
-    expect(titles[0]).toContain('Everything Everywhere')
-    expect(titles.join(' ')).not.toContain('Solo en OtherIndexer')
     expect(postCalls(fn)).toHaveLength(2)
   })
 })
