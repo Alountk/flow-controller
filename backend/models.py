@@ -34,6 +34,9 @@ class CalendarReleasesRequest(BaseModel):
     type: str  # "movie" or "episode"
     id: int  # Radarr movie ID or Sonarr episode ID
     title: str = ""  # the item's title — the query over our own sources (S1)
+    # Site subset for the fan-out; absent = all three sources (today's behavior).
+    sources: list[str] | None = None
+    indexer_ids: list[int] | None = None
 
 
 class CalendarGrabRequest(BaseModel):

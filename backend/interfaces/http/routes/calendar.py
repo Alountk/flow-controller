@@ -3,10 +3,12 @@
 import asyncio
 import logging
 import time
+from collections import Counter
 from datetime import date, timedelta
+from functools import partial
 
 import aiohttp
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from config import ALLOWED_ROOTS, destination_for_quality, find_service, path_is_allowed, service_unavailable_reason
 from application import gateways
@@ -38,7 +40,12 @@ from models import (
 )
 from interfaces.http.deps import verify_api_key
 from interfaces.http.route_helpers import attach_grabbed_at
-from interfaces.http.routes.indexers import dispatch_direct, search_sources
+from interfaces.http.routes.indexers import (
+    dispatch_direct,
+    search_sources,
+    selected_indexer_ids,
+    selected_sources,
+)
 from state import http_session
 
 log = logging.getLogger("flow-controller")
@@ -236,7 +243,12 @@ def _release_row(row: dict) -> dict:
     return mapped
 
 
-async def _direct_release_fetch(query: str) -> dict:
+async def _direct_release_fetch(
+    query: str,
+    *,
+    sources: list[str] | None = None,
+    indexer_ids: list[int] | None = None,
+) -> dict:
     """The job's fetcher: ONE fan-out over our own sources (S1), rows mapped.
 
     `search_sources` is the exact fan-out of `POST /api/indexers/search`; its
@@ -246,21 +258,39 @@ async def _direct_release_fetch(query: str) -> dict:
     and appends the skipped sources and why — the same honesty `skipped` gives
     the free search.
     """
-    answer = await search_sources(query)
+    answer = await search_sources(
+        query, sources=sources, indexer_ids=indexer_ids, raw_counts=True
+    )
     if not answer.get("ok"):
         return {
             "ok": False,
             "releases": [],
             "detail": answer.get("detail") or "ninguna fuente de nuestras fuentes respondió",
         }
-    releases = [_release_row(row) for row in answer.get("results", [])]
-    detail = f"{len(releases)} releases"
-    skipped = answer.get("skipped")
+    results = answer.get("results", [])
+    releases = [_release_row(row) for row in results]
+    segments = [f"{len(releases)} releases"]
+    skipped = answer.get("skipped") or []
+    skipped_sources = {entry.get("source") for entry in skipped}
+    kept = Counter(row.get("source") for row in results)
+    # raw_counts is rows BEFORE the relevance filter, so a source that kept
+    # nothing distinguishes «0 resultados» from «sin coincidencias» (the amule report).
+    for source, raw in (answer.get("raw_counts") or {}).items():
+        if source in skipped_sources or kept.get(source, 0):
+            continue
+        if raw:
+            noun = "resultado" if raw == 1 else "resultados"
+            segments.append(f"{source}: {raw} {noun} sin coincidencias con la búsqueda")
+        else:
+            segments.append(f"{source}: 0 resultados")
     if skipped:
-        detail += " — fuentes omitidas: " + "; ".join(
-            f"{entry.get('source')}: {entry.get('reason')}" for entry in skipped
+        segments.append(
+            "fuentes omitidas: "
+            + "; ".join(
+                f"{entry.get('source')}: {entry.get('reason')}" for entry in skipped
+            )
         )
-    return {"ok": True, "releases": releases, "detail": detail}
+    return {"ok": True, "releases": releases, "detail": " — ".join(segments)}
 
 
 @router.post("/api/calendar/releases")
@@ -287,7 +317,26 @@ async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(ve
     query = (req.title or "").strip()
     if not query:
         return {"releases": [], "detail": "Falta el título del ítem para buscar en nuestras fuentes"}
-    return start_release_search(req.source, req.type, req.id, query=query, fetcher=_direct_release_fetch)
+    if req.sources == []:
+        return {"releases": [], "detail": "Selecciona al menos un sitio para buscar"}
+    try:
+        # the job must never start on an impossible selection: validate here,
+        # in the same synchronous honest shape as service/type/title.
+        selected_sources(req.sources)
+        selected_indexer_ids(req.indexer_ids)
+    except HTTPException as exc:
+        return {"releases": [], "detail": str(exc.detail)}
+    return start_release_search(
+        req.source,
+        req.type,
+        req.id,
+        query=query,
+        fetcher=partial(
+            _direct_release_fetch,
+            sources=req.sources,
+            indexer_ids=req.indexer_ids,
+        ),
+    )
 
 
 @router.get("/api/calendar/releases/{task_id}")

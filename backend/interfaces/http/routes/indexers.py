@@ -284,7 +284,7 @@ def _skip_reason(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
 
 
-def _selected_sources(raw) -> list[str]:
+def selected_sources(raw) -> list[str]:
     """The subset to search, in canonical order — or a Spanish 400.
 
     Absent, null and `[]` all mean «no filter» and search the three sources:
@@ -301,14 +301,14 @@ def _selected_sources(raw) -> list[str]:
     return [source for source in SOURCES if source in raw]
 
 
-def _selected_indexer_ids(raw) -> frozenset[int] | None:
+def selected_indexer_ids(raw) -> frozenset[int] | None:
     """The per-row subset of the Torznab registry — or a Spanish 400 (T2/S3).
 
     Absent, null and `[]` all mean «no filter» and query every enabled row —
-    the `_selected_sources` default precedent, byte-identical to today.
+    the `selected_sources` default precedent, byte-identical to today.
     Anything else must be a LIST of positive integer ids: `bool`, `float`,
     `str`, zero and negatives are NOT ids, and one bad entry is a 400 naming
-    it (the `_selected_sources` honesty style) — never a silently widened or
+    it (the `selected_sources` honesty style) — never a silently widened or
     narrowed search. Ids that match no enabled row are NOT this validator's
     business (L6e: a concurrently deleted indexer must not break the
     search): the fan-out answers them with an honest `skipped` entry.
@@ -526,10 +526,12 @@ def _source_task(source: str, query: str, indexer_ids: frozenset[int] | None):
     return _SOURCE_TASKS[source](query)
 
 
-async def search_sources(query: str, sources=None, indexer_ids=None) -> dict:
-    """The fan-out over our own sources — serves BOTH `POST /api/indexers/search` and the calendar release job (S1)."""
-    selected = _selected_sources(sources)
-    indexer_ids = _selected_indexer_ids(indexer_ids)
+async def search_sources(
+    query: str, sources=None, indexer_ids=None, *, raw_counts: bool = False
+) -> dict:
+    """The fan-out over our own sources — serves BOTH `POST /api/indexers/search` and the calendar release job (S1). `raw_counts` adds the per-source pre-relevance tallies the calendar's honest detail needs."""
+    selected = selected_sources(sources)
+    indexer_ids = selected_indexer_ids(indexer_ids)
 
     outcomes = await asyncio.gather(
         *(_source_task(source, query, indexer_ids) for source in selected),
@@ -537,6 +539,7 @@ async def search_sources(query: str, sources=None, indexer_ids=None) -> dict:
     )
     results: list[dict] = []
     skipped: list[dict] = []
+    raw_seen: dict[str, int] = {}
     answered = False
     for source, outcome in zip(selected, outcomes):
         if isinstance(outcome, BaseException):
@@ -544,10 +547,14 @@ async def search_sources(query: str, sources=None, indexer_ids=None) -> dict:
             continue
         answered = answered or outcome["ok"]
         skipped.extend(outcome["skipped"])
+        raw_seen[source] = len(outcome["rows"])
         results.extend(row for row in outcome["rows"] if _is_relevant(query, row["name"]))
 
     if results or answered:
-        return {"ok": True, "results": results, "skipped": skipped}
+        answer = {"ok": True, "results": results, "skipped": skipped}
+        if raw_counts:
+            answer["raw_counts"] = raw_seen
+        return answer
     return {
         "ok": False,
         "results": [],

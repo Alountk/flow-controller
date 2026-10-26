@@ -967,6 +967,204 @@ class TestCalendarReleases:
         assert data["releases"] == []
         assert "desconocido" in data["detail"]
 
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_post_without_selection_passes_no_subset(self, mock_sources):
+        """Absent fields keep today's fan-out: the fetcher forwards Nones."""
+        mock_sources.return_value = {"ok": True, "results": [], "skipped": []}
+        data = client.post(
+            "/api/calendar/releases",
+            json={"source": "radarr", "type": "movie", "id": 1, "title": "Nulo"},
+        ).json()
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["status"] == "done"
+            kwargs = mock_sources.await_args.kwargs
+            assert kwargs["sources"] is None
+            assert kwargs["indexer_ids"] is None
+            assert kwargs["raw_counts"] is True
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_post_with_a_site_subset_threads_the_selection(self, mock_sources):
+        """The checkbox selection reaches the fan-out verbatim (sites request)."""
+        mock_sources.return_value = {"ok": True, "results": [], "skipped": []}
+        data = client.post(
+            "/api/calendar/releases",
+            json={
+                "source": "radarr",
+                "type": "movie",
+                "id": 1,
+                "title": "Sub",
+                "sources": ["amule"],
+            },
+        ).json()
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["status"] == "done"
+            kwargs = mock_sources.await_args.kwargs
+            assert kwargs["sources"] == ["amule"]
+            assert kwargs["indexer_ids"] is None
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_post_with_a_registry_subset_threads_indexer_ids(self, mock_sources):
+        """Checked registry rows travel as indexer_ids beside torznab."""
+        mock_sources.return_value = {"ok": True, "results": [], "skipped": []}
+        data = client.post(
+            "/api/calendar/releases",
+            json={
+                "source": "radarr",
+                "type": "episode",
+                "id": 2,
+                "title": "Ids",
+                "sources": ["torznab", "amule"],
+                "indexer_ids": [7, 9],
+            },
+        ).json()
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["status"] == "done"
+            kwargs = mock_sources.await_args.kwargs
+            assert kwargs["sources"] == ["torznab", "amule"]
+            assert kwargs["indexer_ids"] == [7, 9]
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_post_refuses_an_empty_site_selection(self, mock_sources):
+        """No sites checked never fans out: synchronous honest refusal."""
+        resp = client.post(
+            "/api/calendar/releases",
+            json={
+                "source": "radarr",
+                "type": "movie",
+                "id": 1,
+                "title": "Nada",
+                "sources": [],
+            },
+        )
+        data = resp.json()
+        assert data["releases"] == []
+        assert data["detail"] == "Selecciona al menos un sitio para buscar"
+        assert "task_id" not in data
+        assert mock_sources.await_count == 0
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_post_names_an_unknown_source_synchronously(self, mock_sources):
+        """A typo in the selection is refused in the old shape, naming it."""
+        resp = client.post(
+            "/api/calendar/releases",
+            json={
+                "source": "radarr",
+                "type": "movie",
+                "id": 1,
+                "title": "Typo",
+                "sources": ["amulee"],
+            },
+        )
+        data = resp.json()
+        assert data["releases"] == []
+        assert data["detail"] == "fuente desconocida: «amulee»"
+        assert "task_id" not in data
+        assert mock_sources.await_count == 0
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_post_names_a_bad_indexer_id_synchronously(self, mock_sources):
+        """A non-positive id never reaches the fan-out: 400 text, old shape."""
+        resp = client.post(
+            "/api/calendar/releases",
+            json={
+                "source": "radarr",
+                "type": "movie",
+                "id": 1,
+                "title": "Bad id",
+                "sources": ["torznab"],
+                "indexer_ids": [0],
+            },
+        )
+        data = resp.json()
+        assert data["releases"] == []
+        assert data["detail"] == "id de indexador no válido: «0»"
+        assert "task_id" not in data
+        assert mock_sources.await_count == 0
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_detail_says_when_a_source_found_or_dropped_nothing(self, mock_sources):
+        """The amule report: 0 raw vs raw-but-filtered are different truths."""
+        mock_sources.return_value = {
+            "ok": True,
+            "results": [],
+            "skipped": [],
+            "raw_counts": {"torznab": 0, "amule": 0, "prowlarr": 4},
+        }
+        data = client.post(
+            "/api/calendar/releases",
+            json={"source": "radarr", "type": "movie", "id": 5, "title": "Hoyo"},
+        ).json()
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["detail"] == (
+                "0 releases — torznab: 0 resultados — amule: 0 resultados — "
+                "prowlarr: 4 resultados sin coincidencias con la búsqueda"
+            )
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_detail_stays_quiet_for_healthy_sources_and_skips(self, mock_sources):
+        """No noise for a source that delivered; skips keep their own line."""
+        mock_sources.return_value = {
+            "ok": True,
+            "results": [{
+                "source": "torznab",
+                "indexer": "Sitio",
+                "name": "Película Grande 1080p",
+                "size": 1,
+                "guid": "g1",
+                "link": "magnet:?xt=urn:btih:aa",
+            }],
+            "skipped": [{"source": "prowlarr", "reason": "no está configurado"}],
+            "raw_counts": {"torznab": 2, "amule": 1},
+        }
+        data = client.post(
+            "/api/calendar/releases",
+            json={"source": "radarr", "type": "movie", "id": 6, "title": "Grande"},
+        ).json()
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["detail"] == (
+                "1 releases — amule: 1 resultado sin coincidencias con la búsqueda — "
+                "fuentes omitidas: prowlarr: no está configurado"
+            )
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+
+class TestSearchSourceCounts:
+    """raw_counts: pre-relevance tallies, only when the calendar asks."""
+
+    @patch("interfaces.http.routes.indexers._source_task", new_callable=AsyncMock)
+    def test_raw_counts_report_rows_before_the_relevance_filter(self, mock_task):
+        # no pytest-asyncio in this repo: drive the coroutine explicitly.
+        import asyncio
+
+        from interfaces.http.routes.indexers import search_sources
+
+        mock_task.return_value = {
+            "rows": [{"source": "amule", "name": "zzz-no-token"}],
+            "ok": True,
+            "skipped": [],
+        }
+        counted = asyncio.run(
+            search_sources("Zeta Grande", sources=["amule"], raw_counts=True)
+        )
+        plain = asyncio.run(search_sources("Zeta Grande", sources=["amule"]))
+        assert counted["raw_counts"] == {"amule": 1}
+        assert counted["results"] == []  # dropped by relevance, still counted
+        assert "raw_counts" not in plain
+
 
 class TestCalendarGrab:
     """async-grab — the POST starts a job; the grab runs in a worker.
