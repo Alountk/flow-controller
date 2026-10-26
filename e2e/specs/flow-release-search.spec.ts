@@ -23,7 +23,7 @@ import { test, expect, login } from '../fixtures/app';
  *
  * The operator initiates every search: selecting a row NEVER searches. The
  * panel lands on its own 🔍 Buscar Releases button, THAT press starts the
- * request (and changing the indexer re-runs it), the rows read as the file
+ * request (and toggling a site re-runs it), the rows read as the file
  * selector (name · size · semillas — S5: chips only for fields the source
  * really states, never invented quality/language) and carry their three
  * destination buttons (→ Biblioteca / → 4K / → 3D) — the press on one of them
@@ -80,12 +80,15 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   await app.getByRole('button', { name: /Buscar Releases/ }).click();
   await expect(app.getByText('3 releases encontrados')).toBeVisible({ timeout: 15000 });
 
-  // The indexer dropdown carries THE ROWS' OWN labels (S5: options derive
-  // from the results — the arr's indexer list is gone, so nothing shows
-  // before this first search) and stays as the trigger for a re-search. The
-  // seeded registry row is named "Torznab" and every row groups under it.
-  // Count, not visibility: options of a closed <select> are not painted.
-  await expect(app.getByRole('option', { name: 'Torznab' })).toHaveCount(1, { timeout: 15000 });
+  // The site checkboxes replace the indexer dropdown: the block lists the
+  // seeded registry row "Torznab" alongside aMule and Prowlarr, all checked —
+  // the selection that rides the NEXT search's POST (a toggle re-runs it).
+  // Scope the box by class: the block carries no role or aria-label, and the
+  // results' select-all checkbox is legitimately elsewhere in the page.
+  await expect(app.getByText('Sitios de búsqueda:')).toBeVisible({ timeout: 15000 });
+  await expect(
+    app.locator('.calendar-sites').getByRole('checkbox', { name: 'Torznab' }),
+  ).toBeChecked({ timeout: 15000 });
 
   // The file selector's first row: the file's name alone on its line —
   // div.release-title (no role → text selector, justified as above).
