@@ -190,3 +190,18 @@ requisitos no pedidos.
   `kanban:119` fue rate-limit 429 por apilar RED+fase1+fase2 en una sola app.
   Gates: backend 1628/0, frontend 772/95, tsc 0, eslint 0, `node --check` ✅.
   Superficies: spec+stub (padre, inline); ci.yml+README (worker mvp2pvz9-g-zt2e).
+- **L7 — R2 roto en el seed, causa raíz del entorno y cierre (2026-10-26):** el CI R2
+  (40303480742) falló en el step nuevo: `POST /api/indexers -> 503 {"detail":"el
+  almacén de indexadores no está disponible"}` con health-check verde. Container
+  logs: `Cannot write settings … [Errno 13] Permission denied:
+  '/app/config/settings.json.tmp' (using in-memory only)` + `History database
+  unavailable at /app/config/history.db: unable to open database file` con
+  `/app/config = drwxr-xr-x root root` — `docker-compose.ci.yml` deja `volumes: []`,
+  así que el config es el dir de la imagen (root:root 755) mientras la app corre con
+  `user: "1000:1000"` → `_conn is None` → 503. **Defecto latente**: ninguna spec de
+  e2e había exigido escribir el store (settings caía a in-memory y el historial
+  degradaba honesto). Fix acotado: `user: "0:0"` en `docker-compose.e2e.yml` (fase 2
+  desechable con `down -v`; why-comment cita el run) — fase 1 bare conserva 1000.
+  Sin repro local (daemon Docker parado): la verificación = el entorno que falló →
+  **R3 (3e9e0ed) GREEN 5/5**, e2e 2m30s con el seed → **merge `e536f79` (PR #242)**.
+  Slice final: 3566 líneas / 4 commits, divulgación sostenida en PR + L4/L5/L6/L7.
