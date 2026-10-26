@@ -87,26 +87,36 @@ function formatSize(bytes: number): string {
 }
 
 /** The facts under a file's name — `idioma · calidad · size · semillas`, in
- *  the order the operator reads them. An empty `languages` array contributes
- *  NOTHING, not even a separator: the `·` is a node between rendered spans,
- *  so it can never appear in front of a missing field. */
+ *  the order the operator reads them. Only the fields the row REALLY has
+ *  contribute (S5): an absent `languages`/`quality`/`seeders` contributes
+ *  NOTHING, not even a separator — the `·` is a node between rendered spans,
+ *  so it can never appear in front of a missing field, and nothing may ever
+ *  print the string "undefined". `size` is the one fact every row carries. */
 function releaseMetaParts(r: Release): { className: string; text: string }[] {
   const parts: { className: string; text: string }[] = []
   if (r.languages && r.languages.length > 0) {
     parts.push({ className: 'release-lang', text: r.languages.join(', ') })
   }
   if (r.quality) parts.push({ className: 'release-quality', text: r.quality })
-  parts.push(
-    { className: 'release-size', text: formatSize(r.size) },
-    { className: 'release-seeders', text: `⬆ ${r.seeders} / ⬇ ${r.leechers}` },
-  )
+  parts.push({ className: 'release-size', text: formatSize(r.size) })
+  if (typeof r.seeders === 'number') {
+    parts.push({ className: 'release-seeders', text: `⬆ ${r.seeders}` })
+  }
   return parts
+}
+
+/** The label a row groups AND filters under (S5): its indexer's own label;
+ *  when the label IS the source (aMule rows) or the source gave none, the
+ *  source names it. One definition — the groups, the select's options and the
+ *  filter all read the row through this. */
+function releaseLabel(r: Release): string {
+  return r.indexer || r.source || 'Desconocido'
 }
 
 function groupByIndexer(releases: Release[]): Map<string, Release[]> {
   const map = new Map<string, Release[]>()
   for (const r of releases) {
-    const key = r.indexer || 'Desconocido'
+    const key = releaseLabel(r)
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(r)
   }
@@ -492,12 +502,11 @@ export function ReleaseSearchModal({
    * contract, so this logic did not have to learn anything new.
    */
   function applyReleaseResult(result: { releases: Release[]; detail: string }, choice: string) {
-    const selectedName = choice === 'all'
-      ? null
-      : indexers.find(i => String(i.id) === choice)?.name
+    // The choice IS a row label (the select offers the rows' own labels):
+    // filtering is the same read `groupByIndexer` groups with.
     const filtered = choice === 'all'
       ? result.releases
-      : result.releases.filter(r => r.indexer === selectedName)
+      : result.releases.filter((r) => releaseLabel(r) === choice)
     if (filtered.length > 0) {
       setReleases(filtered)
       // A new search is a new list: whatever was corrected against the old
@@ -507,8 +516,7 @@ export function ReleaseSearchModal({
     } else {
       setStep('error')
       if (choice !== 'all' && result.releases.length > 0) {
-        const nameFound = indexers.find(i => String(i.id) === choice)?.name || choice
-        setMessage(`${nameFound}: 0 releases encontrados. Hay ${result.releases.length} releases en total en otros indexadores.`)
+        setMessage(`${choice}: 0 releases encontrados. Hay ${result.releases.length} releases en total en otros indexadores.`)
       } else {
         setMessage(result.detail || 'No se encontraron releases. Verifica que los indexadores estén configurados.')
       }
@@ -622,10 +630,10 @@ export function ReleaseSearchModal({
     // A new search is a new list: the previous grab's ack belongs to the old
     // one and must not ride above results that have not been fetched yet.
     setNotice('')
-    const idxName = choice !== 'all' ? (indexers.find(i => String(i.id) === choice)?.name || '') : ''
+    const idxName = choice !== 'all' ? choice : ''
     setMessage(`Buscando releases${idxName ? ` en ${idxName}` : ' en todos los indexadores'}...`)
     try {
-      const started = await startCalendarReleaseSearch(item.source, item.type, item.id)
+      const started = await startCalendarReleaseSearch(item.source, item.type, item.id, item.title)
       if (started.task_id) {
         // C-10: the POST only starts the job. The results arrive through the
         // status poll above and are applied by the effect with THIS choice.
@@ -685,11 +693,12 @@ export function ReleaseSearchModal({
    * configured routing folders, and 3D forces the flag the chip suggests.
    */
   /** Where this row lands when nobody pressed a button: the same three rules
-   *  the backend routes with, resolved here only to SUGGEST a button. */
+   *  the backend routes with, resolved here only to SUGGEST a button. A row
+   *  without a quality class (every direct row) claims nothing. */
   function destinationFor(r: Release): string {
     if (foldersUnreadable) return 'la que decida el backend (configuración ilegible)'
     if (isThreeD(r) && path3d) return path3d
-    if (r.quality.trim().toLowerCase().endsWith('2160p') && path4k) return path4k
+    if ((r.quality ?? '').trim().toLowerCase().endsWith('2160p') && path4k) return path4k
     return LIBRARY
   }
 
@@ -707,6 +716,9 @@ export function ReleaseSearchModal({
     const result = await grabCalendarRelease(
       item.source,
       guid,
+      // S2: `link` when the row has one — the backend dispatches `link or
+      // guid`, so a row without one falls back to its guid untouched.
+      release?.link || undefined,
       release?.indexerId || 0,
       item.type === 'movie' ? item.id : 0,
       item.type === 'episode' ? item.id : 0,
@@ -732,8 +744,14 @@ export function ReleaseSearchModal({
   const isProcessing = step === 'searching' || step === 'adding' || step === 'grabbing'
 
   // Options come from the FULL result set, so they do not vanish as you filter.
-  const qualityOptions = collectQualities(releases)
-  const languageOptions = collectLanguages(releases)
+  // Only fields the rows really carry become chips: a quality/language the API
+  // never sent contributes nothing (S5) — never the string "undefined".
+  const qualityOptions = collectQualities(releases).filter((quality) => Boolean(quality))
+  const languageOptions = collectLanguages(releases).filter((language) => Boolean(language))
+  // The indexer select's options are the rows' own labels — the same ones the
+  // groups below print (S5). The arr's indexer list can never match these
+  // rows, which is exactly how the filter used to empty the results.
+  const indexerOptions = [...new Set(releases.map(releaseLabel))]
   const visibleReleases = filterReleases(releases, filters)
   const filtersActive = hasActiveFilters(filters)
   const isSearching = step === 'searching'
@@ -925,15 +943,17 @@ export function ReleaseSearchModal({
                 value={selectedIndexer}
                 disabled={isProcessing}
                 onChange={(e) => {
-                  const next = e.target.value
+                  // A programmatic value no option carries resolves to "" —
+                  // that is "no filter", never a filter that hides everything.
+                  const next = e.target.value || 'all'
                   setSelectedIndexer(next)
                   // PANEL ONLY: changing the indexer IS the trigger now.
                   if (inPanel && autoSearchable) void handleSearch(next)
                 }}
               >
                 <option value="all">Todos los indexadores</option>
-                {indexers.map((idx) => (
-                  <option key={idx.id} value={String(idx.id)}>{idx.name}</option>
+                {indexerOptions.map((label) => (
+                  <option key={label} value={label}>{label}</option>
                 ))}
               </select>
               {indexersQuery.isError ? (

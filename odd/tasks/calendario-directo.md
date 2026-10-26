@@ -143,3 +143,25 @@ requisitos no pedidos.
   post-PR; (e) incidente de orden de imports resuelto con import perezoso en el test EC
   (52 tests unrelated re-verdes). Suite: **1642 → 1628 / 0** (neto −14 por tests
   obsoletos retirados con accounting). Verificado por el padre de forma independiente.
+  **Slice:** 2546 líneas en 1 commit (`dc3084f`) — supera ~400 → estrategia registrada:
+  **PR ÚNICO con divulgación** (misma disposición que L6 de qbit-nativo); fronteras:
+  backend T1+T2 = `dc3084f`, frontend T3 = commit siguiente, cierre T4.
+- **L5 — T3 frontend (2026-10-25, implementación):** S5 RED 6 runtime + 3 de tipos →
+  GREEN: `startCalendarReleaseSearch(source, type, id, title)` (campo
+  `ReleaseSearchItem.title` existente — 0 cambios en los 4 openers), `Release` honesto
+  (`link`/`source` nuevos, `seeders?`, los 7 campos arr opcionales-con-significado), chips
+  sólo de campos presentes (nunca «undefined»), agrupación `r.indexer || r.source`, payload
+  con `link ?? guid` + `indexerId`→0, body de grab SIN `quality` cuando la fila no lo trae
+  (nunca inventar). **Colisión resuelta con mi autorización (Option 1):** el tipo honesto
+  forzó 5 guards behavior-preserving en `releaseFilters.ts` (superficie extendida;
+  `releaseFilters.test.ts` intacto). **Regresión diferencial detectada y arreglada (RED
+  observado):** el `<select>` de indexador del modal listaba los indexadores de ARR
+  (`GET /api/calendar/indexers`) y filtraba `r.indexer === nombre_arr` → con filas
+  nuestras NO matcheaba nada; fijo = opciones derivadas de las propias filas (misma
+  etiqueta `releaseLabel` que `groupByIndexer`) + test nuevo (falló con
+  `['Todos los indexadores', 'aMuTorrent']` → verde seleccionando/deseleccionando).
+  Fixtures/asserions reescritos con accounting (chips-presentes, body sin quality, flujo
+  de elección re-exprimido al alcanzable). Lote: sin UI de batch → `links` no hizo falta.
+  Nota: los episodios envían el TÍTULO DEL EPISODIO (S1: «título del ítem»); si el
+  filtro de relevancia ruidoso, ajuste de query fuera de este alcance. Gates:
+  vitest **763/92 → 772/95**, tsc 0, eslint 0 — verificados por el padre.

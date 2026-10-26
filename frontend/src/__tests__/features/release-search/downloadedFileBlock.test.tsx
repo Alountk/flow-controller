@@ -39,19 +39,15 @@ function makeItem(overrides: Partial<ReleaseSearchItem> = {}): ReleaseSearchItem
   }
 }
 
+/** A direct-source release row (S5): never the arr era's fields. */
 const release: Release = {
   guid: 'rel-1',
   title: 'ParaNorman.2012.1080p.BluRay.x264',
   size: 8_000_000_000,
-  quality: 'Bluray-2160p',
   indexer: 'aMuTorrent',
-  indexerId: 1,
-  indexerFlags: '',
+  source: 'torznab',
+  link: 'https://idx.test/download/rel-1.torrent',
   seeders: 15,
-  leechers: 2,
-  protocol: 'torrent',
-  releaseGroup: '',
-  languages: ['Spanish'],
 }
 
 /** `/api/settings` is where the 3D tag's rule (path inside `path_3d`) comes

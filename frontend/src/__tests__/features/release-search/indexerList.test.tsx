@@ -11,6 +11,9 @@ import { ReleaseSearchModal } from '../../../features/release-search/ReleaseSear
  *
  * These guard the two halves of the fix: the failure reaches the screen with
  * its reason, and a list already fetched for one source is not fetched again.
+ * The probe is the count readout: since S5 the dropdown lists the ROWS' own
+ * labels (result rows), never the arr's names — the list query and its count
+ * are what this test is about.
  */
 
 const item = {
@@ -76,12 +79,12 @@ describe('indexer list in the release search modal', () => {
         .length
 
     const first = open(client)
-    expect(await screen.findByText('aMuTorrent')).toBeInTheDocument()
+    expect(await screen.findByText('1 configurados')).toBeInTheDocument()
     expect(countIndexerCalls()).toBe(1)
     first.unmount()
 
     open(client)
-    await waitFor(() => expect(screen.getByText('aMuTorrent')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('1 configurados')).toBeInTheDocument())
     expect(countIndexerCalls()).toBe(1)
   })
 })
