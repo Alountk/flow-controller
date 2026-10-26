@@ -526,30 +526,10 @@ def _source_task(source: str, query: str, indexer_ids: frozenset[int] | None):
     return _SOURCE_TASKS[source](query)
 
 
-@router.post("/api/indexers/search")
-async def search_indexers(body: dict, _key: str = Depends(verify_api_key)):
-    """T4/S4 — ONE query over Torznab + aMule + Prowlarr, in parallel.
-
-    Body `{query, sources?, indexer_ids?}`; every selected source runs
-    concurrently (`asyncio.gather(..., return_exceptions=True)` per source)
-    and answers its own rows and its own `skipped` entries, so one source's
-    failure or absence NEVER discards another's results. `indexer_ids`
-    (T2/S3) narrows the Torznab fan-out to a per-row subset of the registry;
-    absent, null and `[]` query every enabled row, byte-identical to today.
-    The answer is `{"ok", "results",
-    "skipped"}` — plus a `detail` summary when EVERY selected source failed,
-    because a silent `[]` disguised as «sin resultados» is the one answer S4
-    refuses to give. The status stays 200 in that case, like every honest
-    refusal in this repo (S3: «200 con ok:false en fallo»): one merged
-    envelope must carry per-source truth, so the truth lives in `ok`/`skipped`
-    and the status does not lie about partial success.
-    """
-    raw_query = body.get("query")
-    query = raw_query.strip() if isinstance(raw_query, str) else ""
-    if not query:
-        raise HTTPException(400, "query is required")
-    selected = _selected_sources(body.get("sources"))
-    indexer_ids = _selected_indexer_ids(body.get("indexer_ids"))
+async def search_sources(query: str, sources=None, indexer_ids=None) -> dict:
+    """The fan-out over our own sources — serves BOTH `POST /api/indexers/search` and the calendar release job (S1)."""
+    selected = _selected_sources(sources)
+    indexer_ids = _selected_indexer_ids(indexer_ids)
 
     outcomes = await asyncio.gather(
         *(_source_task(source, query, indexer_ids) for source in selected),
@@ -577,6 +557,31 @@ async def search_indexers(body: dict, _key: str = Depends(verify_api_key)):
             + "; ".join(f"{entry['source']}: {entry['reason']}" for entry in skipped)
         ),
     }
+
+
+@router.post("/api/indexers/search")
+async def search_indexers(body: dict, _key: str = Depends(verify_api_key)):
+    """T4/S4 — ONE query over Torznab + aMule + Prowlarr, in parallel.
+
+    Body `{query, sources?, indexer_ids?}`; every selected source runs
+    concurrently (`asyncio.gather(..., return_exceptions=True)` per source)
+    and answers its own rows and its own `skipped` entries, so one source's
+    failure or absence NEVER discards another's results. `indexer_ids`
+    (T2/S3) narrows the Torznab fan-out to a per-row subset of the registry;
+    absent, null and `[]` query every enabled row, byte-identical to today.
+    The answer is `{"ok", "results",
+    "skipped"}` — plus a `detail` summary when EVERY selected source failed,
+    because a silent `[]` disguised as «sin resultados» is the one answer S4
+    refuses to give. The status stays 200 in that case, like every honest
+    refusal in this repo (S3: «200 con ok:false en fallo»): one merged
+    envelope must carry per-source truth, so the truth lives in `ok`/`skipped`
+    and the status does not lie about partial success.
+    """
+    raw_query = body.get("query")
+    query = raw_query.strip() if isinstance(raw_query, str) else ""
+    if not query:
+        raise HTTPException(400, "query is required")
+    return await search_sources(query, body.get("sources"), body.get("indexer_ids"))
 
 
 # ── T5/S5 (enmienda L6): the download dispatch ────────────────────────────────
@@ -633,17 +638,20 @@ def _download_target(body: dict) -> str:
     return target
 
 
-async def _download_ed2k(link: str) -> dict:
+async def _download_ed2k(link: str, category: str | None = None) -> dict:
     """An ed2k link: the direct EC seam by default, the LEGACY aMuTorrent
     bridge under rollback (`_download_bridge_legacy` — S7: aMule's domain,
     never qBittorrent's).
 
     The EC adapter is SYNC, so the add rides `asyncio.to_thread` (the
     `grab_release._ec_add_link` precedent) and the tests hold it off the loop.
-    A refusal is a dict, never a raise.
+    A refusal is a dict, never a raise. The EC add takes NO category (it is an
+    aMule category id and none is invented, S5); the legacy bridge forwards
+    the caller's category (S3) and defaults to its own when absent — which is
+    what keeps `POST /api/indexers/download` byte-identical.
     """
     if not _ec_direct():
-        return await _download_bridge_legacy(link)
+        return await _download_bridge_legacy(link, category)
     try:
         await asyncio.to_thread(gateways.amule_add_ed2k, link)
     except Exception as exc:  # noqa: BLE001 — la negativa «no configurado» + errores EC tipados
@@ -667,36 +675,46 @@ async def _download_hash(file_hash: str) -> dict:
     return {"ok": True, "detail": _EC_ADDED}
 
 
-async def _download_bridge(link: str) -> dict:
+async def _download_bridge(link: str, category: str | None = None) -> dict:
     """magnet/http(s) → the NATIVE qBittorrent client (S4/S5): one
     `http_session()` per call, the client's dict mapped to `{ok, detail}`.
 
     PASSTHROUGH, no prefix (S5/S6): the native client's Spanish details
     already name the destination (S2 — «Descarga añadida en qBittorrent
     (URL), categoría flow» / «qBittorrent (URL) no aceptó la descarga: …»),
-    so nothing is re-worded here. A raised transport error keeps
-    `_skip_reason`'s short text. Either way the `apikey=` value a direct
-    .torrent URL may carry is REDACTED first (risk 2): no secret ever reaches
-    a response.
+    so nothing is re-worded here. The caller's category (S3) is forwarded —
+    the calendar grab chooses it by destination — and when it is absent the
+    seam's own default (`flow`) applies, byte-identical to the endpoint's
+    historical call. A raised transport error keeps `_skip_reason`'s short
+    text. Either way the `apikey=` value a direct .torrent URL may carry is
+    REDACTED first (risk 2): no secret ever reaches a response.
     """
     try:
         async with http_session() as session:
-            added = await gateways.qbit_add_download(session, link)
+            if category is None:
+                added = await gateways.qbit_add_download(session, link)
+            else:
+                added = await gateways.qbit_add_download(session, link, category)
         detail = _redact(str(added.get("detail", "")), "")
         return {"ok": bool(added.get("ok")), "detail": detail}
     except Exception as exc:  # noqa: BLE001 — la negativa del puente + errores de transporte
         return {"ok": False, "detail": _redact(_skip_reason(exc), "")}
 
 
-async def _download_bridge_legacy(link: str) -> dict:
+async def _download_bridge_legacy(link: str, category: str | None = None) -> dict:
     """The aMuTorrent bridge — ONLY for the `AMULE_EC_DIRECT=0` rollback (S7).
 
     Byte-identical legacy shape: one `http_session()` per call, and a refusal
-    keeps the «aMuTorrent no aceptó la descarga: …» prefix of always.
+    keeps the «aMuTorrent no aceptó la descarga: …» prefix of always. Same
+    category rule as `_download_bridge`: forwarded when the caller chose one
+    (S3), the seam's own default otherwise.
     """
     try:
         async with http_session() as session:
-            added = await gateways.amutorrent_add_download(session, link)
+            if category is None:
+                added = await gateways.amutorrent_add_download(session, link)
+            else:
+                added = await gateways.amutorrent_add_download(session, link, category)
         detail = _redact(str(added.get("detail", "")), "")
         if not added.get("ok"):
             return {"ok": False, "detail": f"aMuTorrent no aceptó la descarga: {detail}"}
@@ -705,24 +723,44 @@ async def _download_bridge_legacy(link: str) -> dict:
         return {"ok": False, "detail": _redact(_skip_reason(exc), "")}
 
 
+async def dispatch_direct(target: str, category: str | None = None) -> dict:
+    """One target straight to a client, dispatched by SHAPE — `{ok, detail}`.
+
+    Serves BOTH `POST /api/indexers/download` and the calendar grab flows
+    (calendario-directo T2/S2): `ed2k://` → the direct EC seam (the legacy
+    aMuTorrent bridge under the `AMULE_EC_DIRECT=0` rollback), a 32-hex aMule
+    hash-id → `amule_download_search_result` (an honest refusal under the
+    rollback), `magnet:`/`http(s)` → the NATIVE qBittorrent client, and
+    anything else is the `_BAD_SCHEME` honest refusal. NO query, NO re-search:
+    the caller already holds the link.
+
+    `category` is the client category the caller chose (S3 — by destination).
+    `None` means "the bridges' own default" and is exactly the historical
+    `POST /api/indexers/download` call, byte for byte; the EC add takes no
+    category at all.
+    """
+    if target.startswith("ed2k://"):
+        return await _download_ed2k(target, category)
+    if HASH32.fullmatch(target):
+        return await _download_hash(target)
+    if target.startswith("magnet:") or target.startswith(("http://", "https://")):
+        return await _download_bridge(target, category)
+    return {"ok": False, "detail": _BAD_SCHEME}
+
+
 @router.post("/api/indexers/download")
 async def download_indexer(body: dict, _key: str = Depends(verify_api_key)):
     """T5/S5 (enmienda L6) — one free-search row straight to a client.
 
-    Body `{link?, guid?}` — at least one, dispatched by the target's shape:
-    `ed2k://` → the direct EC seam (the legacy aMuTorrent bridge under the
-    `AMULE_EC_DIRECT=0` rollback), a 32-hex aMule hash →
-    `amule_download_search_result` (an honest refusal under the rollback),
-    `magnet:`/`http(s)` → the NATIVE qBittorrent client (S4/S5, destination
-    named in the detail per S2). No persistence, no query, and
+    Body `{link?, guid?}` — at least one, dispatched by the target's shape
+    through `dispatch_direct` (the SAME dispatch the calendar grab uses,
+    calendario-directo T2/S2): `ed2k://` → the direct EC seam (the legacy
+    aMuTorrent bridge under the `AMULE_EC_DIRECT=0` rollback), a 32-hex aMule
+    hash → `amule_download_search_result` (an honest refusal under the
+    rollback), `magnet:`/`http(s)` → the NATIVE qBittorrent client (S4/S5,
+    destination named in the detail per S2). No persistence, no query, and
     200 `{ok, detail}` in BOTH directions — the only 400s are the body's own
     (no link AND no guid, or a non-string), all of them in Spanish.
     """
     target = _download_target(body)
-    if target.startswith("ed2k://"):
-        return await _download_ed2k(target)
-    if HASH32.fullmatch(target):
-        return await _download_hash(target)
-    if target.startswith("magnet:") or target.startswith(("http://", "https://")):
-        return await _download_bridge(target)
-    return {"ok": False, "detail": _BAD_SCHEME}
+    return await dispatch_direct(target)

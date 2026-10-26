@@ -265,10 +265,10 @@ class TestGrabBatchErrorReporting:
     def _post(self, results):
         from unittest.mock import AsyncMock
 
-        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
-            return results[guid]
+        async def _fake_dispatch(target, category):
+            return results[target]
 
-        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
+        with patch("interfaces.http.routes.calendar.dispatch_direct", new=AsyncMock(side_effect=_fake_dispatch)):
             return client.post(
                 "/api/calendar/grab-batch",
                 json={"source": "radarr", "guids": list(results), "indexerIds": [1] * len(results), "movieId": 1},
@@ -355,7 +355,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -375,7 +375,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": False, "detail": "HTTP 404: not found"}),
         ):
             body = post_grab_and_settle(
@@ -388,10 +388,10 @@ class TestGrabOwnRegistry:
     def test_the_batch_records_each_successful_guid(self):
         from unittest.mock import AsyncMock
 
-        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
-            return {"ok": guid != "g2", "detail": "ok" if guid != "g2" else "rechazado"}
+        async def _fake_dispatch(target, category):
+            return {"ok": target != "g2", "detail": "ok" if target != "g2" else "rechazado"}
 
-        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
+        with patch("interfaces.http.routes.calendar.dispatch_direct", new=AsyncMock(side_effect=_fake_dispatch)):
             resp = client.post(
                 "/api/calendar/grab-batch",
                 json={
@@ -410,10 +410,10 @@ class TestGrabOwnRegistry:
     def test_the_batch_persists_the_destination_for_every_grabbed_row(self):
         from unittest.mock import AsyncMock
 
-        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
-            return {"ok": guid != "g2", "detail": "ok" if guid != "g2" else "rechazado"}
+        async def _fake_dispatch(target, category):
+            return {"ok": target != "g2", "detail": "ok" if target != "g2" else "rechazado"}
 
-        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)):
+        with patch("interfaces.http.routes.calendar.dispatch_direct", new=AsyncMock(side_effect=_fake_dispatch)):
             resp = client.post(
                 "/api/calendar/grab-batch",
                 json={
@@ -435,7 +435,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -457,7 +457,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle({"source": "radarr", "guid": "g1", "movieId": 855})
@@ -479,7 +479,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -506,7 +506,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -533,7 +533,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -557,7 +557,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "", raising=False)
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -582,7 +582,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_4K", "/mnt/storage/movies/4k", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -619,7 +619,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -645,7 +645,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "", raising=False)
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -668,7 +668,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -682,7 +682,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle(
@@ -703,7 +703,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle({"source": "radarr", "guid": "g1", "movieId": 855})
@@ -715,7 +715,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -739,7 +739,7 @@ class TestGrabOwnRegistry:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/storage/movies/3d", raising=False)
 
         with patch(
-            "interfaces.http.routes.calendar.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             resp = client.post(
@@ -761,7 +761,7 @@ class TestGrabOwnRegistry:
         from unittest.mock import AsyncMock
 
         mock_grab = AsyncMock(return_value={"ok": True, "detail": "Release encolado"})
-        with patch("application.use_cases.grab_release.arr_grab_release", new=mock_grab):
+        with patch("interfaces.http.routes.calendar.dispatch_direct", new=mock_grab):
             resp = client.post(
                 "/api/calendar/grab",
                 json={
@@ -779,13 +779,13 @@ class TestGrabOwnRegistry:
         assert "task_id" not in resp.json()
         assert self._rows() == [], "an invalid destination must not persist a grab"
         # Rejection happens before any job starts: nothing was sent, nothing stored.
-        mock_grab.assert_not_called()
+        mock_grab.assert_not_awaited()
 
     def test_a_batch_destination_outside_the_allowed_roots_is_rejected_and_writes_no_row(self):
         from unittest.mock import AsyncMock
 
         mock_grab = AsyncMock(return_value={"ok": True, "detail": "ok"})
-        with patch("interfaces.http.routes.calendar.arr_grab_release", new=mock_grab):
+        with patch("interfaces.http.routes.calendar.dispatch_direct", new=mock_grab):
             resp = client.post(
                 "/api/calendar/grab-batch",
                 json={
@@ -800,7 +800,7 @@ class TestGrabOwnRegistry:
         assert resp.json()["ok"] is False
         assert "Destino no permitido" in resp.json()["detail"]
         assert self._rows() == []
-        mock_grab.assert_not_called()
+        mock_grab.assert_not_awaited()
 
     def test_an_unavailable_history_does_not_fail_the_grab(self):
         from unittest.mock import AsyncMock
@@ -808,7 +808,7 @@ class TestGrabOwnRegistry:
         history.close()  # no database: the recording must be a silent no-op
 
         with patch(
-            "application.use_cases.grab_release.arr_grab_release",
+            "interfaces.http.routes.calendar.dispatch_direct",
             new=AsyncMock(return_value={"ok": True, "detail": "Release encolado"}),
         ):
             body = post_grab_and_settle({"source": "radarr", "guid": "g1", "movieId": 855})
@@ -856,7 +856,7 @@ class TestGrabWritesSeriesId:
     def _post(self, payload, *, metadata=None):
         from unittest.mock import AsyncMock
 
-        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
+        async def _fake_dispatch(target, category):
             return {"ok": True, "detail": "ok"}
 
         async def _fake_metadata(session, service, episode_id):
@@ -864,10 +864,11 @@ class TestGrabWritesSeriesId:
                 raise metadata
             return metadata if metadata is not None else {}
 
-        # The worker reads the grab gateway from the use case; the series
-        # lookup is injected from the route, so its gateway stays where the
-        # batch route (and this patch) can see it.
-        with patch("application.use_cases.grab_release.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
+        # The dispatch is injected by the route (`calendar.dispatch_direct`),
+        # so its patch serves the worker AND the synchronous batch; the series
+        # lookup is injected from the route too, and its gateway stays where
+        # both sides can see it.
+        with patch("interfaces.http.routes.calendar.dispatch_direct", new=AsyncMock(side_effect=_fake_dispatch)), \
              patch("interfaces.http.routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
             return post_grab_and_settle(payload)
 
@@ -921,13 +922,13 @@ class TestGrabWritesSeriesId:
     def test_the_batch_records_the_series_for_each_successful_episode_guid(self):
         from unittest.mock import AsyncMock
 
-        async def _fake_grab(session, service, guid, indexer_id=0, movie_id=0, episode_id=0):
-            return {"ok": guid != "g2", "detail": "ok" if guid != "g2" else "rechazado"}
+        async def _fake_dispatch(target, category):
+            return {"ok": target != "g2", "detail": "ok" if target != "g2" else "rechazado"}
 
         async def _fake_metadata(session, service, episode_id):
             return {"series_id": 99}
 
-        with patch("interfaces.http.routes.calendar.arr_grab_release", new=AsyncMock(side_effect=_fake_grab)), \
+        with patch("interfaces.http.routes.calendar.dispatch_direct", new=AsyncMock(side_effect=_fake_dispatch)), \
              patch("interfaces.http.routes.calendar.arr_episode_metadata", new=AsyncMock(side_effect=_fake_metadata)):
             resp = client.post(
                 "/api/calendar/grab-batch",
