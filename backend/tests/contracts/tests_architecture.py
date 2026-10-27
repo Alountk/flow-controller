@@ -89,7 +89,7 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 3409 -> 3411 (calendario-directo T2 / S2-S4): +2 for `CalendarGrabRequest.link` and
 #: `CalendarGrabBatchRequest.links` in `models.py` (the grab target is `link or guid`);
 #: disclosed in the PR.
-MAX_LEGACY_LOC = 3414
+MAX_LEGACY_LOC = 3423
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

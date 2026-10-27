@@ -36,6 +36,9 @@ interface FileNavigatorProps {
   showSizes?: boolean
   /** Region: one mixed listing (scan) or dirs over files (mixer picker). */
   layout?: 'unified' | 'split'
+  /** Hide files the backend classifies as non-video; `is_video` absent stays
+   *  visible — unknown, never "not a video" (shared/types.ts). */
+  onlyVideo?: boolean
   selection?: 'none' | 'file'
   renderFileMeta?: (entry: FileNavigatorEntry) => ReactNode
   emptyLabel?: string
@@ -65,6 +68,7 @@ export function FileNavigator({
   showIcons = false,
   showSizes = false,
   layout = 'unified',
+  onlyVideo = false,
   selection = 'none',
   renderFileMeta,
   emptyLabel,
@@ -115,6 +119,7 @@ export function FileNavigator({
         }))
       : (browseQuery.data?.items ?? [])
           .filter((entry) => mode !== 'folder' || entry.is_dir)
+          .filter((entry) => !onlyVideo || entry.is_dir || entry.is_video !== false)
           .map((entry) => ({
             key: entry.path,
             name: entry.name,

@@ -67,6 +67,14 @@ def normalize_language(tag: str) -> str:
     return _LANGUAGE_ALIASES.get(cleaned, cleaned)
 
 
+class ProbeInputError(RuntimeError):
+    """ffprobe could not read THIS file (empty, partial, no-media) — bad input.
+
+    Subclasses RuntimeError so every existing `except RuntimeError` (the
+    alternatives lookup's 400) keeps catching it unchanged.
+    """
+
+
 def probe_file(path: str) -> dict:
     """Run ffprobe on a file, return parsed metadata.
 
@@ -83,7 +91,8 @@ def probe_file(path: str) -> dict:
         }
     Raises:
         FileNotFoundError: if file doesn't exist
-        RuntimeError: if ffprobe fails or is not installed
+        ProbeInputError: if ffprobe cannot read this file (exit != 0) or times out
+        RuntimeError: if ffprobe is not installed (a broken server)
     """
     p = Path(path)
     if not p.exists():
@@ -102,10 +111,10 @@ def probe_file(path: str) -> dict:
     except FileNotFoundError:
         raise RuntimeError("ffprobe not found")
     except subprocess.TimeoutExpired:
-        raise RuntimeError("ffprobe timed out")
+        raise ProbeInputError("ffprobe timed out")
 
     if result.returncode != 0:
-        raise RuntimeError(f"ffprobe failed: {result.stderr[:200]}")
+        raise ProbeInputError(f"ffprobe failed: {result.stderr[:200]}")
 
     data = json.loads(result.stdout)
     return parse_probe_data(data, path)

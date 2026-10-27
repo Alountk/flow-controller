@@ -14,6 +14,7 @@ from pydantic import AliasChoices, BaseModel, Field
 
 from media_mixer import (
     probe_file,
+    ProbeInputError,
     check_compatibility,
     check_required_languages,
     normalize_language,
@@ -364,6 +365,10 @@ async def mixer_probe(req: ProbeRequest, _key: str = Depends(verify_api_key)):
         probe_a = await asyncio.to_thread(probe_file, path_a)
         probe_b = await asyncio.to_thread(probe_file, path_b)
     except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ProbeInputError as exc:
+        # Unreadable input is bad input (same 400 the lookup answers); a plain
+        # RuntimeError below is ffprobe missing — a broken server, still 500.
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
