@@ -1,0 +1,152 @@
+/* ── FileNavigator (folder picker, once the «→ Carpeta» destination) ─────────
+   Backdrop above the modal's own (z-index 300): a stray click cancels the
+   pick instead of closing the whole modal. */
+.folder-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 300;
+}
+
+.folder-picker {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 301;
+  width: min(420px, calc(100vw - 48px));
+  max-height: min(60vh, 480px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.folder-picker-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.folder-picker-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.folder-picker-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.folder-picker-toolbar {
+  display: flex;
+  gap: 10px;
+}
+
+.folder-picker-up {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.folder-picker-up:hover:enabled {
+  border-color: var(--accent);
+}
+
+.folder-picker-up:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.folder-picker-crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.folder-picker-crumb-sep {
+  opacity: 0.6;
+}
+
+.folder-picker-path {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  min-height: 15px;
+}
+
+.folder-picker-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.folder-picker-row {
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.folder-picker-row:hover {
+  border-color: var(--accent);
+}
+
+.folder-picker-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.folder-picker-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.folder-picker-choose,
+.folder-picker-cancel {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-picker-choose {
+  flex: 1;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-fill);
+}
+
+.folder-picker-choose:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.folder-picker-cancel {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}

@@ -11,8 +11,8 @@ import {
 import { grabCalendarRelease, fetchGrabStatus, type GrabTask } from '../../shared/api/grabs.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import { fetchIndexers } from '../../shared/api/indexers.ts'
-import { fetchRoots, browsePath } from '../../shared/api/files.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
+import { FileNavigator } from '../../shared/ui/FileNavigator.tsx'
 import { looksThreeD } from '../../shared/utils/threeD.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import {
@@ -301,10 +301,9 @@ export function ReleaseSearchModal({
   // task id and this holds it while the status poll runs — null whenever no
   // grab is in flight (and after every settle).
   const [grabJob, setGrabJob] = useState<{ task_id: string; status: string } | null>(null)
-  // The «→ Carpeta» navigator: open flag, where it stands ('' = roots view),
-  // and the row it would grab into.
+  // The «→ Carpeta» navigator: open flag and the row it would grab into.
+  // Where it stands lives inside FileNavigator, seeded per open below.
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [pickerPath, setPickerPath] = useState('')
   const [pickerGuid, setPickerGuid] = useState('')
   // Session memory: reopening lands where the operator last was, not back at
   // the roots — a ref so navigating never costs a render.
@@ -495,22 +494,6 @@ export function ReleaseSearchModal({
       if (data && data.status && TERMINAL_STATUSES.includes(data.status)) return false
       return 1500
     },
-  })
-
-  // The navigator's two listings, the ScanModal pattern: the roots while it
-  // stands at '', the directory's own while it stands inside one.
-  const pickerRootsQuery = useQuery({
-    queryKey: ['roots'],
-    queryFn: fetchRoots,
-    enabled: pickerOpen,
-  })
-  const pickerBrowseQuery = useQuery({
-    queryKey: ['picker-browse', pickerPath],
-    queryFn: () => browsePath(pickerPath),
-    enabled: pickerOpen && pickerPath !== '',
-    // The listing mirrors the disk: a cache here hides a folder a download
-    // just created — the same 0 window ScanModal gives its browse.
-    staleTime: 0,
   })
 
   /**
@@ -801,27 +784,11 @@ export function ReleaseSearchModal({
     applyGrabOutcome(result)
   }
 
-  /** Open the navigator on the last folder visited (roots on a first open). */
+  /** Open the navigator on the last folder visited (roots on a first open):
+   *  `initialPath` re-seeds it because the navigator mounts fresh per open. */
   function openPicker(guid: string) {
     setPickerGuid(guid)
-    setPickerPath(lastPickerPath.current)
     setPickerOpen(true)
-  }
-
-  function visitFolder(path: string) {
-    lastPickerPath.current = path
-    setPickerPath(path)
-  }
-
-  function closePicker() {
-    setPickerOpen(false)
-  }
-
-  /** Confirm is just another `handleGrab`: same grab, chosen destination. */
-  function confirmPicker() {
-    lastPickerPath.current = pickerPath
-    setPickerOpen(false)
-    void handleGrab(pickerGuid, 'folder', pickerPath)
   }
 
   const isProcessing = step === 'searching' || step === 'adding' || step === 'grabbing'
@@ -1407,52 +1374,22 @@ export function ReleaseSearchModal({
           )}
 
           {/* Folder navigator — inside `body`, so both presentations get it.
-              Files never render: only directories are destinations. */}
+              Folder mode: only directories render, only directories confirm. */}
           {pickerOpen && (
-            <>
-              <div className="folder-picker-backdrop" onClick={closePicker} />
-              <div className="folder-picker" role="dialog" aria-label="Elegir carpeta de destino">
-                <div className="folder-picker-path">{pickerPath}</div>
-                <div className="folder-picker-rows">
-                  {pickerPath === ''
-                    ? (pickerRootsQuery.data?.roots ?? []).map((root) => (
-                        <button
-                          key={root.path}
-                          type="button"
-                          className="folder-picker-row"
-                          onClick={() => visitFolder(root.path)}
-                        >
-                          {root.name}
-                        </button>
-                      ))
-                    : (pickerBrowseQuery.data?.items ?? [])
-                        .filter((entry) => entry.is_dir)
-                        .map((entry) => (
-                          <button
-                            key={entry.path}
-                            type="button"
-                            className="folder-picker-row"
-                            onClick={() => visitFolder(entry.path)}
-                          >
-                            {entry.name}
-                          </button>
-                        ))}
-                </div>
-                <div className="folder-picker-actions">
-                  <button
-                    type="button"
-                    className="folder-picker-choose"
-                    onClick={confirmPicker}
-                    disabled={pickerPath === ''}
-                  >
-                    Elegir esta carpeta
-                  </button>
-                  <button type="button" className="folder-picker-cancel" onClick={closePicker}>
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            </>
+            <FileNavigator
+              open={pickerOpen}
+              initialPath={lastPickerPath.current}
+              mode="folder"
+              onNavigate={(p) => {
+                if (p) lastPickerPath.current = p
+              }}
+              onConfirm={(path) => {
+                lastPickerPath.current = path
+                setPickerOpen(false)
+                void handleGrab(pickerGuid, 'folder', path)
+              }}
+              onCancel={() => setPickerOpen(false)}
+            />
           )}
         </div>
   )
