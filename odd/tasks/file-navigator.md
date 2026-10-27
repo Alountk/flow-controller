@@ -16,13 +16,13 @@ S7 — Tests: los 8 de `folderDestination.test.tsx` quedan SIN tocar aserciones.
 
 ## Tasks
 
-T1 — Tests RED de S7 en `folderDestination.test.tsx` (padre) — commit `57ba50b`
-T2 — Módulo `shared` (useBrowse/useRoots/parentDir/formatBytes) + componente `FileNavigator` modo folder (worker) — commit `57ba50b`
-T3 — Migración del picker de `ReleaseSearchModal` al componente (worker, mismas superficies) — commit `57ba50b`
-T4 — Gates (focused 11, full 787/0, tsc 0, eslint 0, build OK — todos ejecutados por el padre) + assess — commit `57ba50b`; entrega pendiente de visto
+T1 — Tests RED de S7 en `folderDestination.test.tsx` (padre) — commit `6bf4b57`
+T2 — Módulo `shared` (useBrowse/useRoots/parentDir/formatBytes) + componente `FileNavigator` modo folder (worker) — commit `6bf4b57`
+T3 — Migración del picker de `ReleaseSearchModal` al componente (worker, mismas superficies) — commit `6bf4b57`
+T4 — Gates (focused 11, full 787/0, tsc 0, eslint 0, build OK — todos ejecutados por el padre) + assess — commit `6bf4b57`; entrega pendiente de visto
 
 ## Log
 
 L1 — «analiza los modals de archivos si podemos reutilizar los mismos, porque veo que se implementa algo diferente para cada uno, tal vez el más completo es el de media mixer. Habla con Stitch y basandose en el de media mixer que proponga un diseño para todas estas partes que pueda reutilizar. Si se puede reutilizar tambien en archivos para aprovechar estaria bien. Echale un vistazo.»
 L2 — Ask producto (2026-10-27): respuesta «F1 piloto» (núcleo + sólo picker «Carpeta»; F2+ se decide después). Stitch entregó 4 pantallas en proyecto `15633374431171084630`; quirk: `list_screens` devuelve `{}` (ir por `get_screen` con id), `generate_variants` no fiable → `generate_screen_from_text` ×3.
-L3 — Slice boundary: work-unit único de 585 líneas autorizadas (413/172) en commit `57ba50b` — módulo + componente + su primer consumidor + tests es UNA unidad de comportamiento indivisible (los tests RED ya referenciaban el componente). Estrategia de entrega: single PR con divulgación del slice en el cuerpo (patrón aceptado en #243/#244).
+L3 — Slice boundary: work-unit único de 585 líneas autorizadas (413/172) en commit `6bf4b57` — módulo + componente + su primer consumidor + tests es UNA unidad de comportamiento indivisible (los tests RED ya referenciaban el componente). Estrategia de entrega: single PR con divulgación del slice en el cuerpo (patrón aceptado en #243/#244).
