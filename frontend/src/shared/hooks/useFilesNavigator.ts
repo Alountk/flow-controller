@@ -5,6 +5,17 @@ import { browsePath, fetchRoots } from '../api/files.ts'
 // the implementation stays in text.ts, never a second copy.
 export { formatBytes } from '../utils/text.ts'
 
+/** Row sizes as every navigator row shows them («1.4 GB», «—» when empty).
+ *  ONE implementation: FileNavigator's rows and consumers' cards share it. */
+export function formatSize(bytes: number): string {
+  if (!bytes) return '—'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let size = bytes
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
 /** One directory's listing. staleTime 0 keeps the listing mirroring the disk:
  *  a cache here would hide a folder a download just created. */
 export function useBrowse(path: string, enabled: boolean) {
