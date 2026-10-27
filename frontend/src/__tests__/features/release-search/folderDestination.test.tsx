@@ -214,6 +214,49 @@ describe('Carpeta destination (folder navigator)', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('adds «⬆ Subir» that climbs to the parent folder', async () => {
+    mockFetch()
+    renderModal()
+    await showResults()
+    fireEvent.click(await screen.findByRole('button', { name: /^→ Carpeta$/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'storage' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'peliculas' }))
+    const up = screen.getByRole('button', { name: /Subir/ })
+    expect(up).toBeEnabled()
+    fireEvent.click(up)
+    expect(await screen.findByText('/mnt/storage-6tb')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'peliculas' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Elegir esta carpeta' })).toBeEnabled()
+  })
+
+  it('blocks «⬆ Subir» at the roots view and tops out at a root\'s entry', async () => {
+    mockFetch()
+    renderModal()
+    await showResults()
+    fireEvent.click(await screen.findByRole('button', { name: /^→ Carpeta$/ }))
+    expect(screen.getByRole('button', { name: /Subir/ })).toBeDisabled()
+    fireEvent.click(await screen.findByRole('button', { name: 'storage' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Subir/ }))
+    // The root's own entry tops out at the origins view, never at /mnt.
+    expect(await screen.findByRole('button', { name: 'storage' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Elegir esta carpeta' })).toBeDisabled()
+  })
+
+  it('shows the current path as a segment breadcrumb beside the full path', async () => {
+    mockFetch()
+    renderModal()
+    await showResults()
+    fireEvent.click(await screen.findByRole('button', { name: /^→ Carpeta$/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'storage' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'peliculas' }))
+    const crumb = document.querySelector('.folder-picker-crumb')
+    expect(crumb).not.toBeNull()
+    expect(crumb?.textContent).toContain('storage-6tb')
+    expect(crumb?.textContent).toContain('peliculas')
+    // The exact full path stays a single untouched node for callers and tests.
+    expect(screen.getByText('/mnt/storage-6tb/peliculas')).toBeEnabled()
+  })
+
   it('surfaces the backend refusal for a destination outside the allowed roots', async () => {
     mockFetch({ grabOk: false, grabDetail: 'Destino no permitido: /fuera' })
     renderModal()
