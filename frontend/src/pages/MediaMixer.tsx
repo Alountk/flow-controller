@@ -21,7 +21,9 @@ import type {
   AlternativeLookupResponse,
   AlternativeTitle,
 } from '../shared/api/mixer.ts'
-import { browsePath, fetchRoots } from '../shared/api/files.ts'
+import { fetchRoots } from '../shared/api/files.ts'
+import { formatSize } from '../shared/hooks/useFilesNavigator.ts'
+import { FileNavigator } from '../shared/ui/FileNavigator.tsx'
 import { apiFetch } from '../shared/api/auth.ts'
 import { toast } from '../shared/utils/toast.ts'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
@@ -45,15 +47,6 @@ async function lookupIndexerMovie(filename: string): Promise<MixerLookupResponse
 }
 
 /* ── Helpers ───────────────────────────────────────────────────────────────── */
-
-function formatSize(bytes: number): string {
-  if (!bytes) return '—'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let i = 0
-  let size = bytes
-  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
 
 /** Compact duration (mockup 11's comparison cards): `1h 55m 42s`. */
 function formatDuration(seconds: number): string {
@@ -206,26 +199,10 @@ interface FilePickerProps {
 
 function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerProps) {
   const [open, setOpen] = useState(false)
-  const [selectedVolume, setSelectedVolume] = useState(roots[0]?.path || '')
-  const [currentPath, setCurrentPath] = useState(roots[0]?.path || '')
+  // Session memory (F1 pattern): reopening resumes the last visited folder.
+  const [lastPath, setLastPath] = useState<string | undefined>(roots[0]?.path)
   const [selected, setSelected] = useState<string | null>(null)
-  // Live filter over the visible directory: one query drives folders AND files
-  // (the same pattern Archivos already uses in ScanModal).
-  const [filter, setFilter] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
-
-  const { data: browseData } = useQuery({
-    queryKey: ['mixer-browse', currentPath],
-    queryFn: () => browsePath(currentPath),
-    enabled: open && !!currentPath,
-  })
-
-  useEffect(() => {
-    if (roots.length > 0 && !selectedVolume) {
-      setSelectedVolume(roots[0].path)
-      setCurrentPath(roots[0].path)
-    }
-  }, [roots, selectedVolume])
 
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) setOpen(false)
@@ -238,43 +215,13 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  function navigateTo(p: string) {
-    setSelected(null)
-    setCurrentPath(p)
-  }
-
-  function parentDir() {
-    if (currentPath === selectedVolume) return selectedVolume
-    const parts = currentPath.split('/')
-    const parent = parts.slice(0, -1).join('/') || '/'
-    if (parent.length < selectedVolume.length || !parent.startsWith(selectedVolume)) {
-      return selectedVolume
-    }
-    return parent
-  }
-
-  function handleSelect(item: { path: string; is_dir: boolean }) {
-    if (item.is_dir) {
-      navigateTo(item.path)
-    } else {
-      onSelect(item.path)
-      setOpen(false)
-    }
-  }
-
-  const items = browseData?.ok ? browseData.items : []
-  const query = filter.trim().toLocaleLowerCase()
-  const matchesFilter = (name: string) => !query || name.toLocaleLowerCase().includes(query)
-  const visibleDirs = items.filter((i) => i.is_dir && matchesFilter(i.name))
-  const visibleFiles = items.filter((i) => !i.is_dir && matchesFilter(i.name))
-
   return (
     <>
       <div className="mixer-file-input">
         <div className="mixer-file-input-head">
           <span className="mixer-file-badge">{label.slice(-1)}</span>
           <span className="mixer-file-label">{label}</span>
-          <button className="fm-action-btn" onClick={() => { setFilter(''); setOpen(true) }}>
+          <button className="fm-action-btn" onClick={() => setOpen(true)}>
             Examinar…
           </button>
           {value && (
@@ -318,84 +265,27 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
             </div>
             <div className="scan-modal-body">
               <div className="scan-controls">
-                <div className="scan-row">
-                  <label className="scan-label">Volumen:</label>
-                  <select
-                    className="fm-volume-select"
-                    value={selectedVolume}
-                    onChange={(e) => {
-                      setSelectedVolume(e.target.value)
-                      setCurrentPath(e.target.value)
-                      setSelected(null)
-                    }}
-                  >
-                    {roots.map((r) => (
-                      <option key={r.path} value={r.path}>{r.name}</option>
-                    ))}
-                  </select>
-                  {currentPath && (
-                    <button
-                      className="fm-nav-btn"
-                      onClick={() => navigateTo(parentDir())}
-                      title="Subir"
-                      disabled={currentPath === selectedVolume}
-                    >
-                      ⬆
-                    </button>
-                  )}
-                </div>
-
-                <div className="scan-row">
-                  <input
-                    type="search"
-                    className="fm-filter-input"
-                    placeholder="Buscar carpeta o archivo…"
-                    aria-label="Buscar carpeta o archivo"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                  />
-                </div>
-
-                {currentPath && (
-                  <div className="scan-path-list">
-                    <div className="scan-current-path">{currentPath}</div>
-                    {visibleDirs.map((dirItem) => (
-                      <div
-                        key={dirItem.path}
-                        className="scan-folder-item"
-                        onClick={() => navigateTo(dirItem.path)}
-                      >
-                        📁 {dirItem.name}
-                      </div>
-                    ))}
-                    {visibleDirs.length === 0 && (
-                      <div className="scan-no-subfolders">
-                        {!query
-                          ? 'Sin subcarpetas'
-                          : visibleFiles.length === 0
-                            ? 'Sin coincidencias'
-                            : 'Sin carpetas'}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {visibleFiles.length > 0 && (
-                  <div className="scan-file-list">
-                    {visibleFiles.map((file) => (
-                      <div
-                        key={file.path}
-                        className={`scan-file-item ${selected === file.path ? 'selected' : ''}`}
-                        onClick={() => setSelected(file.path)}
-                        onDoubleClick={() => handleSelect(file)}
-                      >
-                        <span className="fm-icon">📄</span>
-                        <span className="fm-name">{file.name}</span>
-                        <span className="fm-size">{formatSize(file.size)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <FileNavigator
+                  variant="region"
+                  rootPicker="select"
+                  rootLabel="Volumen:"
+                  showFilter
+                  showIcons
+                  showSizes
+                  layout="split"
+                  selection="file"
+                  mode="both"
+                  initialPath={lastPath}
+                  onNavigate={(p) => {
+                    setSelected(null)
+                    setLastPath(p)
+                  }}
+                  onSelect={setSelected}
+                  onConfirm={(p) => {
+                    onSelect(p)
+                    setOpen(false)
+                  }}
+                />
               </div>
 
               <div className="scan-actions">

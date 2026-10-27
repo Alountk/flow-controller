@@ -3,18 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ScanMatch, ScanResult } from '../../../shared/types.ts'
 import { fetchSeriesEpisodes, scanForMovies } from '../../../shared/api/wanted.ts'
 import { episodeTagKey, formatEpisodeLabel, parseEpisodeTag } from '../../../shared/utils/episodeTag.ts'
-import { fetchRoots, browsePath, queueAdd } from '../../../shared/api/files.ts'
+import { queueAdd } from '../../../shared/api/files.ts'
+import { useRoots } from '../../../shared/hooks/useFilesNavigator.ts'
+import { FileNavigator } from '../../../shared/ui/FileNavigator.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../../shared/utils/selection.ts'
 import { filterScanMatches, scanMatchKey } from '../../../shared/utils/scanResults.ts'
-
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '—'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let i = 0
-  let size = bytes
-  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
 
 /** What a row asked the pane to scan for: one movie, or one series (possibly
  *  narrowed to a single episode by the "En carpeta" action). */
@@ -33,8 +26,8 @@ export interface ScanItem {
 
 export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
   const queryClient = useQueryClient()
-  const [selectedVolume, setSelectedVolume] = useState('')
   const [currentPath, setCurrentPath] = useState('')
+  const rootsQuery = useRoots(true)
   const [customTitle, setCustomTitle] = useState('')
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
   const [resultFilter, setResultFilter] = useState('')
@@ -42,23 +35,6 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [toast, setToast] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
-
-  const { data: rootsData } = useQuery({
-    queryKey: ['roots'],
-    queryFn: fetchRoots,
-  })
-
-  const roots = rootsData?.roots ?? []
-
-  const { data: browseData, refetch: refetchBrowse } = useQuery({
-    queryKey: ['scan-browse', currentPath],
-    queryFn: () => browsePath(currentPath),
-    enabled: !!currentPath,
-    // The listing mirrors the disk: any cache here hides a folder that a
-    // download just created, which is the one thing this modal exists to find.
-    staleTime: 0,
-    refetchOnMount: 'always',
-  })
 
   const episodesQuery = useQuery({
     queryKey: ['series-episodes', item.id],
@@ -141,14 +117,17 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  function handleVolumeChange(volumePath: string) {
-    setSelectedVolume(volumePath)
-    setCurrentPath(volumePath)
-    setScanResult(null)
-    setSelectedFiles(new Set())
+  // Switching volumes invalidates results pointing into the old tree — the
+  // pre-migration handleVolumeChange behavior FileNavigator cannot infer.
+  function rootOf(p: string) {
+    return rootsQuery.data?.roots.find((r) => p === r.path || p.startsWith(`${r.path}/`))?.path ?? ''
   }
 
-  function navigateTo(p: string) {
+  function handleNavigate(p: string) {
+    if (rootOf(p) !== rootOf(currentPath)) {
+      setScanResult(null)
+      setSelectedFiles(new Set())
+    }
     setCurrentPath(p)
   }
 
@@ -161,7 +140,6 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
     })
   }
 
-  const items = browseData?.ok ? browseData.items : []
   const allMatches = scanResult?.matches ?? []
   // Filters only what is already on screen: the scan returns its full result set
   // in one response, so unlike the paginated listing this cannot hide matches.
@@ -189,6 +167,24 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
         })
       : null
 
+  // Resolve the episode from the name, then look it up in the series map. No
+  // tag or no match means no extra line — never a guessed episode.
+  function renderEpisode(entry: { name: string }) {
+    const tag = parseEpisodeTag(entry.name)
+    const episode = tag ? episodeByTag.get(episodeTagKey(tag.season, tag.episode)) : undefined
+    if (!tag || !episode) return null
+    return (
+      <span className="scan-file-row-episode">
+        {formatEpisodeLabel({
+          season: tag.season,
+          episode: tag.episode,
+          title: episode.title,
+          air_date: episode.air_date,
+        })}
+      </span>
+    )
+  }
+
   return (
     <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
       <div className="scan-modal" ref={modalRef}>
@@ -205,83 +201,20 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
 
         <div className="scan-modal-body">
           <div className="scan-controls">
-            <div className="scan-row">
-              <label className="scan-label">Carpeta a escanear:</label>
-              <select
-                className="fm-volume-select"
-                value={selectedVolume}
-                onChange={(e) => handleVolumeChange(e.target.value)}
-              >
-                <option value="">Seleccionar volumen...</option>
-                {roots.map((r: { path: string; name: string }) => (
-                  <option key={r.path} value={r.path}>{r.name}</option>
-                ))}
-              </select>
-              {currentPath && (
-                <button className="fm-nav-btn" onClick={() => {
-                  const parts = currentPath.split('/')
-                  if (parts.length > 2) {
-                    const parent = parts.slice(0, -1).join('/') || selectedVolume
-                    if (parent.length >= selectedVolume.length) navigateTo(parent)
-                  }
-                }} title="Subir">⬆</button>
-              )}
-              {currentPath && (
-                <button
-                  className="fm-nav-btn"
-                  onClick={() => refetchBrowse()}
-                  title="Refrescar listado"
-                >
-                  ↻
-                </button>
-              )}
-            </div>
-
-            {currentPath && (
-              <div className="scan-path-list">
-                <div className="scan-current-path">{currentPath}</div>
-                {items.map((entry) => {
-                  if (entry.is_dir) {
-                    return (
-                      <div
-                        key={entry.path}
-                        className="scan-folder-item"
-                        onClick={() => navigateTo(entry.path)}
-                      >
-                        📁 {entry.name}
-                      </div>
-                    )
-                  }
-                  // Resolve the episode from the name, then look it up in the
-                  // series map. No tag or no match means no extra line — never
-                  // a guessed episode.
-                  const tag = parseEpisodeTag(entry.name)
-                  const episode = tag ? episodeByTag.get(episodeTagKey(tag.season, tag.episode)) : undefined
-                  return (
-                    <div key={entry.path} className="scan-file-row">
-                      <span className="scan-file-row-icon">📄</span>
-                      <div className="scan-file-row-main">
-                        <span className="scan-file-row-name" title={entry.name}>{entry.name}</span>
-                        {tag && episode && (
-                          <span className="scan-file-row-episode">
-                            {formatEpisodeLabel({
-                              season: tag.season,
-                              episode: tag.episode,
-                              title: episode.title,
-                              air_date: episode.air_date,
-                            })}
-                          </span>
-                        )}
-                      </div>
-                      <span className="scan-file-row-size">{formatSize(entry.size)}</span>
-                    </div>
-                  )
-                })}
-                {items.length === 0 && (
-                  <div className="scan-no-subfolders">Carpeta vacía</div>
-                )}
-              </div>
-            )}
+            <FileNavigator
+              variant="region"
+              rootPicker="select"
+              rootLabel="Carpeta a escanear:"
+              selectPlaceholder="Seleccionar volumen..."
+              showRefresh
+              showIcons
+              showSizes
+              renderFileMeta={renderEpisode}
+              emptyLabel="Carpeta vacía"
+              mode="both"
+              initialPath={currentPath}
+              onNavigate={handleNavigate}
+            />
 
             <div className="scan-row">
               <label className="scan-label">Título adicional:</label>
