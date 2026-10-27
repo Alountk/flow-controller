@@ -228,6 +228,15 @@ Specs: **1633 backend / 760 frontend**, working tree limpia.
   Frontera **565/3** → PR único (divulgado). Review nativa no corre (D). Commits
   `1e7f0f2`+`4560987`+`adf0c7c`, merge **`c84d3ae`** (CI main verde `40136089795`).
   Feature doc: `odd/tasks/alternativa-sin-ruteo.md` (S1–S3, T1–T3, Log L1–L3).
+- #232 — **limpieza SDD (decisión del usuario «limpia»)**: eliminados del repo los
+  restos de la era SDD (previa a ODD): `openspec/` (config `sdd-init` con su
+  `strict_tdd: false` + 3 cambios históricos de septiembre, 20 ficheros) y
+  `sdd/media-mixer/`. Sin referencias en CI/README/BACKLOG/.gitignore. El historial git
+  conserva todo; los Logs de `odd/tasks/` que citan `origen sdd-init/flow-controller`
+  quedan intactos como registro histórico. Preferencia global Engram **1464**: nunca SDD
+  por defecto en ningún proyecto (por defecto ODD); restos globales (skill `sdd-verify`,
+  symlinks de harness, entradas `sdd-*` en gentle state, rol `sdd-spec`) limpiados en el
+  entorno con backup.
 - #233 — **alternativa-indexadores** (petición del usuario L1 verbatim, Log L1): el flujo
   «Buscar y descargar alternativa» del mixer busca en LOS INDEXADORES DEL PROYECTO
   (registro Torznab + aMule EC) en vez de Radarr/Sonarr: S1 checklist (filas del
