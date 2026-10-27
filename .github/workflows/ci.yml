@@ -285,6 +285,34 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.e2e.yml logs --tail=50
           exit 1
 
+      # Why: S1 moved calendar search off Radarr onto the app's OWN Torznab
+      # registry, and S2 dispatches grabs to the qBittorrent client — so the
+      # phase 2 specs need those two sources seeded before a browser runs.
+      - name: "Phase 2 — seed our sources (Torznab registry + qbit service)"
+        run: |
+          set -e
+          # 1) Torznab registry row pointing at the stub's feed. 409 = a previous
+          #    seed already created it (idempotent re-run), anything else fails loud.
+          CODE=$(curl -s -o /tmp/seed-idx.json -w '%{http_code}' \
+            -H "X-Api-Key: test-key" -H "Content-Type: application/json" \
+            -d '{"name":"Torznab","url":"http://127.0.0.1:4400/torznab/api","api_key":"test-e2e-key","enabled":true}' \
+            http://localhost:8000/api/indexers)
+          if [ "$CODE" = "200" ]; then echo "✅ registry seeded"
+          elif [ "$CODE" = "409" ]; then echo "ℹ️ registry already seeded (409)"
+          else echo "❌ POST /api/indexers -> HTTP $CODE"; cat /tmp/seed-idx.json; exit 1; fi
+          # 2) qbit service settings: GET (the payload contract IS the settings GET,
+          #    repo lesson: DEFAULTS["services"]) → merge services.qbit → POST back.
+          #    Masked secrets ride back and the endpoint restores them from current.
+          curl -sS -f -H "X-Api-Key: test-key" http://localhost:8000/api/settings > /tmp/settings.json \
+            || { echo "❌ GET /api/settings"; exit 1; }
+          jq '.services.qbit = {"url":"http://127.0.0.1:4400","user":"test","password":"test"}' \
+            /tmp/settings.json > /tmp/settings-seed.json \
+            || { echo "❌ jq merge of services.qbit"; exit 1; }
+          curl -sS -f -X POST -H "X-Api-Key: test-key" -H "Content-Type: application/json" \
+            --data-binary @/tmp/settings-seed.json http://localhost:8000/api/settings > /tmp/seed-settings.json \
+            || { echo "❌ POST /api/settings"; exit 1; }
+          echo "✅ qbit service seeded: $(jq -c '.services.qbit' /tmp/seed-settings.json)"
+
       - name: "Phase 2 — auth contract (diagnostic)"
         # Never fails the job: it is a diagnostic. It answers the one question
         # the specs keep failing on — does the container accept the CI key and

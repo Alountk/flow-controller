@@ -85,7 +85,11 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: `infrastructure/prowlarr_client.py` behind the `ProwlarrClient` port, so
 #: this is wiring, not migration debt. Disclosed as debt in the
 #: busqueda-idioma-prowlarr PR description.
-MAX_LEGACY_LOC = 3408
+#: 3408 -> 3409 (calendario-directo T1 / S1): +1 for `CalendarReleasesRequest.title` in `models.py`; disclosed in the PR.
+#: 3409 -> 3411 (calendario-directo T2 / S2-S4): +2 for `CalendarGrabRequest.link` and
+#: `CalendarGrabBatchRequest.links` in `models.py` (the grab target is `link or guid`);
+#: disclosed in the PR.
+MAX_LEGACY_LOC = 3414
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

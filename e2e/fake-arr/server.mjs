@@ -29,6 +29,13 @@
  *   GET  /api/v3/downloadclient  200 []                   clients.py:750 returns the body as-is;
  *                                                          traces.py:60 iterates it as list[dict]
  *   GET  /api/v3/series          200 []                   clients.py:691 (iterated; not {records})
+ *   GET  /torznab/api            200 Atom feed            torznab_client.py::_parse_rows — S1: the app's
+ *                                                         calendar search fans out to ITS OWN Torznab
+ *                                                         registry, seeded against this route in Phase 2
+ *   POST /api/v2/auth/login      200 "Ok." + SID cookie   qbit_client.py login contract
+ *   POST /api/v2/torrents/add    200 "Ok."                qbit_client.py add contract (200 + ""|"Ok.") — S2:
+ *                                                         the grab dispatches the row's link here; the stub
+ *                                                         records it and adds nothing (see e2e/README.md)
  *   GET  /__health               200 ok                   compose healthcheck
  *
  * queue/history/downloadclient/series exist so the app's 15 s /api/trace poll
@@ -71,6 +78,15 @@ function send(res, status, body, contentType) {
 const json = (res, status, body) =>
   send(res, status, body, 'application/json; charset=utf-8')
 
+const xmlEscape = (value) =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+const PUB_DATE = 'Thu, 01 Jan 2026 00:00:00 +0000'
+
 const server = createServer((req, res) => {
   // "METHOD path?query" — one line per request, always flushed to stdout so a
   // failed CI run shows exactly what the app asked the stub for.
@@ -82,6 +98,35 @@ const server = createServer((req, res) => {
     switch (pathname) {
       case '/__health':
         return send(res, 200, 'ok', 'text/plain; charset=utf-8')
+      case '/torznab/api': {
+        // S1: the answer to the app's own Torznab registry (the Phase 2 seed
+        // registers this route). `t`/`q`/`apikey` are logged by the request
+        // line above and then intentionally ignored — the fixture feed is
+        // already scoped to the movie under test and the app's `_is_relevant`
+        // does the token filtering. Shape: torznab_client.py::_parse_rows.
+        const items = fixtures.releases
+          .map((release) => {
+            const seeders =
+              typeof release.seeders === 'number'
+                ? `\n      <torznab:attr name="seeders" value="${release.seeders}" />`
+                : ''
+            return `    <item>
+      <title>${xmlEscape(release.title)}</title>
+      <guid>${xmlEscape(release.guid)}</guid>
+      <pubDate>${PUB_DATE}</pubDate>
+      <enclosure url="http://127.0.0.1:${PORT}/download/${xmlEscape(release.guid)}.torrent" length="${release.size}" type="application/x-bittorrent" />${seeders}
+    </item>`
+          })
+          .join('\n')
+        const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>fake-torznab</title>
+${items}
+  </channel>
+</rss>`
+        return send(res, 200, feed, 'application/rss+xml; charset=utf-8')
+      }
       case '/api/v3/system/status':
         return json(res, 200, fixtures['system-status'])
       case '/api/v3/movie':
@@ -140,6 +185,31 @@ const server = createServer((req, res) => {
       // (clients.py:1395); Radarr answers with the grabbed release resource, so
       // echo it (or an acknowledged guid) back.
       json(res, 201, release)
+    })
+    return
+  }
+
+  if (req.method === 'POST' && (pathname === '/api/v2/auth/login' || pathname === '/api/v2/torrents/add')) {
+    // qBittorrent Web API (S2: the grab dispatches the row's link here —
+    // no arr on that path anymore). Contracts from qbit_client.py:
+    //   login → 200 + body "Ok." (real qB answers "Fails." on bad credentials)
+    //   add   → 200 + body "" or "Ok." — form fields `urls` + `category`
+    let raw = ''
+    req.on('data', (chunk) => {
+      raw += chunk
+    })
+    req.on('end', () => {
+      const form = new URLSearchParams(raw)
+      if (pathname === '/api/v2/auth/login') {
+        if (form.get('username') === 'test' && form.get('password') === 'test') {
+          res.setHeader('set-cookie', 'SID=e2e-sid; Path=/')
+          return send(res, 200, 'Ok.', 'text/plain; charset=utf-8')
+        }
+        return send(res, 403, 'Fails.', 'text/plain; charset=utf-8')
+      }
+      // Captured for the job log: what the app asked us to add, and where.
+      console.log(`qbit add urls=${form.get('urls')} category=${form.get('category')}`)
+      return send(res, 200, 'Ok.', 'text/plain; charset=utf-8')
     })
     return
   }

@@ -18,6 +18,7 @@ const settings = {
     radarr: { url: 'http://localhost:7878', api_key: 'radarr-key' },
     sonarr: { url: 'http://localhost:8989', api_key: 'sonarr-key' },
     amutorrent: { url: 'http://localhost:4000', api_key: 'amule-key', user: 'admin', password: 'p' },
+    qbit: { url: 'http://localhost:8080', user: 'admin', password: 'p' },
     opensubtitles: { api_key: 'os-key' },
   },
   security: { api_key: 'own-key', safe_mode: true },
@@ -72,7 +73,8 @@ describe('settings API key masking', () => {
     mockFetch()
     renderSettings()
 
-    // The four services share the label "API Key"; the app's own key is
+    // The four services that HAVE a key share the label "API Key" (qBittorrent
+    // logs in with user/password and adds none); the app's own key is
     // "API Key propia". All five must be masked.
     // ADAPTADO (config-1x1 T4, sin aflojar): el formulario «Nuevo indexador»
     // del panel Indexadores usa ahora los literales cortos del diseño
@@ -94,13 +96,21 @@ describe('settings API key masking', () => {
 
     // ADAPTADO (config-1x1 T4, sin aflojar): escopado al panel «General» por
     // la misma colisión de literales cortos («URL» en el formulario de
-    // Indexadores; panel oculto montado en jsdom). Mismo conteo (3).
+    // Indexadores; panel oculto montado en jsdom).
+    // ADAPTADO (qbit-nativo T3/S3, sin aflojar): la tarjeta qBittorrent añade
+    // una cuarta «URL» (3 → 4); misma aserción por campo, conteo actualizado.
     const general = await screen.findByRole('tabpanel', { name: 'General' })
     const urls = await within(general).findAllByLabelText('URL')
-    expect(urls).toHaveLength(3)
+    expect(urls).toHaveLength(4)
     for (const url of urls) {
       expect(url).toHaveAttribute('type', 'text')
     }
-    expect(screen.getByLabelText('Usuario')).toHaveAttribute('type', 'text')
+    // ADAPTADO (qbit-nativo T3/S3, sin aflojar): qBittorrent también usa
+    // «Usuario» (1 → 2); misma aserción por campo, conteo actualizado.
+    const users = screen.getAllByLabelText('Usuario')
+    expect(users).toHaveLength(2)
+    for (const user of users) {
+      expect(user).toHaveAttribute('type', 'text')
+    }
   })
 })

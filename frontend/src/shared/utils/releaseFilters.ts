@@ -51,14 +51,23 @@ export function filterReleases(
 
   return releases.filter((release) => {
     if (needle && !textIncludes(release.title, needle)) return false
-    if (filters.qualities.size > 0 && !filters.qualities.has(release.quality)) return false
+    // Absent is absent (S5): a row without a quality/language can never match
+    // one — it is hidden under the filter it cannot satisfy, never guessed.
     if (
-      filters.languages.size > 0 &&
-      !release.languages.some((language) => filters.languages.has(language))
+      filters.qualities.size > 0 &&
+      !(release.quality && filters.qualities.has(release.quality))
     ) {
       return false
     }
-    if (release.seeders < filters.minSeeders) return false
+    if (
+      filters.languages.size > 0 &&
+      !(release.languages && release.languages.some((language) => filters.languages.has(language)))
+    ) {
+      return false
+    }
+    // Absent seeders is UNKNOWN, not zero: the floor excludes what is KNOWN
+    // to be below it, never a row whose source never stated one.
+    if (release.seeders !== undefined && release.seeders < filters.minSeeders) return false
     return true
   })
 }
@@ -67,15 +76,22 @@ export function filterReleases(
  * Every quality present in the results, sorted.
  *
  * Derived from the FULL result set, never the filtered one: options that vanish
- * as you filter make the control feel broken.
+ * as you filter make the control feel broken. A row without one (every direct
+ * row, S5) contributes nothing — never the string "undefined".
  */
 export function collectQualities(releases: readonly Release[]): string[] {
-  return [...new Set(releases.map((release) => release.quality))].sort()
+  return [
+    ...new Set(
+      releases
+        .map((release) => release.quality)
+        .filter((quality): quality is string => quality !== undefined),
+    ),
+  ].sort()
 }
 
 /** Every language present in the results, sorted. Derived from the full set. */
 export function collectLanguages(releases: readonly Release[]): string[] {
-  return [...new Set(releases.flatMap((release) => release.languages))].sort()
+  return [...new Set(releases.flatMap((release) => release.languages ?? []))].sort()
 }
 
 /** Toggle a value in a filter set, returning a new set. */

@@ -2,10 +2,14 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReleaseSearchModal } from '../../../features/release-search/ReleaseSearchModal.tsx'
+import {
+  LanguageSearchSection,
+  type LanguageSearchContext,
+} from '../../../features/release-search/LanguageSearchSection.tsx'
 
 /**
- * «Búsqueda en idioma» (S4/T3) — the section the ALTERNATIVE flow adds to the
- * shared modal (S5: «Sólo en alternativa»).
+ * «Búsqueda en idioma» (S4/T3) — the section the ALTERNATIVE flow mounts in
+ * `AlternativeModal` (T4/S7; S5: «Sólo en alternativa»).
  *
  * Radarr searches by id and never `alternateTitles`, so Russian releases hide
  * behind Russian titles the indexers know. The section offers the titles the
@@ -20,11 +24,9 @@ import { ReleaseSearchModal } from '../../../features/release-search/ReleaseSear
  * handler itself.
  */
 
-interface LanguageSearchData {
-  originalTitle: string | null
-  alternateTitles: { title: string; language: string | null }[]
-  movieId: number
-}
+/** The context the section takes — `AlternativeModal` builds it from the
+ *  alternative lookup's titles and movie id. */
+type LanguageSearchData = LanguageSearchContext
 
 const languageSearch: LanguageSearchData = {
   originalTitle: 'Arthur et les Minimoys',
@@ -118,13 +120,24 @@ function downloadBodies(fn: FetchMock): Record<string, unknown>[] {
     .map(([, init]) => JSON.parse(String(init?.body)) as Record<string, unknown>)
 }
 
-function renderModal(languageSearchProp?: LanguageSearchData) {
+/** T4/S7: the section lives in `AlternativeModal` now, so the behavior pins
+ *  mount it DIRECTLY with the same lookup context the modal passes. */
+function renderSection(context: LanguageSearchData) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <LanguageSearchSection context={context} />
+    </QueryClientProvider>,
+  )
+}
+
+/** The release-search modal — which must never carry the section (T4/S7). */
+function renderReleaseModal() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <ReleaseSearchModal
         item={{ type: 'movie', id: 42, title: 'Arthur and the Invisibles', source: 'radarr' }}
-        languageSearch={languageSearchProp}
         onClose={() => {}}
       />
     </QueryClientProvider>,
@@ -138,17 +151,17 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('Búsqueda en idioma — section gate (S5)', () => {
-  it('renders no section when the modal was not opened from the alternative button', () => {
+describe('Búsqueda en idioma — section gate (T4/S7)', () => {
+  it('renders no section in ReleaseSearchModal — it belongs to AlternativeModal now', () => {
     mockFetch()
-    renderModal()
+    renderReleaseModal()
 
     expect(screen.queryByText('Búsqueda en idioma')).toBeNull()
   })
 
-  it('renders the section when the alternative flow provides the lookup titles', () => {
+  it('renders the section when it gets the lookup titles (the AlternativeModal mount)', () => {
     mockFetch()
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     expect(screen.getByText('Búsqueda en idioma')).toBeInTheDocument()
   })
@@ -157,7 +170,7 @@ describe('Búsqueda en idioma — section gate (S5)', () => {
 describe('Búsqueda en idioma — chips fill the input (S4)', () => {
   it('renders an ORIGINAL chip and one chip per alternate, labeled with its language code', () => {
     mockFetch()
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     expect(
       screen.getByRole('button', { name: 'ORIGINAL: Arthur et les Minimoys' }),
@@ -169,7 +182,7 @@ describe('Búsqueda en idioma — chips fill the input (S4)', () => {
 
   it('clicking a chip fills the editable input with that title', () => {
     mockFetch()
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.click(screen.getByRole('button', { name: 'RU: Grom' }))
 
@@ -183,7 +196,7 @@ describe('Búsqueda en idioma — chips fill the input (S4)', () => {
 describe('Búsqueda en idioma — search and results', () => {
   it('sends {query, movieId} and renders rows (title, indexer, seeders, size) with their one action', async () => {
     const fn = mockFetch({ searchBody: { releases: [PROWLARR_ROW] } })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     // The input is free text — the titles TMDB does not carry are typed by hand.
     fireEvent.change(queryInput(), { target: { value: 'Артур и минипуты' } })
@@ -207,7 +220,7 @@ describe('Búsqueda en idioma — search and results', () => {
 
   it('a chip-filled search carries the chip language alongside query and movieId', async () => {
     const fn = mockFetch({ searchBody: { releases: [PROWLARR_ROW] } })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.click(screen.getByRole('button', { name: 'RU: Grom' }))
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en Prowlarr' }))
@@ -221,7 +234,7 @@ describe('Búsqueda en idioma — search and results', () => {
       searchStatus: 502,
       searchBody: { detail: 'prowlarr no está configurado (faltan la URL o la API key)' },
     })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.change(queryInput(), { target: { value: 'Grom' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en Prowlarr' }))
@@ -237,7 +250,7 @@ describe('Búsqueda en idioma — search and results', () => {
       settle = resolve
     })
     mockFetch({ searchDeferred: deferred })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.change(queryInput(), { target: { value: 'Grom' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en Prowlarr' }))
@@ -262,7 +275,7 @@ describe('Búsqueda en idioma — «Descargar» una fila (S7/T4)', () => {
       searchBody: { releases: [PROWLARR_ROW] },
       downloadDeferred: deferred,
     })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.change(queryInput(), { target: { value: 'Артур и минипуты' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en Prowlarr' }))
@@ -299,7 +312,7 @@ describe('Búsqueda en idioma — «Descargar» una fila (S7/T4)', () => {
         detail: 'aMuTorrent no aceptó la descarga: HTTP 400: magnet no soportado',
       },
     })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.change(queryInput(), { target: { value: 'Артур и минипуты' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en Prowlarr' }))
@@ -327,7 +340,7 @@ describe('Búsqueda en idioma — «Descargar» una fila (S7/T4)', () => {
       searchBody: { releases: [PROWLARR_ROW] },
       downloadDeferred: deferred,
     })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.change(queryInput(), { target: { value: 'Артур и минипуты' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en Prowlarr' }))
@@ -357,7 +370,7 @@ describe('Búsqueda en idioma — «Descargar» una fila (S7/T4)', () => {
   it('keeps «Descargar» disabled for a row with neither url and sends nothing', async () => {
     const NO_URL_ROW = { ...PROWLARR_ROW, guid: 'no-url', magnet_url: null, download_url: null }
     const fn = mockFetch({ searchBody: { releases: [NO_URL_ROW] } })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.change(queryInput(), { target: { value: 'Артур и минипуты' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en Prowlarr' }))
@@ -377,7 +390,7 @@ describe('Búsqueda en idioma — «Descargar» una fila (S7/T4)', () => {
       downloadStatus: 400,
       downloadBody: { detail: 'url no válida: se espera un magnet o una URL http(s)' },
     })
-    renderModal(languageSearch)
+    renderSection(languageSearch)
 
     fireEvent.change(queryInput(), { target: { value: 'Артур и минипуты' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en Prowlarr' }))

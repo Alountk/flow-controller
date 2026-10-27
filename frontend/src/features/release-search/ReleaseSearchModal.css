@@ -75,10 +75,10 @@
   color: var(--text-secondary);
 }
 
-.calendar-indexer-select {
+.calendar-sites {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 16px;
   padding: 10px 12px;
   background: var(--surface);
@@ -86,56 +86,35 @@
   border-radius: 8px;
 }
 
-.calendar-indexer-label {
+.calendar-sites-label {
   font-size: 13px;
   color: var(--text-secondary);
-  white-space: nowrap;
 }
 
-.calendar-indexer-dropdown {
-  flex: 1;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.calendar-indexer-dropdown:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.calendar-indexer-error {
-  font-size: 11px;
-  color: var(--bad);
+.calendar-sites-list {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.calendar-site {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
-}
-
-.calendar-indexer-retry {
-  font-size: 11px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
+  font-size: 13px;
   color: var(--text);
   cursor: pointer;
-  white-space: nowrap;
 }
 
-.calendar-indexer-retry:hover {
-  border-color: var(--accent);
-}
-
-.calendar-indexer-count {
+.calendar-sites-error {
   font-size: 11px;
+  color: var(--bad);
+}
+
+.release-detail-note {
+  font-size: 12px;
   color: var(--text-secondary);
-  white-space: nowrap;
+  margin: 4px 0 8px;
 }
 
 .calendar-modal-progress {
@@ -546,44 +525,6 @@
   outline-offset: 1px;
 }
 
-/* T2/S1-S2 — modo alternativa, SIN ruteo: the F-12 destination row is gone
-   and ONE «Descargar» takes its place. It carries the accent the suggested
-   destination used to: it is the row's only action, and it always grabs the
-   normal flow (library, no destination). */
-.release-download {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.release-download-btn {
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--accent);
-  background: var(--accent-bg);
-  color: var(--text);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-
-.release-download-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.release-download-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.release-download-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
 /* The 3D mark: a suggestion from the title until the operator clicks it, at
    which point it stops being one. Always rendered — offering the control only
    when the heuristic already guessed would leave no way to correct a miss. */
@@ -763,4 +704,94 @@
 .lang-search-row-error {
   font-size: 11px;
   color: var(--danger, #e5484d);
+}
+
+/* ── Folder navigator (the «→ Carpeta» destination) ──────────────────────────
+   Backdrop above the modal's own (z-index 200): a stray click cancels the
+   pick instead of closing the whole modal. */
+.folder-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 300;
+}
+
+.folder-picker {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 301;
+  width: min(420px, calc(100vw - 48px));
+  max-height: min(60vh, 480px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.folder-picker-path {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  min-height: 15px;
+}
+
+.folder-picker-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.folder-picker-row {
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.folder-picker-row:hover {
+  border-color: var(--accent);
+}
+
+.folder-picker-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.folder-picker-choose,
+.folder-picker-cancel {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-picker-choose {
+  flex: 1;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-fill);
+}
+
+.folder-picker-choose:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.folder-picker-cancel {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
 }

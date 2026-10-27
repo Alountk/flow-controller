@@ -2,16 +2,17 @@
 
 import asyncio
 import logging
-import os
 import time
+from collections import Counter
 from datetime import date, timedelta
+from functools import partial
 
 import aiohttp
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from config import ALLOWED_ROOTS, destination_for_quality, find_service, path_is_allowed, service_unavailable_reason
 from application import gateways
-from application.gateways import record_own_grab
+from application.gateways import direct_link_identity, record_own_grab
 from application.use_cases.disk_report import disk_report
 from application.gateways import (
     fetch_radarr_calendar,
@@ -21,7 +22,6 @@ from application.gateways import (
     arr_episode_metadata,
     arr_add_movie,
     arr_add_series,
-    arr_grab_release,
     arr_indexers,
     arr_root_folders,
     arr_movie_lookup,
@@ -29,7 +29,7 @@ from application.gateways import (
     arr_movie_exists,
     arr_series_exists,
 )
-from application.use_cases.grab_release import grab_tasks, start_grab
+from application.use_cases.grab_release import category_for, grab_tasks, start_grab
 from application.use_cases.release_search import release_tasks, start_release_search
 from models import (
     CalendarSearchRequest,
@@ -40,6 +40,12 @@ from models import (
 )
 from interfaces.http.deps import verify_api_key
 from interfaces.http.route_helpers import attach_grabbed_at
+from interfaces.http.routes.indexers import (
+    dispatch_direct,
+    search_sources,
+    selected_indexer_ids,
+    selected_sources,
+)
 from state import http_session
 
 log = logging.getLogger("flow-controller")
@@ -181,7 +187,7 @@ async def calendar_add(req: CalendarAddRequest, _key: str = Depends(verify_api_k
 
 
 # The indexers are a small, very stable list, and it is asked for on every modal
-# open AND on every release search (to map indexer name → id). 300s is long
+# open. 300s is long
 # enough that a list already fetched for Radarr is not fetched again a few
 # minutes later — the point of the bug — and short enough that adding an indexer
 # shows up without restarting anything. Failures are never cached: that would
@@ -214,24 +220,77 @@ async def _indexers_for(source: str) -> dict:
     return result
 
 
-async def _enrich_indexer_ids(source: str, result: dict) -> dict:
-    """Enrich releases with indexerId by matching indexer name → id. The
-    cached list is reused: re-asking the arr on every search was the reason a
-    Radarr indexer list was fetched twice in a row.
+def _release_row(row: dict) -> dict:
+    """One direct-source row → the release shape the modal renders (S1).
 
-    This runs inside the search JOB now (C-10), not in the request: the
-    worker hands it the arr's payload and it hands back the payload the
-    status endpoint will serve. Empty results skip the indexer list entirely —
-    the same rule the synchronous handler had.
+    Only what the sources really said: title/name, guid (falling back to the
+    link so the grab always has a target), link, size, seeders when the source
+    stated one, and indexer/source. The arr's fields (quality, languages,
+    indexerId, leechers, protocol, releaseGroup, indexerFlags) are NEVER
+    invented — if a source does not say it, the key is absent and the UI does
+    not paint it.
     """
-    if not result.get("releases"):
-        return result
-    indexers = (await _indexers_for(source)).get("indexers", [])
-    name_to_id = {idx["name"]: idx["id"] for idx in indexers if idx.get("name")}
-    for r in result["releases"]:
-        if not r.get("indexerId"):
-            r["indexerId"] = name_to_id.get(r.get("indexer", ""), 0)
-    return result
+    mapped = {
+        "title": row.get("name") or "",
+        "guid": row.get("guid") or row.get("link") or "",
+        "link": row.get("link") or "",
+        "size": row.get("size") or 0,
+        "indexer": row.get("indexer") or row.get("source") or "",
+        "source": row.get("source") or "",
+    }
+    if row.get("seeders") is not None:
+        mapped["seeders"] = row.get("seeders")
+    return mapped
+
+
+async def _direct_release_fetch(
+    query: str,
+    *,
+    sources: list[str] | None = None,
+    indexer_ids: list[int] | None = None,
+) -> dict:
+    """The job's fetcher: ONE fan-out over our own sources (S1), rows mapped.
+
+    `search_sources` is the exact fan-out of `POST /api/indexers/search`; its
+    `ok: False` envelope means EVERY selected source failed, and those reasons
+    travel as this fetcher's `detail` so the job settles as an error instead of
+    a silent empty list. When some source answered, the detail counts the rows
+    and appends the skipped sources and why — the same honesty `skipped` gives
+    the free search.
+    """
+    answer = await search_sources(
+        query, sources=sources, indexer_ids=indexer_ids, raw_counts=True
+    )
+    if not answer.get("ok"):
+        return {
+            "ok": False,
+            "releases": [],
+            "detail": answer.get("detail") or "ninguna fuente de nuestras fuentes respondió",
+        }
+    results = answer.get("results", [])
+    releases = [_release_row(row) for row in results]
+    segments = [f"{len(releases)} releases"]
+    skipped = answer.get("skipped") or []
+    skipped_sources = {entry.get("source") for entry in skipped}
+    kept = Counter(row.get("source") for row in results)
+    # raw_counts is rows BEFORE the relevance filter, so a source that kept
+    # nothing distinguishes «0 resultados» from «sin coincidencias» (the amule report).
+    for source, raw in (answer.get("raw_counts") or {}).items():
+        if source in skipped_sources or kept.get(source, 0):
+            continue
+        if raw:
+            noun = "resultado" if raw == 1 else "resultados"
+            segments.append(f"{source}: {raw} {noun} sin coincidencias con la búsqueda")
+        else:
+            segments.append(f"{source}: 0 resultados")
+    if skipped:
+        segments.append(
+            "fuentes omitidas: "
+            + "; ".join(
+                f"{entry.get('source')}: {entry.get('reason')}" for entry in skipped
+            )
+        )
+    return {"ok": True, "releases": releases, "detail": " — ".join(segments)}
 
 
 @router.post("/api/calendar/releases")
@@ -247,20 +306,36 @@ async def calendar_releases(req: CalendarReleasesRequest, _key: str = Depends(ve
     payload the synchronous handler used to return.
 
     Validation still answers synchronously and in the old shape: a request
-    that could never run (unknown service, unknown type) never gets a job id.
+    that could never run (unknown service, unknown type, a missing title)
+    never gets a job id.
     """
     service = find_service(req.source, "arr")
     if not service:
         return {"releases": [], "detail": f"Servicio desconocido: {req.source}"}
     if req.type not in ("movie", "episode"):
         return {"releases": [], "detail": f"Tipo desconocido: {req.type}"}
+    query = (req.title or "").strip()
+    if not query:
+        return {"releases": [], "detail": "Falta el título del ítem para buscar en nuestras fuentes"}
+    if req.sources == []:
+        return {"releases": [], "detail": "Selecciona al menos un sitio para buscar"}
+    try:
+        # the job must never start on an impossible selection: validate here,
+        # in the same synchronous honest shape as service/type/title.
+        selected_sources(req.sources)
+        selected_indexer_ids(req.indexer_ids)
+    except HTTPException as exc:
+        return {"releases": [], "detail": str(exc.detail)}
     return start_release_search(
         req.source,
-        service,
         req.type,
         req.id,
-        session_factory=http_session,
-        enrich=lambda result: _enrich_indexer_ids(req.source, result),
+        query=query,
+        fetcher=partial(
+            _direct_release_fetch,
+            sources=req.sources,
+            indexer_ids=req.indexer_ids,
+        ),
     )
 
 
@@ -305,34 +380,25 @@ async def _resolve_series_id(
 class GrabBody(CalendarGrabRequest):
     """The grab body plus what a direct add needs.
 
-    `title` is the release's own title — the key we ask aMuTorrent's Torznab
-    for the link, because the arr's release payload carries only its guid. On
-    the arr path it rides along unused; a foreign-destination grab without it
-    fails loudly instead of guessing a query.
-
-    `size` is the release's byte size: when a Radarr-suffixed guid matches
-    several items sharing the base id, the enclosure size breaks the tie —
-    the same title exists at 5.8 GB and at 13 KB (the sidecar nfo), and only
-    the size can tell them apart.
+    `title` is the release's own title: the fallback `direct_link_identity`
+    uses when the row's link carries no file name of its own (calendario-
+    directo T2: nothing is re-searched — the row already carries `link`/`guid`
+    — so the title no longer keys any resolve; it only names the download
+    honestly in the own-grab registry).
 
     `library` is the explicit "the arr's own path" choice of the per-card
     buttons: without it, an absent destination still means *derived* routing
     (a 2160p release would be sent to `path_4k` even though the operator
     pressed → Biblioteca). Library wins over any folder; quality and is3d
     still ride for the registry.
+
+    `size` stays accepted for wire compatibility (the frontend payload carries
+    it) but nothing reads it since S2: the size tiebreak only existed to pick
+    among re-search results, and there is no re-search anymore.
     """
     title: str = ""
     library: bool = False
     size: int = 0
-
-
-def _inside(path: str, root: str) -> bool:
-    """`path` is `root` or below it, without the `/a/b`-matches-`/a/bc` trap."""
-    normalized_path = os.path.normpath(path)
-    normalized_root = os.path.normpath(root)
-    return normalized_path == normalized_root or normalized_path.startswith(
-        normalized_root.rstrip("/") + "/"
-    )
 
 
 @router.post("/api/calendar/grab")
@@ -349,10 +415,9 @@ async def calendar_grab(req: GrabBody, _key: str = Depends(verify_api_key)):
 
     Validation still answers synchronously and in the old shape: a request
     that could never run (unknown service, destination outside the allowed
-    roots) never gets a job id. Everything that needs a session — the roots
-    gate, the foreign check, the resolve, the add, the arr grab, the
-    registry row — runs in the worker, because that is where the slow
-    phases live.
+    roots) never gets a job id. Everything that needs a session — the shape
+    dispatch, the registry row, the series lookup — runs in the worker,
+    because that is where the slow phases live.
     """
     service = find_service(req.source, "arr")
     if not service:
@@ -379,14 +444,15 @@ async def calendar_grab(req: GrabBody, _key: str = Depends(verify_api_key)):
         service,
         destination=destination,
         guid=req.guid,
+        link=req.link,
         indexer_id=req.indexerId,
         movie_id=req.movieId,
         episode_id=req.episodeId,
         quality=req.quality,
         title=req.title,
-        size=req.size,
         session_factory=http_session,
         resolve_series=_resolve_series_id,
+        dispatch=dispatch_direct,
     )
 
 
@@ -409,17 +475,30 @@ async def calendar_grab_status(task_id: str, _key: str = Depends(verify_api_key)
 
 @router.post("/api/calendar/grab-batch")
 async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends(verify_api_key)):
-    """Descarga múltiples releases en lote."""
+    """Descarga múltiples releases en lote — despacho directo fila a fila.
+
+    S4 (calendario-directo T2): the old refusal for a destination outside the
+    arr roots is GONE — it reasoned a falsehood («va directa al cliente sin
+    pasar por el arr» was false THEN). With the dispatch no longer passing
+    through the arr at all (S2), a batch with a destination allowed by
+    `path_is_allowed` dispatches row by row exactly like the single grab: the
+    ONLY denial left is `path_is_allowed`, checked once above.
+
+    Each row is dispatched by the shape of its own target — `links[i]` paired
+    with `guids[i]` by index (the `indexerIds` pattern), a missing/short entry
+    falling back to that row's guid (S2: no re-search, the row already carries
+    `link`/`guid`). The category is the batch's, chosen by destination (S3).
+    """
     service = find_service(req.source, "arr")
     if not service:
         return {"ok": False, "detail": service_unavailable_reason(req.source)}
 
     # Same resolution and guard as the single grab, applied once for the whole
-    # batch: an invalid destination rejects the request before any guid is sent
-    # to the arr, so no own-grab row is written either. The frontend groups
-    # rows by destination and calls this once per group, so one value covers
-    # the batch — and one quality covers it for the same reason, because the
-    # derived destination is what put these rows in the same group.
+    # batch: an invalid destination rejects the request before anything is
+    # sent to a client, so no own-grab row is written either. The frontend
+    # groups rows by destination and calls this once per group, so one value
+    # covers the batch — and one quality covers it for the same reason,
+    # because the derived destination is what put these rows in the same group.
     destination = req.destination or destination_for_quality(
         req.quality, is3d=req.is3d
     )
@@ -433,36 +512,21 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
 
     results = []
     errors = []
-    # Every guid in one batch targets the same title, so the series is resolved
+    category = category_for(req.source, destination)
+    # Every row in one batch targets the same title, so the series is resolved
     # once for the request and reused. `series_resolved` is the "already asked"
-    # flag on purpose: `series_id is None` would re-ask the arr per guid after a
+    # flag on purpose: `series_id is None` would re-ask the arr per row after a
     # lookup that legitimately found no series, turning a slow arr into N slow
     # lookups. A failed lookup still leaves every successful grab recorded.
     series_id: int | None = None
     series_resolved = False
     async with http_session() as session:
-        # Same foreign gate as the single grab, and the same fail-closed
-        # reading of an unreadable root list. Refusing is deliberate: a batch
-        # through the arr would import and replace, and resolving each guid's
-        # link needs a title the batch does not carry — one row at a time is
-        # the honest answer until the per-card buttons land.
-        if destination is not None:
-            roots = await arr_root_folders(session, service)
-            if roots and not any(_inside(destination, root) for root in roots):
-                return {
-                    "ok": False,
-                    "detail": (
-                        f"El lote con destino fuera de la biblioteca ({destination}) no "
-                        "está soportado: descarga fila a fila, que va directa al "
-                        "cliente sin pasar por el arr."
-                    ),
-                    "downloaded": [],
-                    "errors": [],
-                }
         for i, guid in enumerate(req.guids):
             idx_id = req.indexerIds[i] if i < len(req.indexerIds) else 0
+            link = req.links[i] if i < len(req.links) else ""
+            target = link or guid
             try:
-                result = await arr_grab_release(session, service, guid, idx_id, req.movieId, req.episodeId)
+                result = await dispatch_direct(target, category)
                 if result.get("ok"):
                     results.append(guid)
                     if not series_resolved:
@@ -470,7 +534,11 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                             session, service, req.source, req.episodeId
                         )
                         series_resolved = True
-                    # One row per guid that succeeded, not one per request.
+                    # One row per row that succeeded, not one per request.
+                    # `direct=True` and the client identity on every success
+                    # (S2): nothing here rode `arr_grab_release`, so no arr
+                    # grab-history row will ever exist for these downloads.
+                    client_name, client_hash = direct_link_identity(target, "")
                     await asyncio.to_thread(record_own_grab, 
                         req.source,
                         movie_id=req.movieId or None,
@@ -480,6 +548,9 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
                         indexer_id=idx_id,
                         destination=destination,
                         quality=req.quality or None,
+                        direct=True,
+                        client_name=client_name,
+                        client_hash=client_hash,
                     )
                 else:
                     errors.append({"guid": guid, "detail": result.get("detail", "Error desconocido")})
@@ -489,6 +560,10 @@ async def calendar_grab_batch(req: CalendarGrabBatchRequest, _key: str = Depends
     ok = len(errors) == 0
     if ok:
         detail = f"{len(results)} descargados"
+        if destination is not None:
+            # The same honesty the single grab's success detail carries (S2):
+            # out of the library, the arr will neither see nor import these.
+            detail += " — directa: el arr no la verá ni la importará"
     else:
         # Surface the actual reason, not just a count. "0 OK, 1 errores" tells the
         # user nothing about what went wrong.

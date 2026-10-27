@@ -1,7 +1,7 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-24 · **PR #230 (mixer: alternativa sin ruteo — un solo «Descargar» al flujo normal)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1588 backend / 754 frontend** · main pre-#230 = `06298d0` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-25 · **PR #236 (qbit-nativo — descargas magnet/http NATIVAS a qBittorrent: cliente propio sólo con aiohttp, login+SID, servicio «qbit» en Configuración, destino en el `detail`; aMuTorrent queda sólo para ed2k/rollback)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1633 backend / 760 frontend** · main pre-#236 = `c5fc4c7` · público: próxima sesión + Raul.
 
 ## Estado actual
 
@@ -16,9 +16,11 @@ el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre
 recientes sin intervención. Si un deploy se pierde: `docker compose -f
 docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
 
-**Verde**: `main` en `c84d3ae` (post-#230), run `40136089795` **pass** (backend-tests,
-frontend-build, docker-verify, e2e y **docker-push** → deploy por webhook de Portainer,
-política verificada de la saga). Specs: **1588 backend / 754 frontend**, working tree limpia.
+**Verde**: `main` en `7e41440` (post-#236/#237), run `40213273281` (post-merge del #236;
+el #237 docs-only sin checks, GitGuardian pass) · PR #236 CI verde previo `40212883069`
+**pass** (backend-tests, frontend-build, docker-verify, e2e; docker-push → deploy por
+webhook de Portainer, política verificada de la saga).
+Specs: **1633 backend / 760 frontend**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -235,6 +237,51 @@ política verificada de la saga). Specs: **1588 backend / 754 frontend**, workin
   por defecto en ningún proyecto (por defecto ODD); restos globales (skill `sdd-verify`,
   symlinks de harness, entradas `sdd-*` en gentle state, rol `sdd-spec`) limpiados en el
   entorno con backup.
+- #233 — **alternativa-indexadores** (petición del usuario L1 verbatim, Log L1): el flujo
+  «Buscar y descargar alternativa» del mixer busca en LOS INDEXADORES DEL PROYECTO
+  (registro Torznab + aMule EC) en vez de Radarr/Sonarr: S1 checklist (filas del
+  registro con deshabilitadas visibles/no marcables, marcadas por defecto, «aMule (EC)»;
+  sin Prowlarr — queda en «Búsqueda en idioma») → S2 título precargado editable del
+  filename → S3 `POST /api/indexers/search` con **`indexer_ids`** nuevo (fan-out Torznab
+  restringido; 400 «id de indexador no válido» / skipped «ningún indexador de los
+  seleccionados está habilitado»; sin filtro = byte-idéntico) → S4 fila →
+  `POST /api/indexers/download` mostrando `detail`. Decisiones usuario: **S5 manual MVP**
+  (fuera `altWait`/polling/auto-place/`onGrabStarted`; backend `/alternatives/status`
+  intacto), **S6 sin gate de biblioteca** (movieId 0; aviso «añádela primero» sólo
+  fuera del alternativo), **S7 modal sustituido** (lista de releases de Radarr fuera;
+  `alternativeMode`/`languageSearch`/`onGrabStarted` retirados de `ReleaseSearchModal`).
+  L5: el dispatch qBittorrent YA existía (ed2k/hash→EC, magnet/http→
+  `amutorrent_add_download` categoría `flow`; único cliente = aMuTorrent `kind:"qbit"`).
+  Suites **1597 / 754** (+9 backend RED, +19 frontend con −19 contabilizados bajo
+  S5/S6/S7 y 2 pins migrados; cero pérdidas), tsc/eslint 0, build OK. Frontend de 770
+  (post-T3) a 754 por retires autorizados. Frontera **2665/4** → PR único (divulgado).
+  Assessor `reviewDue:false` (riesgo medio, RDD off → self-verification). Commits
+  `e9e16a4`+`d425091`+`585aadf`+`5ee00f5`, merge **`d51b6bc`** (CI verde `40181771327`).
+  Feature doc: `odd/tasks/alternativa-indexadores.md` (S1–S8, T1–T5, Log L1–L12).
+- #236 — **qbit-nativo** (petición del usuario L1 verbatim, Log L1): «no quiero tener el
+  amutorrent como bypass para pasar las descargas de qbittorrent, implementemos algo
+  nativo. No quiero dependencias, excepto las estrictas» — magnet/http de
+  `POST /api/indexers/download` y de `language-download` van DIRECTOS a qBittorrent con
+  `backend/infrastructure/qbit_client.py` (sólo aiohttp: login `POST /api/v2/auth/login`
+  form+Referer → cookie SID, add con Referer/Origin; **Bearer 403 en el build real**; sin
+  `ensure_category` — `createCategories`/`deleteCategories` son 404 y el add auto-crea la
+  categoría). Éxito honesto **200 && body ∈ {"", "Ok."}** — el `200+Fail.` de la fachada
+  aMuTorrent (:4000, rota: no añade NADA) ya no puede leerse como éxito (bug raíz
+  reproducido en producción; Radarr funcionaba porque grabbea directo a :8080). Servicio
+  `qbit` (kind `qbittorrent`, url/user/password, máscara+restauración de contraseña,
+  `/api/services` blanquea {key,kind,url,configured}, sin configurar → rechazo honesto) +
+  tarjeta en Configuración → Servicios (frontend `ServiceKey+'qbit'`). Destino en el
+  `detail` (S2: «Descarga añadida en qBittorrent (URL), categoría flow»). S7 intacto:
+  ed2k/hash y rollback `AMULE_EC_DIRECT=0` siguen en aMuTorrent vía
+  `_download_bridge_legacy` byte-idéntico; `AMUTORRENT_URL`/WS/status sin cambios. Sondas
+  nativas vivas contra :8080 verificadas y revertidas (probe borrado, 118 torrents). Suites
+  **1633 / 760** (+36/+6 con reescrituras contabilizadas en S8), tsc/eslint 0, build OK,
+  ratchet **3408 intacto** (+6/−6 compactación de envolturas, divulgado). Contrato de probe
+  `service` (no `key`) cruzado parent↔worker. Frontera 1436/5 → PR único (divulgado, L6).
+  Assessor `reviewDue:false` (riesgo medio, RDD off → self-verification + focos del padre;
+  risk item 2 credenciales). Commits `0b2a976`+`1bcdbd6`+`0373d19`+`7e7c9ca`+`63bd3f5`,
+  merge **`a742b16`** (CI verde `40212883069`) · PR **#237** cierre Log L7 → `7e41440`.
+  Feature doc: `odd/tasks/qbit-nativo.md` (S1–S8, T1–T5, Log L1–L7).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
@@ -252,7 +299,7 @@ política verificada de la saga). Specs: **1588 backend / 754 frontend**, workin
 la activa `gentle-ai review mode enable --scope clone`). La review nativa operó en
 #214/#216/#218 (approved + autoridad quemada; #218: assess `nativeRisk medium`, 23
 paths/2225 líneas, 3 lentes). En **#220 quedó atascada en collect**: 6 capturas
-rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu), **#226** y **#228** (config-1x1-fixes y su enmienda S4/S5) y **#230** (alternativa sin ruteo) mergearon también bajo esa disposición D.
+rechazadas (ver gotcha) → abandon + fallback autorizado del usuario → merge ordinario. Los PR **#222** (indexadores), **#224** (config-submenu), **#226** y **#228** (config-1x1-fixes y su enmienda S4/S5) y **#230** (alternativa sin ruteo) y **#233** (alternativa-indexadores; assess `reviewDue:false`, riesgo medio, self-verification) y **#236/#237** (qbit-nativo; assess `reviewDue:false`, riesgo medio, self-verification + focos del padre) mergearon también bajo esa disposición D.
 Gate: assess antes de reportar completo, capturas sólo con bindings del proveedor
 (STATUS fresco antes de cada una) y verificación por tier.
 

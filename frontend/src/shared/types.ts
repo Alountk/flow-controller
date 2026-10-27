@@ -1,4 +1,4 @@
-export type ServiceKey = 'radarr' | 'sonarr' | 'amutorrent'
+export type ServiceKey = 'radarr' | 'sonarr' | 'amutorrent' | 'qbit'
 
 export type ServiceState =
   | 'online'
@@ -266,6 +266,8 @@ export interface Settings {
     radarr: { url: string; api_key: string }
     sonarr: { url: string; api_key: string }
     amutorrent: { url: string; api_key: string; user: string; password: string }
+    /** Native qBittorrent (qbit-nativo S3): no api_key — login/password auth. */
+    qbit: { url: string; user: string; password: string }
     /** Clave de OpenSubtitles (mixer-redesign S6): Configuración → Servicios. */
     opensubtitles: { api_key: string }
   }

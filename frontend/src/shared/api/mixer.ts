@@ -328,16 +328,11 @@ export interface AlternativeLookupResponse {
   alternate_titles: AlternativeTitle[]
 }
 
-/** `GET /api/mixer/alternatives/status` — where the alternative download
- *  stands: `ready` (Radarr owns the file), `downloading` (a queue row matches
- *  the title), `unknown` (neither). */
-export interface AlternativeStatusResponse {
-  state: 'ready' | 'downloading' | 'unknown'
-  /** Downloads-row percent (0–100) or null when it cannot be known. */
-  progress: number | null
-  path: string | null
-  allowed: boolean
-}
+/** `GET /api/mixer/alternatives/status` (S5) stays in the backend — its
+ *  contract is tested in `tests_mixer_api` — but the frontend no longer
+ *  consumes it: the alternative flow's post-download is MANUAL (L2), with no
+ *  wait or auto-placement (`alternativeStatus`/`AlternativeStatusResponse`
+ *  deleted with the `altWait` machinery). */
 
 export async function alternativeLookup(path: string): Promise<AlternativeLookupResponse> {
   const res = await apiFetch('/api/mixer/alternatives/lookup', {
@@ -350,20 +345,6 @@ export async function alternativeLookup(path: string): Promise<AlternativeLookup
     throw new Error(msg)
   }
   return res.json() as Promise<AlternativeLookupResponse>
-}
-
-export async function alternativeStatus(
-  movieId: number,
-  title: string,
-): Promise<AlternativeStatusResponse> {
-  const params = new URLSearchParams({ movie_id: String(movieId), title })
-  const res = await apiFetch(`/api/mixer/alternatives/status?${params.toString()}`, {})
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, unknown>
-    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
-    throw new Error(msg)
-  }
-  return res.json() as Promise<AlternativeStatusResponse>
 }
 
 /** T3/S4: one Prowlarr row `POST /api/mixer/alternatives/language-search`

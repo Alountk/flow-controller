@@ -24,19 +24,15 @@ import type { Release } from '../../../shared/api/releases.ts'
  *   6. the overlay keeps its dialog ending byte for byte (done + Cerrar).
  */
 
+/** A direct-source release row (S5): never the arr era's fields. */
 const release: Release = {
   guid: 'rel-panel-1',
   title: 'Alpha.2024.1080p.BluRay.x264-GRP',
   size: 5_000_000_000,
-  quality: 'Bluray-1080p',
   indexer: 'aMuTorrent',
-  indexerId: 1,
-  indexerFlags: '',
+  source: 'torznab',
+  link: 'https://idx.test/download/rel-panel-1.torrent',
   seeders: 12,
-  leechers: 1,
-  protocol: 'torrent',
-  releaseGroup: '',
-  languages: ['Spanish'],
 }
 
 function ok(body: unknown) {
@@ -142,9 +138,14 @@ describe('panel · a grab leaves the results alone', () => {
     // The exit that used to trade this list for a re-search is gone…
     expect(screen.queryByRole('button', { name: 'Nueva búsqueda' })).toBeNull()
 
-    // The grab returned: nothing is processing any more.
+    // The grab returned: nothing is processing any more — and the site
+    // checkboxes (the select's replacement) are enabled with it.
     expect(screen.getByRole('button', { name: /Refrescar/ })).toBeEnabled()
-    expect(screen.getByRole('combobox', { name: /Indexador/ })).toBeEnabled()
+    const boxes = [
+      ...document.querySelectorAll<HTMLInputElement>('.calendar-sites input[type="checkbox"]'),
+    ]
+    expect(boxes.length).toBeGreaterThan(0)
+    expect(boxes.every((box) => !box.disabled)).toBe(true)
   })
 
   it('does the same on the per-row button grab — the common path', async () => {

@@ -1,6 +1,6 @@
 # Flow Controller
 
-Panel de control para el flujo de descargas **Radarr → aMule → Sonarr**: desde esta feature las descargas hablan **directo con aMule por EC** (`AMULE_URL`/`AMULE_EC_PORT`/`AMULE_EC_PASSWORD`), con el puente aMuTorrent como rollback (`AMULE_EC_DIRECT=0`) y para el tramo qBittorrent.
+Panel de control para el flujo de descargas **Radarr → aMule → Sonarr**: desde esta feature las descargas hablan **directo con aMule por EC** (`AMULE_URL`/`AMULE_EC_PORT`/`AMULE_EC_PASSWORD`), el tramo magnet/http va **directo a qBittorrent** con un cliente nativo propio (servicio `qbit` en Configuración → Servicios, login+SID, sin intermediario) y el puente aMuTorrent queda como rollback (`AMULE_EC_DIRECT=0`) y para el tramo ed2k hacia aMule.
 Detecta dónde se rompe el pipeline y ofrece acciones de remediación directas
 desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 
@@ -11,13 +11,15 @@ desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 - **Backend**: Python 3.11 / FastAPI / aiohttp (async)
 - **Frontend**: React 19 / TypeScript / Vite 7 / @tanstack/react-query
 - **Conexión directa aMule**: protocolo EC (autenticación challenge-response con el hash de `AMULE_EC_PASSWORD`)
-- **Control aMuTorrent**: WebSocket nativo (`ws://host:4000/ws`) — ruta de rollback (`AMULE_EC_DIRECT=0`) y puente qBittorrent
+- **Cliente qBittorrent nativo**: propio y sin dependencias nuevas (sólo aiohttp) — login+SID contra `POST /api/v2/auth/login`, éxito honesto (`200` y cuerpo `Ok.`), servicio `qbit` en Configuración → Servicios
+- **Control aMuTorrent**: WebSocket nativo (`ws://host:4000/ws`) — ruta de rollback (`AMULE_EC_DIRECT=0`)
 
 ## Requisitos
 
 - Python 3.10+
 - Node.js 18+
 - Radarr, Sonarr y aMuTorrent corriendo y accesibles
+- qBittorrent accesible para el tramo magnet/http nativo (opcional: sin configurar, esas filas responden un rechazo honesto)
 
 ## Instalación
 
@@ -145,8 +147,8 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/indexers` | GET/POST | Lista/alta de indexadores directos (Torznab; API key enmascarada en respuestas) |
 | `/api/indexers/{id}` | PUT/DELETE | Editar (clave vacía = conservar la guardada) / eliminar un indexador |
 | `/api/indexers/{id}/test` | POST | Prueba la conexión con `t=caps` sin persistir nada |
-| `/api/indexers/search` | POST | Búsqueda unificada: Torznab + aMule (EC) + Prowlarr, con `skipped` honesto por fuente |
-| `/api/indexers/download` | POST | Descarga una fila: ed2k/hash → EC directo, magnet/http → puente qBittorrent |
+| `/api/indexers/search` | POST | Búsqueda unificada: Torznab + aMule (EC) + Prowlarr, con `skipped` honesto por fuente; `indexer_ids` opcional restringe el fan-out Torznab a filas concretas del registro |
+| `/api/indexers/download` | POST | Descarga una fila: ed2k/hash → EC directo (o aMuTorrent bajo rollback), magnet/http → **qBittorrent nativo** (servicio `qbit`) con el destino en el `detail` |
 | `/api/amule/test` | POST | Prueba la conexión EC a aMule (lo escrito en Configuración o lo guardado; sólo handshake, nunca encola) |
 | `/api/amule/shared-dirs` | GET/PUT | Carpetas que aMule comparte (lee/escribe `shareddir*.dat` y recarga) |
 | `/api/mixer/probe` | POST | Analiza dos archivos de video (pistas, compatibilidad) |
@@ -483,7 +485,8 @@ Detalles:
 
 ### 🔌 #24 — Probar las conexiones desde Configuración
 
-**Hecho ✅** — botón en Configuración que prueba Radarr, Sonarr y aMuTorrent y dice **qué**
+**Hecho ✅** — botón en Configuración que prueba Radarr, Sonarr, aMuTorrent y **qBittorrent**
+(servicio nativo `qbit`, sonda de login — Bearer no vale en el build real) y dice **qué**
 falla en cada uno.
 
 Nace pensando en el **Paso 3** (mover los servicios detrás de un proxy): cuando dejen de estar en

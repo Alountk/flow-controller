@@ -15,20 +15,14 @@ import type { ReleaseSearchItem } from '../../features/release-search/ReleaseSea
 
 const modalSpy = vi.hoisted(() => ({
   items: [] as ReleaseSearchItem[],
-  alternativeModes: [] as (boolean | undefined)[],
+  propKeys: [] as string[][],
 }))
 
 vi.mock('../../features/release-search/ReleaseSearchModal.tsx', () => ({
-  ReleaseSearchModal: ({
-    item,
-    alternativeMode,
-  }: {
-    item: ReleaseSearchItem
-    alternativeMode?: boolean
-  }) => {
-    modalSpy.items.push(item)
-    modalSpy.alternativeModes.push(alternativeMode)
-    return <div data-testid="release-search-modal">{item.title}</div>
+  ReleaseSearchModal: (props: { item: ReleaseSearchItem; onClose: () => void }) => {
+    modalSpy.items.push(props.item)
+    modalSpy.propKeys.push(Object.keys(props))
+    return <div data-testid="release-search-modal">{props.item.title}</div>
   },
 }))
 
@@ -153,7 +147,7 @@ async function driveToResults(languageCheck: LanguageCheck, lookup: LookupReply)
 describe('mixer — «Buscar en el indexador» when a required language is missing (S7)', () => {
   beforeEach(() => {
     modalSpy.items.length = 0
-    modalSpy.alternativeModes.length = 0
+    modalSpy.propKeys.length = 0
   })
 
   afterEach(() => {
@@ -201,7 +195,7 @@ describe('mixer — «Buscar en el indexador» when a required language is missi
     expect(lookupCall?.body).toEqual({ filename: FILE_A })
   })
 
-  it('opens the S7 modal WITHOUT alternative mode — destinos Normal/4K/3D intactos (T2/S3 pin)', async () => {
+  it('opens the S7 modal with item/onClose ONLY — no alternative-flow props (T4/S7 pin)', async () => {
     await driveToResults(
       { ok: false, missing: ['spa'], required: ['spa'] },
       {
@@ -216,10 +210,12 @@ describe('mixer — «Buscar en el indexador» when a required language is missi
 
     fireEvent.click(screen.getByRole('button', { name: 'Buscar en el indexador' }))
 
-    // T2/S2: the exclusion is ONLY the alternative modal's. This mount passes
-    // nothing — every other consumer keeps today's three destinations.
+    // T4/S7: the alternative flow's props (`alternativeMode`, `languageSearch`,
+    // `onGrabStarted`) are GONE from this modal — the S7 mount passes nothing
+    // and keeps its three F-12 destinations byte-identically.
     await screen.findByTestId('release-search-modal')
-    expect(modalSpy.alternativeModes).toEqual([undefined])
+    expect(modalSpy.propKeys).toHaveLength(1)
+    expect([...modalSpy.propKeys[0]].sort()).toEqual(['item', 'onClose'])
   })
 
   it('answers «añádela primero» with the derived title when the movie is not in the library', async () => {

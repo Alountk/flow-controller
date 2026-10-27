@@ -18,20 +18,17 @@ import type { Release } from '../../../shared/api/releases.ts'
  * step a failed POST always used.
  */
 
+/** A direct-source release row, exactly as `POST /api/calendar/releases`
+ *  serves it (S5): never the arr era's quality/languages/indexerId. */
 function makeRelease(overrides: Partial<Release> = {}): Release {
   return {
     guid: 'en-1',
     title: 'Everything Everywhere All at Once 2022 1080p BluRay',
     size: 10_000_000_000,
-    quality: 'Bluray-1080p',
     indexer: 'aMuTorrent',
-    indexerId: 1,
-    indexerFlags: '',
+    source: 'torznab',
+    link: 'https://idx.test/download/en-1.torrent',
     seeders: 10,
-    leechers: 1,
-    protocol: 'torrent',
-    releaseGroup: '',
-    languages: ['English'],
     ...overrides,
   }
 }
@@ -41,13 +38,13 @@ const releases: Release[] = [
   makeRelease({
     guid: 'es-1',
     title: 'Todo a la vez en todas partes 2022 1080p',
-    quality: 'WEBDL-1080p',
-    languages: ['Spanish'],
   }),
 ]
 
 const indexers = {
-  indexers: [{ id: 1, name: 'aMuTorrent', implementation: 'Torznab', enableSearch: true }],
+  indexers: [
+    { id: 1, name: 'aMuTorrent', implementation: 'Torznab', enableSearch: true, enabled: 1 },
+  ],
 }
 
 const STARTED_JOB = { ok: true, task_id: 'rel-job-1', status: 'running', detail: 'Búsqueda de releases lanzada' }
@@ -72,6 +69,10 @@ function mockPollingFetch(options: PollOptions = {}) {
   const state = { statusCalls: 0 }
   const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
+    if (url.includes('/api/indexers')) {
+      // our own registry — the modal's site checkboxes
+      return Promise.resolve({ ok: true, json: async () => indexers } as Response)
+    }
     if (url.includes('/api/calendar/indexers')) {
       return Promise.resolve({ ok: true, json: async () => indexers } as Response)
     }
@@ -105,6 +106,26 @@ function renderModal() {
       <ReleaseSearchModal
         item={{ type: 'movie', id: 411, title: 'Everything Everywhere All at Once', source: 'radarr' }}
         onClose={() => {}}
+      />
+    </QueryClientProvider>,
+  )
+}
+
+/** The panel keeps its site checkboxes ON the results, so the re-run-on-
+ *  toggle flow is a panel scenario. */
+function renderPanelModal() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <ReleaseSearchModal
+        item={{
+          type: 'movie',
+          id: 511,
+          title: 'Everything Everywhere All at Once',
+          source: 'radarr',
+          has_file: false,
+        }}
+        presentation="panel"
       />
     </QueryClientProvider>,
   )
@@ -193,44 +214,31 @@ describe('Release search polling (C-10)', () => {
     expect(statusCalls(fn)).toHaveLength(0)
   })
 
-  it('applies the chosen indexer to the results the poll delivers', async () => {
-    // The choice is captured when the search STARTS (the select is disabled
-    // while the job runs) and must filter the payload the poll brings back —
-    // not whatever the select says by then.
-    mockPollingFetch({
-      statusBodies: [
-        { ok: true, id: 'rel-job-1', status: 'running', detail: 'Búsqueda de releases lanzada' },
-        {
-          ok: true,
-          id: 'rel-job-1',
-          status: 'done',
-          detail: '2 releases encontrados',
-          releases: [
-            makeRelease({ guid: 'mu-1', indexer: 'aMuTorrent' }),
-            makeRelease({ guid: 'other-1', indexer: 'OtherIndexer', title: 'Solo en OtherIndexer 2022 1080p' }),
-          ],
-        },
-      ],
-    })
-    renderModal()
+  it('re-runs under the checked sites and the subset rides that job', async () => {
+    // The panel's site toggle is the re-run trigger, and the selection is
+    // SERVER-SIDE: it rides the POST (`sources`), never a client filter.
+    const fn = mockPollingFetch()
+    renderPanelModal()
 
-    // The options come from the async indexers query: changing the select
-    // before they render would write a value no option has.
-    await screen.findByRole('option', { name: 'aMuTorrent' })
-    fireEvent.change(document.getElementById('release-indexer') as HTMLSelectElement, {
-      target: { value: '1' },
-    })
     fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
-
     await waitFor(
-      () => expect(screen.getByText('1 releases encontrados')).toBeInTheDocument(),
+      () => expect(screen.getByText('2 releases encontrados')).toBeInTheDocument(),
       { timeout: 4000 },
     )
-    // Scope to the rows: the modal header repeats the item title, so a
-    // document-wide query would match it too.
-    const titles = [...document.querySelectorAll('.release-title')].map((el) => el.textContent ?? '')
-    expect(titles).toHaveLength(1)
-    expect(titles[0]).toContain('Everything Everywhere')
-    expect(titles.join(' ')).not.toContain('Solo en OtherIndexer')
+
+    fireEvent.click(screen.getByLabelText('aMule'))
+    await waitFor(() => expect(postCalls(fn)).toHaveLength(2))
+    const secondBody = JSON.parse(
+      String((postCalls(fn)[1][1] as RequestInit).body),
+    ) as Record<string, unknown>
+    expect(secondBody.sources).toEqual(['torznab', 'prowlarr'])
+
+    // The second job's payload renders exactly as delivered: the sites
+    // decided on the server, so no client-side row filtering survives.
+    await waitFor(
+      () => expect(document.querySelectorAll('.release-title')).toHaveLength(2),
+      { timeout: 4000 },
+    )
+    expect(postCalls(fn)).toHaveLength(2)
   })
 })

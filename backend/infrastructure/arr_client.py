@@ -22,6 +22,7 @@ from config import (
     QBIT_DOWNLOADING,
 )
 from domain.naming import MEDIA_EXTENSIONS
+from infrastructure import qbit_client
 
 log = logging.getLogger("flow-controller")
 
@@ -132,9 +133,28 @@ async def check_qbit(session: aiohttp.ClientSession, service: dict) -> tuple[str
     return "offline", f"Fallaron {config.MAX_RETRIES} intentos ({last_error})", {}
 
 
+async def check_qbittorrent(session: aiohttp.ClientSession, service: dict) -> tuple[str, str, dict]:
+    """Cliente qBittorrent NATIVO: la sonda es el login y nada más (S4/D2).
+
+    El Bearer de `check_qbit` devuelve 403 en el build real — aquí se prueba
+    `POST /api/v2/auth/login` con las credenciales del servicio. Un login
+    rechazado no es "caído": es `misconfigured`, como la API key de los arr.
+    """
+    probed = await qbit_client.qbit_login_probe(
+        session, service["url"], service.get("user", ""), service.get("password", "")
+    )
+    if probed["ok"]:
+        return "online", "Conexión exitosa", {}
+    if probed["error_kind"] == "auth":
+        return "misconfigured", probed["detail"], {}
+    return "offline", probed["detail"], {}
+
+
 async def check_service(session: aiohttp.ClientSession, service: dict) -> tuple[str, str, dict]:
     if service["kind"] == "qbit":
         return await check_qbit(session, service)
+    if service["kind"] == "qbittorrent":
+        return await check_qbittorrent(session, service)
     return await check_arr(session, service)
 
 
@@ -154,6 +174,14 @@ async def test_service_connection(session: aiohttp.ClientSession, service: dict)
         "kind": service.get("kind", "arr"),
         "url": service.get("url", ""),
     }
+
+    if service["kind"] == "qbittorrent":
+        # S4/D2: el cliente nativo se autentica por login+SID — la sonda es el
+        # login y nada más (Bearer → 403 en el build real).
+        probed = await qbit_client.qbit_login_probe(
+            session, service["url"], service.get("user", ""), service.get("password", "")
+        )
+        return {**result, "version": "", **probed}
 
     if service["kind"] == "qbit":
         endpoint = f"{service['url']}/api/v2/app/version"
@@ -1020,6 +1048,13 @@ async def amutorrent_add_download(
             return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": _empty_answer_detail(exc, timeout)}
+
+
+async def qbit_add_download(*args, **kwargs):
+    """The NATIVE qBittorrent add (`infrastructure.qbit_client`, S4) — answered
+    here so the bound `ArrClient` adapter owns both download bridges.
+    """
+    return await qbit_client.qbit_add_download(*args, **kwargs)
 
 
 def _search_query(title: str) -> str:
