@@ -274,6 +274,7 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
                   showSizes
                   layout="split"
                   selection="file"
+                  onlyVideo
                   mode="both"
                   initialPath={lastPath}
                   onNavigate={(p) => {

@@ -1,9 +1,11 @@
 """Tests para las rutas API de media_mixer."""
 import os
+import subprocess
 import time
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import aiohttp
+import pytest
 
 # Configurar env vars antes de importar
 os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
@@ -127,6 +129,31 @@ class TestProbeEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["compatibility"]["warnings"]) == 1
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_unprobeable_file_is_400(self, mock_probe, _isfile):
+        # An ffprobe-unreadable file (0-byte .part, .met, no-media) is bad
+        # INPUT — the same 400 alternatives/lookup answers, never a 500.
+        mock_probe.side_effect = media_mixer.ProbeInputError("ffprobe failed: boom")
+        resp = client.post(
+            "/api/mixer/probe",
+            json={"path_a": "/mnt/storage/temp/001.part", "path_b": "/mnt/storage/temp/002.part"},
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "ffprobe failed: boom"}
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_missing_ffprobe_is_500(self, mock_probe, _isfile):
+        # A missing binary IS a server fault: the only probe failure at 500.
+        mock_probe.side_effect = RuntimeError("ffprobe not found")
+        resp = client.post(
+            "/api/mixer/probe",
+            json={"path_a": "/mnt/storage/video.mkv", "path_b": "/mnt/storage/video2.mkv"},
+        )
+        assert resp.status_code == 500
+        assert resp.json() == {"detail": "ffprobe not found"}
 
     def test_probe_missing_file(self):
         resp = client.post(
@@ -254,6 +281,29 @@ class TestProbeEndpoint:
         assert s0["kind"] == "text"
         assert s0["extractable"] is True
         assert s0["forced"] is True
+
+
+class TestProbeFileErrors:
+    """probe_file's failure taxonomy: input problems vs a broken server."""
+
+    @patch("media_mixer.subprocess.run")
+    def test_ffprobe_nonzero_exit_raises_probe_input_error(self, mock_run, tmp_path):
+        target = tmp_path / "x.mkv"
+        target.write_bytes(b"x")
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="",
+            stderr="x.mkv: Invalid data found when processing input",
+        )
+        with pytest.raises(media_mixer.ProbeInputError, match="ffprobe failed"):
+            media_mixer.probe_file(str(target))
+
+    @patch("media_mixer.subprocess.run")
+    def test_ffprobe_timeout_raises_probe_input_error(self, mock_run, tmp_path):
+        target = tmp_path / "x.mkv"
+        target.write_bytes(b"x")
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="ffprobe", timeout=30)
+        with pytest.raises(media_mixer.ProbeInputError, match="timed out"):
+            media_mixer.probe_file(str(target))
 
 
 class TestMuxEndpoint:
