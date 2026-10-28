@@ -419,6 +419,33 @@ class TestBuildMuxCommand:
         c_idx = cmd.index("-c")
         assert cmd[c_idx + 1] == "copy"
 
+    def test_normalizes_metadata_and_writes_track_languages(self):
+        # S4: nada heredado (contenedor ni pista) + title = nombre de salida
+        # + language= por cada pista de audio mapeada.
+        video = {"path": "/mnt/storage/movie.mkv", "track_index": 0}
+        audio = [{"path": "/mnt/storage/fileB.mkv", "track_index": 2}]
+        cmd = build_mux_command(video, audio, "/tmp/output.mkv", audio_languages=["spa"])
+
+        assert "-map_metadata" in cmd
+        assert cmd[cmd.index("-map_metadata") + 1] == "-1"
+        title_idx = cmd.index("-metadata")
+        assert cmd[title_idx + 1] == "title=output"
+        assert "-map_metadata:s:v:0" in cmd
+        assert "-map_metadata:s:a:0" in cmd
+        assert cmd[cmd.index("-metadata:s:a:0") + 1] == "language=spa"
+        assert cmd[-1] == "/tmp/output.mkv"
+
+    def test_metadata_normalization_without_language_info(self):
+        # S4 aplica aunque no haya lenguajes conocidos: strip + title sí,
+        # language= no (no se inventa etiqueta donde no la hay).
+        video = {"path": "/mnt/storage/movie.mkv", "track_index": 0}
+        audio = [{"path": "/mnt/storage/movie.mkv", "track_index": 1}]
+        cmd = build_mux_command(video, audio, "/tmp/output.mkv")
+
+        assert "-map_metadata" in cmd
+        assert cmd[cmd.index("-metadata") + 1] == "title=output"
+        assert not any(part.startswith("language=") for part in cmd)
+
 
 # ── _cleanup_partial ────────────────────────────────────────────────────────
 
@@ -930,8 +957,10 @@ class TestSubtitleSidecarExtraction:
         assert [s["status"] for s in subs] == ["extracted"]
         sidecar = media_mixer.subtitle_sidecar_path(task["output_path"], "spa")
         assert subs[0]["sidecar"] == sidecar
-        # S8: the mux maps video+audio only — never an embedded subtitle.
-        assert all(":s:" not in part for part in calls[0])
+        # S8: -map picks video+audio only — never an embedded subtitle
+        # (metadata stream specifiers carry ':s:' too, but map nothing).
+        mapped = [calls[0][i + 1] for i, p in enumerate(calls[0]) if p == "-map"]
+        assert all(":s:" not in spec for spec in mapped)
         assert calls[1] == [
             "ffmpeg", "-y", "-i", "/in/a.mkv",
             "-map", "0:s:0", "-c:s", "srt", sidecar,

@@ -29,6 +29,12 @@ CODEC_PRIORITY: dict[str, int] = {"hevc": 0, "h265": 0, "h264": 1, "avc": 1}
 #: inglés, ruso, catalán. The user's order; not configurable.
 ORDERED_AUDIO_LANGUAGES: tuple[str, ...] = ("spa", "eng", "rus", "cat")
 
+#: S2 (idiomas-metadata): every code the mixer language selectors offer.
+#: Mirrors LANGUAGE_LABELS in frontend/src/pages/MediaMixer.tsx — keep in sync.
+MUX_LANGUAGE_CODES: tuple[str, ...] = (
+    "spa", "eng", "rus", "cat", "fra", "deu", "ita", "por", "jpn", "kor", "zho", "und",
+)
+
 #: ISO 639-2/B + 639-1 aliases for the four ordered languages only.
 _LANGUAGE_ALIASES: dict[str, str] = {
     "spa": "spa", "es": "spa",
@@ -399,11 +405,16 @@ def build_mux_command(
     video_source: dict,
     audio_sources: list[dict],
     output_path: str,
+    audio_languages: list[str | None] | None = None,
+    metadata_title: str | None = None,
 ) -> list[str]:
     """Build ffmpeg command for mux operation.
 
     Returns command as list of strings for subprocess.run.
     Uses -c copy for all tracks (stream copy, no re-encode).
+    S4: output metadata is normalized — no inherited container or stream
+    tags, title from `metadata_title` (falls back to the output name), and
+    `language=` per mapped audio track when its effective code is known.
     """
     # Collect unique input files
     input_files = []
@@ -439,6 +450,17 @@ def build_mux_command(
 
     # Stream copy
     cmd.extend(["-c", "copy"])
+
+    # S4: normalized metadata — strip inherited tags (container and per
+    # stream), then set the output title and the effective track languages.
+    cmd.extend(["-map_metadata", "-1"])
+    cmd.extend(["-metadata", f"title={metadata_title or Path(output_path).stem}"])
+    cmd.extend(["-map_metadata:s:v:0", "-1"])
+    for i in range(len(audio_sources)):
+        cmd.extend([f"-map_metadata:s:a:{i}", "-1"])
+    for i, code in enumerate(audio_languages or []):
+        if code:
+            cmd.extend([f"-metadata:s:a:{i}", f"language={code}"])
 
     # Progress output
     cmd.extend(["-progress", "pipe:1"])
@@ -568,6 +590,7 @@ def start_mux(
     output_dir: str,
     subtitle_plan: list[dict] | None = None,
     destination_path: str = "",
+    audio_languages: list[str | None] | None = None,
 ) -> str:
     """Start a mux task (or queue it — one mux at a time, S11-4). Returns task_id.
 
@@ -591,7 +614,11 @@ def start_mux(
         output_path = write_path
 
     job = {
-        "cmd": build_mux_command(video_source, audio_sources, write_path),
+        "cmd": build_mux_command(
+            video_source, audio_sources, write_path,
+            audio_languages=audio_languages,
+            metadata_title=Path(output_path).stem,
+        ),
         "write_path": write_path,
         "output_path": output_path,
         "subtitles": subtitles,
