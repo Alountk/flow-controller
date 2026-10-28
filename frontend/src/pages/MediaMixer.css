@@ -706,10 +706,28 @@
   gap: 12px;
 }
 
-.mixer-sub-lang {
-  width: 80px;
-  font-weight: 500;
+/* Local select styling for the language selectors (mirrors fm-volume-select
+   so the mixer does not depend on FileManager.css being loaded). */
+.mixer-lang-select {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elev);
   color: var(--text);
+  font-size: 11px;
+  font-family: monospace;
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 140px;
+  outline: none;
+}
+
+.mixer-lang-select:hover {
+  border-color: var(--accent);
+}
+
+.mixer-lang-select:focus {
+  border-color: var(--accent);
 }
 
 .mixer-sub-chip {
@@ -973,40 +991,4 @@
   text-align: right;
 }
 
-/* L24/T10 — mark an und audio track as castellano (and undo it) */
-.mixer-chip-marked {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 500;
-  flex-shrink: 0;
-  color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
-}
 
-.mixer-btn-mark-lang {
-  margin-left: auto;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.mixer-btn-mark-lang:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.mixer-btn-mark-lang--on {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
-}

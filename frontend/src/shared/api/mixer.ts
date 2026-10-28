@@ -179,13 +179,16 @@ export interface MuxLanguageOverride {
 }
 
 /** S11/T13: `destination_path` is the full absolute path of one of the two
- *  inputs — the original file the mix replaces (the UI always sends it). */
+ *  inputs — the original file the mix replaces (the UI always sends it).
+ *  S3/T3: `subtitleLanguages` is the per-row chosen code list; omitted when
+ *  every row keeps its derived default (the old wire shape). */
 export async function startMux(
   videoSource: { path: string; track_index: number },
   audioSources: { path: string; track_index: number }[],
   destinationPath: string,
   outputPath?: string,
   languageOverrides: MuxLanguageOverride[] = [],
+  subtitleLanguages?: string[],
 ): Promise<MuxResponse> {
   const body: Record<string, unknown> = {
     video_source: videoSource,
@@ -195,6 +198,7 @@ export async function startMux(
   if (outputPath) body.output_path = outputPath
   // L24: omitted when empty so the wire keeps its old shape.
   if (languageOverrides.length > 0) body.language_overrides = languageOverrides
+  if (subtitleLanguages && subtitleLanguages.length > 0) body.subtitle_languages = subtitleLanguages
 
   const res = await apiFetch('/api/mixer/mux', {
     method: 'POST',

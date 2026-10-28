@@ -28,6 +28,7 @@ from media_mixer import (
     cleanup_tasks,
     subtitle_sidecar_path,
     ORDERED_AUDIO_LANGUAGES,
+    MUX_LANGUAGE_CODES,
     SHORT_LANGUAGE_SUFFIXES,
 )
 from task_manager import mux_tasks
@@ -71,6 +72,9 @@ class MuxRequest(BaseModel):
     # L24: [{path, track_index, language}] — pistas `und` que el usuario marcó
     # como castellano (u otro idioma ordenado) para pasar el gate de exigidos.
     language_overrides: list[dict] = []
+    # S3: one code per subtitle panel row; absent/empty keeps the derived plan
+    # (union of the audio languages) so old clients stay byte-for-byte intact.
+    subtitle_languages: list[str] | None = None
 
 
 class SubtitleSearchRequest(BaseModel):
@@ -147,15 +151,15 @@ def _required_languages() -> list[str]:
 def _resolve_language_overrides(
     probes: list[dict], overrides: list[dict] | None
 ) -> dict[tuple[str, int], str]:
-    """L24: user-marked `und` tracks → effective language for this mux.
+    """S2 (idiomas-metadata): effective language per user override — any track.
 
-    «deberiamos poder marcar las pista und si son las castellanas para poder
-    pasar el flag» — each override is `{path, track_index, language}`: the path
-    must be one of the probed files, the ordinal must exist inside it, the
-    track must probe as `und`, and the target language must normalize to one
-    of `ORDERED_AUDIO_LANGUAGES`. Anything else raises 400
-    `invalid_language_override` — the gate never guesses. Only the multi-file
-    gate path resolves them (a single-file mux runs no gate and no plan).
+    Each override is `{path, track_index, language}`: the path must be one of
+    the probed files, the ordinal must exist inside it, and the target language
+    must normalize to one of `MUX_LANGUAGE_CODES` (the 12 selector codes). The
+    und-only rule (L24) is superseded by S2 «Selector en todas las pistas».
+    Anything else raises 400 `invalid_language_override` — the gate never
+    guesses. Only the multi-file gate path resolves them (a single-file mux
+    runs no gate and no plan).
     """
     if not overrides:
         return {}
@@ -163,7 +167,7 @@ def _resolve_language_overrides(
     resolved: dict[tuple[str, int], str] = {}
     for item in overrides:
         code = normalize_language(str(item.get("language", "")))
-        if code not in ORDERED_AUDIO_LANGUAGES:
+        if code not in MUX_LANGUAGE_CODES:
             raise HTTPException(
                 status_code=400,
                 detail=f"invalid_language_override: unknown language {item.get('language')!r}",
@@ -182,17 +186,40 @@ def _resolve_language_overrides(
                 status_code=400,
                 detail="invalid_language_override: track_index out of range",
             )
-        if normalize_language(tracks[ordinal].get("language", "und")) != "und":
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_language_override: target track is not und",
-            )
         resolved[(path, ordinal)] = code
     return resolved
 
 
+def _resolve_subtitle_languages(raw: list[str] | None) -> list[str] | None:
+    """S3 (idiomas-metadata): the user's subtitle codes — fail-closed.
+
+    Present and non-empty ⇒ every code must be one of `MUX_LANGUAGE_CODES`
+    (LANGUAGE_LABELS) and unique, else 400 `invalid_subtitle_languages` —
+    duplicated codes would twin one sidecar. Absent/empty ⇒ None: the plan
+    derives from the audio union exactly as before T2.
+    """
+    if not raw:
+        return None
+    seen: set[str] = set()
+    for code in raw:
+        if code not in MUX_LANGUAGE_CODES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid_subtitle_languages: unknown language {code!r}",
+            )
+        if code in seen:
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid_subtitle_languages: duplicate language {code!r}",
+            )
+        seen.add(code)
+    return list(raw)
+
+
 def _build_subtitle_plan(
-    probes: list[dict], overrides: dict[tuple[str, int], str] | None = None
+    probes: list[dict],
+    overrides: dict[tuple[str, int], str] | None = None,
+    requested_languages: list[str] | None = None,
 ) -> list[dict]:
     """S6: one `.srt` sidecar plan entry per audio language of the files.
 
@@ -204,6 +231,10 @@ def _build_subtitle_plan(
 
     L24: `overrides` swaps a marked `und` audio track for its declared
     language (spa counts in the union; the plan entry is then `spa`).
+
+    S3: `requested_languages` (validated by the route) replaces the audio-
+    union derivation — one entry per requested code, same shape and rank.
+    None/empty keeps the derivation.
     """
     overrides = overrides or {}
 
@@ -212,17 +243,20 @@ def _build_subtitle_plan(
             return (0, ORDERED_AUDIO_LANGUAGES.index(code))
         return (1, code)
 
-    audio_langs = {
-        overrides.get(
-            (os.path.realpath(probe.get("path", "")), ordinal),
-            normalize_language(track.get("language", "und")),
-        )
-        for probe in probes
-        for ordinal, track in enumerate(probe.get("audio_tracks", []))
-    }
+    if requested_languages:
+        langs = set(requested_languages)
+    else:
+        langs = {
+            overrides.get(
+                (os.path.realpath(probe.get("path", "")), ordinal),
+                normalize_language(track.get("language", "und")),
+            )
+            for probe in probes
+            for ordinal, track in enumerate(probe.get("audio_tracks", []))
+        }
 
     plan: list[dict] = []
-    for code in sorted(audio_langs, key=_rank):
+    for code in sorted(langs, key=_rank):
         candidates = [
             (probe, track)
             for probe in probes
@@ -668,6 +702,10 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         if not os.path.isfile(validated_audio_path):
             raise HTTPException(status_code=400, detail=f"Audio file not found: {audio_path}")
 
+    # S3: the chosen subtitle codes are validated before any probe or gate
+    # work so a bad request fails closed even when no plan gets built.
+    requested_subtitle_languages = _resolve_subtitle_languages(req.subtitle_languages)
+
     # S11-1/S11-5: `destination_path` names the mux input file the result must
     # SUBSTITUTE. Fail closed: it must resolve to exactly one of the validated
     # inputs AND pass the allowlist — anything else is 400
@@ -698,6 +736,7 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         + [os.path.realpath(a["path"]) for a in req.audio_sources]
     ))
     subtitle_plan: list[dict] = []
+    track_languages: dict[tuple[str, int], str] = {}
     if len(unique_files) > 1:
         try:
             probes = await asyncio.gather(
@@ -720,18 +759,19 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
         # S2/L14 required-language gate — after the fps/duration check (S3
         # «el primer check») and still BEFORE any ffmpeg starts. Availability
         # is checked over the UNION of the probed files (L3: one of the two
-        # files carrying the language is enough). L24: `language_overrides`
-        # counts a user-marked `und` track as its declared language.
+        # files carrying the language is enough). S2: an override counts on
+        # any track; the same map feeds the plan and the output language tags.
         overrides_map = _resolve_language_overrides(list(probes), req.language_overrides)
-        required = _required_languages()
-        available = {
-            overrides_map.get(
+        track_languages = {
+            (os.path.realpath(probe.get("path", "")), ordinal): overrides_map.get(
                 (os.path.realpath(probe.get("path", "")), ordinal),
                 normalize_language(track.get("language", "und")),
             )
             for probe in probes
             for ordinal, track in enumerate(probe.get("audio_tracks", []))
         }
+        required = _required_languages()
+        available = set(track_languages.values())
         missing = [code for code in required if code not in available]
         if missing:
             raise HTTPException(status_code=409, detail={
@@ -742,8 +782,10 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
 
         # S6: .srt sidecar plan derived server-side from the probes (the
         # client's languages are never trusted) — one entry per audio
-        # language of the A+B union.
-        subtitle_plan = _build_subtitle_plan(list(probes), overrides_map)
+        # language of the A+B union, or per S3 requested code when given.
+        subtitle_plan = _build_subtitle_plan(
+            list(probes), overrides_map, requested_subtitle_languages
+        )
 
     # Determine output directory
     from application.gateways import get_setting
@@ -765,6 +807,13 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
 
     try:
         start_kwargs: dict = {"subtitle_plan": subtitle_plan}
+        if track_languages:
+            # S4: effective language per selected audio track (probe + overrides),
+            # same order as audio_sources — written as `-metadata:s:a:N language=`.
+            start_kwargs["audio_languages"] = [
+                track_languages.get((os.path.realpath(a["path"]), a["track_index"]))
+                for a in audio_sources
+            ]
         if destination_path:
             # S11-2: substitution mode — the task reports the destination as
             # its output_path. Empty keeps the legacy call untouched.

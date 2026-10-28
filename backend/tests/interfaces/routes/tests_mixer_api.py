@@ -534,9 +534,9 @@ class TestMuxEndpoint:
     @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
     @patch("interfaces.http.routes_mixer.start_mux")
     @patch("interfaces.http.routes_mixer.probe_file")
-    def test_mux_language_override_rejects_non_und_target(self, mock_probe, mock_start, mock_isfile):
-        # L24: solo las pistas `und` admiten la marca — un eng etiquetado no
-        # se puede renombrar (400, fail closed, nunca un mux silencioso).
+    def test_mux_language_override_retags_any_track(self, mock_probe, mock_start, mock_isfile):
+        # S2 (relaja L24): cualquier pista admite reetiquetado — un eng ya
+        # etiquetado puede pasar a spa y cuenta en el gate y en el plan.
         mock_probe.side_effect = [
             _probe_fixture("/mnt/storage/video.mkv", languages=("eng",)),
             _probe_fixture("/mnt/storage/audio.mkv", languages=("rus",)),
@@ -546,15 +546,67 @@ class TestMuxEndpoint:
             "/api/mixer/mux",
             json={
                 "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
-                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 0}],
                 "language_overrides": [
                     {"path": "/mnt/storage/video.mkv", "track_index": 0, "language": "spa"}
                 ],
             },
         )
-        assert resp.status_code == 400
-        assert "invalid_language_override" in resp.json()["detail"]
-        mock_start.assert_not_called()
+        assert resp.status_code == 200
+        mock_start.assert_called_once()
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [e["language_code"] for e in plan] == ["spa", "rus"]
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_language_override_accepts_full_label_codes(self, mock_probe, mock_start, mock_isfile):
+        # S2: los 12 códigos de LANGUAGE_LABELS son válidos (hoy sólo spa/eng/rus/cat).
+        # The extra spa track only satisfies the pinned 409 gate; fra is the subject.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("und", "spa")),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=("rus",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 0}],
+                "language_overrides": [
+                    {"path": "/mnt/storage/video.mkv", "track_index": 0, "language": "fra"}
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        mock_start.assert_called_once()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_audio_languages_flow_to_start_mux(self, mock_probe, mock_start, mock_isfile):
+        # S4: start_mux recibe el idioma efectivo por pista de audio (sondeo,
+        # con el override aplicado) en el MISMO orden que audio_sources.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv", languages=("eng",)),
+            _probe_fixture("/mnt/storage/audio.mkv", languages=("rus", "und")),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+                "audio_sources": [
+                    {"path": "/mnt/storage/audio.mkv", "track_index": 0},
+                    {"path": "/mnt/storage/audio.mkv", "track_index": 1},
+                ],
+                "language_overrides": [
+                    {"path": "/mnt/storage/audio.mkv", "track_index": 1, "language": "spa"}
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        assert mock_start.call_args.kwargs.get("audio_languages") == ["rus", "spa"]
 
     @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
     @patch("interfaces.http.routes_mixer.start_mux")
@@ -792,6 +844,233 @@ class TestMuxEndpoint:
             assert entry["path"] is None
             assert entry["track_index"] is None
             assert entry["codec"] is None
+
+# ── Subtitle languages (S3): user-chosen codes ──────────────────────────────
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_subtitle_languages_rank_order_and_track_selection(self, mock_probe, mock_start, mock_isfile):
+        # S3(c): requested codes replace the audio-union derivation — one
+        # entry per code, rank-ordered, best track across files.
+        mock_start.return_value = "test-task-chosen"
+        mock_probe.side_effect = [
+            _probe_fixture(
+                "/mnt/storage/a.mkv", languages=("spa",),
+                subtitle_tracks=(_sub_track("eng", "hdmv_pgs_subtitle", index=2, track_index=0, extractable=False),),
+            ),
+            _probe_fixture(
+                "/mnt/storage/b.mkv", languages=("spa",),
+                subtitle_tracks=(
+                    _sub_track("eng", "subrip", index=2, track_index=0),
+                    _sub_track("spa", "subrip", index=3, track_index=1),
+                ),
+            ),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+                "subtitle_languages": ["eng", "spa"],
+            },
+        )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [e["language_code"] for e in plan] == ["spa", "eng"]
+        eng = plan[1]
+        # extractable beats bitmap across files, as in the derived plan.
+        assert eng["path"] == "/mnt/storage/b.mkv"
+        assert eng["track_index"] == 0
+        assert eng["extractable"] is True
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_subtitle_languages_pending_entry_for_untracked_code(self, mock_probe, mock_start, mock_isfile):
+        # S3(c): a chosen code with no track anywhere still gets its entry
+        # (pending → the T6 search fills it), not silence.
+        mock_start.return_value = "test-task-fra"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("spa",)),
+            _probe_fixture("/mnt/storage/b.mkv", languages=("spa",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+                "subtitle_languages": ["fra"],
+            },
+        )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [e["language_code"] for e in plan] == ["fra"]
+        entry = plan[0]
+        assert entry["status"] == "pending"
+        assert entry["path"] is None
+        assert entry["track_index"] is None
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_subtitle_languages_drive_the_sidecar_suffix(self, mock_probe, mock_start, mock_isfile):
+        # S3(a): the chosen code names the sidecar — `fra` falls back to its
+        # full code (`<stem>.fra.srt`) in subtitle_sidecar_path.
+        mock_start.return_value = "test-task-suffix"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("spa",)),
+            _probe_fixture(
+                "/mnt/storage/b.mkv", languages=("spa",),
+                subtitle_tracks=(_sub_track("fra", "subrip", index=2, track_index=0),),
+            ),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+                "subtitle_languages": ["fra"],
+            },
+        )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        entry = plan[0]
+        assert entry["language_code"] == "fra"
+        assert entry["path"] == "/mnt/storage/b.mkv"
+        sidecar = media_mixer.subtitle_sidecar_path(
+            "/mnt/storage/Mixer_20261018T120000_mixed.mkv", entry["language_code"],
+        )
+        assert sidecar == "/mnt/storage/Mixer_20261018T120000_mixed.fra.srt"
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_subtitle_languages_reject_unknown_code(self, mock_probe, mock_start, mock_isfile):
+        # S3: codes outside LANGUAGE_LABELS ⇒ 400, no task starts.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("spa",)),
+            _probe_fixture("/mnt/storage/b.mkv", languages=("spa",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+                "subtitle_languages": ["zzz"],
+            },
+        )
+        assert resp.status_code == 400
+        assert "invalid_subtitle_languages" in resp.json()["detail"]
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_subtitle_languages_reject_duplicates(self, mock_probe, mock_start, mock_isfile):
+        # S3: one row per code — a repeated code would twin a sidecar.
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("spa",)),
+            _probe_fixture("/mnt/storage/b.mkv", languages=("spa",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+                "subtitle_languages": ["spa", "spa"],
+            },
+        )
+        assert resp.status_code == 400
+        assert "invalid_subtitle_languages" in resp.json()["detail"]
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_without_subtitle_languages_keeps_the_derived_plan(self, mock_probe, mock_start, mock_isfile):
+        # S3 compatibility pin: absent field ⇒ derive from the audio union,
+        # rank-ordered exactly as before T2.
+        mock_start.return_value = "test-task-absent"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("eng", "rus")),
+            _probe_fixture("/mnt/storage/b.mkv", languages=("spa",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+            },
+        )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [e["language_code"] for e in plan] == ["spa", "eng", "rus"]
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_mux_empty_subtitle_languages_keeps_the_derived_plan(self, mock_probe, mock_start, mock_isfile):
+        # S3 compatibility pin: an empty list is the same contract as an
+        # absent field — derive from the audio union.
+        mock_start.return_value = "test-task-empty"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/a.mkv", languages=("spa", "eng")),
+            _probe_fixture("/mnt/storage/b.mkv", languages=("spa",)),
+        ]
+
+        resp = client.post(
+            "/api/mixer/mux",
+            json={
+                "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+                "subtitle_languages": [],
+            },
+        )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        assert [e["language_code"] for e in plan] == ["spa", "eng"]
+
+    def test_search_uses_the_user_chosen_subtitle_codes(self, tmp_path):
+        # S3(b): «Buscar subtítulos» queries OpenSubtitles with the codes the
+        # user chose — the plan's language_code is the search code end to end.
+        with patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True), \
+                patch("interfaces.http.routes_mixer.start_mux") as mock_start, \
+                patch("interfaces.http.routes_mixer.probe_file") as mock_probe:
+            mock_start.return_value = "test-task-chosen"
+            mock_probe.side_effect = [
+                _probe_fixture("/mnt/storage/a.mkv", languages=("spa",)),
+                _probe_fixture("/mnt/storage/b.mkv", languages=("spa",)),
+            ]
+            resp = client.post(
+                "/api/mixer/mux",
+                json={
+                    "video_source": {"path": "/mnt/storage/a.mkv", "track_index": 0},
+                    "audio_sources": [{"path": "/mnt/storage/b.mkv", "track_index": 0}],
+                    "subtitle_languages": ["fra"],
+                },
+            )
+        assert resp.status_code == 200
+        plan = mock_start.call_args.kwargs["subtitle_plan"]
+        for entry in plan:
+            # the background run flips trackless pending → missing (searchable)
+            entry["status"] = "missing"
+        _search_task("t-chosen", tmp_path, plan)
+        with patch("infrastructure.settings_store.get_setting", return_value="test-os-key"), \
+                patch("infrastructure.opensubtitles_client.search_subtitles", return_value=[]) as mock_search, \
+                patch("infrastructure.opensubtitles_client.download_subtitle"):
+            resp = client.post("/api/mixer/tasks/t-chosen/subtitles/search", json={})
+        try:
+            assert resp.status_code == 200
+            mock_search.assert_called_once_with("test-os-key", "Mixer", languages="fra")
+        finally:
+            mux_tasks._tasks.clear()
 
 
 # ── Tasks List Endpoint ─────────────────────────────────────────────────────

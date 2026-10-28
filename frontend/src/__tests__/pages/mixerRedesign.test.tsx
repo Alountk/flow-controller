@@ -367,7 +367,7 @@ describe('mixer — idioma exigido ausente (S2/L14, mockup 12)', () => {
   })
 })
 
-/* ── L24/T10 — marcar pista und como castellano ─────────────────────────── */
+/* ── L24/T10 — marcar pista und como castellano (T3: selector de idioma) ── */
 
 describe('mixer — marcar und como castellano (L24/T10)', () => {
   const undMissingProbe = () =>
@@ -379,27 +379,37 @@ describe('mixer — marcar und como castellano (L24/T10)', () => {
       ],
     })
 
-  it('offers «Marcar como castellano» on und rows and clears the block when marked', async () => {
+  /** The und row is the first audio row — its select is the row's language control. */
+  const undRowSelect = () =>
+    screen.getAllByRole('combobox', { name: 'Idioma de la pista' })[0] as HTMLSelectElement
+
+  it('defaults the und row select to «Desconocido» and clears the block when set to Castellano', async () => {
     await driveToResults(undMissingProbe())
 
     pickDest()
     expect(screen.getByText('Falta castellano (exigido) en los dos archivos')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Marcar como castellano' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mezclar' })).toBeDisabled()
+    expect(undRowSelect().value).toBe('und')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar como castellano' }))
+    fireEvent.change(undRowSelect(), { target: { value: 'spa' } })
 
     expect(screen.queryByText('Falta castellano (exigido) en los dos archivos')).toBeNull()
     expect(screen.getByRole('button', { name: 'Mezclar' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Quitar marca' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Marcar como castellano' })).toBeNull()
+    // The row reads as spa everywhere it is consumed: name, chip, subtitle rows.
+    const row = undRowSelect().closest('.mixer-audio-row')!
+    expect(row.querySelector('.mixer-lang-name')?.textContent).toBe('Castellano')
+    expect(row.querySelector('.mixer-lang-chip')?.textContent).toBe('spa')
+    expect(
+      (screen.getAllByRole('combobox', { name: 'Idioma del subtítulo' })[0] as HTMLSelectElement)
+        .value,
+    ).toBe('spa')
   })
 
   it('sends language_overrides for the marked und track in the mux payload', async () => {
     const calls = await driveToResults(undMissingProbe())
 
     pickDest()
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar como castellano' }))
+    fireEvent.change(undRowSelect(), { target: { value: 'spa' } })
     fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
     await waitFor(() => expect(calls.some((c) => c.url.includes('/api/mixer/mux'))).toBe(true))
 
@@ -409,18 +419,23 @@ describe('mixer — marcar und como castellano (L24/T10)', () => {
     ])
   })
 
-  it('does not offer the mark on non-und rows', async () => {
-    await driveToResults(probeBody())
+  it('sends no overrides while every row keeps its probed language', async () => {
+    const calls = await driveToResults(probeBody())
 
-    expect(screen.queryByRole('button', { name: 'Marcar como castellano' })).toBeNull()
+    pickDest()
+    fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/api/mixer/mux'))).toBe(true))
+
+    const muxCall = calls.find((c) => c.url.includes('/api/mixer/mux'))
+    expect(muxCall?.body).not.toHaveProperty('language_overrides')
   })
 
-  it('re-blocks when the mark is removed', async () => {
+  it('re-blocks when the und row returns to Desconocido', async () => {
     await driveToResults(undMissingProbe())
 
     pickDest()
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar como castellano' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Quitar marca' }))
+    fireEvent.change(undRowSelect(), { target: { value: 'spa' } })
+    fireEvent.change(undRowSelect(), { target: { value: 'und' } })
 
     expect(screen.getByText('Falta castellano (exigido) en los dos archivos')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mezclar' })).toBeDisabled()
@@ -475,7 +490,8 @@ describe('mixer — audio ordenado (S2/S5, L18)', () => {
     const rows = document.querySelectorAll('.mixer-audio-row')
     const names = ['Castellano', 'Inglés', 'Ruso', 'Catalán', 'Francés', 'Alemán']
     rows.forEach((row, i) => {
-      expect(row.textContent).toContain(names[i])
+      // `.mixer-lang-name` only: each row's select also renders every option label.
+      expect(row.querySelector('.mixer-lang-name')?.textContent).toBe(names[i])
     })
     expect(screen.getByText('Otros idiomas · elegir a mano')).toBeInTheDocument()
     expect(screen.getByText('4 seleccionadas · 2 omitidas')).toBeInTheDocument()
