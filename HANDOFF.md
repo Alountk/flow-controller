@@ -10,11 +10,11 @@
 proxyando `/api/events` (bloque location copiado en `routes/events.py` docstring). Usuario
 validó en vivo: eventos llegan y disparan la UI.
 
-**Deploy = automático**: cada merge a main publica `ghcr.io/alountk/flow-controller:latest`
-(+ tag `sha-XXXX`) en el job `docker-push` y notifica a Portainer por webhook (HTTP 204);
-el stack redeploya solo. **Verificado en vivo por el usuario 2026-10-17**: corre los cambios
-recientes sin intervención. Si un deploy se pierde: `docker compose -f
-docker-compose.deploy.yml pull && up -d` (o redeploy manual en Portainer).
+**Deploy = manual**: cada merge a main publica `ghcr.io/alountk/flow-controller:latest`
+(+ tag `sha-XXXX`) en el job `docker-push`, pero **no hay webhook**: el auto-redeploy de
+stacks por webhook es funcionalidad **Pro** de Portainer y esta instalación es CE (el POST
+siempre devolvió 204 sin efecto). Tras cada merge: **pull + redeploy manual** en Portainer
+(`docker compose -f docker-compose.deploy.yml pull && up -d` equivale).
 
 **Verde**: `main` en `7e41440` (post-#236/#237), run `40213273281` (post-merge del #236;
 el #237 docs-only sin checks, GitGuardian pass) · PR #236 CI verde previo `40212883069`
