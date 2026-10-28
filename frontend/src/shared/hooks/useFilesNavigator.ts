@@ -16,6 +16,21 @@ export function formatSize(bytes: number): string {
   return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
+/** One row's modified date as the navigator family shows it («12 oct 2025»). */
+export function formatDate(ts: number): string {
+  if (!ts) return '—'
+  return new Date(ts * 1000).toLocaleDateString('es-ES', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  })
+}
+
+/** The one row-name filter: case-insensitive substring on the name only.
+ *  Unfiltered keeps the same array — `filterByName(items, '') === items`. */
+export function filterByName<T extends { name: string }>(items: T[], query: string): T[] {
+  const q = query.trim().toLowerCase()
+  return q ? items.filter((item) => item.name.toLowerCase().includes(q)) : items
+}
+
 /** One directory's listing. staleTime 0 keeps the listing mirroring the disk:
  *  a cache here would hide a folder a download just created. */
 export function useBrowse(path: string, enabled: boolean) {

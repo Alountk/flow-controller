@@ -120,6 +120,32 @@
   padding: 0 4px;
 }
 
+/* Breadcrumb (S11a): the path slot, now with clickable ancestors. */
+.fm-crumb-sep {
+  margin: 0 1px;
+  opacity: 0.6;
+}
+
+.fm-crumb-btn {
+  font: inherit;
+  padding: 0 2px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.fm-crumb-btn:hover {
+  color: var(--accent);
+}
+
+/* Out-of-volume segments are text, not buttons: the volume is the floor. */
+.fm-crumb-seg {
+  padding: 0 2px;
+  opacity: 0.7;
+}
+
 /* The row-name filter (T3): lives in the toolbar, beside the path it does
    NOT repeat. Same convention as the pane's FilterBar — a search field with
    a Spanish accessible name and placeholder. */
@@ -230,6 +256,33 @@
   text-align: center;
   color: var(--text-dim);
   font-size: 12px;
+}
+
+/* Column headers (S11b): name the row cells the navigator renders below. */
+.fm-head-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* Name spans the row's name line; the rest mirror the row cells' widths. */
+.fm-head-row span:nth-child(1) {
+  flex: 1;
+}
+
+.fm-head-row span:nth-child(4) {
+  min-width: 60px;
+  text-align: right;
+}
+
+.fm-head-row span:nth-child(5) {
+  min-width: 80px;
+  text-align: right;
 }
 
 .fm-list {
