@@ -1,5 +1,12 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
-import { formatSize, parentDir, useBrowse, useRoots } from '../hooks/useFilesNavigator.ts'
+import {
+  filterByName,
+  formatDate,
+  formatSize,
+  parentDir,
+  useBrowse,
+  useRoots,
+} from '../hooks/useFilesNavigator.ts'
 import './FileNavigator.css'
 
 export interface FileNavigatorEntry {
@@ -8,6 +15,7 @@ export interface FileNavigatorEntry {
   path: string
   isDir: boolean
   size: number
+  modified: number
 }
 
 interface FileNavigatorProps {
@@ -17,6 +25,9 @@ interface FileNavigatorProps {
   open?: boolean
   /** Seeded once on mount — consumers remount the navigator per open. */
   initialPath?: string
+  /** Controlled current path: navigation reports via `onNavigate`, the caller
+   *  drives the listing (FileManager's panes navigate from their own toolbar). */
+  path?: string
   /** F1 ships `folder` fully; `file`/`both` also list files, and a file row
    *  click confirms that file — no other file affordances exist yet. */
   mode: 'folder' | 'file' | 'both'
@@ -34,13 +45,27 @@ interface FileNavigatorProps {
   showFilter?: boolean
   showIcons?: boolean
   showSizes?: boolean
-  /** Region: one mixed listing (scan) or dirs over files (mixer picker). */
-  layout?: 'unified' | 'split'
+  /** Region: one mixed listing (scan), dirs over files (mixer picker), or
+   *  dense rows with full chrome (name, meta, size, date, actions). */
+  layout?: 'unified' | 'split' | 'rows'
+  /** Controlled name filter applied to the rows; without it the built-in
+   *  filter input's own state drives the filtering. */
+  filter?: string
   /** Hide files the backend classifies as non-video; `is_video` absent stays
    *  visible — unknown, never "not a video" (shared/types.ts). */
   onlyVideo?: boolean
   selection?: 'none' | 'file'
   renderFileMeta?: (entry: FileNavigatorEntry) => ReactNode
+  /** Row-layout slots: leading cell (checkbox), name-cell override (inline
+   *  rename), and the right-hand actions cell. */
+  renderRowStart?: (entry: FileNavigatorEntry) => ReactNode
+  renderRowName?: (entry: FileNavigatorEntry) => ReactNode
+  renderRowActions?: (entry: FileNavigatorEntry) => ReactNode
+  /** Row layout: modified-date column and the caller's row highlight. */
+  showDates?: boolean
+  isRowSelected?: (entry: FileNavigatorEntry) => boolean
+  /** Row single-click; without it a row click opens directories. */
+  onRowClick?(entry: FileNavigatorEntry): void
   emptyLabel?: string
   onNavigate?(path: string): void
   onSelect?(path: string): void
@@ -54,6 +79,7 @@ export function FileNavigator({
   variant = 'dialog',
   open,
   initialPath,
+  path,
   mode,
   ariaLabel = 'Elegir carpeta de destino',
   title = 'Elegir carpeta de destino',
@@ -69,8 +95,15 @@ export function FileNavigator({
   showSizes = false,
   layout = 'unified',
   onlyVideo = false,
+  filter,
   selection = 'none',
   renderFileMeta,
+  renderRowStart,
+  renderRowName,
+  renderRowActions,
+  showDates = false,
+  isRowSelected,
+  onRowClick,
   emptyLabel,
   onNavigate,
   onSelect,
@@ -79,43 +112,52 @@ export function FileNavigator({
 }: FileNavigatorProps) {
   // Region callers mount the navigator only while their modal is open.
   const active = open ?? true
-  const [path, setPath] = useState(initialPath ?? '')
+  const [internalPath, setInternalPath] = useState(initialPath ?? '')
+  // Controlled callers drive navigation from their own chrome.
+  const currentPath = path ?? internalPath
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
-  const [filter, setFilter] = useState('')
+  const [filterState, setFilterState] = useState('')
   const rootsQuery = useRoots(active)
   const roots = rootsQuery.data?.roots ?? []
   const rootPaths = roots.map((root) => root.path)
-  const browseQuery = useBrowse(path, active && path !== '')
+  const browseQuery = useBrowse(currentPath, active && currentPath !== '')
 
   function visit(next: string) {
-    setPath(next)
+    if (path === undefined) setInternalPath(next)
     setSelectedFile(null)
     onNavigate?.(next)
   }
 
   function goUp() {
-    visit(parentDir(path, rootPaths))
+    visit(parentDir(currentPath, rootPaths))
   }
 
   // No placeholder option means the caller wants to open on the first root —
   // the mixer picker has no origins state to show.
   useEffect(() => {
     const first = roots[0]
-    if (rootPicker === 'select' && selectPlaceholder === undefined && path === '' && first) {
+    if (
+      path === undefined &&
+      rootPicker === 'select' &&
+      selectPlaceholder === undefined &&
+      currentPath === '' &&
+      first
+    ) {
       visit(first.path)
     }
-  }, [rootPicker, selectPlaceholder, path, roots])
+  }, [path, rootPicker, selectPlaceholder, currentPath, roots])
 
   // Roots carry their display name; a directory listing is filtered to
   // directories only in folder mode — a file is never a destination.
   const entries: FileNavigatorEntry[] =
-    path === ''
+    currentPath === ''
       ? roots.map((root) => ({
           key: root.path,
           name: root.name,
           path: root.path,
           isDir: true,
           size: 0,
+          modified: 0,
         }))
       : (browseQuery.data?.items ?? [])
           .filter((entry) => mode !== 'folder' || entry.is_dir)
@@ -126,18 +168,19 @@ export function FileNavigator({
             path: entry.path,
             isDir: entry.is_dir,
             size: entry.size,
+            modified: entry.modified,
           }))
 
   if (!active) return null
 
   if (variant === 'region') {
-    const query = filter.trim().toLocaleLowerCase()
-    const matchesFilter = (name: string) => !query || name.toLocaleLowerCase().includes(query)
-    const visibleDirs = entries.filter((e) => e.isDir && matchesFilter(e.name))
-    const visibleFiles = entries.filter((e) => !e.isDir && matchesFilter(e.name))
-    const visibleEntries = entries.filter((e) => matchesFilter(e.name))
+    const filterQuery = filter ?? filterState
+    const visibleEntries = filterByName(entries, filterQuery)
+    const visibleDirs = visibleEntries.filter((e) => e.isDir)
+    const visibleFiles = visibleEntries.filter((e) => !e.isDir)
     // The select shows the root holding `path`, never a guessed volume.
-    const containingRoot = rootPaths.find((r) => path === r || path.startsWith(`${r}/`)) ?? ''
+    const containingRoot =
+      rootPaths.find((r) => currentPath === r || currentPath.startsWith(`${r}/`)) ?? ''
 
     return (
       <>
@@ -159,11 +202,11 @@ export function FileNavigator({
               className="fm-nav-btn"
               title="Subir"
               onClick={goUp}
-              disabled={path === '' || path === containingRoot}
+              disabled={currentPath === '' || currentPath === containingRoot}
             >
               ⬆ Subir
             </button>
-            {showRefresh && path !== '' && (
+            {showRefresh && currentPath !== '' && (
               <button
                 type="button"
                 className="fm-nav-btn"
@@ -183,15 +226,15 @@ export function FileNavigator({
               className="fm-filter-input"
               placeholder="Buscar carpeta o archivo…"
               aria-label="Buscar carpeta o archivo"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              value={filterState}
+              onChange={(e) => setFilterState(e.target.value)}
             />
           </div>
         )}
 
-        {path !== '' && layout === 'unified' && (
+        {currentPath !== '' && layout === 'unified' && (
           <div className="scan-path-list">
-            <div className="scan-current-path">{path}</div>
+            <div className="scan-current-path">{currentPath}</div>
             {visibleEntries.map((entry) =>
               entry.isDir ? (
                 <div
@@ -229,9 +272,9 @@ export function FileNavigator({
           </div>
         )}
 
-        {path !== '' && layout === 'split' && (
+        {currentPath !== '' && layout === 'split' && (
           <div className="scan-path-list">
-            <div className="scan-current-path">{path}</div>
+            <div className="scan-current-path">{currentPath}</div>
             {visibleDirs.map((entry) => (
               <div
                 key={entry.key}
@@ -243,7 +286,7 @@ export function FileNavigator({
             ))}
             {visibleDirs.length === 0 && (
               <div className="scan-no-subfolders">
-                {!query
+                {!filterQuery.trim()
                   ? 'Sin subcarpetas'
                   : visibleFiles.length === 0
                     ? 'Sin coincidencias'
@@ -276,6 +319,40 @@ export function FileNavigator({
             ))}
           </div>
         )}
+
+        {currentPath !== '' && layout === 'rows' && (
+          <div className="fm-list">
+            {visibleEntries.map((entry) => (
+              <div
+                key={entry.key}
+                className={`fm-item ${entry.isDir ? 'dir' : ''}${isRowSelected?.(entry) ? ' selected' : ''}`}
+                onClick={() =>
+                  onRowClick ? onRowClick(entry) : entry.isDir && visit(entry.path)
+                }
+                onDoubleClick={() => entry.isDir && visit(entry.path)}
+              >
+                {renderRowStart?.(entry)}
+                {showIcons && <span className="fm-icon">{entry.isDir ? '📁' : '📄'}</span>}
+                {renderRowName ? (
+                  renderRowName(entry)
+                ) : (
+                  <span className="fm-name">{entry.name}</span>
+                )}
+                {renderFileMeta?.(entry)}
+                {showSizes && (
+                  <span className="fm-size">{entry.isDir ? '—' : formatSize(entry.size)}</span>
+                )}
+                {showDates && <span className="fm-date">{formatDate(entry.modified)}</span>}
+                {renderRowActions && (
+                  <div className="fm-item-actions">{renderRowActions(entry)}</div>
+                )}
+              </div>
+            ))}
+            {visibleEntries.length === 0 && emptyLabel && (
+              <div className="fm-empty">{emptyLabel}</div>
+            )}
+          </div>
+        )}
       </>
     )
   }
@@ -291,13 +368,13 @@ export function FileNavigator({
           </span>
         </div>
         <div className="folder-picker-toolbar">
-          <button type="button" className="folder-picker-up" onClick={goUp} disabled={path === ''}>
+          <button type="button" className="folder-picker-up" onClick={goUp} disabled={currentPath === ''}>
             ⬆ Subir
           </button>
         </div>
-        {path !== '' && (
+        {currentPath !== '' && (
           <div className="folder-picker-crumb">
-            {segments(path).map((seg, i) => (
+            {segments(currentPath).map((seg, i) => (
               <Fragment key={`${i}-${seg}`}>
                 {i > 0 && <span className="folder-picker-crumb-sep">▸</span>}
                 <span className="folder-picker-crumb-seg">{seg}</span>
@@ -318,13 +395,13 @@ export function FileNavigator({
           ))}
         </div>
         {hint && <div className="folder-picker-hint">{hint}</div>}
-        <div className="folder-picker-path">{path}</div>
+        <div className="folder-picker-path">{currentPath}</div>
         <div className="folder-picker-actions">
           <button
             type="button"
             className="folder-picker-choose"
-            onClick={() => onConfirm?.(path)}
-            disabled={path === ''}
+            onClick={() => onConfirm?.(currentPath)}
+            disabled={currentPath === ''}
           >
             {confirmLabel}
           </button>

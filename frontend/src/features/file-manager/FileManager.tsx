@@ -1,26 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FileItem, RetentionFile } from '../../shared/types.ts'
 import {
   fetchRoots,
-  browsePath,
   fetchRetention,
   createDirectory,
   renameItem,
   deleteItem,
   queueAdd,
 } from '../../shared/api/files.ts'
+import { filterByName, useBrowse } from '../../shared/hooks/useFilesNavigator.ts'
+import { FileNavigator, type FileNavigatorEntry } from '../../shared/ui/FileNavigator.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../shared/utils/selection.ts'
 import './FileManager.css'
-
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '—'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let i = 0
-  let size = bytes
-  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
 
 /** "1 colocado" / "7 colocados" — a count without an agreement is noise. */
 function countWord(n: number, one: string, many: string): string {
@@ -43,13 +35,6 @@ interface BatchOutcome {
 interface BatchReport {
   failures: BatchOutcome[]
   total: number
-}
-
-function formatDate(ts: number): string {
-  if (!ts) return '—'
-  return new Date(ts * 1000).toLocaleDateString('es-ES', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  })
 }
 
 interface RootsItem {
@@ -83,14 +68,12 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const [batchBusy, setBatchBusy] = useState(false)
   const [nameFilter, setNameFilter] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const filterRef = useRef<HTMLInputElement>(null)
+  const paneRef = useRef<HTMLDivElement>(null)
   const onPathChangeRef = useRef<((index: number, path: string) => void) | null>(null)
   onPathChangeRef.current = onPathChange
 
-  const { data: browseData, isLoading } = useQuery({
-    queryKey: ['browse', path],
-    queryFn: () => browsePath(path),
-    enabled: !!path,
-  })
+  const { data: browseData, isLoading } = useBrowse(path, !!path)
 
   // Ages for the directory just browsed, keyed by the RESOLVED path the
   // backend answered with — both listings come from that same resolution, so
@@ -115,8 +98,23 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     }
   }, [browseData, index])
 
+  // «/» jumps to the filter (S11c). The input guard keeps the key typing in
+  // create/rename fields; `defaultPrevented` hands the key to one pane only.
+  useEffect(() => {
+    function onShortcut(e: KeyboardEvent) {
+      if (e.key !== '/' || e.defaultPrevented) return
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active.closest('input, textarea, select, [contenteditable]')) return
+      if (active !== document.body && !paneRef.current?.contains(active)) return
+      e.preventDefault()
+      filterRef.current?.focus()
+    }
+    document.addEventListener('keydown', onShortcut)
+    return () => document.removeEventListener('keydown', onShortcut)
+  }, [])
+
   const invalidateBrowse = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['browse', path] })
+    queryClient.invalidateQueries({ queryKey: ['files-browse', path] })
   }, [queryClient, path])
 
   const createDir = useMutation({
@@ -175,6 +173,13 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     toastTimer.current = setTimeout(() => setToast(null), 3000)
   }
 
+  function handleCopyPath(target: string) {
+    void navigator.clipboard
+      .writeText(target)
+      .then(() => showToast('Ruta copiada'))
+      .catch(() => setError('No se pudo copiar la ruta'))
+  }
+
   function navigateTo(p: string) {
     setSelected(new Set())
     setPath(p)
@@ -184,10 +189,6 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     setSelectedRoot(newRoot)
     setSelected(new Set())
     setPath(newRoot)
-  }
-
-  function handleDoubleClick(item: FileItem) {
-    if (item.is_dir) navigateTo(item.path)
   }
 
   function parentDir() {
@@ -205,7 +206,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     createDir.mutate(`${path}/${newName.trim()}`)
   }
 
-  function handleRename(item: FileItem) {
+  function handleRename(item: FileNavigatorEntry) {
     if (!renameValue.trim() || renameValue === item.name) {
       setRenaming(null)
       return
@@ -214,26 +215,21 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     rename.mutate({ oldPath: item.path, newPath: `${dir}/${renameValue.trim()}` })
   }
 
-  function handleDelete(item: FileItem) {
+  function handleDelete(item: FileNavigatorEntry) {
     if (!confirm(`¿Eliminar ${item.name}?`)) return
     del.mutate(item.path)
   }
 
-  function handleQueue(type: 'copy' | 'move', item: FileItem) {
+  function handleQueue(type: 'copy' | 'move', item: FileNavigatorEntry) {
     const dst = `${otherPath}/${item.name}`
     queue.mutate({ type, src: item.path, dst })
   }
 
   const items = browseData?.ok ? browseData.items : []
   const itemKey = (item: FileItem) => item.path
-  // The row-name filter: case-insensitive substring on the name only. An
-  // unfiltered pane keeps the whole listing — `visibleItems === items` —
-  // and every on-screen action below (selection, batch) works on exactly
-  // this list, so it can never act on a row nobody is looking at.
-  const filterQuery = nameFilter.trim().toLowerCase()
-  const visibleItems = filterQuery
-    ? items.filter((item) => item.name.toLowerCase().includes(filterQuery))
-    : items
+  // The shared name filter; an unfiltered pane keeps the whole listing and
+  // every on-screen action below (selection, batch) works on exactly it.
+  const visibleItems = filterByName(items, nameFilter)
   const allVisibleSelected = areAllVisibleSelected(selected, visibleItems, itemKey)
 
   // The join: the retention endpoint answers a top-level `path` plus each
@@ -251,7 +247,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   /** The row's retention chip. Unknown age (`null`: store unreadable) and
    *  files the endpoint did not report render NOTHING — a fabricated age
    *  could justify deleting a file that was never recorded. */
-  function ageChip(item: FileItem) {
+  function ageChip(item: FileNavigatorEntry) {
     const info = retentionByPath.get(item.path)
     if (!info) return null
     // Caducado is a STATE, not an error: `--warn`, never `--bad`.
@@ -267,7 +263,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
    *  explains, it never gates. A file no source claims (`null`, both fields
    *  together) renders NOTHING — same honesty rule as the age chip, because
    *  a guessed provenance would be a claim nobody made. */
-  function provenanceChip(item: FileItem) {
+  function provenanceChip(item: FileNavigatorEntry) {
     const label = retentionByPath.get(item.path)?.provenance_label
     if (!label) return null
     return <span className="fm-prov">{label}</span>
@@ -286,6 +282,99 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     // The shared helper, never a second copy: select-all only ever touches the
     // rows currently on screen, so it cannot act on a file nobody is looking at.
     setSelected((prev) => toggleVisibleSelection(prev, visibleItems, itemKey))
+  }
+
+  // The rows below are FileNavigator's; these four slots keep the pane's own
+  // row content (selection, inline rename, path cell, chips, buttons) in JSX.
+
+  function renderRowStart(entry: FileNavigatorEntry) {
+    return (
+      <input
+        type="checkbox"
+        className="fm-item-check"
+        checked={selected.has(entry.path)}
+        onChange={() => toggleRowSelection(entry.path)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Seleccionar ${entry.name}`}
+      />
+    )
+  }
+
+  function renderRowName(entry: FileNavigatorEntry) {
+    if (renaming !== entry.path) return <span className="fm-name">{entry.name}</span>
+    return (
+      <input
+        className="fm-rename-input"
+        value={renameValue}
+        onChange={(e) => setRenameValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleRename(entry)
+          if (e.key === 'Escape') setRenaming(null)
+        }}
+        onBlur={() => handleRename(entry)}
+        autoFocus
+        onClick={(e) => e.stopPropagation()}
+      />
+    )
+  }
+
+  function renderFileMeta(entry: FileNavigatorEntry) {
+    return (
+      <>
+        {/* Derived from the row's data, never invented — a row with no path
+            renders no path cell. */}
+        {entry.path && <span className="fm-row-path" title={entry.path}>{entry.path}</span>}
+        {ageChip(entry)}
+        {provenanceChip(entry)}
+      </>
+    )
+  }
+
+  function renderRowActions(entry: FileNavigatorEntry) {
+    return (
+      <>
+        <button
+          className="fm-sm-btn accent"
+          title="Copiar al otro panel"
+          onClick={(e) => { e.stopPropagation(); handleQueue('copy', entry) }}
+        >
+          ⬎
+        </button>
+        <button
+          className="fm-sm-btn accent"
+          title="Mover al otro panel"
+          onClick={(e) => { e.stopPropagation(); handleQueue('move', entry) }}
+        >
+          ⬏
+        </button>
+        <button
+          className="fm-sm-btn"
+          title="Copiar ruta absoluta POSIX"
+          aria-label="Copiar ruta absoluta POSIX"
+          onClick={(e) => { e.stopPropagation(); handleCopyPath(entry.path) }}
+        >
+          ⧉
+        </button>
+        <button
+          className="fm-sm-btn"
+          title="Renombrar"
+          onClick={(e) => {
+            e.stopPropagation()
+            setRenaming(entry.path)
+            setRenameValue(entry.name)
+          }}
+        >
+          ✏
+        </button>
+        <button
+          className="fm-sm-btn danger"
+          title="Eliminar"
+          onClick={(e) => { e.stopPropagation(); handleDelete(entry) }}
+        >
+          🗑
+        </button>
+      </>
+    )
   }
 
   /**
@@ -381,11 +470,32 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         >
           ⬆
         </button>
-        <div className="fm-path" title={path}>{path}</div>
+        {/* Clickable breadcrumb (S11a): each segment navigates to that
+            ancestor, clamped to the selected volume — never above it. */}
+        <div className="fm-path" title={path}>
+          {path.split('/').filter(Boolean).map((seg, i, segs) => {
+            const target = `/${segs.slice(0, i + 1).join('/')}`
+            const inside =
+              target === selectedRoot || target.startsWith(`${selectedRoot.replace(/\/$/, '')}/`)
+            return (
+              <Fragment key={`${i}-${seg}`}>
+                <span className="fm-crumb-sep">/</span>
+                {inside ? (
+                  <button type="button" className="fm-crumb-btn" onClick={() => navigateTo(target)}>
+                    {seg}
+                  </button>
+                ) : (
+                  <span className="fm-crumb-seg">{seg}</span>
+                )}
+              </Fragment>
+            )
+          })}
+        </div>
         <input
           type="search"
           className="fm-filter"
-          placeholder="Filtrar archivos..."
+          ref={filterRef}
+          placeholder="Buscar carpeta o archivo... [ / ]"
           aria-label="Filtrar archivos"
           value={nameFilter}
           onChange={(e) => {
@@ -514,83 +624,33 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         // nothing still has to say so instead of leaving a blank pane.
         <div className="fm-empty">Sin resultados</div>
       ) : (
-        <div className="fm-list">
-          {visibleItems.map((item) => (
-            <div
-              key={item.path}
-              className={`fm-item ${selected.has(item.path) ? 'selected' : ''} ${item.is_dir ? 'dir' : ''}`}
-              onClick={() => setSelected(new Set([item.path]))}
-              onDoubleClick={() => handleDoubleClick(item)}
-            >
-              <input
-                type="checkbox"
-                className="fm-item-check"
-                checked={selected.has(item.path)}
-                onChange={() => toggleRowSelection(item.path)}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Seleccionar ${item.name}`}
-              />
-              <span className="fm-icon">{item.is_dir ? '📁' : '📄'}</span>
-              {renaming === item.path ? (
-                <input
-                  className="fm-rename-input"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRename(item)
-                    if (e.key === 'Escape') setRenaming(null)
-                  }}
-                  onBlur={() => handleRename(item)}
-                  autoFocus
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span className="fm-name">{item.name}</span>
-              )}
-              {/* The row's own path (T2): derived from the row's data, never
-                  invented — a row with no path renders no path cell. */}
-              {item.path && <span className="fm-row-path" title={item.path}>{item.path}</span>}
-              {ageChip(item)}
-              {provenanceChip(item)}
-              <span className="fm-size">{item.is_dir ? '—' : formatSize(item.size)}</span>
-              <span className="fm-date">{formatDate(item.modified)}</span>
-              <div className="fm-item-actions">
-                <button
-                  className="fm-sm-btn accent"
-                  title="Copiar al otro panel"
-                  onClick={(e) => { e.stopPropagation(); handleQueue('copy', item) }}
-                >
-                  ⬎
-                </button>
-                <button
-                  className="fm-sm-btn accent"
-                  title="Mover al otro panel"
-                  onClick={(e) => { e.stopPropagation(); handleQueue('move', item) }}
-                >
-                  ⬏
-                </button>
-                <button
-                  className="fm-sm-btn"
-                  title="Renombrar"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setRenaming(item.path)
-                    setRenameValue(item.name)
-                  }}
-                >
-                  ✏
-                </button>
-                <button
-                  className="fm-sm-btn danger"
-                  title="Eliminar"
-                  onClick={(e) => { e.stopPropagation(); handleDelete(item) }}
-                >
-                  🗑
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="fm-head-row">
+            <span>Nombre</span>
+            <span>Procedencia</span>
+            <span>Retención</span>
+            <span>Tamaño</span>
+            <span>Modificado</span>
+            <span>Acciones</span>
+          </div>
+          <FileNavigator
+            variant="region"
+            mode="both"
+            layout="rows"
+            path={path}
+            filter={nameFilter}
+            showIcons
+            showSizes
+            showDates
+            onNavigate={navigateTo}
+            isRowSelected={(entry) => selected.has(entry.path)}
+            onRowClick={(entry) => setSelected(new Set([entry.path]))}
+            renderRowStart={renderRowStart}
+            renderRowName={renderRowName}
+            renderFileMeta={renderFileMeta}
+            renderRowActions={renderRowActions}
+          />
+        </>
       )}
     </div>
   )

@@ -133,7 +133,7 @@ describe('FileManager name filter', () => {
 
     // The FilterBar convention: a search field, Spanish accessible name.
     const filter = screen.getByRole('searchbox', { name: 'Filtrar archivos' })
-    expect(filter).toHaveAttribute('placeholder', 'Filtrar archivos...')
+    expect(filter).toHaveAttribute('placeholder', 'Buscar carpeta o archivo... [ / ]')
 
     fireEvent.change(filter, { target: { value: 'ALP' } })
     expect(screen.getByText('Alpha.mkv')).toBeInTheDocument()
