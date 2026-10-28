@@ -170,8 +170,9 @@ async function driveToResults(probe: Obj = probeBody()) {
 function audioRow(langName: string): HTMLElement {
   const list = document.querySelector('.mixer-audio-list')
   if (!list) throw new Error('audio list not rendered')
-  // Scope to the list: the gate chips also render exact texts like «Castellano».
-  const row = within(list as HTMLElement).getByText(langName).closest('.mixer-audio-row')
+  // Match `.mixer-lang-name` only: the row's select also renders every option label.
+  const names = [...list.querySelectorAll('.mixer-lang-name')]
+  const row = names.find((n) => n.textContent === langName)?.closest('.mixer-audio-row')
   if (!row) throw new Error(`audio row for ${langName} not rendered`)
   return row as HTMLElement
 }

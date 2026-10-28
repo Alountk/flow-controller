@@ -99,6 +99,16 @@ function langName(code: string): string {
   return LANGUAGE_LABELS[code] || code.toUpperCase()
 }
 
+/** The 12 LANGUAGE_LABELS options; a probed code outside them stays selectable. */
+function languageOptions(selected: string) {
+  const options = Object.entries(LANGUAGE_LABELS).map(([code, label]) => (
+    <option key={code} value={code}>{label}</option>
+  ))
+  return selected in LANGUAGE_LABELS
+    ? options
+    : [...options, <option key={selected} value={selected}>{langName(selected)}</option>]
+}
+
 const CODEC_LABELS: Record<string, string> = {
   h264: 'H.264', hevc: 'HEVC', av1: 'AV1', vp9: 'VP9', mpeg2video: 'MPEG-2',
   eac3: 'E-AC-3', ac3: 'AC-3', dts: 'DTS', aac: 'AAC', flac: 'FLAC',
@@ -522,8 +532,10 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   // (L18 — ordinals, never the absolute ffprobe `index`).
   const [selectedVideoKey, setSelectedVideoKey] = useState<string | null>(null)
   const [checkedAudio, setCheckedAudio] = useState<Set<string>>(new Set())
-  // L24/T10: `und` rows the user marked as castellano (row keys, this selection only).
-  const [markedSpanish, setMarkedSpanish] = useState<Set<string>>(new Set())
+  // S2/T3: per-row chosen language (row key → code); absent ⇒ the probed code.
+  const [audioLangChoice, setAudioLangChoice] = useState<Record<string, string>>({})
+  // S3/T3: per-subtitle-row chosen code, keyed by the row's derived language.
+  const [subtitleLangChoice, setSubtitleLangChoice] = useState<Record<string, string>>({})
   // S11/L30 — the destination is an EXPLICIT choice (no default): the exact
   // path of the input file the mix replaces. It is keyed by path, never by
   // slot, and revalidated below: a destination that stops matching a current
@@ -619,10 +631,10 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
     })
   }
 
-  // L24/T10: a marked `und` row reads as castellano everywhere it is consumed —
-  // group headers, subtitle languages, the gate below and the mux payload.
+  // S2/T3: the chosen code reads everywhere it is consumed — group headers,
+  // subtitle rows, the gate below and the mux payload. Equal to probe ⇒ no override.
   const effectiveCode = (row: { key: string; entry: AudioOrderedTrack }) =>
-    markedSpanish.has(row.key) ? 'spa' : row.entry.language_code
+    audioLangChoice[row.key] ?? row.entry.language_code
 
   const audioCheckedCount = audioRows.filter((r) => checkedAudio.has(r.key)).length
   const otherAudioCount = audioRows.filter(
@@ -682,7 +694,8 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
       setLookupNotice(null)
       setError(null)
       setMuxConflict(null)
-      setMarkedSpanish(new Set())
+      setAudioLangChoice({})
+      setSubtitleLangChoice({})
       // S4: auto-select the best video across A and B (`best_video` may name B).
       const best = result.best_video
       const firstRow = result.file_a.video_tracks[0]
@@ -720,16 +733,22 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
         throw new Error('Selecciona al menos una pista de audio')
       }
 
-      // L24: marked und tracks travel with the mux — the backend re-applies
-      // them in its own gate and subtitle plan (the badge is never trusted).
-      const languageOverrides = [...markedSpanish].map((key) => {
-        const [file, ordinal] = key.split(':')
-        return {
-          path: file === 'a' ? probeResult.file_a.path : probeResult.file_b.path,
-          track_index: Number(ordinal),
-          language: 'spa',
-        }
-      })
+      // S2/T3: every row whose choice differs from the probe travels as an
+      // override (unchecked rows too — the backend applies its own gate).
+      const languageOverrides = audioRows
+        .filter((r) => effectiveCode(r) !== r.entry.language_code)
+        .map((r) => ({
+          path: r.file === 'a' ? probeResult.file_a.path : probeResult.file_b.path,
+          track_index: r.track_index,
+          language: effectiveCode(r),
+        }))
+
+      // S3/T3: chosen subtitle codes in row order — only when a row differs
+      // from its derived default (absent ⇒ the backend derives as before).
+      const subtitleLanguages = subtitleRows.map((r) => subtitleLangChoice[r.code] ?? r.code)
+      const subtitlesRetagged = subtitleRows.some(
+        (r) => (subtitleLangChoice[r.code] ?? r.code) !== r.code,
+      )
 
       // S11/L30 — `canMux` holds destFile, but the guard keeps the payload
       // honest on its own: `destination_path` is always the chosen input path.
@@ -741,6 +760,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
         destFile!.path,
         undefined,
         languageOverrides,
+        subtitlesRetagged ? subtitleLanguages : undefined,
       )
     },
     onSuccess: (resp) => {
@@ -816,13 +836,13 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   })
 
   // S6 — «Buscar subtítulos»: only the entries extraction could not give,
-  // narrowed to their three-letter codes; the task refresh flips the chips.
+  // narrowed to their chosen three-letter codes; the task refresh flips the chips.
   const searchMut = useMutation({
     mutationFn: () => {
       if (!latestTask) throw new Error('No task')
       const codes = subtitleRows
         .filter((r) => r.searchable)
-        .map((r) => r.code)
+        .map((r) => subtitleLangChoice[r.code] ?? r.code)
       return searchTaskSubtitles(latestTask.task_id, codes)
     },
     onSuccess: () => {
@@ -847,7 +867,8 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
     setAltModal(null)
     setSelectedVideoKey(null)
     setCheckedAudio(new Set())
-    setMarkedSpanish(new Set())
+    setAudioLangChoice({})
+    setSubtitleLangChoice({})
     // `destinationPath` stays on purpose: it is a session choice keyed by an
     // exact input path. The next probe revalidates it — if it no longer
     // matches an input it stops authorizing the submit until re-picked.
@@ -863,16 +884,16 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   }
 
   // S3/L14 + L24 — `canMux` needs compatibility.ok AND the EFFECTIVE language
-  // gate (a marked und track satisfies `spa` locally; the mux re-derives it
-  // from language_overrides) plus real selections; the mockup-11 «Mezclar»
-  // carries a real `disabled` attribute. S11/L30 adds the explicit destination
-  // (never a default): without a valid one the button stays disabled.
+  // gate (a row re-tagged to a missing required code satisfies it locally; the
+  // mux re-derives it from language_overrides) plus real selections; the
+  // mockup-11 «Mezclar» carries a real `disabled` attribute. S11/L30 adds the
+  // explicit destination (never a default): without a valid one the button stays disabled.
   const compatOk =
     probeResult != null &&
     probeResult.compatibility.ok &&
     muxConflict?.error !== 'incompatible'
   const stillMissing = (probeResult?.language_check?.missing ?? []).filter(
-    (code) => !(code === 'spa' && markedSpanish.size > 0),
+    (code) => !audioRows.some((r) => effectiveCode(r) === code && r.entry.language_code !== code),
   )
   const langOk = probeResult?.language_check != null && stillMissing.length === 0
   const canProbe = pathA !== '' && pathB !== '' && phase === 'idle'
@@ -1059,7 +1080,6 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
 
             <div className="mixer-audio-list">
               {audioRows.map((row, i) => {
-                const marked = markedSpanish.has(row.key)
                 const effCode = effectiveCode(row)
                 const isOther = !ORDERED_LANGUAGES.includes(effCode)
                 const prevOther = i > 0 && !ORDERED_LANGUAGES.includes(effectiveCode(audioRows[i - 1]))
@@ -1125,37 +1145,22 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                       </span>
                       <span className={`mixer-row-file mixer-row-file-${row.file}`}>Archivo {row.file.toUpperCase()}</span>
                       {row.entry.selected && <span className="mixer-chip-auto">Auto</span>}
-                      {marked && <span className="mixer-chip-marked">Marcada</span>}
-                      {row.entry.language_code === 'und' && !marked && (
-                        <button
-                          type="button"
-                          className="mixer-btn-mark-lang"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setMarkedSpanish((prev) => new Set(prev).add(row.key))
-                          }}
-                        >
-                          Marcar como castellano
-                        </button>
-                      )}
-                      {marked && (
-                        <button
-                          type="button"
-                          className="mixer-btn-mark-lang mixer-btn-mark-lang--on"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setMarkedSpanish((prev) => {
-                              const next = new Set(prev)
-                              next.delete(row.key)
-                              return next
-                            })
-                          }}
-                        >
-                          Quitar marca
-                        </button>
-                      )}
+                      <select
+                        className="mixer-lang-select"
+                        aria-label="Idioma de la pista"
+                        value={effCode}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          setAudioLangChoice((prev) => {
+                            const next = { ...prev }
+                            if (e.target.value === row.entry.language_code) delete next[row.key]
+                            else next[row.key] = e.target.value
+                            return next
+                          })
+                        }
+                      >
+                        {languageOptions(effCode)}
+                      </select>
                     </label>
                   </div>
                 )
@@ -1181,10 +1186,20 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                   row.candidate,
                   searchMut.isPending && row.searchable,
                 )
+                const chosen = subtitleLangChoice[row.code] ?? row.code
                 return (
                   <div key={row.code} className="mixer-sub-row">
                     <div className="mixer-sub-row-left">
-                      <span className="mixer-sub-lang">{langName(row.code)}</span>
+                      <select
+                        className="mixer-lang-select"
+                        aria-label="Idioma del subtítulo"
+                        value={chosen}
+                        onChange={(e) =>
+                          setSubtitleLangChoice((prev) => ({ ...prev, [row.code]: e.target.value }))
+                        }
+                      >
+                        {languageOptions(chosen)}
+                      </select>
                       <span className={`mixer-sub-chip mixer-sub-chip-${state.tone}`}>{state.chip}</span>
                     </div>
                     {state.detail && <span className="mixer-sub-detail">{state.detail}</span>}
