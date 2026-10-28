@@ -305,6 +305,21 @@ class TestProbeFileErrors:
         with pytest.raises(media_mixer.ProbeInputError, match="timed out"):
             media_mixer.probe_file(str(target))
 
+    def test_non_utf8_ffprobe_output_raises_probe_input_error(self, tmp_path, monkeypatch):
+        """Legacy cp1251/latin1 junk in ffprobe output is input error, not a crash."""
+        target = tmp_path / "x.mkv"
+        target.write_bytes(b"x")
+        real_run = subprocess.run
+
+        # sh stands in for ffprobe: the bug lives in run()'s text-mode decode, so
+        # the stand-in must really emit invalid UTF-8 instead of being mocked away.
+        def run_with_junk_bytes(cmd, **kwargs):
+            return real_run(["sh", "-c", "printf 'bad \\377\\376 bytes' >&2; exit 1"], **kwargs)
+
+        monkeypatch.setattr(media_mixer.subprocess, "run", run_with_junk_bytes)
+        with pytest.raises(media_mixer.ProbeInputError, match="ffprobe failed"):
+            media_mixer.probe_file(str(target))
+
 
 class TestMuxEndpoint:
     @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
