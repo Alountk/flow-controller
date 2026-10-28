@@ -4,7 +4,6 @@ import { Calendar } from '../features/calendar/Calendar.tsx'
 import { MediaPane, type MediaDetail, type MediaSelection } from '../features/media-pane/MediaPane.tsx'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
 import { apiFetch } from '../shared/api/auth.ts'
-import { browsePath } from '../shared/api/files.ts'
 import { fetchSeriesEpisodes } from '../shared/api/wanted.ts'
 import { episodeTagKey } from '../shared/utils/episodeTag.ts'
 import {
@@ -17,7 +16,8 @@ import {
 } from '../shared/utils/episodeView.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
 import { errorMessage } from '../shared/utils/text.ts'
-import type { AllSeries, BrowseResponse, CalendarItem, PaginatedResponse, SeriesEpisode } from '../shared/types.ts'
+import { PanelFiles, ROW_MISSING } from '../shared/ui/PanelFiles.tsx'
+import type { AllSeries, CalendarItem, PaginatedResponse, SeriesEpisode } from '../shared/types.ts'
 import './Sections.css'
 
 /**
@@ -533,80 +533,6 @@ function selectedRowFacts(
     grabbedDestination,
     seriesId: selected.id,
   }
-}
-
-const ROW_MISSING = 'No se pudo leer la fila seleccionada.'
-
-/** File size in human units — the same reading FileManager's list does. */
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '—'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let i = 0
-  let size = bytes
-  while (size >= 1024 && i < units.length - 1) {
-    size /= 1024
-    i++
-  }
-  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
-/** The Archivos tab: GET /api/files/browse for the selected row's folder.
- *  Read-only by construction — rename/delete/copy live in the Archivos PAGE
- *  (retired later, not here); this listing has no actions at all. */
-function PanelFiles({ facts }: { facts: RowFacts }) {
-  if (facts.state === 'empty') return null
-  if (facts.state === 'missing') return <p className="sec-tab-note">{ROW_MISSING}</p>
-  if (!facts.path) return <p className="sec-tab-note">Esta entrada no tiene ruta</p>
-  return <FilesList path={facts.path} />
-}
-
-function FilesList({ path }: { path: string }) {
-  const query = useQuery({ queryKey: ['panel-browse', path], queryFn: () => browsePath(path) })
-  if (query.isPending) return <p className="sec-tab-note">Cargando ruta…</p>
-  if (query.isError) {
-    return (
-      <div className="wanted-error" role="alert">
-        <strong>No se pudo leer la ruta</strong>
-        <span>{errorMessage(query.error)}</span>
-      </div>
-    )
-  }
-  // browsePath answers failures on the body: a file where a folder was asked
-  // for reads "No es un directorio", and a blocked path arrives as FastAPI's
-  // `detail`. Neither may render as an empty listing.
-  const data = query.data as BrowseResponse & { detail?: string }
-  const failure = data.error ?? data.detail
-  if (!data.ok) {
-    return (
-      <div className="wanted-error" role="alert">
-        <strong>No se pudo leer la ruta</strong>
-        <span>{failure ?? 'respuesta inesperada del servidor'}</span>
-      </div>
-    )
-  }
-  if (data.items.length === 0) return <p className="sec-tab-note">Esta carpeta está vacía</p>
-  return (
-    <table className="sec-table sec-files-table">
-      <thead>
-        <tr>
-          <th scope="col">Nombre</th>
-          <th scope="col">Tamaño</th>
-          <th scope="col">Modificado</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.items.map((item) => (
-          <tr key={item.path}>
-            <td className="sec-file-name" title={item.path}>
-              {item.name}
-            </td>
-            <td>{item.is_dir ? '—' : formatSize(item.size)}</td>
-            <td>{new Date(item.modified * 1000).toLocaleDateString('es-ES')}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
 }
 
 /** The Episodios tab: every episode of the selected series, from the same
