@@ -205,6 +205,46 @@ describe('event → query invalidation', () => {
     )
   })
 
+  it('invalidates every folder-listing key when a file op completes (desync)', async () => {
+    // Panes, FileNavigator modals and panel tabs share /api/files/browse under
+    // different keys — a completed move must refresh all of them, not just queue.
+    const { invalidate } = setup()
+    const source = await openStream()
+
+    source.emit('task', {
+      kind: 'task',
+      channel: 'copy',
+      task_id: 'copy-2',
+      status: 'done',
+      detail: 'Movido',
+    })
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['browse'] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['files-browse'] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['panel-browse'] })
+    })
+  })
+
+  it('keeps the deliberate routing-listing cache untouched on file ops', async () => {
+    // Pin: the 5-minute routing-tag cache is a documented tradeoff (S-deliberate).
+    const { invalidate } = setup()
+    const source = await openStream()
+
+    source.emit('task', {
+      kind: 'task',
+      channel: 'copy',
+      task_id: 'copy-3',
+      status: 'done',
+      detail: 'Movido',
+    })
+
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['task', 'copy-3'] }),
+    )
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['routing-listing'] })
+  })
+
   it('invalidates the whole mixer task list for a mixer task event', async () => {
     const { invalidate } = setup()
     const source = await openStream()
