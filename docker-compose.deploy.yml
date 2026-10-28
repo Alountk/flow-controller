@@ -5,9 +5,7 @@
 
 services:
   flow-controller:
-    # INCIDENT pin (2026-10-27): openresty 502s no-query /assets/* of the :latest
-    # build; revert to :latest once the proxy layer is fixed.
-    image: ghcr.io/alountk/flow-controller:sha-ae93e41
+    image: ghcr.io/alountk/flow-controller:latest
     container_name: flow-controller
     network_mode: host
     restart: unless-stopped
