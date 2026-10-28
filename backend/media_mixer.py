@@ -107,7 +107,11 @@ def probe_file(path: str) -> dict:
     ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            timeout=30,
+        )
     except FileNotFoundError:
         raise RuntimeError("ffprobe not found")
     except subprocess.TimeoutExpired:
