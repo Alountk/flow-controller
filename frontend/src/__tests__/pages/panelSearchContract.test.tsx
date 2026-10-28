@@ -9,9 +9,10 @@ import type { Release } from '../../shared/api/releases.ts'
 /**
  * The two contracts this change establishes, pinned directly:
  *
- * 1. SELECTING A ROW NEVER SEARCHES. The operator initiates — 🔍 Buscar
- *    Releases is THE way the first search starts — and changing the indexer
- *    re-runs it (PR B's requirement, kept). No other trigger exists.
+ * 1. SELECTION NEVER SEARCHES — not a row, not a site checkbox. The
+ *    operator initiates: 🔍 Buscar Releases is THE way the first search
+ *    starts, 🔄 Refrescar re-runs it, and toggling a site only shapes the
+ *    NEXT search (2026-10-28: search is an action). No other trigger exists.
  * 2. `holdsCopy` counts a routing-folder entry only when it is a DIRECTORY
  *    (the nested layout `path_4k/<folder>/<file>`) or a file the backend
  *    CLASSIFIED as video (the flat layout `path_4k/<folder>….mkv`). A `.srt`
@@ -154,9 +155,15 @@ describe('the operator initiates · selection searches nothing', () => {
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(searchCalls(fn)).toBe(1)
 
-    // Trigger 3 — a SITE toggle, and never before this moment: the count was
-    // 1 above, and it becomes exactly 2 now (the panel's re-run trigger).
+    // Trigger 3 — a SITE toggle searches NOTHING (2026-10-28: search is an
+    // action). The tick proves no deferred re-run is pending either.
     fireEvent.click(screen.getByLabelText('aMule'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(searchCalls(fn)).toBe(1)
+
+    // The explicit re-run is what carries the new selection: Refrescar on
+    // the results step makes it exactly 2.
+    fireEvent.click(screen.getByRole('button', { name: /Refrescar/ }))
     await waitFor(() => expect(searchCalls(fn)).toBe(2))
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(searchCalls(fn)).toBe(2)

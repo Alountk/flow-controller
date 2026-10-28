@@ -214,9 +214,10 @@ describe('Release search polling (C-10)', () => {
     expect(statusCalls(fn)).toHaveLength(0)
   })
 
-  it('re-runs under the checked sites and the subset rides that job', async () => {
-    // The panel's site toggle is the re-run trigger, and the selection is
-    // SERVER-SIDE: it rides the POST (`sources`), never a client filter.
+  it('re-runs on the explicit 🔄 press under the checked sites and the subset rides that job', async () => {
+    // The re-run is an operator action (2026-10-28: a site toggle alone
+    // searches nothing), and the selection is SERVER-SIDE: it rides the
+    // POST (`sources`), never a client filter.
     const fn = mockPollingFetch()
     renderPanelModal()
 
@@ -227,6 +228,10 @@ describe('Release search polling (C-10)', () => {
     )
 
     fireEvent.click(screen.getByLabelText('aMule'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(postCalls(fn)).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /Refrescar/ }))
     await waitFor(() => expect(postCalls(fn)).toHaveLength(2))
     const secondBody = JSON.parse(
       String((postCalls(fn)[1][1] as RequestInit).body),

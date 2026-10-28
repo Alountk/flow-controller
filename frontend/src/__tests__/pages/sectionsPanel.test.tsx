@@ -341,7 +341,7 @@ describe('sections · the release search in the panel', () => {
     expect(document.querySelector('.scan-modal-backdrop')).toBeNull()
   })
 
-  it('searches only on the press and on an indexer change — never on selection, never on re-open', async () => {
+  it('searches only on the press and on an explicit re-run — never on selection, never on a site toggle, never on re-open', async () => {
     renderSection(Peliculas)
     await screen.findByText('Your Name.')
 
@@ -364,10 +364,15 @@ describe('sections · the release search in the panel', () => {
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(searchCalls()).toBe(1)
 
-    // Trigger 3: toggling a site re-runs it — exactly one NEW search, under
-    // the newly marked set. Not before: the count was 1 through both
-    // triggers above.
+    // Trigger 3: toggling a site searches NOTHING (2026-10-28: search is an
+    // action) — the count holds at 1, no deferred re-run pending.
     fireEvent.click(screen.getByLabelText('aMule'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(searchCalls()).toBe(1)
+
+    // The explicit re-run: 🔄 Refrescar on the results step makes it 2,
+    // carrying the newly marked set.
+    fireEvent.click(screen.getByRole('button', { name: /Refrescar/ }))
     await waitFor(() => expect(searchCalls()).toBe(2))
     await screen.findByPlaceholderText('Filtrar por título...')
 

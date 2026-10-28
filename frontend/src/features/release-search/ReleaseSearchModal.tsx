@@ -263,7 +263,7 @@ export function ReleaseSearchModal({
   // The population the panel's 🔍 Buscar Releases button serves: a title
   // that still needs a file, and one already inside the library (id 0 must
   // be ADDED first — its ➕ button's job). The same gate guards the
-  // indexer-change re-run and the results cache, so a title that already has
+  // 🔍 button and the results cache, so a title that already has
   // its file never searches from out here: it meets the has-file block,
   // whose "Buscar versiones" button searches on demand instead.
   // Selection itself is NOT a trigger: the operator initiates, always.
@@ -644,18 +644,13 @@ export function ReleaseSearchModal({
     if (next.has(key)) next.delete(key)
     else next.add(key)
     setUnchecked(next)
-    // PANEL ONLY: the toggle IS the re-run trigger, and it must see the NEXT
-    // selection — state still holds the old one in this tick.
-    if (inPanel && autoSearchable) void handleSearch(next)
   }
 
   /**
-   * The search runs under the checked sites. `next` is a real parameter,
-   * not state: the panel's toggle re-run fires in the same tick as
-   * setUnchecked — reading state there would search under the OLD set.
+   * The search runs under the checked sites, read at press time.
    */
-  async function handleSearch(next: Set<string> = unchecked) {
-    const payload = sitePayload(next)
+  async function handleSearch() {
+    const payload = sitePayload(unchecked)
     if (payload.count === 0) return
     setStep('searching')
     // A new search is a new list: the previous grab's ack belongs to the old
@@ -663,7 +658,7 @@ export function ReleaseSearchModal({
     setNotice('')
     setSearchDetail('')
     setMessage(
-      `Buscando releases en ${next.size === 0 ? 'todos los sitios' : 'los sitios marcados'}...`,
+      `Buscando releases en ${unchecked.size === 0 ? 'todos los sitios' : 'los sitios marcados'}...`,
     )
     try {
       const started = await startCalendarReleaseSearch(
