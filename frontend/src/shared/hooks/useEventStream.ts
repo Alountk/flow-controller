@@ -112,6 +112,13 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
       // The activity table follows operations, which move with tasks (S6).
       void queryClient.invalidateQueries({ queryKey: ['activity'] })
       void queryClient.invalidateQueries({ queryKey: keyOf(payload) })
+      // A completed file op rewrites folder contents: refresh every listing
+      // surface (panes, FileNavigator modals, panel tabs) over /api/files/browse.
+      if (payload.channel === 'copy') {
+        void queryClient.invalidateQueries({ queryKey: ['browse'] })
+        void queryClient.invalidateQueries({ queryKey: ['files-browse'] })
+        void queryClient.invalidateQueries({ queryKey: ['panel-browse'] })
+      }
     }
 
     const onTrace = () => {
