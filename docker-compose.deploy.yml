@@ -45,3 +45,10 @@ services:
       - /mnt/storage/config/flow-control:/app/config
       - /mnt/storage:/mnt/storage:rw
       - /mnt/storage-6tb:/mnt/storage-6tb:rw
+      # aMule-watchdog (S4/S5): reinicio del contenedor por la Engine API.
+      # Socket de sólo lectura en el contenedor; si el uid no está en el grupo
+      # del socket, el watchdog falla closed a solo-detección (nunca adivina).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    group_add:
+      # gid del grupo docker del host (stat -c '%g' /var/run/docker.sock) — ver README.
+      - ${DOCKER_GID:-999}
