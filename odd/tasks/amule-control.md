@@ -131,4 +131,8 @@ L5 — Frontera de slice (2026-10-29): `05851f5` (doc, 128 L) + `22d940d` (RED, 
 **PR único con disclosure en el cuerpo** (mismo criterio que file-navigator F1/F2/F3/F4,
 idiomas-metadata 1051 L y amule-watchdog 2033 L), frontera anotada aquí. Redis de
 observación: builders rc=2 (ImportError de los nombres nuevos) y rutas 15 failed (404
-router inexistente) — evidencia dada al worker de T2.
+router inexistente) — evidencia dada al worker de T2. Frontera ampliada con cada unit:
+`5ca33d3` (esta entrada) y `f94da28` (T2 backend + seam T3 del padre: fix de 3 corchetes
+CJK en mensajes de servicio, gates propios focused 39/arch/vulture/pyflakes rc=0 y full
+1743 passed + 1 dist-fresh pendiente del rebuild tras T4) ⇒ acumulado **1008 L / 4
+commits**; estrategia invariante: PR único con disclosure del total final en T6.
