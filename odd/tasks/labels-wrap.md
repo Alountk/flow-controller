@@ -39,3 +39,18 @@ resuelven los `getByLabelText` existentes); en SharedDirs/API Key los botones de
 quedan FUERA del label (el control etiquetado es el input); en AltModal el label gana
 `display:flex` columna; en ScanModal/FileNavigator el label envuelve control y
 `scan-label` gana flex de fila.
+L3 — 2026-10-29, seam review del padre sobre la entrega de T1 (worker
+`mvtkbk0y-14-f5ab`: RED 6/9 → GREEN 6/6, 840/tsc/eslint en verde, cero test
+existente tocado, superficie exacta): 3 hallazgos corregidos. (1) Comentarios
+nuevos en español → traducidos a inglés (AGENTS.md:3-5, why ≤2 líneas) y
+títulos/doc de los 6 test files a inglés (precedente: los existentes, en inglés).
+(2) API Key: `<div>` + botón dentro del `<label>` viola el content model
+(label = contenido phrasing + un único elemento labelable) y contradecía L2;
+el error de handoff fue del padre (la tarea decía «dentro»). Corregido con
+wrapper `.indexadores-key-field` en la fila, label dentro (regla
+`> label { flex:1; min-width:0; margin-bottom:0 }`) y botón hermano con
+`bottom:8` (anclado al input en cualquier ancho). Test de envoltura actualizado:
+RED observado (1F/1P) → GREEN 6/6 (9/9). (3) El nombre accesible del toggle de
+`Field` pasa al texto del label (spec-correcto, más informativo que «Sí»/«No»):
+aceptado. Gates propios del padre: vitest 109 ficheros/840 tests, tsc, eslint,
+build — todos rc=0.

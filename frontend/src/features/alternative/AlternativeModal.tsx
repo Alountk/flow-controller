@@ -247,16 +247,15 @@ export function AlternativeModal({
 
           {/* S2 — prefilled, always editable. */}
           <section className="alt-modal-query">
-            <label className="alt-modal-query-label" htmlFor="alt-modal-title-input">
+            <label className="alt-modal-query-label">
               Título a buscar
+              <input
+                className="alt-modal-query-input"
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
             </label>
-            <input
-              id="alt-modal-title-input"
-              className="alt-modal-query-input"
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
           </section>
 
           {/* S3/L6c — the explicit search; opening the modal is not a search. */}

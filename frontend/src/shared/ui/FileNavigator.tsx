@@ -182,21 +182,33 @@ export function FileNavigator({
     const containingRoot =
       rootPaths.find((r) => currentPath === r || currentPath.startsWith(`${r}/`)) ?? ''
 
+    // Without rootLabel the select renders bare, as before; row buttons
+    // stay outside the label that wraps it.
+    const rootSelect = (
+      <select
+        className="fm-volume-select"
+        value={containingRoot}
+        onChange={(e) => visit(e.target.value)}
+      >
+        {selectPlaceholder !== undefined && <option value="">{selectPlaceholder}</option>}
+        {roots.map((root) => (
+          <option key={root.path} value={root.path}>{root.name}</option>
+        ))}
+      </select>
+    )
+
     return (
       <>
         {rootPicker === 'select' && (
           <div className="scan-row">
-            {rootLabel && <label className="scan-label">{rootLabel}</label>}
-            <select
-              className="fm-volume-select"
-              value={containingRoot}
-              onChange={(e) => visit(e.target.value)}
-            >
-              {selectPlaceholder !== undefined && <option value="">{selectPlaceholder}</option>}
-              {roots.map((root) => (
-                <option key={root.path} value={root.path}>{root.name}</option>
-              ))}
-            </select>
+            {rootLabel ? (
+              <label className="scan-label">
+                {rootLabel}
+                {rootSelect}
+              </label>
+            ) : (
+              rootSelect
+            )}
             <button
               type="button"
               className="fm-nav-btn"

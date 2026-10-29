@@ -414,11 +414,24 @@
   flex-wrap: wrap;
 }
 
+/* The label is a flex row wrapping its control; gap 10 matches the spacing
+   the row used when label and control were siblings. */
 .scan-label {
   font-size: 12px;
   color: var(--text-dim);
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Only the label holding the growing control stretches; .scan-label is
+   shared with FileNavigator, which must stay content-width. */
+.scan-label--grow {
+  flex: 1;
+  min-width: 0;
 }
 
 .scan-path-list {

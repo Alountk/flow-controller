@@ -20,12 +20,14 @@ export function Field({
   ariaLabel?: string
   disabled?: boolean
 }) {
+  // The label IS the row; the input keeps its aria-label because the restart
+  // badge would otherwise leak into the accessible name.
   return (
-    <div className="settings-field">
-      <label className="settings-label">
+    <label className="settings-field">
+      <span className="settings-label">
         {label}
         {restart && <span className="settings-restart-badge">Requiere reinicio</span>}
-      </label>
+      </span>
       {type === 'toggle' ? (
         <button
           className={`settings-toggle ${value ? 'on' : 'off'}`}
@@ -44,6 +46,6 @@ export function Field({
           onChange={(e) => onChange(e.target.value)}
         />
       )}
-    </div>
+    </label>
   )
 }

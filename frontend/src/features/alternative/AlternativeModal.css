@@ -140,6 +140,10 @@
 .alt-modal-query-label {
   font-size: 12px;
   color: var(--text-2);
+  /* The label stacks text over input now that the input lives inside it. */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .alt-modal-query-input {

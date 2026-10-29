@@ -217,14 +217,16 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
             />
 
             <div className="scan-row">
-              <label className="scan-label">Título adicional:</label>
-              <input
-                type="text"
-                className="scan-custom-input"
-                placeholder="Opcional: añade un título para buscar también..."
-                value={customTitle}
-                onChange={(e) => setCustomTitle(e.target.value)}
-              />
+              <label className="scan-label scan-label--grow">
+                Título adicional:
+                <input
+                  type="text"
+                  className="scan-custom-input"
+                  placeholder="Opcional: añade un título para buscar también..."
+                  value={customTitle}
+                  onChange={(e) => setCustomTitle(e.target.value)}
+                />
+              </label>
             </div>
 
             <button
