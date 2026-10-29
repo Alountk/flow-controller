@@ -98,13 +98,12 @@ export function SharedDirsSection() {
         <code>allowed_roots</code>.
       </p>
 
-      <div className="settings-field">
-        <label className="settings-label" htmlFor="shared-dirs-entry">
-          Ruta a compartir
-        </label>
-        <div className="shared-dirs-add">
+      {/* The label wraps text+input; the row buttons stay outside — the
+          labeled control is the input alone. */}
+      <div className="settings-field shared-dirs-entry-row">
+        <label className="shared-dirs-entry-label">
+          <span className="settings-label">Ruta a compartir</span>
           <input
-            id="shared-dirs-entry"
             className="settings-input"
             value={entry}
             placeholder="/mnt/storage/peliculas"
@@ -113,13 +112,13 @@ export function SharedDirsSection() {
               if (e.key === 'Enter') addTo('recursive')
             }}
           />
-          <button className="action-btn" type="button" onClick={() => addTo('recursive')}>
-            Añadir recursiva
-          </button>
-          <button className="action-btn" type="button" onClick={() => addTo('explicit')}>
-            Añadir solo esta carpeta
-          </button>
-        </div>
+        </label>
+        <button className="action-btn" type="button" onClick={() => addTo('recursive')}>
+          Añadir recursiva
+        </button>
+        <button className="action-btn" type="button" onClick={() => addTo('explicit')}>
+          Añadir solo esta carpeta
+        </button>
       </div>
 
       <div className="settings-group">

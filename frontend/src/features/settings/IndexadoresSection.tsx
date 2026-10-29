@@ -791,54 +791,47 @@ export function IndexadoresSection({
           </div>
 
           <div className="indexadores-form-grid">
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="indexer-form-name">
-                Nombre
-              </label>
+            <label className="settings-field">
+              <span className="settings-label">Nombre</span>
               <input
-                id="indexer-form-name"
                 className="settings-input"
                 ref={nameInputRef}
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               />
-            </div>
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="indexer-form-url">
-                URL
-              </label>
+            </label>
+            <label className="settings-field">
+              <span className="settings-label">URL</span>
               <input
-                id="indexer-form-url"
                 className="settings-input"
                 value={form.url}
                 placeholder="http://localhost:9117/1/api"
                 onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
               />
-            </div>
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="indexer-form-key">
-                API Key
-              </label>
-              <div className="indexadores-key-field">
+            </label>
+            {/* The «Mostrar» toggle stays outside the label: a label may hold
+                only one labelable control — the input. */}
+            <div className="settings-field indexadores-key-field">
+              <label className="settings-field">
+                <span className="settings-label">API Key</span>
                 <input
-                  id="indexer-form-key"
                   className="settings-input"
                   type={showKey ? 'text' : 'password'}
                   value={form.api_key ?? ''}
                   placeholder={editingId === null ? 'Clave del indexador' : '(sin cambio)'}
                   onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
                 />
-                {/* «Mostrar u ocultar» del diseño: revela la clave ESCRITA,
-                    nunca la máscara guardada (el campo llega vacío al editar). */}
-                <button
-                  type="button"
-                  className="indexadores-key-toggle"
-                  title="Mostrar u ocultar"
-                  onClick={() => setShowKey((v) => !v)}
-                >
-                  {showKey ? 'Ocultar' : 'Mostrar'}
-                </button>
-              </div>
+              </label>
+              {/* Design's «Mostrar u ocultar»: reveals the key the user typed,
+                  never the saved mask (the field arrives empty when editing). */}
+              <button
+                type="button"
+                className="indexadores-key-toggle"
+                title="Mostrar u ocultar"
+                onClick={() => setShowKey((v) => !v)}
+              >
+                {showKey ? 'Ocultar' : 'Mostrar'}
+              </button>
             </div>
             <div className="settings-field indexadores-form-wide">
               <span className="settings-label" id="indexer-form-categories">
