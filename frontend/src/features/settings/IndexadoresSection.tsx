@@ -413,14 +413,19 @@ export function IndexadoresSection({
           </div>
 
           <div className="indexadores-search-bar">
-            <input
-              className="indexadores-search-input"
-              type="text"
-              aria-label="Buscar en todas las fuentes…"
-              placeholder="Buscar en todas las fuentes…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+            {/* Hidden label text mirrors the placeholder (no new user-facing
+                string); aria-label stays to pin the accessible name. */}
+            <label className="indexadores-search-label">
+              <span className="sr-only">Buscar en todas las fuentes…</span>
+              <input
+                className="indexadores-search-input"
+                type="text"
+                aria-label="Buscar en todas las fuentes…"
+                placeholder="Buscar en todas las fuentes…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
             <button
               type="button"
               className="settings-btn settings-btn-primary"

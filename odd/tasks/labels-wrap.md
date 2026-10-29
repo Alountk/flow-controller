@@ -25,6 +25,10 @@ FileNavigator `rootLabel`). La regla de S1 aplica a B y C.
   Indexadores ×3, AltModal, ScanModal, FileNavigator + CSS sin cambiar el layout
   visual ni tocar la familia A. Rutas en `## Allowed edit surfaces`.
 - T2 — Padre: seam review + gates completos (vitest, tsc, eslint, build) + commit.
+- T3 — Input de búsqueda «Buscar en todas las fuentes…» (IndexadoresSection:416,
+  único caso sin label tras T1): envolver en `<label>` con el texto del placeholder
+  como contenido oculto (mismo string, sin strings nuevos) + clase `sr-only`;
+  prueba RED→GREEN y paridad de layout (flex de la search bar intacto).
 
 ## Log
 
@@ -57,3 +61,10 @@ build — todos rc=0.
 L4 — Entrega: single PR con divulgación; frontera de rebanada registrada aquí
 (superficie 551 L autóritas / 2 commits sobre origin/main: doc `d82d014` +
 impl `f7fde6d`; el límite ~400 L se supera — una sola unidad de comportamiento).
+L5 — 2026-10-29, usuario reporta que en prod `/configuracion` siguen los inputs
+fuera de su label: **causa = prod no corre labels-wrap** (assets `index-BduVpnN1.js`/
+`index-CX9zka5w.css` con 0 marcas nuevas — corre `sha-a4c6dd9`; hace falta el
+redeploy a `sha-fcf2b28`). Auditoría residual en main: único caso = input de búsqueda
+«Buscar en todas las fuentes…» (sin label, solo placeholder+aria-label). Pregunta
+focalizada → decisión del usuario: **envolver con label oculto** (mismo texto del
+placeholder, visual idéntico). Implementa T3.

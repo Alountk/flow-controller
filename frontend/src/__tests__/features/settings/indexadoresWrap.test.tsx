@@ -61,4 +61,16 @@ describe('indexadores — the label wraps its input', () => {
     const toggle = screen.getByRole('button', { name: 'Mostrar' })
     expect(label).not.toContainElement(toggle)
   })
+
+  it('«Buscar en todas las fuentes…»: the search input is inside a label', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: [] }) })
+    renderSection()
+
+    const input = await screen.findByPlaceholderText('Buscar en todas las fuentes…')
+    const label = input.closest('label')
+    expect(label).not.toBeNull()
+    expect(label).toContainElement(input)
+    expect(within(label!).getByText('Buscar en todas las fuentes…')).toBeInTheDocument()
+    expect(screen.getByLabelText('Buscar en todas las fuentes…')).toBe(input)
+  })
 })
