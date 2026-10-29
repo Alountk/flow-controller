@@ -146,3 +146,18 @@ test solo-anclas/copy autorizado) + 673 L en 2 nuevos (`AmuleServerActions.tsx`
 rc=0. Decisiones de frontera: conteo DOM panel-agnóstico en `configSubmenu:246`
 (intención «exactamente 2, uno por sitio» intacta) y reanclaje de 22/23
 aserciones con 0 bytes de comportamiento tocados.
+
+L6 — Entrega (2026-10-29): gates T5 ejecutados por el padre con rc=0 en todo
+(backend **1744 passed / 0 failed**, frontend **831/831** 103 ficheros, tsc,
+eslint, `npm run build` cerrando dist_fresh, vulture, pyflakes, arquitectura);
+assess `reviewDue:false` (under_budget; risk medium por `backend/app.py`
+ejecutable; sin escalate — ningún item de riesgo alto aplica, todo es
+aditivo). README (pestaña + 5 rutas nuevas) commit `32ca09a`; mirror Engram
+1497 rev 2; push de 8 commits; **PR #256** con disclosure de 1985 L / 8C
+(francha total de L5) → CI del PR **green** (run `40866892053`) → **merge
+`a4c6dd9`** en main. Run post-merge de main `40867488638` en vuelo al cerrar
+esta entrada. Pendiente declarado: **deploy manual del usuario en Portainer**
+(imagen `sha-a4c6dd9`) y verificación en prod; informe de cierre con catálogo
+S7 (otras acciones EC: pausa/reanudación/prioridad de ficheros, red
+ed2k/Kad, límites de ancho de banda, log, stats, categorías, recarga de
+compartición/ipfilter, actualización de lista de servidores por URL).

@@ -1,13 +1,16 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-25 · **PR #236 (qbit-nativo — descargas magnet/http NATIVAS a qBittorrent: cliente propio sólo con aiohttp, login+SID, servicio «qbit» en Configuración, destino en el `detail`; aMuTorrent queda sólo para ed2k/rollback)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1633 backend / 760 frontend** · main pre-#236 = `c5fc4c7` · público: próxima sesión + Raul.
+> Última actualización: 2026-10-29 · **PR #256 (amule-control — tercera pestaña «aMule» en Ajustes con su config+watchdog trasladados y control EC de servidores y enlaces: `GET /api/amule/servers`, `POST /api/amule/servers/{add,remove,connect}`, `POST /api/amule/links`)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
+> · specs: **1744 backend / 831 frontend** · main pre-#256 = `5403694` · público: próxima sesión + Raul.
 
 ## Estado actual
 
 **Desplegado en producción**: la instancia corre hasta el merge **`6b0af6f`** (PR #255
 amule-watchdog); el usuario hizo pull+redeploy manual el 2026-10-29, cubriendo los
-merges pendientes #252 (F4), #253, #254 y #255. Verificado en prod: asset
+merges pendientes #252 (F4), #253, #254 y #255. Tras ellos llegó el merge
+**`a4c6dd9`** (PR #256 amule-control) y **falta su pull+redeploy manual** (el job
+`docker-push` publicó `sha-a4c6dd9`): hasta entonces prod sigue en `6b0af6f`.
+Verificado en prod: asset
 `index-Beb5VUb0.js` (F1–F4 completos, marcadores presentes), `GET /api/amule/health`
 → 401 (ruta presente y protegida), raíz 200. Sigue NPM proxyando `/api/events`.
 
@@ -19,10 +22,11 @@ siempre devolvió 204 sin efecto). Tras cada merge: **pull + redeploy manual** e
 residual de webhook fue **borrado de la UI de Portainer** el 2026-10-29 por el usuario
 (limpieza final de #253; repo+secret ya estaban eliminados).
 
-**Verde**: `main` en `97d75e7` (docs L6 de amule-watchdog) sobre el merge **`6b0af6f`**
-(PR #255); run post-merge de main **pass** (backend-tests, frontend-build, docker-verify,
-e2e, docker-push → imagen `sha-6b0af6f` desplegada por el usuario).
-Specs: **1704 backend / 815 frontend**, ratchet legacy **3455**, working tree limpia.
+**Verde**: `main` en `a4c6dd9` (merge PR #256 amule-control; docs de entrega L6/L7
+posteriores); run post-merge de main **pass** (backend-tests, frontend-build,
+docker-verify, e2e, docker-push → imagen `sha-a4c6dd9` publicada, deploy manual
+pendiente).
+Specs: **1744 backend / 831 frontend**, ratchet legacy **3456**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -307,6 +311,16 @@ Specs: **1704 backend / 815 frontend**, ratchet legacy **3455**, working tree li
 - #251/#252 — `file-navigator` **F3/F4** (FileManager → FileNavigator; `PanelFiles` compartido).
 - #253 — eliminación del webhook (repo + secret); endpoint UI borrado el 2026-10-29.
 - #254 — fix: el toggle de sitios ya no dispara auto-búsqueda.
+
+**PR #256 — `amule-control` (2026-10-29, merge `a4c6dd9`)**: tercera pestaña «aMule»
+en Ajustes (config EC + watchdog trasladados desde General; 23 aserciones de
+localización reubicadas con **0 bytes de comportamiento tocados**, verificado
+muestreando 8/8 sitios por el padre) + control de servidores y enlaces por EC:
+`GET /api/amule/servers`, `POST /api/amule/servers/{add,remove,connect}`,
+`POST /api/amule/links`. 1985 L autoriginales en 8 commits (disclosure en L5),
+ratchet 3455→3456, CI de PR y post-merge **pass**; imagen `sha-a4c6dd9`
+pendiente de deploy manual. Feature doc:
+`odd/tasks/amule-control.md` (S1–S8, T1–T6, Log L1–L6).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
