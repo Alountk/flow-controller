@@ -54,3 +54,6 @@ RED observado (1F/1P) → GREEN 6/6 (9/9). (3) El nombre accesible del toggle de
 `Field` pasa al texto del label (spec-correcto, más informativo que «Sí»/«No»):
 aceptado. Gates propios del padre: vitest 109 ficheros/840 tests, tsc, eslint,
 build — todos rc=0.
+L4 — Entrega: single PR con divulgación; frontera de rebanada registrada aquí
+(superficie 551 L autóritas / 2 commits sobre origin/main: doc `d82d014` +
+impl `f7fde6d`; el límite ~400 L se supera — una sola unidad de comportamiento).
