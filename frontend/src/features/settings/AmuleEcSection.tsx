@@ -38,11 +38,13 @@
  * backend's `config.rebuild()`, not a frontend POST).
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Field } from '../../shared/ui/Field.tsx'
 import {
   testAmuleEc,
+  getAmuleHealth,
   type AmuleEcCandidate,
+  type AmuleHealth,
 } from '../../shared/api/services.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import './Settings.css'
@@ -74,6 +76,18 @@ function candidateFrom(values: AmuleEcValues): AmuleEcCandidate {
   return candidate
 }
 
+const HEALTH_POLL_MS = 30_000
+
+const HEALTH_LABELS: Record<AmuleHealth['state'], string> = {
+  sano: 'Sano',
+  'sin-datos': 'Sin datos',
+  'sin-configurar': 'Sin configurar',
+  colgado: 'Colgado',
+  reiniciando: 'Reiniciando…',
+  recuperado: 'Recuperado',
+  alerta: 'Alerta',
+}
+
 export function AmuleEcSection({
   values,
   update,
@@ -95,6 +109,28 @@ export function AmuleEcSection({
   saving?: boolean
 }) {
   const [pending, setPending] = useState(false)
+  const [health, setHealth] = useState<AmuleHealth | null>(null)
+
+  // Plain poll on purpose (amule-watchdog S6): one snapshot every 30 s, no cache layer.
+  useEffect(() => {
+    let active = true
+    const load = () => {
+      getAmuleHealth()
+        .then((snapshot) => {
+          if (active) setHealth(snapshot)
+        })
+        // A failed poll claims no state: absence beats a stale badge.
+        .catch(() => {
+          if (active) setHealth(null)
+        })
+    }
+    load()
+    const id = setInterval(load, HEALTH_POLL_MS)
+    return () => {
+      active = false
+      clearInterval(id)
+    }
+  }, [])
 
   async function probe() {
     setPending(true)
@@ -143,6 +179,25 @@ export function AmuleEcSection({
           type="password"
         />
       </div>
+      <div className="amule-ec-watchdog">
+        <span className="amule-ec-watchdog-caption">Estado del watchdog:</span>
+        {health && HEALTH_LABELS[health.state] && (
+          <span
+            className={`amule-ec-watchdog-badge${
+              health.state === 'colgado' || health.state === 'alerta' || health.state === 'reiniciando'
+                ? ' amule-ec-watchdog-badge-problem'
+                : ''
+            }`}
+          >
+            {HEALTH_LABELS[health.state]}
+          </span>
+        )}
+      </div>
+      {health?.detail ? (
+        <p className="amule-ec-watchdog-detail" role="status">
+          {health.detail}
+        </p>
+      ) : null}
       <div className="amule-ec-actions">
         <button
           type="button"
