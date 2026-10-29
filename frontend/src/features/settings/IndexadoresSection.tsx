@@ -169,19 +169,20 @@ function buildCategoriesCsv(ids: string[]): string {
 /** T7/S5 — «Fuentes integradas»: fuentes de primer nivel que la búsqueda
  *  unificada consulta directamente (el fan-out ya las llama en paralelo).
  *  NO son endpoints Torznab ni filas del registro (éste sigue siendo sólo
- *  Torznab): aMule se configura en General (fila accionable → onOpenGeneral) y
+ *  Torznab): aMule se configura en la pestaña aMule (fila accionable →
+ *  onOpenGeneral) y
  *  Prowlarr llegará con la importación del paso 5 (fila estática — aquí NO se
  *  inventa una acción; su affordance disabled-honesto es el de la cabecera). */
 const INTEGRATED_SOURCES = [
-  { key: 'amule', name: 'aMule (EC)', action: 'Configurar en General → aMule (EC directo)' },
+  { key: 'amule', name: 'aMule (EC)', action: 'Configurar en la pestaña aMule (EC directo)' },
   { key: 'prowlarr', name: 'Prowlarr', action: null },
 ] as const
 
 export function IndexadoresSection({
   onOpenGeneral,
 }: {
-  /** El enlace «General → aMule (EC directo)» del callout conmuta al panel
-   *  General (espejo exacto de `onOpenIndexadores` en AmuleEcSection). */
+  /** El enlace «la pestaña aMule (EC directo)» del callout conmuta al panel
+   *  aMule (espejo exacto de `onOpenIndexadores` en AmuleEcSection). */
   onOpenGeneral: () => void
 }) {
   const queryClient = useQueryClient()
@@ -619,8 +620,8 @@ export function IndexadoresSection({
                   </>
                 )
                 // La fila aMule es accionable (click Y teclado: botón nativo)
-                // → onOpenGeneral, la misma prop del callout: salta al panel
-                // General, donde vive la tarjeta aMule (EC).
+                // → onOpenGeneral, la misma prop del callout: salta a la
+                // pestaña aMule, donde vive la tarjeta aMule (EC).
                 return source.action ? (
                   <button
                     key={source.key}
@@ -925,13 +926,13 @@ export function IndexadoresSection({
               onClick={(e) => {
                 e.preventDefault()
                 // El estado del tab vive en `Settings.tsx`: el enlace conmuta
-                // al panel General por la prop real `onOpenGeneral` (espejo de
-                // `onOpenIndexadores` en AmuleEcSection). Accionable, no
+                // a la pestaña aMule por la prop real `onOpenGeneral` (espejo
+                // de `onOpenIndexadores` en AmuleEcSection). Accionable, no
                 // decorativo.
                 onOpenGeneral()
               }}
             >
-              General → aMule (EC directo)
+              la pestaña aMule (EC directo)
             </a>
             . Los resultados de la fuente «amule» salen de esa conexión.
           </p>

@@ -425,3 +425,23 @@ def amule_delete(*args, **kwargs):
 def amule_categories(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _amule.amule_categories(*args, **kwargs)
+
+
+def amule_servers(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_servers(*args, **kwargs)
+
+
+def amule_server_add(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_server_add(*args, **kwargs)
+
+
+def amule_server_remove(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_server_remove(*args, **kwargs)
+
+
+def amule_server_connect(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_server_connect(*args, **kwargs)

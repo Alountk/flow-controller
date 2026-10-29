@@ -12,6 +12,7 @@ import { toast } from '../../shared/utils/toast.ts'
 import { SharedDirsSection } from './SharedDirsSection.tsx'
 import { IndexadoresSection } from './IndexadoresSection.tsx'
 import { AmuleEcSection, type AmuleEcValues } from './AmuleEcSection.tsx'
+import { AmuleServerActions } from './AmuleServerActions.tsx'
 import { Field } from '../../shared/ui/Field.tsx'
 import './Settings.css'
 
@@ -143,6 +144,7 @@ function withAmuleEc(data: Settings): SettingsForm {
 const TABS = {
   general: { id: 'settings-tab-general', panel: 'settings-panel-general' },
   indexadores: { id: 'settings-tab-indexadores', panel: 'settings-panel-indexadores' },
+  amule: { id: 'settings-tab-amule', panel: 'settings-panel-amule' },
 } as const
 
 /** «Probar conexión» de cada tarjeta de Servicios — sondea LO QUE EL FORM
@@ -208,7 +210,7 @@ export function Settings() {
   const [baseline, setBaseline] = useState<SettingsForm | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [restartFields, setRestartFields] = useState<string[]>([])
-  const [tab, setTab] = useState<'general' | 'indexadores'>('general')
+  const [tab, setTab] = useState<'general' | 'indexadores' | 'amule'>('general')
 
   const { data, isPending, error } = useQuery({
     queryKey: ['settings'],
@@ -342,6 +344,18 @@ export function Settings() {
               >
                 <span className="settings-rail-item-label">Indexadores</span>
                 <span className="settings-rail-item-tag" aria-hidden="true">Torznab</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id={TABS.amule.id}
+                aria-controls={TABS.amule.panel}
+                aria-selected={tab === 'amule'}
+                className={`settings-rail-item ${tab === 'amule' ? 'active' : ''}`}
+                onClick={() => setTab('amule')}
+              >
+                <span className="settings-rail-item-label">aMule</span>
+                <span className="settings-rail-item-dot" aria-hidden="true" />
               </button>
             </div>
           </nav>
@@ -517,21 +531,6 @@ export function Settings() {
         )}
       </Section>
 
-      {/* S2 — «Recuerda que los datos para conectar amule son diferentes a
-          los indexadores de prowlarr y jackett por ejemplo» (Log L1c): su
-          propia tarjeta, aquí en General; los indexadores Torznab viven en la
-          pestaña Indexadores. Form-bindings como los servicios vecinos, pero
-          la contraseña EC llega siempre enmascarada y «vacío/máscara =
-          conservar la guardada» lo aplica el backend. */}
-      <AmuleEcSection
-        values={form.services.amule ?? { url: '', ec_port: '', ec_password: '' }}
-        update={update}
-        isRestarting={isRestarting}
-        onOpenIndexadores={() => setTab('indexadores')}
-        onSave={doSave}
-        saving={saveMutation.isPending}
-      />
-
       <Section title="Seguridad">
         <Field label="API Key propia" value={form.security.api_key} onChange={(v) => update('security.api_key', v)} restart={isRestarting('security.api_key')} placeholder="Clave para proteger la API" type="password" />
         <Field label="Modo seguro (bloquea acciones destructivas)" value={form.security.safe_mode} onChange={(v) => update('security.safe_mode', v)} type="toggle" />
@@ -593,8 +592,37 @@ export function Settings() {
       >
         {/* T6/S5 — direct connections: its own SQLite table and its own
             buttons, so (like SharedDirsSection) it is not part of the form
-            that "Guardar cambios" claims to save. */}
-        <IndexadoresSection onOpenGeneral={() => setTab('general')} />
+            that "Guardar cambios" claims to save. S1: the callout's «aMule
+            (EC directo)» destination now lives in its own tab. */}
+        <IndexadoresSection onOpenGeneral={() => setTab('amule')} />
+      </div>
+
+      {/* S1 (amule-control): la config de aMule, su watchdog y sus acciones EC
+          en la tercera pestaña — mismas claves `services.amule.*` y mismo ciclo
+          Guardar/Descartar, sólo cambia de sitio. */}
+      <div
+        role="tabpanel"
+        id={TABS.amule.panel}
+        aria-labelledby={TABS.amule.id}
+        aria-hidden={tab !== 'amule'}
+        hidden={tab !== 'amule'}
+        className="settings-panel"
+      >
+        {/* S2 — «Recuerda que los datos para conectar amule son diferentes a
+            los indexadores de prowlarr y jackett por ejemplo» (Log L1c): su
+            propia tarjeta (S1: esta pestaña); los indexadores Torznab viven en
+            la pestaña Indexadores. Form-bindings como los servicios vecinos,
+            pero la contraseña EC llega siempre enmascarada y «vacío/máscara =
+            conservar la guardada» lo aplica el backend. */}
+        <AmuleEcSection
+          values={form.services.amule ?? { url: '', ec_port: '', ec_password: '' }}
+          update={update}
+          isRestarting={isRestarting}
+          onOpenIndexadores={() => setTab('indexadores')}
+          onSave={doSave}
+          saving={saveMutation.isPending}
+        />
+        <AmuleServerActions />
       </div>
     </div>
   )

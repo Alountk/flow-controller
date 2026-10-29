@@ -73,6 +73,11 @@ __all__ = [
     "EC_OP_SEARCH_RESULTS",
     "EC_OP_SEARCH_PROGRESS",
     "EC_OP_DOWNLOAD_SEARCH_RESULT",
+    "EC_OP_GET_SERVER_LIST",
+    "EC_OP_SERVER_LIST",
+    "EC_OP_SERVER_CONNECT",
+    "EC_OP_SERVER_REMOVE",
+    "EC_OP_SERVER_ADD",
     "EC_OP_GET_SHARED_FILES",
     "EC_OP_SHARED_FILES",
     "EC_OP_GET_PREFERENCES",
@@ -87,6 +92,16 @@ __all__ = [
     "EC_TAG_PASSWD_SALT",
     "EC_TAG_CLIENT_NAME",
     "EC_TAG_CLIENT_VERSION",
+    "EC_TAG_SERVER",
+    "EC_TAG_SERVER_NAME",
+    "EC_TAG_SERVER_ADDRESS",
+    "EC_TAG_SERVER_PING",
+    "EC_TAG_SERVER_USERS",
+    "EC_TAG_SERVER_USERS_MAX",
+    "EC_TAG_SERVER_FILES",
+    "EC_TAG_SERVER_PRIO",
+    "EC_TAG_SERVER_FAILED",
+    "EC_TAG_SERVER_STATIC",
     "EC_TAG_SERVER_VERSION",
     "EC_TAG_PARTFILE",
     "EC_TAG_PARTFILE_NAME",
@@ -149,9 +164,14 @@ __all__ = [
     "build_search_results",
     "build_search_start",
     "build_search_stop",
+    "build_server_add",
+    "build_server_connect",
+    "build_server_remove",
+    "build_get_server_list",
     "compute_passwd_hash",
     "decode_frame",
     "encode_frame",
+    "encode_ipv4_tag",
     "encode_string_tag",
     "encode_tag",
     "encode_uint_tag",
@@ -185,6 +205,11 @@ EC_OP_SEARCH_STOP = 0x27
 EC_OP_SEARCH_RESULTS = 0x28
 EC_OP_SEARCH_PROGRESS = 0x29
 EC_OP_DOWNLOAD_SEARCH_RESULT = 0x2A
+EC_OP_GET_SERVER_LIST = 0x2C
+EC_OP_SERVER_LIST = 0x2D  # respuesta a GET_SERVER_LIST
+EC_OP_SERVER_CONNECT = 0x2F
+EC_OP_SERVER_REMOVE = 0x30
+EC_OP_SERVER_ADD = 0x31
 EC_OP_GET_PREFERENCES = 0x3F
 EC_OP_SET_PREFERENCES = 0x40  # respuesta a GET_PREFERENCES (verificado en vivo)
 EC_OP_KNOWNFILE_DELETE = 0x6A
@@ -201,6 +226,16 @@ EC_TAG_PASSWD_SALT = 0x000B
 EC_TAG_ECID = 0x000F
 EC_TAG_CLIENT_NAME = 0x0100
 EC_TAG_CLIENT_VERSION = 0x0101
+EC_TAG_SERVER = 0x0500
+EC_TAG_SERVER_NAME = 0x0501
+EC_TAG_SERVER_ADDRESS = 0x0503
+EC_TAG_SERVER_PING = 0x0504
+EC_TAG_SERVER_USERS = 0x0505
+EC_TAG_SERVER_USERS_MAX = 0x0506
+EC_TAG_SERVER_FILES = 0x0507
+EC_TAG_SERVER_PRIO = 0x0508
+EC_TAG_SERVER_FAILED = 0x0509
+EC_TAG_SERVER_STATIC = 0x050A
 EC_TAG_SERVER_VERSION = 0x050B
 EC_TAG_PARTFILE = 0x0300
 EC_TAG_PARTFILE_NAME = 0x0301
@@ -403,6 +438,19 @@ def _hash16(file_hash) -> bytes:
 def encode_hash_tag(code: int, file_hash) -> bytes:
     """Tag HASH16 (tipo 9) con el MD4 en crudo."""
     return encode_tag(code, EC_TAGTYPE_HASH16, _hash16(file_hash))
+
+
+def encode_ipv4_tag(code: int, ipv4: str, port: int) -> bytes:
+    """Tag IPV4: 4B de IP numérica en orden de red + 2B de puerto (igual orden).
+
+    El core sólo admite binario (`GetServerByIPTCP`): un nombre aquí es un
+    error de la capa de servicio, y sube como `ValueError` en español.
+    """
+    try:
+        packed = socket.inet_aton(ipv4)
+    except OSError as exc:
+        raise ValueError(f"dirección inválida: «{ipv4}» no es una IP numérica") from exc
+    return encode_tag(code, EC_TAGTYPE_IPV4, packed + _uint(port, 2))
 
 
 def encode_frame(opcode: int, tags: Sequence[bytes] = ()) -> bytes:
@@ -641,6 +689,33 @@ def build_knownfile_delete(file_hash, ecid: int, directory: str, name: str) -> b
     )
 
 
+def build_server_add(address: str, name: str = "") -> bytes:
+    """`EC_OP_SERVER_ADD`: dirección «ip:puerto» SIEMPRE, nombre sólo si existe.
+
+    Sin nombre el tag no viaja y el core pone la dirección completa
+    (`Get_EC_Response_Server_Add`: name.IsEmpty() ? full_addr : name).
+    """
+    tags = [encode_string_tag(EC_TAG_SERVER_ADDRESS, address)]
+    if name:
+        tags.append(encode_string_tag(EC_TAG_SERVER_NAME, name))
+    return encode_frame(EC_OP_SERVER_ADD, tags)
+
+
+def build_server_remove(ipv4: str, port: int) -> bytes:
+    """`EC_OP_SERVER_REMOVE` con el selector único `EC_TAG_SERVER` tipo IPV4."""
+    return encode_frame(EC_OP_SERVER_REMOVE, [encode_ipv4_tag(EC_TAG_SERVER, ipv4, port)])
+
+
+def build_server_connect(ipv4: str, port: int) -> bytes:
+    """`EC_OP_SERVER_CONNECT` con el mismo selector IPV4 que remove."""
+    return encode_frame(EC_OP_SERVER_CONNECT, [encode_ipv4_tag(EC_TAG_SERVER, ipv4, port)])
+
+
+def build_get_server_list(detail: int = EC_DETAIL_FULL) -> bytes:
+    """Petición de la lista con `EC_TAG_DETAIL_LEVEL` — igual que `build_search_results`."""
+    return encode_frame(EC_OP_GET_SERVER_LIST, [encode_uint_tag(EC_TAG_DETAIL_LEVEL, detail)])
+
+
 # --- Cliente ---------------------------------------------------------------
 
 
@@ -829,6 +904,53 @@ class AmuleECClient:
         self._send(build_partfile_delete(file_hash))
         self._await_ack()
 
+    # -- servidores (T2/S3) --
+
+    def server_add(self, address: str, name: str = "") -> None:
+        """Añade un servidor (`EC_OP_SERVER_ADD`); la dirección viaja verbatim."""
+        self._send(build_server_add(address, name))
+        self._await_ack()
+
+    def server_remove(self, ipv4: str, port: int) -> None:
+        """Quita un servidor por IP:puerto (`EC_OP_SERVER_REMOVE`)."""
+        self._send(build_server_remove(ipv4, port))
+        self._await_ack()
+
+    def server_connect(self, ipv4: str, port: int) -> None:
+        """Pide al core conectar con un servidor (`EC_OP_SERVER_CONNECT`)."""
+        self._send(build_server_connect(ipv4, port))
+        self._await_ack()
+
+    def server_list(self) -> list:
+        """Servidores del core como filas `{name, address, failed, ...}`.
+
+        `EC_OP_SERVER_LIST`: cada `EC_TAG_SERVER` trae el IPV4 como dato propio
+        y sólo los subtags presentes — `CEC_Server_Tag` omite ceros y vacíos —,
+        así que los números opcionales viajan SÓLO cuando existen: aquí no se
+        inventa ningún cero. El nombre ausente cae a la dirección «ip:puerto».
+        """
+        self._send(build_get_server_list())
+        opcode, tags = self._recv_frame()
+        self._raise_if_rejected(opcode, tags)
+        if opcode != EC_OP_SERVER_LIST:
+            raise AmuleECProtocolError("respuesta inesperada a GET_SERVER_LIST")
+        rows = []
+        for tag in tags:
+            if tag.code != EC_TAG_SERVER:
+                continue
+            address = _ipv4_text(tag.data)
+            row = {
+                "name": _field_str(tag, EC_TAG_SERVER_NAME) or address,
+                "address": address,
+                "failed": bool(_field_int(tag, EC_TAG_SERVER_FAILED)),
+            }
+            for code, key in _SERVER_OPTIONAL_FIELDS:
+                sub = find_tag(tag.subtags, code)
+                if sub is not None:
+                    row[key] = sub.as_int()
+            rows.append(row)
+        return rows
+
     # -- categorías y borrado en disco (T5/L7) --
 
     def categories(self) -> dict:
@@ -966,3 +1088,21 @@ def _field_int(tag: ECTag, code: int) -> int:
 def _field_hash(tag: ECTag, code: int) -> str:
     sub = find_tag(tag.subtags, code)
     return sub.as_hash_hex() if sub is not None else ""
+
+
+def _ipv4_text(data: bytes) -> str:
+    """«a.b.c.d:puerto» del dato IPV4 del cable (4B IP + 2B puerto)."""
+    if len(data) != 6:
+        raise AmuleECProtocolError("tag IPV4 EC con longitud inesperada")
+    return f"{socket.inet_ntoa(data[:4])}:{int.from_bytes(data[4:], 'big')}"
+
+
+#: Subtags opcionales de `EC_TAG_SERVER` (CEC_Server_Tag): sólo cuando existen.
+_SERVER_OPTIONAL_FIELDS = (
+    (EC_TAG_SERVER_PING, "ping"),
+    (EC_TAG_SERVER_USERS, "users"),
+    (EC_TAG_SERVER_USERS_MAX, "users_max"),
+    (EC_TAG_SERVER_FILES, "files"),
+    (EC_TAG_SERVER_PRIO, "prio"),
+    (EC_TAG_SERVER_STATIC, "static"),
+)

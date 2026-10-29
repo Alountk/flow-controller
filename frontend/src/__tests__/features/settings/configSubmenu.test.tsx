@@ -113,6 +113,9 @@ async function rail(): Promise<HTMLElement> {
  *  es `.amule-ec-card` (antes `.settings-section`, que era el wrapper genérico). */
 async function amuleCard(): Promise<HTMLElement> {
   const title = await screen.findByText(/aMule — conexión directa \(EC\)/)
+  // S1: la tarjeta vive en la pestaña «aMule» — conmutar primero es el ancla
+  // de ubicación; las aserciones de visibilidad prueban su propia pestaña.
+  fireEvent.click(screen.getByRole('tab', { name: 'aMule' }))
   return title.closest('.amule-ec-card') as HTMLElement
 }
 
@@ -240,7 +243,7 @@ describe('cabecera del panel «General» — Guardar cambios / Descartar (config
     // ADAPTADO (config-1x1 T6/S4, sin aflojar): la enmienda S4 añade un
     // segundo «Guardar cambios» en la tarjeta aMule, así que el total pasa de
     // 1 a 2 EXACTOS — y cada uno está en su sitio (cabecera y tarjeta).
-    expect(screen.getAllByRole('button', { name: 'Guardar cambios' })).toHaveLength(2)
+    expect(Array.from(document.querySelectorAll('button')).filter((b) => b.textContent === 'Guardar cambios')).toHaveLength(2)
     within(await amuleCard()).getByRole('button', { name: 'Guardar cambios' })
   })
 
@@ -396,6 +399,8 @@ describe('aMule (EC) card — «Probar conexión EC» (S2)', () => {
     })
     renderSettings()
 
+    // S1: la tarjeta vive en la pestaña «aMule» — ancla de ubicación.
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
 
     await waitFor(() =>
@@ -415,6 +420,8 @@ describe('aMule (EC) card — «Probar conexión EC» (S2)', () => {
     })
     renderSettings()
 
+    // S1: la tarjeta vive en la pestaña «aMule» — ancla de ubicación.
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
 
     await waitFor(() =>
@@ -434,6 +441,8 @@ describe('aMule (EC) card — «Probar conexión EC» (S2)', () => {
     })
     renderSettings()
 
+    // S1: la tarjeta vive en la pestaña «aMule» — ancla de ubicación.
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
 
     await waitFor(() =>
@@ -452,6 +461,8 @@ describe('aMule (EC) card — «Probar conexión EC» (S2)', () => {
     })
     renderSettings()
 
+    // S1: la tarjeta vive en la pestaña «aMule» — ancla de ubicación.
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
     const button = await screen.findByRole('button', { name: 'Probar conexión EC' })
     fireEvent.click(button)
     fireEvent.click(button)
@@ -496,6 +507,9 @@ describe('aMule (EC) card — «Probar conexión EC» (S2)', () => {
     fireEvent.change(within(card).getByLabelText('Contraseña EC'), {
       target: { value: '' },
     })
+    // S1: la cabecera vive en el panel «General» — ancla de ubicación.
+    fireEvent.click(screen.getByRole('tab', { name: 'General' }))
+
     // ADAPTADO (S3; T6/S4 acota a la cabecera): el guardado es ahora
     // «Guardar cambios» (cabecera); la tarjeta aMule añade un segundo botón
     // homónimo (S4), así que la búsqueda se acota a la cabecera — mismo botón.
@@ -590,6 +604,8 @@ describe('«Probar conexión EC» — sonda de lo ESCRITO (config-1x1 S1/T2)', (
     renderSettings()
 
     // Sin tocar el form: la contraseña del campo es la máscara que devolvió GET.
+    // S1: la tarjeta vive en la pestaña «aMule» — ancla de ubicación.
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
 
     await waitFor(() =>
@@ -638,7 +654,7 @@ describe('callout «La conexión a aMule no es un indexador…» (config-1x1 T4/
     clearToasts()
   })
 
-  it('the callout link opens General — the aMule (EC directo) card lives there', async () => {
+  it('the callout link opens the aMule tab — the aMule (EC directo) card lives there', async () => {
     mockFetch(baseRoutes)
     renderSettings()
 
@@ -646,12 +662,12 @@ describe('callout «La conexión a aMule no es un indexador…» (config-1x1 T4/
     const callout = document.querySelector('.indexadores-callout') as HTMLElement
     expect(callout).toBeVisible()
 
-    // El callout literal del diseño enlaza a «General → aMule (EC directo)» y
-    // el enlace es ACCIONABLE (la libertad de T3 de dejar enlaces muertos no
-    // se repite): conmuta al panel General donde vive la tarjeta aMule — por
-    // la prop real `onOpenGeneral` (Settings → setTab('general')), no por el
+    // El callout literal del diseño enlaza a «la pestaña aMule (EC directo)»
+    // y el enlace es ACCIONABLE (la libertad de T3 de dejar enlaces muertos no
+    // se repite): conmuta a la pestaña aMule donde vive la tarjeta — por
+    // la prop real `onOpenGeneral` (Settings → setTab('amule')), no por el
     // truco del anclaje DOM. Comportamiento idéntico al pinneado.
-    fireEvent.click(within(callout).getByRole('link', { name: 'General → aMule (EC directo)' }))
+    fireEvent.click(within(callout).getByRole('link', { name: 'la pestaña aMule (EC directo)' }))
     expect(await screen.findByText(/aMule — conexión directa \(EC\)/)).toBeVisible()
     expect(callout).not.toBeVisible()
   })
@@ -695,6 +711,9 @@ describe('tarjeta aMule — «Guardar cambios» local (config-1x1 T6/S4)', () =>
       (bodies[0] as { services: { amule: { url: string } } }).services.amule.url,
     ).toBe('http://10.0.0.9')
 
+    // S1: la cabecera vive en el panel «General» — ancla de ubicación.
+    fireEvent.click(screen.getByRole('tab', { name: 'General' }))
+
     // MISMO guardado que la cabecera: mismo endpoint y payload idéntico.
     fireEvent.click(within(await panelHeader()).getByRole('button', { name: 'Guardar cambios' }))
     await waitFor(() => expect(bodies).toHaveLength(2))
@@ -726,9 +745,13 @@ describe('tarjeta aMule — «Guardar cambios» local (config-1x1 T6/S4)', () =>
     // pendiente llega en microtarea (notifyManager de TanStack Query), se
     // espera a que se pinte — misma aserción, await correcto.
     await within(card).findByRole('button', { name: 'Guardando...' })
+    // S1: la cabecera vive en el panel «General» — ancla de ubicación.
+    fireEvent.click(screen.getByRole('tab', { name: 'General' }))
     await within(await panelHeader()).findByRole('button', { name: 'Guardando...' })
 
     resolveSave({ ok: true, restart_required: [] })
+    // S1: de vuelta a la pestaña «aMule» — ancla para la query final.
+    fireEvent.click(screen.getByRole('tab', { name: 'aMule' }))
     await waitFor(() =>
       expect(within(card).getByRole('button', { name: 'Guardar cambios' })).toBeVisible(),
     )
@@ -749,6 +772,8 @@ describe('tarjeta aMule — «Guardar cambios» local (config-1x1 T6/S4)', () =>
     const amuleProbes = () =>
       fn.mock.calls.filter(([input]) => String(input).includes('/api/amule/test'))
 
+    // S1: la tarjeta vive en la pestaña «aMule» — ancla de ubicación.
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Probar conexión EC' }))
     await waitFor(() =>
       expect(getToasts()).toContainEqual(

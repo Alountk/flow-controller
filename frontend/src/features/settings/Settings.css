@@ -1378,3 +1378,70 @@ tr.disabled .indexadores-row-name {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ── Bloque «Control de aMule» (amule-control S5): filas de servidor y
+   veredictos; los formularios reusan Field/.settings-group. ─────────── */
+.amule-actions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.amule-actions-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.amule-actions-row-main {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.amule-actions-row-name {
+  font-size: 13px;
+}
+
+.amule-actions-row-address {
+  font-size: 12px;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+
+.amule-actions-estado {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.amule-actions-estado-failed {
+  color: var(--bad);
+}
+
+.amule-actions-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.amule-actions-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.amule-actions-notice {
+  display: block;
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.amule-actions-notice-error {
+  color: var(--bad);
+}
