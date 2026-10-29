@@ -89,7 +89,11 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 3409 -> 3411 (calendario-directo T2 / S2-S4): +2 for `CalendarGrabRequest.link` and
 #: `CalendarGrabBatchRequest.links` in `models.py` (the grab target is `link or guid`);
 #: disclosed in the PR.
-MAX_LEGACY_LOC = 3454
+#: 3454 -> 3455 (amule-watchdog T3 / S6): the `amule_watchdog.watchdog_loop()`
+#: entry in the lifespan tuple of `app.py` (+1; the import and the adapter
+#: hand-off pair fit on existing lines). Composition-root wiring, the
+#: stitch-actividad +1 precedent — disclosed as wiring debt in the PR.
+MAX_LEGACY_LOC = 3455
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

@@ -137,3 +137,29 @@ export async function testAmuleEc(candidate?: AmuleEcCandidate): Promise<AmuleEc
   }
   return (await res.json()) as AmuleEcTestResult
 }
+
+/** `GET /api/amule/health` — watchdog snapshot (amule-watchdog S6).
+ *  `state`/`detail` arrive in Spanish, `*_at` are unix seconds or null. */
+export interface AmuleHealth {
+  state:
+    | 'sano'
+    | 'sin-datos'
+    | 'sin-configurar'
+    | 'colgado'
+    | 'reiniciando'
+    | 'recuperado'
+    | 'alerta'
+  detail: string
+  checked_at: number | null
+  consecutive_failures: number
+  restart_attempts: number
+  last_restart_at: number | null
+}
+
+export async function getAmuleHealth(): Promise<AmuleHealth> {
+  const res = await apiFetch('/api/amule/health')
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  return (await res.json()) as AmuleHealth
+}

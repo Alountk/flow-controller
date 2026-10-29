@@ -454,6 +454,43 @@
   color: color-mix(in srgb, var(--accent) 85%, var(--on-fill));
 }
 
+/* Watchdog (amule-watchdog S6): state visible beside the EC probe. */
+.amule-ec-watchdog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.amule-ec-watchdog-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.amule-ec-watchdog-badge {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-1);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Fault/starting states must read as a problem at a glance. */
+.amule-ec-watchdog-badge-problem {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.amule-ec-watchdog-detail {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
 
 /* ── Connection tests ────────────────────────────────────────────── */
 .settings-hint {
