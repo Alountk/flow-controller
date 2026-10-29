@@ -163,3 +163,76 @@ export async function getAmuleHealth(): Promise<AmuleHealth> {
   }
   return (await res.json()) as AmuleHealth
 }
+
+/* ── aMule control actions (amule-control S3/S4/S5) ───────────────────── */
+
+/** `GET /api/amule/servers` — one row per server; fields are PRESENT-OR-ABSENT,
+ *  never assumed (`failed` truthy = the server reports a failure; absent = the
+ *  payload says nothing about it). `address` is «ip:puerto». */
+export interface AmuleServerRow {
+  name: string
+  address: string
+  failed?: boolean
+  ping?: number
+  users?: number
+  files?: number
+  prio?: number
+  static?: boolean
+}
+
+export interface AmuleServersResponse {
+  ok: boolean
+  servers: AmuleServerRow[]
+  detail: string
+}
+
+/** Every action answers `{ok, detail}`; a 422 (missing/empty field) answers
+ *  `{detail}` only. */
+export interface AmuleActionResult {
+  ok: boolean
+  detail: string
+}
+
+export async function getAmuleServers(): Promise<AmuleServersResponse> {
+  const res = await apiFetch('/api/amule/servers')
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  return (await res.json()) as AmuleServersResponse
+}
+
+/** The verdict lives in the body (indexers.ts mold): a 422 carries `{detail}`
+ *  that must reach the user, so only a fetch that itself throws escapes. */
+async function amuleAction(path: string, body: Record<string, unknown>): Promise<AmuleActionResult> {
+  const res = await apiFetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = (await res.json().catch(() => null)) as Partial<AmuleActionResult> | null
+  return {
+    ok: res.ok && data?.ok === true,
+    detail:
+      typeof data?.detail === 'string' && data.detail !== '' ? data.detail : `HTTP ${res.status}`,
+  }
+}
+
+/** `name` is optional in the contract: an empty one is omitted, not sent blank. */
+export function addAmuleServer(address: string, name?: string): Promise<AmuleActionResult> {
+  const body: Record<string, unknown> = { address }
+  const trimmed = name?.trim()
+  if (trimmed) body.name = trimmed
+  return amuleAction('/api/amule/servers/add', body)
+}
+
+export function removeAmuleServer(address: string): Promise<AmuleActionResult> {
+  return amuleAction('/api/amule/servers/remove', { address })
+}
+
+export function connectAmuleServer(address: string): Promise<AmuleActionResult> {
+  return amuleAction('/api/amule/servers/connect', { address })
+}
+
+export function addAmuleLink(link: string): Promise<AmuleActionResult> {
+  return amuleAction('/api/amule/links', { link })
+}

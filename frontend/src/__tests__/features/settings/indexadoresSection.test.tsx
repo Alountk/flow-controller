@@ -19,7 +19,7 @@ import { IndexadoresSection } from '../../../features/settings/IndexadoresSectio
  *    submit del formulario es «Guardar» (literal del diseño, sin duplicar el
  *    nombre de la cabecera), localizado dentro de la tarjeta «Nuevo
  *    indexador»: misma acción, mismo payload;
- *  - el enlace del callout conmuta a General por la prop real `onOpenGeneral`
+ *  - el enlace del callout conmuta a la pestaña aMule por la prop real `onOpenGeneral`
  *    (Settings → setTab('general')), no por el truco del anclaje DOM.
  *
  * What this panel has to get right, in order of how badly it fails otherwise:
@@ -46,12 +46,12 @@ import { IndexadoresSection } from '../../../features/settings/IndexadoresSectio
  *    acota con `within(sourcesCard())`;
  *  - «Configurado»/«No configurado» pueden colisionar con cualquier otro
  *    texto de Settings → `within(sourceRow(...))`, jamás página completa;
- *  - «aMule (EC)» es substring del callout «General → aMule (EC directo)» →
+ *  - «aMule (EC)» es substring del callout «la pestaña aMule (EC directo)» →
  *    texto EXACTO + scope a la tarjeta;
  *  - «Prowlarr» es substring de «Importar de Prowlarr/Jackett…» (cabecera) y
  *    del título de grupo «Resultados de Prowlarr» → texto EXACTO + scope;
  *  - el nombre accesible de la fila aMule contiene el del enlace del callout
- *    («General → aMule (EC directo)») → se resuelve por ROL (button vs link)
+ *    («la pestaña aMule (EC directo)») → se resuelve por ROL (button vs link)
  *    y nombre completo exacto.
  */
 
@@ -413,9 +413,9 @@ describe('panel «Indexadores» — estructura del diseño (config-1x1 T4/S2)', 
 
     const callout = document.querySelector('.indexadores-callout') as HTMLElement
     expect(callout).toHaveTextContent(
-      'La conexión a aMule no es un indexador: su host, puerto y contraseña EC se configuran en General → aMule (EC directo). Los resultados de la fuente «amule» salen de esa conexión.',
+      'La conexión a aMule no es un indexador: su host, puerto y contraseña EC se configuran en la pestaña aMule (EC directo). Los resultados de la fuente «amule» salen de esa conexión.',
     )
-    const link = within(callout).getByRole('link', { name: 'General → aMule (EC directo)' })
+    const link = within(callout).getByRole('link', { name: 'la pestaña aMule (EC directo)' })
     expect(link).toHaveAttribute('href', '#')
     // El enlace YA NO depende del truco del anclaje DOM (`#settings-tab-general`):
     // en este render ese tab ni siquiera existe, y aún así el enlace conmuta —
@@ -547,9 +547,9 @@ describe('«Fuentes integradas» — fuentes de primer nivel, no registro (confi
 
     const card = sourcesCard()
     // SCOPED por ROL + nombre completo (colisión con el enlace del callout,
-    // «General → aMule (EC directo)», que es substring de este nombre).
+    // «la pestaña aMule (EC directo)», que es substring de este nombre).
     const row = await within(card).findByRole('button', {
-      name: 'aMule (EC) — Configurar en General → aMule (EC directo)',
+      name: 'aMule (EC) — Configurar en la pestaña aMule (EC directo)',
     })
     expect(row).toHaveAttribute('type', 'button')
     // Accesible por teclado: elemento enfocable nativo (Enter/Space activan

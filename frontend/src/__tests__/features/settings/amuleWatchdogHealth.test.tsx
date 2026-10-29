@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, within, act } from '@testing-library/react'
+import { render, screen, waitFor, within, act, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Settings } from '../../../features/settings/Settings.tsx'
 import { clearToasts } from '../../../shared/utils/toast.ts'
@@ -81,6 +81,9 @@ function renderSettings() {
 
 async function amuleCard(): Promise<HTMLElement> {
   const title = await screen.findByText(/aMule — conexión directa \(EC\)/)
+  // S1: la tarjeta vive en la pestaña «aMule» — conmutar primero es el ancla
+  // de ubicación; las aserciones de visibilidad prueban su propia pestaña.
+  fireEvent.click(screen.getByRole('tab', { name: 'aMule' }))
   return title.closest('.amule-ec-card') as HTMLElement
 }
 
