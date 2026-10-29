@@ -136,3 +136,13 @@ router inexistente) — evidencia dada al worker de T2. Frontera ampliada con ca
 CJK en mensajes de servicio, gates propios focused 39/arch/vulture/pyflakes rc=0 y full
 1743 passed + 1 dist-fresh pendiente del rebuild tras T4) ⇒ acumulado **1008 L / 4
 commits**; estrategia invariante: PR único con disclosure del total final en T6.
+Ampliación T4/T5 (2026-10-29): unidad frontend verificada por el padre — 7
+ficheros modificados (+239/-42: Settings.tsx con la tercera pestaña «aMule» +
+traslado del montaje + retarget del callout, services.ts +73 de contrato,
+Settings.css +67, IndexadoresSection copy «la pestaña aMule», y 3 ficheros de
+test solo-anclas/copy autorizado) + 673 L en 2 nuevos (`AmuleServerActions.tsx`
+194 L y su test 479 L). Gates padre: vitest **831/831** rc=0, tsc 0, eslint 0,
+`npm run build` 0 (cierra dist_fresh) y backend full **1744 passed / 0 failed**
+rc=0. Decisiones de frontera: conteo DOM panel-agnóstico en `configSubmenu:246`
+(intención «exactamente 2, uno por sitio» intacta) y reanclaje de 22/23
+aserciones con 0 bytes de comportamiento tocados.
