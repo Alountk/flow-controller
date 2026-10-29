@@ -282,6 +282,18 @@ Specs: **1633 backend / 760 frontend**, working tree limpia.
   risk item 2 credenciales). Commits `0b2a976`+`1bcdbd6`+`0373d19`+`7e7c9ca`+`63bd3f5`,
   merge **`a742b16`** (CI verde `40212883069`) · PR **#237** cierre Log L7 → `7e41440`.
   Feature doc: `odd/tasks/qbit-nativo.md` (S1–S8, T1–T5, Log L1–L7).
+- **amule-watchdog** (rama `feat/amule-watchdog`; entrega en el PR de esta rama):
+  detección de aMule colgado con **canario de búsqueda real** por EC (2 fallos =
+  confirmado; el handshake seguiría pasando con las búsquedas muertas — L2) +
+  **auto-restart del contenedor por la Docker Engine API** (socket montado `:ro` +
+  `group_add DOCKER_GID`; fail-closed: sin canal o contenedor ambiguo = solo
+  detección, nunca reinicia). Estados sano/colgado/reiniciando/recuperado/alerta
+  visibles en la tarjeta aMule (poll 30 s) y en `GET /api/amule/health`; knobs
+  `services.amule.watchdog_*` con env de respaldo. Disclosures: ratchet legacy
+  3454→3455 (+1 línea de wiring en el lifespan de `app.py`), PR único con disclosure
+  (2021 L autoriginales en 4 commits, frontera en L5) y socket Docker = items 2 y 5
+  de riesgo → assess con `escalate item 2`. Feature doc:
+  `odd/tasks/amule-watchdog.md` (S1–S8, T1–T6, Log L1–L5).
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
