@@ -126,3 +126,9 @@ ratchet); contrato de capas y ratchet
 patrón de acciones fuera de «Guardar cambios»: `Settings.tsx:571-574/593-597`
 (`SharedDirsSection`/`IndexadoresSection`); test files de ancla listados en el handoff
 (route tests de amule y tests de infra).
+L5 — Frontera de slice (2026-10-29): `05851f5` (doc, 128 L) + `22d940d` (RED, 277 L)
+= 405 L autoriginales en 2 commits > presupuesto ~400 ⇒ ESTRATEGIA DE ENTREGA:
+**PR único con disclosure en el cuerpo** (mismo criterio que file-navigator F1/F2/F3/F4,
+idiomas-metadata 1051 L y amule-watchdog 2033 L), frontera anotada aquí. Redis de
+observación: builders rc=2 (ImportError de los nombres nuevos) y rutas 15 failed (404
+router inexistente) — evidencia dada al worker de T2.
