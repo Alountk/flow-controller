@@ -25,6 +25,12 @@ router = APIRouter()
 #: `indexers_routes.torznab`.
 amule_ec_client = None
 
+#: The watchdog module behind `GET /api/amule/health`. Routes may not import
+#: `infrastructure/` (`tests_architecture`), so `app.py` — the one file allowed
+#: to hold an adapter — puts it in this module's hand, exactly like
+#: `amule_ec_client` above.
+amule_watchdog = None
+
 #: Only what genuinely cannot be picked up at runtime. Services are refilled
 #: in place by `config.rebuild()`, and `security.api_key` is read live by
 #: `settings.auth_required()` — its own docstring says a restart would be
@@ -376,6 +382,25 @@ async def test_amule_ec(body: dict | None = None, _key: str = Depends(verify_api
     guardado y jamás se refleja ni se loguea.
     """
     return await asyncio.to_thread(_probe_amule_ec, body)
+
+
+@router.get("/api/amule/health")
+async def amule_health(_key: str = Depends(verify_api_key)):
+    """El estado del watchdog de aMule (S6) tal cual, con detalle y hora.
+
+    `app.py` inyecta el módulo (misma regla que `amule_ec_client`); sin esa
+    inyección responde el payload honesto de «sin-datos», nunca un 500.
+    """
+    if amule_watchdog is None:
+        return {
+            "state": "sin-datos",
+            "detail": "watchdog no conectado: app.py no inyectó el módulo",
+            "checked_at": None,
+            "consecutive_failures": 0,
+            "restart_attempts": 0,
+            "last_restart_at": None,
+        }
+    return amule_watchdog.get_state()
 
 
 @router.get("/api/services")

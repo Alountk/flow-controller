@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 
 from application import gateways
 from application.use_cases import downloads_cache, trace_cache
-from infrastructure import amule_ec_client, amule_service, arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
+from infrastructure import amule_ec_client, amule_service, amule_watchdog, arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
 from infrastructure import credentials as credentials_module, prowlarr_client, sqlite_history as history, torznab_client
 from config import FRONTEND_DIST
 from state import _LOG_BUFFER, buf_handler, _load_log_file, close_shared_session, open_shared_session
@@ -60,7 +60,7 @@ from interfaces.http.routes.amule_shares import router as amule_shares_router
 from interfaces.http.routes.events import router as events_router
 from interfaces.http.middleware import RequestGuards
 from interfaces.http.routes_mixer import router as mixer_router
-indexers_routes.torznab, settings_routes.amule_ec_client = torznab_client, amule_ec_client.AmuleECClient  # adapter hand-off: delivery may hold one only because this file puts it in its hand (Torznab for the indexers; the EC client behind POST /api/amule/test). Both share the line because tests_architecture.py pins legacy — this file — at its line cap.
+indexers_routes.torznab, settings_routes.amule_ec_client, settings_routes.amule_watchdog = torznab_client, amule_ec_client.AmuleECClient, amule_watchdog  # adapter hand-off: delivery may hold one only because this file puts it in its hand (Torznab for the indexers; the EC client behind POST /api/amule/test; the watchdog module behind GET /api/amule/health). All share the line because tests_architecture.py pins legacy — this file — at its line cap.
 
 logging.basicConfig(
     level=logging.INFO,
@@ -97,6 +97,7 @@ async def lifespan(_app: FastAPI):
             status_routes.background_checker(),
             downloads_cache.downloads_poller(),
             trace_cache.trace_refresher(),
+            amule_watchdog.watchdog_loop(),
         )
     ]
     try:
