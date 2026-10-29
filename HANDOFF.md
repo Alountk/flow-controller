@@ -5,22 +5,24 @@
 
 ## Estado actual
 
-**Desplegado en producción**: la instancia del usuario corre hasta `56bd09d` (6 PRs del
-2026-10-11/12: #193 timeout · #194 async grab · #195 SSE · #196 B1 · #197 B2) con NPM
-proxyando `/api/events` (bloque location copiado en `routes/events.py` docstring). Usuario
-validó en vivo: eventos llegan y disparan la UI.
+**Desplegado en producción**: la instancia corre hasta el merge **`6b0af6f`** (PR #255
+amule-watchdog); el usuario hizo pull+redeploy manual el 2026-10-29, cubriendo los
+merges pendientes #252 (F4), #253, #254 y #255. Verificado en prod: asset
+`index-Beb5VUb0.js` (F1–F4 completos, marcadores presentes), `GET /api/amule/health`
+→ 401 (ruta presente y protegida), raíz 200. Sigue NPM proxyando `/api/events`.
 
 **Deploy = manual**: cada merge a main publica `ghcr.io/alountk/flow-controller:latest`
 (+ tag `sha-XXXX`) en el job `docker-push`, pero **no hay webhook**: el auto-redeploy de
 stacks por webhook es funcionalidad **Pro** de Portainer y esta instalación es CE (el POST
 siempre devolvió 204 sin efecto). Tras cada merge: **pull + redeploy manual** en Portainer
-(`docker compose -f docker-compose.deploy.yml pull && up -d` equivale).
+(`docker compose -f docker-compose.deploy.yml pull && up -d` equivale). El endpoint
+residual de webhook fue **borrado de la UI de Portainer** el 2026-10-29 por el usuario
+(limpieza final de #253; repo+secret ya estaban eliminados).
 
-**Verde**: `main` en `7e41440` (post-#236/#237), run `40213273281` (post-merge del #236;
-el #237 docs-only sin checks, GitGuardian pass) · PR #236 CI verde previo `40212883069`
-**pass** (backend-tests, frontend-build, docker-verify, e2e; docker-push → deploy por
-webhook de Portainer, política verificada de la saga).
-Specs: **1633 backend / 760 frontend**, working tree limpia.
+**Verde**: `main` en `97d75e7` (docs L6 de amule-watchdog) sobre el merge **`6b0af6f`**
+(PR #255); run post-merge de main **pass** (backend-tests, frontend-build, docker-verify,
+e2e, docker-push → imagen `sha-6b0af6f` desplegada por el usuario).
+Specs: **1704 backend / 815 frontend**, ratchet legacy **3455**, working tree limpia.
 
 **Tanda 2026-10-17/22 (PRs #206–#218)**:
 - #206 — refresco de HANDOFF (tanda #198–#205, backstop de contexto, gotchas).
@@ -294,6 +296,17 @@ Specs: **1633 backend / 760 frontend**, working tree limpia.
   (2021 L autoriginales en 4 commits, frontera en L5) y socket Docker = items 2 y 5
   de riesgo → assess con `escalate item 2`. Feature doc:
   `odd/tasks/amule-watchdog.md` (S1–S8, T1–T6, Log L1–L5).
+
+**Tanda 2026-10-26/29 (PRs #242–#254, todos mergeados y verificados)**:
+- #242 — `calendario-directo`: búsqueda directa en el calendario (doc `odd/tasks/calendario-directo.md`).
+- #243 — `site-checkboxes`: checkboxes de sitios en la búsqueda (F2 de la saga).
+- #244 — `carpeta-destino`: carpeta de destino con preview de rutas.
+- #247/#248 — arreglos de «Cotejar archivos» (doble pasada / columnas).
+- #249 — `idiomas-metadata`: idiomas en fichas de película (1051 L, desplegado y verificado en prod).
+- #250 — fix de listings desincronizados (invalidación de queries).
+- #251/#252 — `file-navigator` **F3/F4** (FileManager → FileNavigator; `PanelFiles` compartido).
+- #253 — eliminación del webhook (repo + secret); endpoint UI borrado el 2026-10-29.
+- #254 — fix: el toggle de sitios ya no dispara auto-búsqueda.
 
 **Tanda 2026-10-16 (8 merges, PRs #198–#205)**:
 - #198/#199/#200 — puertos design-01 dashboard y design-03 Películas (chips, cards,
