@@ -93,7 +93,10 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: entry in the lifespan tuple of `app.py` (+1; the import and the adapter
 #: hand-off pair fit on existing lines). Composition-root wiring, the
 #: stitch-actividad +1 precedent — disclosed as wiring debt in the PR.
-MAX_LEGACY_LOC = 3455
+#: 3455 -> 3456 (amule-control T2 / S6): the `amule_actions_router` import line
+#: in `app.py` (+1; the tuple entry fit on the existing line). Router wiring,
+#: the stitch-actividad +1 precedent — disclosed as wiring debt in the PR.
+MAX_LEGACY_LOC = 3456
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:
