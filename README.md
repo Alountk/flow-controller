@@ -10,7 +10,7 @@ desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 
 - **Backend**: Python 3.11 / FastAPI / aiohttp (async)
 - **Frontend**: React 19 / TypeScript / Vite 7 / @tanstack/react-query
-- **Conexión directa aMule**: protocolo EC (autenticación challenge-response con el hash de `AMULE_EC_PASSWORD`)
+- **Conexión directa aMule**: protocolo EC (autenticación challenge-response con el hash de `AMULE_EC_PASSWORD`) — pestaña **aMule** en Ajustes con su config, su watchdog y el control de servidores y enlaces
 - **Cliente qBittorrent nativo**: propio y sin dependencias nuevas (sólo aiohttp) — login+SID contra `POST /api/v2/auth/login`, éxito honesto (`200` y cuerpo `Ok.`), servicio `qbit` en Configuración → Servicios
 - **Control aMuTorrent**: WebSocket nativo (`ws://host:4000/ws`) — ruta de rollback (`AMULE_EC_DIRECT=0`)
 
@@ -69,7 +69,7 @@ usuario del contenedor, añade su grupo con `DOCKER_GID` en Portainer
 modo solo-detección (fail-closed: nunca reinicia un contenedor ambiguo). Cadencia,
 enfriamiento y máximo de reinicios se configuran en `settings.json →
 services.amule.watchdog_*`; el estado (sano/colgado/reiniciando/recuperado/alerta)
-se ve en Ajustes → tarjeta aMule y en `GET /api/amule/health`.
+se ve en Ajustes → pestaña aMule y en `GET /api/amule/health`.
 
 ## Workflow de verificación (ANTES de cada push)
 
@@ -166,6 +166,11 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/indexers/download` | POST | Descarga una fila: ed2k/hash → EC directo (o aMuTorrent bajo rollback), magnet/http → **qBittorrent nativo** (servicio `qbit`) con el destino en el `detail` |
 | `/api/amule/test` | POST | Prueba la conexión EC a aMule (lo escrito en Configuración o lo guardado; sólo handshake, nunca encola) |
 | `/api/amule/shared-dirs` | GET/PUT | Carpetas que aMule comparte (lee/escribe `shareddir*.dat` y recarga) |
+| `/api/amule/servers` | GET | Servidores de aMule con estado (`{ok, servers, detail}`; campos opcionales solo cuando el core los informa) |
+| `/api/amule/servers/add` | POST | Añade servidor «ip:puerto» (nombre opcional) — dirección verbatim al core |
+| `/api/amule/servers/remove` | POST | Quita un servidor «host:puerto» (nombre resuelviendo a IPv4 si hace falta) |
+| `/api/amule/servers/connect` | POST | Pide al core conectar con «host:puerto» |
+| `/api/amule/links` | POST | Encola un enlace `ed2k://` o `magnet:` (otro esquema → `{ok:false}` sin tocar el servicio) |
 | `/api/mixer/probe` | POST | Analiza dos archivos de video (pistas, compatibilidad) |
 | `/api/mixer/mux` | POST | Mezcla pistas de audio seleccionadas |
 | `/api/mixer/tasks` | GET | Lista todas las tareas de mixer |
