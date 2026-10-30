@@ -83,3 +83,35 @@ build` rc=0 (reconstruye `dist` y desactiva el fallo preexistente de
 frescura `tests_dist_fresh`), backend **1752 passed** (1744 + 8), contratos
 16/16. Nota (fuera de alcance, para issue futura): `alternatives/lookup` no
 valida raíces permitidas — hueco latente heredado.
+L5 — T2 ENTREGADO (worker `mvvk3oav-6-kcjw`, seam review + vitest del padre
+6/6 rc=0): `shared/api/probe.ts` con los tipos `Probe*Track/ProbeFile`
+CRUZADOS campo a campo contra `parse_probe_data` (`media_mixer.py:160-205`,
+11/11 exactos, incl. `extractable`), unión `ProbeFileResult`
+(`{ok:true,probe}|{ok:false,detail}`) y `probeFile()` never-reject al molde
+de `grabs.ts` (detalle `HTTP <status>` de fallback, «Error de conexión» en
+transporte). RED (import fallido) → GREEN 6/6 (`probe.test.ts`). El worker
+no encontró este doc ni el endpoint T1 en su árbol (corrió en la rama del
+fix) — implementó con la spec inline del padre; resuelto en commits por
+ruta. NOTA T4: importar los tipos de `probe.ts`, NO los de `mixer.ts`.
+L6 — T3 ENTREGADO INLINE (el gate rechazó el launch: «write this unit inline
+yourself now» — no se reintentó): RED 2 ficheros RC=1 → GREEN 26/26 rc=0 →
+gates TSC/ESLINT/VITEST/BUILD=0. Diseño: `PanelFiles` gana la prop opcional
+`folders` (Series byte-idéntico, verificado por sectionsTabs); clasificador
+puro `shared/utils/fileSections.ts` — reglas: dir/no-vídeo→Otros (prueba
+nada, molde `holdsCopy`), `looksThreeD`→3D, pertenencia path_3d→3D,
+path_4k→4K, 2160p/4K→4K, 1080p→1080, otra resolución declarada (720p/480p/
+576p/360p/dvd)→Otros, carpeta base sin token→1080 (default de biblioteca,
+respaldado por el preview S3 del usuario), resto→Otros; precedencia S1
+3D>4K>1080>Otros. Secciones «1080», «4K», «3D», «Otros» (h4+section,
+etiqueta de `hasFileTags`), vacío honesto «Sin archivos en esta sección»;
+copias de enrutado con matching de prefijo `copyPrefixOf≠''` + descenso de
+UN nivel (layout `path_4k/<folder>/<file>`), fallo de lectura = alerta por
+fuente y sin nota de vacío (failed≠empty); carpetas vía `['routing-folders']`
+(misma key que Calidad; settings solo con la pestaña abierta). `sectionsTabs`
+reescrito para la nueva presentación de Películas (la pestaña pedida en S1);
+Series intacta. Archivos: `fileSections.ts`+test (9), `PanelFiles.tsx`,
+`Peliculas.tsx`, `Sections.css`, `panelFilesSections.test.tsx` (7),
+`sectionsTabs.test.tsx`. Rebanadas: T2 = `9aa0e96` (188 L/1C, dentro de
+cuarto); T3 = `74ed136` (506 L/1C, **>400 → disclosure obligatorio en el PR**,
+frontera registrada aquí según la estrategia de entrega); doc en commit
+aparte.
