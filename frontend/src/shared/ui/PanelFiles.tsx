@@ -1,6 +1,9 @@
+import { useQuery } from '@tanstack/react-query'
 import { formatSize, useBrowse } from '../hooks/useFilesNavigator.ts'
+import { apiFetch } from '../api/auth.ts'
 import { errorMessage } from '../utils/text.ts'
-import type { BrowseResponse } from '../types.ts'
+import { classifyFile, type FileSectionId, type RoutingFolders } from '../utils/fileSections.ts'
+import type { BrowseResponse, FileItem } from '../types.ts'
 
 /** What the Archivos tab reads of each page's RowFacts — pages pass theirs. */
 export type PanelFilesFacts =
@@ -12,12 +15,24 @@ export type PanelFilesFacts =
 export const ROW_MISSING = 'No se pudo leer la fila seleccionada.'
 
 /** The Archivos tab: the selected row's folder, read-only by construction —
- *  rename/delete/copy live in the Archivos PAGE (retired later, not here). */
-export function PanelFiles({ facts }: { facts: PanelFilesFacts }) {
+ *  rename/delete/copy live in the Archivos PAGE (retired later, not here).
+ *  Pages that pass `routing` get T3's four sections (1080/4K/3D/Otros); the
+ *  flat listing is the default so Series' tab stays byte-identical. */
+export function PanelFiles({
+  facts,
+  folders,
+}: {
+  facts: PanelFilesFacts
+  folders?: RoutingFolders
+}) {
   if (facts.state === 'empty') return null
   if (facts.state === 'missing') return <p className="sec-tab-note">{ROW_MISSING}</p>
   if (!facts.path) return <p className="sec-tab-note">Esta entrada no tiene ruta</p>
-  return <FilesList path={facts.path} />
+  return folders ? (
+    <FilesSections basePath={facts.path} folders={folders} />
+  ) : (
+    <FilesList path={facts.path} />
+  )
 }
 
 function FilesList({ path }: { path: string }) {
@@ -44,6 +59,12 @@ function FilesList({ path }: { path: string }) {
     )
   }
   if (data.items.length === 0) return <p className="sec-tab-note">Esta carpeta está vacía</p>
+  return <FilesTable items={data.items} />
+}
+
+/** The listing table the navigator family renders — one copy for the flat
+ *  tab and for every section. */
+function FilesTable({ items }: { items: FileItem[] }) {
   return (
     <table className="sec-table sec-files-table">
       <thead>
@@ -54,7 +75,7 @@ function FilesList({ path }: { path: string }) {
         </tr>
       </thead>
       <tbody>
-        {data.items.map((item) => (
+        {items.map((item) => (
           <tr key={item.path}>
             <td className="sec-file-name" title={item.path}>
               {item.name}
@@ -65,5 +86,122 @@ function FilesList({ path }: { path: string }) {
         ))}
       </tbody>
     </table>
+  )
+}
+
+const SECTIONS: Array<{ id: FileSectionId; label: string }> = [
+  { id: '1080', label: '1080' },
+  { id: '4k', label: '4K' },
+  { id: '3d', label: '3D' },
+  { id: 'otros', label: 'Otros' },
+]
+
+/** The movie's folder name: its copies keep it at the FRONT of theirs (the
+ *  same prefix rule ReleaseSearchModal's holdsCopy uses). No name, no proof. */
+function copyPrefixOf(path: string): string {
+  const parts = path.split('/').filter(Boolean)
+  return parts[parts.length - 1] ?? ''
+}
+
+async function browseFolder(folder: string): Promise<FileItem[]> {
+  // Same read as ReleaseSearchModal's feature-local fetchRoutingListing: a
+  // failure throws so the UI shows an error, never "the folder is empty".
+  const res = await apiFetch(`/api/files/browse?path=${encodeURIComponent(folder)}`, {})
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const body = (await res.json()) as BrowseResponse
+  if (!body.ok || !Array.isArray(body.items)) throw new Error(body.error || `HTTP ${res.status}`)
+  return body.items
+}
+
+/** The movie's copies in ONE routing folder: top-level prefix matches plus
+ *  the files inside a matched copy directory (the nested layout
+ *  `path_4k/<folder>/<file>`) — ONE level down, never a recursive crawl. */
+async function fetchRoutingCopies(folder: string, prefix: string): Promise<FileItem[]> {
+  const top = await browseFolder(folder)
+  if (prefix === '') return []
+  const copies: FileItem[] = []
+  for (const entry of top.filter((item) => item.name.startsWith(prefix))) {
+    if (entry.is_dir) copies.push(...(await browseFolder(entry.path)))
+    else copies.push(entry)
+  }
+  return copies
+}
+
+/** T3 (S1/S4): the three locations as ONE list, split into four sections. */
+function FilesSections({ basePath, folders }: { basePath: string; folders: RoutingFolders }) {
+  const base = useBrowse(basePath, true)
+  const prefix = copyPrefixOf(basePath)
+  const staleTime = 0 // A listing must mirror the disk — see useBrowse.
+  const r4k = useQuery({
+    queryKey: ['routing-copies', folders.path4k, prefix],
+    queryFn: () => fetchRoutingCopies(folders.path4k, prefix),
+    enabled: !!folders.path4k,
+    staleTime,
+  })
+  const r3d = useQuery({
+    queryKey: ['routing-copies', folders.path3d, prefix],
+    queryFn: () => fetchRoutingCopies(folders.path3d, prefix),
+    enabled: !!folders.path3d,
+    staleTime,
+  })
+
+  if (base.isLoading || r4k.isLoading || r3d.isLoading) {
+    return <p className="sec-tab-note">Cargando ruta…</p>
+  }
+  if (base.isError) {
+    return (
+      <div className="wanted-error" role="alert">
+        <strong>No se pudo leer la ruta</strong>
+        <span>{errorMessage(base.error)}</span>
+      </div>
+    )
+  }
+  const data = base.data as BrowseResponse & { detail?: string }
+  if (!data.ok) {
+    return (
+      <div className="wanted-error" role="alert">
+        <strong>No se pudo leer la ruta</strong>
+        <span>{data.error ?? data.detail ?? 'respuesta inesperada del servidor'}</span>
+      </div>
+    )
+  }
+
+  // A FAILED routing read may never show as an empty section: the alert says
+  // which source could not answer, and no note claims "there are no copies".
+  const routingFailed = r4k.isError || r3d.isError
+  const entries = [...data.items, ...(r4k.data ?? []), ...(r3d.data ?? [])]
+
+  return (
+    <>
+      {r4k.isError && (
+        <div className="wanted-error" role="alert">
+          <strong>No se pudo leer la ruta</strong>
+          <span>
+            {folders.path4k}: {errorMessage(r4k.error)}
+          </span>
+        </div>
+      )}
+      {r3d.isError && (
+        <div className="wanted-error" role="alert">
+          <strong>No se pudo leer la ruta</strong>
+          <span>
+            {folders.path3d}: {errorMessage(r3d.error)}
+          </span>
+        </div>
+      )}
+      {SECTIONS.map((section) => {
+        const items = entries.filter((entry) => classifyFile(entry, folders, basePath) === section.id)
+        return (
+          <section key={section.id} className="sec-files-section">
+            <h4>{section.label}</h4>
+            {items.length === 0 ? (
+              routingFailed ? null : <p className="sec-tab-note">Sin archivos en esta sección</p>
+            ) : (
+              <FilesTable items={items} />
+            )}
+          </section>
+        )
+      })}
+    </>
   )
 }

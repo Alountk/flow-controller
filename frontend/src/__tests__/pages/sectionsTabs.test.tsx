@@ -210,18 +210,24 @@ describe('sections · PR 6 — the detail tabs', () => {
     fireEvent.click(rowOf('Your Name.'))
     fireEvent.click(screen.getByRole('button', { name: 'Archivos' }))
 
-    // The listing is browsePath on the row's OWN path…
+    // The listing is browsePath on the row's OWN path, grouped by T3's
+    // sections — the tokenless copy is the library default under «1080».
     await screen.findByText('Your.Name.2016.mkv')
     expect(
       callsMatching(fn, `/api/files/browse?path=${encodeURIComponent(CATALOG_PATH)}`),
     ).toHaveLength(1)
 
-    // …with only columns the response actually carries.
-    expect(screen.getByRole('columnheader', { name: 'Nombre' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Tamaño' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Modificado' })).toBeInTheDocument()
+    // …with only columns the response actually carries (scoped to the one
+    // section the copy landed in: every section renders its own table).
+    const section1080 = screen
+      .getByRole('heading', { level: 4, name: '1080' })
+      .closest('section') as HTMLElement
+    expect(within(section1080).getByRole('columnheader', { name: 'Nombre' })).toBeInTheDocument()
+    expect(within(section1080).getByRole('columnheader', { name: 'Tamaño' })).toBeInTheDocument()
+    expect(within(section1080).getByRole('columnheader', { name: 'Modificado' })).toBeInTheDocument()
     expect(screen.getByText('11.2 GB')).toBeInTheDocument()
     // A directory carries size 0 from the endpoint: shown as "—", not "0 B".
+    // It proves no class (S4), so it is visible under «Otros».
     expect(screen.getByText('subs')).toBeInTheDocument()
 
     // Read-only: rename/delete/copy are NOT in this tab (they stay in the
