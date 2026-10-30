@@ -167,4 +167,22 @@ describe('site checkboxes', () => {
     ).toBeVisible()
     expect(screen.getByLabelText('aMule')).toBeChecked()
   })
+
+  it('binds every site label to its checkbox with htmlFor/id/name (S2)', async () => {
+    mockFetch()
+    renderModal()
+    await screen.findByLabelText('Sitio Uno')
+
+    const labels = [...document.querySelectorAll('label.calendar-site')] as HTMLLabelElement[]
+    expect(labels.map((l) => l.textContent)).toEqual(['Sitio Uno', 'Sitio Dos', 'aMule', 'Prowlarr'])
+    const ids = labels.map((label) => {
+      const box = label.querySelector('input') as HTMLInputElement
+      expect(box).not.toBeNull()
+      expect(label.getAttribute('for')).toBe(box.id)
+      expect(box.id).toBeTruthy()
+      expect(box.name).toBe(box.id)
+      return box.id
+    })
+    expect(ids).toEqual(['calendar-site-1', 'calendar-site-3', 'calendar-site-amule', 'calendar-site-prowlarr'])
+  })
 })

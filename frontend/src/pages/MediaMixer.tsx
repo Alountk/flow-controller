@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useContext } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { EventStreamContext } from '../shared/hooks/useEventStream.ts'
+import { slug } from '../shared/utils/slug.ts'
 import {
   probeFiles,
   startMux,
@@ -1004,10 +1005,12 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
               {videoRows.map((row) => (
                 <label
                   key={row.key}
+                  htmlFor={`mixer-video-${slug(String(row.key))}`}
                   className={`mixer-video-row ${selectedVideoKey === row.key ? 'selected' : ''}`}
                 >
                   <input
                     type="radio"
+                    id={`mixer-video-${slug(String(row.key))}`}
                     name="mixer-video"
                     checked={selectedVideoKey === row.key}
                     onChange={() => setSelectedVideoKey(row.key)}
@@ -1085,6 +1088,10 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                 const prevOther = i > 0 && !ORDERED_LANGUAGES.includes(effectiveCode(audioRows[i - 1]))
                 const showGroup = isOther && !prevOther
                 const checked = checkedAudio.has(row.key)
+                const boxId = `mixer-audio-${slug(String(row.key))}`
+                const langId = `mixer-audio-lang-${slug(String(row.key))}`
+                const upId = `mixer-audio-move-up-${slug(String(row.key))}`
+                const downId = `mixer-audio-move-down-${slug(String(row.key))}`
                 const orderNum = audioRows
                   .slice(0, i + 1)
                   .filter((r) => checkedAudio.has(r.key)).length
@@ -1096,12 +1103,14 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                         <span className="mixer-panel-aside">{otherAudioCount} disponibles</span>
                       </div>
                     )}
-                    <label className="mixer-audio-row">
+                    <label className="mixer-audio-row" htmlFor={boxId}>
                       <span className="mixer-audio-num">{checked ? orderNum : '—'}</span>
                       {checked && (
                         <span className="mixer-audio-move-group">
                           <button
                             type="button"
+                            id={upId}
+                            name={upId}
                             className="mixer-audio-move"
                             title="Subir posición"
                             disabled={i === 0}
@@ -1115,6 +1124,8 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                           </button>
                           <button
                             type="button"
+                            id={downId}
+                            name={downId}
                             className="mixer-audio-move"
                             title="Bajar posición"
                             disabled={i === audioRows.length - 1}
@@ -1130,6 +1141,8 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                       )}
                       <input
                         type="checkbox"
+                        id={boxId}
+                        name={boxId}
                         checked={checked}
                         onChange={() => toggleAudio(row.key)}
                       />
@@ -1147,6 +1160,8 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                       {row.entry.selected && <span className="mixer-chip-auto">Auto</span>}
                       <select
                         className="mixer-lang-select"
+                        id={langId}
+                        name={langId}
                         aria-label="Idioma de la pista"
                         value={effCode}
                         onClick={(e) => e.stopPropagation()}

@@ -73,4 +73,32 @@ describe('indexadores — the label wraps its input', () => {
     expect(within(label!).getByText('Buscar en todas las fuentes…')).toBeInTheDocument()
     expect(screen.getByLabelText('Buscar en todas las fuentes…')).toBe(input)
   })
+
+  it('S2: every pair carries htmlFor/id and the T4-table name (form, search, categories)', async () => {
+    mockFetch({ 'GET /api/indexers': () => ({ indexers: [] }) })
+    renderSection()
+
+    const nombre = (await screen.findByLabelText('Nombre')) as HTMLInputElement
+    const pairs: Array<[HTMLInputElement, string]> = [
+      [nombre, 'indexadores-nombre'],
+      [screen.getByLabelText('URL') as HTMLInputElement, 'indexadores-url'],
+      [screen.getByLabelText('API Key') as HTMLInputElement, 'indexadores-api-key'],
+      [
+        screen.getByLabelText('Buscar en todas las fuentes…') as HTMLInputElement,
+        'indexadores-search',
+      ],
+      [screen.getByLabelText('Todas (sin filtro)') as HTMLInputElement, 'indexadores-cat-todas'],
+      [screen.getByLabelText('Películas 2000') as HTMLInputElement, 'indexadores-cat-2000'],
+    ]
+    for (const [control, name] of pairs) {
+      const label = control.closest('label')
+      expect(label).not.toBeNull()
+      expect(label).toContainElement(control)
+      expect(label!.getAttribute('for')).toBe(control.id)
+      expect(control.id).toBeTruthy()
+      expect(control.name).toBeTruthy()
+      expect(control.id).toBe(name)
+      expect(control.name).toBe(name)
+    }
+  })
 })

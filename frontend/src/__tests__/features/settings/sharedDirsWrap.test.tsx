@@ -51,4 +51,19 @@ describe('aMule shared dirs — the label wraps the input', () => {
       screen.getByRole('button', { name: /Añadir solo esta carpeta/ }),
     )
   })
+
+  it('S2: the input carries id/name shared-dirs-ruta and the label links to it', async () => {
+    mockFetch()
+    renderSection()
+
+    const input = (await screen.findByLabelText('Ruta a compartir')) as HTMLInputElement
+    const label = input.closest('label')
+    expect(label).not.toBeNull()
+    expect(label).toContainElement(input)
+    expect(label!.getAttribute('for')).toBe(input.id)
+    expect(input.id).toBeTruthy()
+    expect(input.name).toBeTruthy()
+    expect(input.id).toBe('shared-dirs-ruta')
+    expect(input.name).toBe('shared-dirs-ruta')
+  })
 })

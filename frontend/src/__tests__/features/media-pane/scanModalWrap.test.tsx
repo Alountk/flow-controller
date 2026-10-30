@@ -43,4 +43,24 @@ describe('ScanModal — the label wraps «Título adicional»', () => {
     expect(label).toContainElement(input)
     expect(within(label!).getByText('Título adicional:')).toBeInTheDocument()
   })
+
+  it('S2: the input carries id/name scan-titulo-adicional and the label links to it', async () => {
+    mockFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <ScanModal item={item} onClose={() => {}} />
+      </QueryClientProvider>,
+    )
+
+    const input = (await screen.findByLabelText('Título adicional:')) as HTMLInputElement
+    const label = input.closest('label')
+    expect(label).not.toBeNull()
+    expect(label).toContainElement(input)
+    expect(label!.getAttribute('for')).toBe(input.id)
+    expect(input.id).toBeTruthy()
+    expect(input.name).toBeTruthy()
+    expect(input.id).toBe('scan-titulo-adicional')
+    expect(input.name).toBe('scan-titulo-adicional')
+  })
 })

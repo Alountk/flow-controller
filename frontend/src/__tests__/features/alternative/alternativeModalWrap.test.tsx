@@ -42,4 +42,24 @@ describe('AlternativeModal S2 — the label wraps the input', () => {
     expect(label).toContainElement(input)
     expect(within(label!).getByText('Título a buscar')).toBeInTheDocument()
   })
+
+  it('S2: the input carries id/name alt-modal-titulo and the label links to it', async () => {
+    mockFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <AlternativeModal {...PROPS} />
+      </QueryClientProvider>,
+    )
+
+    const input = (await screen.findByLabelText('Título a buscar')) as HTMLInputElement
+    const label = input.closest('label')
+    expect(label).not.toBeNull()
+    expect(label).toContainElement(input)
+    expect(label!.getAttribute('for')).toBe(input.id)
+    expect(input.id).toBeTruthy()
+    expect(input.name).toBeTruthy()
+    expect(input.id).toBe('alt-modal-titulo')
+    expect(input.name).toBe('alt-modal-titulo')
+  })
 })

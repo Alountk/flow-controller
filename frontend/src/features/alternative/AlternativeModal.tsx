@@ -10,6 +10,7 @@ import {
   type IndexerSearchSource,
 } from '../../shared/api/indexers.ts'
 import type { AlternativeTitle } from '../../shared/api/mixer.ts'
+import { slug } from '../../shared/utils/slug.ts'
 import { LanguageSearchSection } from '../release-search/LanguageSearchSection.tsx'
 import './AlternativeModal.css'
 
@@ -219,9 +220,15 @@ export function AlternativeModal({
                 </div>
               )}
               {rows.map((row) => (
-                <label key={row.id} className="alt-modal-source-row">
+                <label
+                  key={row.id}
+                  className="alt-modal-source-row"
+                  htmlFor={`alt-modal-source-${slug(String(row.id))}`}
+                >
                   <input
                     type="checkbox"
+                    id={`alt-modal-source-${slug(String(row.id))}`}
+                    name={`alt-modal-source-${slug(String(row.id))}`}
                     aria-label={`Buscar en ${row.name}`}
                     checked={row.enabled !== 0 && !deselected.has(row.id)}
                     disabled={row.enabled === 0}
@@ -233,9 +240,14 @@ export function AlternativeModal({
                   )}
                 </label>
               ))}
-              <label className="alt-modal-source-row alt-modal-source-row--amule">
+              <label
+                className="alt-modal-source-row alt-modal-source-row--amule"
+                htmlFor="alt-modal-source-amule"
+              >
                 <input
                   type="checkbox"
+                  id="alt-modal-source-amule"
+                  name="alt-modal-source-amule"
                   aria-label="Buscar en aMule (EC)"
                   checked={amule}
                   onChange={() => setAmule((prev) => !prev)}
@@ -247,11 +259,13 @@ export function AlternativeModal({
 
           {/* S2 — prefilled, always editable. */}
           <section className="alt-modal-query">
-            <label className="alt-modal-query-label">
+            <label className="alt-modal-query-label" htmlFor="alt-modal-titulo">
               Título a buscar
               <input
                 className="alt-modal-query-input"
                 type="text"
+                id="alt-modal-titulo"
+                name="alt-modal-titulo"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />

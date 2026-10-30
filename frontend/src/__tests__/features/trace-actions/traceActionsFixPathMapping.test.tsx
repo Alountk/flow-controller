@@ -111,4 +111,21 @@ describe('fix_path_mapping request', () => {
     const body = JSON.parse(String((call![1] as RequestInit).body))
     expect(body.local_path).toBe('/mnt/custom/amule')
   })
+
+  it('binds every modal-fields label to its wrapped input with htmlFor/id/name (S2)', () => {
+    renderActions(trace())
+    fireEvent.click(screen.getByRole('button', { name: 'Mapear ruta' }))
+
+    const slug = (s: string) =>
+      s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    const labels = [...document.querySelectorAll('.modal-fields label')] as HTMLLabelElement[]
+    expect(labels).toHaveLength(3)
+    for (const label of labels) {
+      const input = label.querySelector('input') as HTMLInputElement
+      expect(input).not.toBeNull()
+      expect(label.getAttribute('for')).toBe(input.id)
+      expect(input.id).toBe(slug(label.textContent ?? ''))
+      expect(input.name).toBe(input.id)
+    }
+  })
 })

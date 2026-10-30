@@ -543,9 +543,11 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
 
       {visibleItems.length > 0 && (
         <div className="fm-select-bar">
-          <label className="fm-select-all">
+          <label className="fm-select-all" htmlFor="fm-select-all">
             <input
               type="checkbox"
+              id="fm-select-all"
+              name="fm-select-all"
               checked={allVisibleSelected}
               onChange={toggleAllSelection}
             />

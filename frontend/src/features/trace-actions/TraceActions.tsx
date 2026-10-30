@@ -5,6 +5,7 @@ import { runAction, type ActionOptions } from '../../shared/api/actions.ts'
 import { ackBlockedImport } from '../../shared/api/traces.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
+import { slug } from '../../shared/utils/slug.ts'
 import './TraceActions.css'
 
 interface Props {
@@ -30,6 +31,19 @@ interface TaskProgress {
   files_total: number
   detail: string
 }
+
+// S2: the visible label text is the id/name source — one string, so both cannot drift.
+const HOST_LABEL = 'Host del cliente de descargas'
+const HOST_ID = slug(HOST_LABEL)
+const REMOTE_LABEL = 'Ruta remota (dentro del contenedor del cliente)'
+const REMOTE_ID = slug(REMOTE_LABEL)
+const LOCAL_LABEL = 'Ruta local (dentro del contenedor del *arr)'
+const LOCAL_ID = slug(LOCAL_LABEL)
+const confirmOptionText = (action: ActionKey) =>
+  action === 'remove_queue'
+    ? 'Añadir a la blocklist (no volver a descargar)'
+    : 'Eliminar también los archivos descargados'
+const confirmOptionId = (action: ActionKey) => slug(confirmOptionText(action))
 
 function derivePathMapping(trace: Trace) {
   const host = trace.download_client_host || ''
@@ -307,30 +321,36 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
 
             {pending.action === 'fix_path_mapping' && (
               <div className="modal-fields">
-                <label>
-                  Host del cliente de descargas
+                <label htmlFor={HOST_ID}>
+                  {HOST_LABEL}
                   <input
                     type="text"
+                    id={HOST_ID}
+                    name={HOST_ID}
                     value={pending.options.host || ''}
                     onChange={(e) =>
                       setPending((p) => p ? { ...p, options: { ...p.options, host: e.target.value } } : p)
                     }
                   />
                 </label>
-                <label>
-                  Ruta remota (dentro del contenedor del cliente)
+                <label htmlFor={REMOTE_ID}>
+                  {REMOTE_LABEL}
                   <input
                     type="text"
+                    id={REMOTE_ID}
+                    name={REMOTE_ID}
                     value={pending.options.remote_path || ''}
                     onChange={(e) =>
                       setPending((p) => p ? { ...p, options: { ...p.options, remote_path: e.target.value } } : p)
                     }
                   />
                 </label>
-                <label>
-                  Ruta local (dentro del contenedor del *arr)
+                <label htmlFor={LOCAL_ID}>
+                  {LOCAL_LABEL}
                   <input
                     type="text"
+                    id={LOCAL_ID}
+                    name={LOCAL_ID}
                     value={pending.options.local_path || ''}
                     onChange={(e) =>
                       setPending((p) => p ? { ...p, options: { ...p.options, local_path: e.target.value } } : p)
@@ -341,9 +361,11 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
             )}
 
             {pending.action !== 'fix_path_mapping' && (
-              <label className="modal-check">
+              <label className="modal-check" htmlFor={confirmOptionId(pending.action)}>
                 <input
                   type="checkbox"
+                  id={confirmOptionId(pending.action)}
+                  name={confirmOptionId(pending.action)}
                   checked={Boolean(
                     pending.action === 'remove_queue'
                       ? pending.options.blocklist
@@ -364,9 +386,7 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
                     )
                   }}
                 />
-                {pending.action === 'remove_queue'
-                  ? 'Añadir a la blocklist (no volver a descargar)'
-                  : 'Eliminar también los archivos descargados'}
+                {confirmOptionText(pending.action)}
               </label>
             )}
 

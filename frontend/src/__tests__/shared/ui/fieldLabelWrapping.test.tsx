@@ -38,4 +38,23 @@ describe('Field — the label wraps its control', () => {
     expect(within(label!).getByText('Modo seguro')).toBeInTheDocument()
     expect(within(label!).getByText('Sí')).toBeInTheDocument()
   })
+
+  it('S2: every pair carries htmlFor/id and name — the toggle name is the label slug', () => {
+    render(<Field label="URL" value="http://x" onChange={() => {}} />)
+    render(<Field label="Puerto" value={8080} onChange={() => {}} restart />)
+    render(<Field label="Modo seguro" value onChange={() => {}} type="toggle" />)
+
+    const url = screen.getByLabelText('URL') as HTMLInputElement
+    const puerto = screen.getByLabelText('Puerto') as HTMLInputElement
+    const toggle = screen.getByLabelText('Modo seguro') as HTMLButtonElement
+    for (const control of [url, puerto, toggle]) {
+      const label = control.closest('label')
+      expect(label).not.toBeNull()
+      expect(label).toContainElement(control)
+      expect(label!.getAttribute('for')).toBe(control.id)
+      expect(control.id).toBeTruthy()
+      expect(control.name).toBeTruthy()
+    }
+    expect(toggle.name).toBe('modo-seguro')
+  })
 })

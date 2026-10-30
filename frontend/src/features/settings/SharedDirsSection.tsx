@@ -101,10 +101,12 @@ export function SharedDirsSection() {
       {/* The label wraps text+input; the row buttons stay outside — the
           labeled control is the input alone. */}
       <div className="settings-field shared-dirs-entry-row">
-        <label className="shared-dirs-entry-label">
+        <label className="shared-dirs-entry-label" htmlFor="shared-dirs-ruta">
           <span className="settings-label">Ruta a compartir</span>
           <input
             className="settings-input"
+            id="shared-dirs-ruta"
+            name="shared-dirs-ruta"
             value={entry}
             placeholder="/mnt/storage/peliculas"
             onChange={(e) => setEntry(e.target.value)}

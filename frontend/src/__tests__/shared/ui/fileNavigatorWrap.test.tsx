@@ -48,4 +48,45 @@ describe('FileNavigator — the label wraps the volume select', () => {
     expect(within(label!).getByText('Carpeta a escanear:')).toBeInTheDocument()
     expect(label).not.toContainElement(screen.getByRole('button', { name: /Subir/ }))
   })
+
+  it('S2: the volume select carries id/name fm-volume-root and the label links to it', async () => {
+    mockFetch()
+    const makeClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const { unmount } = render(
+      <QueryClientProvider client={makeClient()}>
+        <FileNavigator
+          variant="region"
+          rootPicker="select"
+          rootLabel="Carpeta a escanear:"
+          selectPlaceholder="Seleccionar volumen..."
+          mode="both"
+        />
+      </QueryClientProvider>,
+    )
+
+    const select = (await screen.findByLabelText('Carpeta a escanear:')) as HTMLSelectElement
+    const label = select.closest('label')
+    expect(label).not.toBeNull()
+    expect(label).toContainElement(select)
+    expect(label!.getAttribute('for')).toBe(select.id)
+    expect(select.id).toBe('fm-volume-root')
+    expect(select.name).toBe('fm-volume-root')
+
+    // Without rootLabel no label renders, but the form hookup stays on the select.
+    unmount()
+    render(
+      <QueryClientProvider client={makeClient()}>
+        <FileNavigator
+          variant="region"
+          rootPicker="select"
+          selectPlaceholder="Seleccionar volumen..."
+          mode="both"
+        />
+      </QueryClientProvider>,
+    )
+    const bare = (await screen.findByRole('combobox')) as HTMLSelectElement
+    expect(bare.closest('label')).toBeNull()
+    expect(bare.id).toBe('fm-volume-root')
+    expect(bare.name).toBe('fm-volume-root')
+  })
 })
