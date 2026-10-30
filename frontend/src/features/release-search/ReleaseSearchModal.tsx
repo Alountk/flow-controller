@@ -10,6 +10,7 @@ import {
 } from '../../shared/api/releases.ts'
 import { grabCalendarRelease, fetchGrabStatus, type GrabTask } from '../../shared/api/grabs.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
+import { slug } from '../../shared/utils/slug.ts'
 import { fetchIndexers } from '../../shared/api/indexers.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
 import { FileNavigator } from '../../shared/ui/FileNavigator.tsx'
@@ -977,9 +978,15 @@ export function ReleaseSearchModal({
               <span className="calendar-sites-label">Sitios de búsqueda:</span>
               <div className="calendar-sites-list">
                 {registryRows.map((row) => (
-                  <label key={`reg:${row.id}`} className="calendar-site">
+                  <label
+                    key={`reg:${row.id}`}
+                    className="calendar-site"
+                    htmlFor={`calendar-site-${slug(String(row.id))}`}
+                  >
                     <input
                       type="checkbox"
+                      id={`calendar-site-${slug(String(row.id))}`}
+                      name={`calendar-site-${slug(String(row.id))}`}
                       checked={!unchecked.has(`reg:${row.id}`)}
                       disabled={isProcessing}
                       onChange={() => toggleSite(`reg:${row.id}`)}
@@ -987,18 +994,22 @@ export function ReleaseSearchModal({
                     {row.name}
                   </label>
                 ))}
-                <label className="calendar-site">
+                <label className="calendar-site" htmlFor="calendar-site-amule">
                   <input
                     type="checkbox"
+                    id="calendar-site-amule"
+                    name="calendar-site-amule"
                     checked={!unchecked.has('src:amule')}
                     disabled={isProcessing}
                     onChange={() => toggleSite('src:amule')}
                   />
                   aMule
                 </label>
-                <label className="calendar-site">
+                <label className="calendar-site" htmlFor="calendar-site-prowlarr">
                   <input
                     type="checkbox"
+                    id="calendar-site-prowlarr"
+                    name="calendar-site-prowlarr"
                     checked={!unchecked.has('src:prowlarr')}
                     disabled={isProcessing}
                     onChange={() => toggleSite('src:prowlarr')}
@@ -1183,10 +1194,12 @@ export function ReleaseSearchModal({
                   onChange={(e) => setFilters((f) => ({ ...f, text: e.target.value }))}
                 />
 
-                <label className="release-filter-seeders">
+                <label className="release-filter-seeders" htmlFor="release-filter-seeders">
                   Seeders mín.
                   <input
                     type="number"
+                    id="release-filter-seeders"
+                    name="release-filter-seeders"
                     min={0}
                     value={filters.minSeeders || ''}
                     placeholder="0"

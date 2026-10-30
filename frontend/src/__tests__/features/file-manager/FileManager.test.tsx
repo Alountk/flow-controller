@@ -524,4 +524,16 @@ describe('FileManager multi-file selection', () => {
       expect(options.indexOf(plain[0])).toBeLessThan(options.indexOf(groupOptions[0]))
     }
   })
+
+  it('binds the select-all label to its checkbox with htmlFor/id/name (S2)', async () => {
+    mockFetch({ listings: { '/mnt/storage': [file('A.mkv')] } })
+    await openPane()
+
+    const box = screen.getByRole('checkbox', { name: 'Seleccionar todo' }) as HTMLInputElement
+    const label = box.closest('label') as HTMLLabelElement
+    expect(label).not.toBeNull()
+    expect(label.getAttribute('for')).toBe(box.id)
+    expect(box.id).toBe('fm-select-all')
+    expect(box.name).toBe('fm-select-all')
+  })
 })

@@ -113,4 +113,17 @@ describe('settings API key masking', () => {
       expect(user).toHaveAttribute('type', 'text')
     }
   })
+
+  it('links the auto-refresh toggle through label for/id/name (labels-wrap S2)', async () => {
+    mockFetch()
+    renderSettings()
+
+    const general = await screen.findByRole('tabpanel', { name: 'General' })
+    const toggle = general.querySelector('#settings-auto-refresh') as HTMLButtonElement
+    expect(toggle).not.toBeNull()
+    expect(toggle.name).toBe('settings-auto-refresh')
+    const label = toggle.closest('label')
+    expect(label).not.toBeNull()
+    expect(label!.getAttribute('for')).toBe('settings-auto-refresh')
+  })
 })

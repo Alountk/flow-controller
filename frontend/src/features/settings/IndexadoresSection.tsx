@@ -62,6 +62,7 @@ import {
 } from '../../shared/api/indexers.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import { fetchServices } from '../../shared/api/services.ts'
+import { slug } from '../../shared/utils/slug.ts'
 import './Settings.css'
 
 /**
@@ -413,14 +414,21 @@ export function IndexadoresSection({
           </div>
 
           <div className="indexadores-search-bar">
-            <input
-              className="indexadores-search-input"
-              type="text"
-              aria-label="Buscar en todas las fuentes…"
-              placeholder="Buscar en todas las fuentes…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+            {/* Hidden label text mirrors the placeholder (no new user-facing
+                string); aria-label stays to pin the accessible name. */}
+            <label className="indexadores-search-label" htmlFor="indexadores-search">
+              <span className="sr-only">Buscar en todas las fuentes…</span>
+              <input
+                className="indexadores-search-input"
+                type="text"
+                id="indexadores-search"
+                name="indexadores-search"
+                aria-label="Buscar en todas las fuentes…"
+                placeholder="Buscar en todas las fuentes…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
             <button
               type="button"
               className="settings-btn settings-btn-primary"
@@ -791,19 +799,23 @@ export function IndexadoresSection({
           </div>
 
           <div className="indexadores-form-grid">
-            <label className="settings-field">
+            <label className="settings-field" htmlFor="indexadores-nombre">
               <span className="settings-label">Nombre</span>
               <input
                 className="settings-input"
+                id="indexadores-nombre"
+                name="indexadores-nombre"
                 ref={nameInputRef}
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               />
             </label>
-            <label className="settings-field">
+            <label className="settings-field" htmlFor="indexadores-url">
               <span className="settings-label">URL</span>
               <input
                 className="settings-input"
+                id="indexadores-url"
+                name="indexadores-url"
                 value={form.url}
                 placeholder="http://localhost:9117/1/api"
                 onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
@@ -812,10 +824,12 @@ export function IndexadoresSection({
             {/* The «Mostrar» toggle stays outside the label: a label may hold
                 only one labelable control — the input. */}
             <div className="settings-field indexadores-key-field">
-              <label className="settings-field">
+              <label className="settings-field" htmlFor="indexadores-api-key">
                 <span className="settings-label">API Key</span>
                 <input
                   className="settings-input"
+                  id="indexadores-api-key"
+                  name="indexadores-api-key"
                   type={showKey ? 'text' : 'password'}
                   value={form.api_key ?? ''}
                   placeholder={editingId === null ? 'Clave del indexador' : '(sin cambio)'}
@@ -842,14 +856,27 @@ export function IndexadoresSection({
                 aria-labelledby="indexer-form-categories"
                 className="indexadores-category-grid"
               >
-                <label className="indexadores-category-item">
-                  <input type="checkbox" checked={todasChecked} onChange={checkTodas} />
+                {/* Category ids run through slug(): custom ids are stored data. */}
+                <label className="indexadores-category-item" htmlFor="indexadores-cat-todas">
+                  <input
+                    type="checkbox"
+                    id="indexadores-cat-todas"
+                    name="indexadores-cat-todas"
+                    checked={todasChecked}
+                    onChange={checkTodas}
+                  />
                   Todas (sin filtro)
                 </label>
                 {CATEGORY_ITEMS.map((item) => (
-                  <label key={item.id} className="indexadores-category-item">
+                  <label
+                    key={item.id}
+                    className="indexadores-category-item"
+                    htmlFor={`indexadores-cat-${slug(item.id)}`}
+                  >
                     <input
                       type="checkbox"
+                      id={`indexadores-cat-${slug(item.id)}`}
+                      name={`indexadores-cat-${slug(item.id)}`}
                       checked={selected.has(item.id)}
                       onChange={() => toggleCategory(item.id)}
                     />
@@ -857,8 +884,18 @@ export function IndexadoresSection({
                   </label>
                 ))}
                 {customIds.map((id) => (
-                  <label key={id} className="indexadores-category-item">
-                    <input type="checkbox" checked onChange={() => toggleCategory(id)} />
+                  <label
+                    key={id}
+                    className="indexadores-category-item"
+                    htmlFor={`indexadores-cat-${slug(id)}`}
+                  >
+                    <input
+                      type="checkbox"
+                      id={`indexadores-cat-${slug(id)}`}
+                      name={`indexadores-cat-${slug(id)}`}
+                      checked
+                      onChange={() => toggleCategory(id)}
+                    />
                     {id} (personalizada)
                   </label>
                 ))}

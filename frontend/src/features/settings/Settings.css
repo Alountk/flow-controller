@@ -779,6 +779,27 @@ button.indexadores-source-row:focus-visible {
   border-color: var(--accent);
 }
 
+/* The label takes the bar's flex slot the input had; its text is the
+   visually-hidden mirror of the placeholder (no new visible string). */
+.indexadores-search-label {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Standard visually-hidden pattern: present for assistive tech only. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .indexadores-source-chips {
   display: flex;
   align-items: center;

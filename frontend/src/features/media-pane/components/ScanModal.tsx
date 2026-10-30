@@ -217,11 +217,13 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
             />
 
             <div className="scan-row">
-              <label className="scan-label scan-label--grow">
+              <label className="scan-label scan-label--grow" htmlFor="scan-titulo-adicional">
                 Título adicional:
                 <input
                   type="text"
                   className="scan-custom-input"
+                  id="scan-titulo-adicional"
+                  name="scan-titulo-adicional"
                   placeholder="Opcional: añade un título para buscar también..."
                   value={customTitle}
                   onChange={(e) => setCustomTitle(e.target.value)}

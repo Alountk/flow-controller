@@ -72,9 +72,11 @@ function LogsSection() {
         <button className="action-btn" onClick={fetchLogs} disabled={loading}>
           {loading ? 'Cargando...' : '🔄 Actualizar'}
         </button>
-        <label className="settings-toggle-label">
+        <label className="settings-toggle-label" htmlFor="settings-auto-refresh">
           <button
             className={`settings-toggle ${autoRefresh ? 'on' : 'off'}`}
+            id="settings-auto-refresh"
+            name="settings-auto-refresh"
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
             {autoRefresh ? 'Sí' : 'No'}

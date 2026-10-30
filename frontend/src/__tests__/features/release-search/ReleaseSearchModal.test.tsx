@@ -235,7 +235,19 @@ describe('ReleaseSearchModal filter bar', () => {
     const groups = document.querySelectorAll('.calendar-indexer-group')
     expect(groups).toHaveLength(1)
     expect(within(groups[0] as HTMLElement).getByText(/Todo a la vez/)).toBeInTheDocument()
-  })})
+  })
+
+  it('binds the seeders floor label to its input with htmlFor/id/name (S2)', async () => {
+    await openResults()
+
+    const input = screen.getByPlaceholderText('0') as HTMLInputElement
+    const label = input.closest('label') as HTMLLabelElement
+    expect(label).not.toBeNull()
+    expect(label.getAttribute('for')).toBe(input.id)
+    expect(input.id).toBe('release-filter-seeders')
+    expect(input.name).toBe('release-filter-seeders')
+  })
+})
 
 /**
  * The three per-row destination buttons (F-12). The combo is gone: the

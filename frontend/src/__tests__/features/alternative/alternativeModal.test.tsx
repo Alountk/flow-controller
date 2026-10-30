@@ -166,6 +166,26 @@ describe('AlternativeModal — checklist de indexadores → título → resultad
     expect(within(checklist).queryByText(/prowlarr/i)).toBeNull()
   })
 
+  it('S2: every source-row label links its checkbox with htmlFor/id/name', async () => {
+    mockFetch({ 'GET /api/indexers': () => ROWS })
+    renderModal()
+
+    const expected: Array<[string, string]> = [
+      ['Buscar en NoNaMe', 'alt-modal-source-7'],
+      ['Buscar en Rutor', 'alt-modal-source-9'],
+      ['Buscar en Zamunda', 'alt-modal-source-12'],
+      ['Buscar en aMule (EC)', 'alt-modal-source-amule'],
+    ]
+    for (const [rowName, id] of expected) {
+      const input = (await screen.findByRole('checkbox', { name: rowName })) as HTMLInputElement
+      expect(input.id, rowName).toBe(id)
+      expect(input.name, rowName).toBe(id)
+      const label = input.closest('label')
+      expect(label, rowName).not.toBeNull()
+      expect(label!.getAttribute('for'), rowName).toBe(id)
+    }
+  })
+
   it('S2: the title input is prefilled from the prop and stays editable', async () => {
     mockFetch({ 'GET /api/indexers': () => ROWS })
     renderModal()

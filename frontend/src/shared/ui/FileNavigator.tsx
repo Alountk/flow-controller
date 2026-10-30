@@ -187,6 +187,8 @@ export function FileNavigator({
     const rootSelect = (
       <select
         className="fm-volume-select"
+        id="fm-volume-root"
+        name="fm-volume-root"
         value={containingRoot}
         onChange={(e) => visit(e.target.value)}
       >
@@ -202,7 +204,7 @@ export function FileNavigator({
         {rootPicker === 'select' && (
           <div className="scan-row">
             {rootLabel ? (
-              <label className="scan-label">
+              <label className="scan-label" htmlFor="fm-volume-root">
                 {rootLabel}
                 {rootSelect}
               </label>

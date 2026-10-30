@@ -91,3 +91,48 @@ describe('"Cancelar descarga" visibility', () => {
     expect(modal).toHaveTextContent('Cancelar descarga')
   })
 })
+
+describe('confirm checkbox binding (S2)', () => {
+  it('binds the confirm checkbox to its label with htmlFor/id/name', () => {
+    renderActions(trace())
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar descarga' }))
+
+    const label = document.querySelector('.modal-check') as HTMLLabelElement
+    const box = label.querySelector('input') as HTMLInputElement
+    expect(box).not.toBeNull()
+    expect(label.getAttribute('for')).toBe(box.id)
+    expect(box.id).toBe('eliminar-tambien-los-archivos-descargados')
+    expect(box.name).toBe(box.id)
+  })
+
+  it('binds the same pair under the remove_queue wording (blocklist variant)', () => {
+    const removeMeta = {
+      remove_queue: {
+        key: 'remove_queue',
+        label: 'Quitar de la cola',
+        description: 'Quita el item de la cola del arr',
+        destructive: true,
+        scope: 'arr',
+      },
+    } as Record<ActionKey, ActionMeta>
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <TraceActions
+          trace={trace({ stage: 'failed', ids: { queue_id: 1, episode_id: null, movie_id: 1, series_id: null } })}
+          meta={removeMeta}
+          safeMode={false}
+          onDone={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar de la cola' }))
+
+    const label = document.querySelector('.modal-check') as HTMLLabelElement
+    const box = label.querySelector('input') as HTMLInputElement
+    expect(box).not.toBeNull()
+    expect(label.getAttribute('for')).toBe(box.id)
+    expect(box.id).toBe('anadir-a-la-blocklist-no-volver-a-descargar')
+    expect(box.name).toBe(box.id)
+  })
+})

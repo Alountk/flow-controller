@@ -678,3 +678,62 @@ describe('mixer — descarga de alternativa (S5/S6/T4)', () => {
     expect(screen.getByText('Sin seleccionar')).toBeInTheDocument()
   })
 })
+
+/* ── S2 — label↔control bindings ─────────────────────────────────────────── */
+
+describe('mixer — label↔control bindings (S2)', () => {
+  it('binds each video row label to its radio: htmlFor + unique id under the shared name', async () => {
+    await driveToResults(probeBody())
+
+    const labels = [...document.querySelectorAll('.mixer-video-row')] as HTMLLabelElement[]
+    expect(labels).toHaveLength(3)
+    const ids = labels.map((label) => {
+      const radio = label.querySelector('input') as HTMLInputElement
+      expect(radio).not.toBeNull()
+      expect(label.getAttribute('for')).toBe(radio.id)
+      expect(radio.id).toBeTruthy()
+      expect(radio.name).toBe('mixer-video')
+      return radio.id
+    })
+    expect(ids).toEqual(['mixer-video-a-0', 'mixer-video-b-0', 'mixer-video-b-1'])
+  })
+
+  it('binds each audio row label to its checkbox and gives every inner control id/name', async () => {
+    await driveToResults(probeBody())
+
+    const labels = [...document.querySelectorAll('.mixer-audio-row')] as HTMLLabelElement[]
+    expect(labels).toHaveLength(6)
+    const boxIds: string[] = []
+    const allIds: string[] = []
+    for (const label of labels) {
+      const box = label.querySelector('input[type="checkbox"]') as HTMLInputElement
+      expect(box).not.toBeNull()
+      expect(label.getAttribute('for')).toBe(box.id)
+      expect(box.id).toBeTruthy()
+      expect(box.name).toBe(box.id)
+      boxIds.push(box.id)
+      allIds.push(box.id)
+
+      const select = label.querySelector('select') as HTMLSelectElement
+      expect(select.id).toBeTruthy()
+      expect(select.name).toBeTruthy()
+      allIds.push(select.id)
+
+      for (const btn of [...label.querySelectorAll('button')]) {
+        const button = btn as HTMLButtonElement
+        expect(button.id).toBeTruthy()
+        expect(button.name).toBeTruthy()
+        allIds.push(button.id)
+      }
+    }
+    expect(boxIds.sort()).toEqual([
+      'mixer-audio-a-0',
+      'mixer-audio-a-1',
+      'mixer-audio-a-2',
+      'mixer-audio-b-1',
+      'mixer-audio-b-2',
+      'mixer-audio-b-3',
+    ])
+    expect(new Set(allIds).size).toBe(allIds.length)
+  })
+})
