@@ -797,6 +797,7 @@ class TestCalendarReleases:
                 "seeders": 7,
                 "indexer": "Mi Indexador",
                 "source": "torznab",
+                "quality": "Bluray-1080p",
             }]
             assert task["detail"] == "1 releases"
         finally:
@@ -875,6 +876,45 @@ class TestCalendarReleases:
             # honest about what it never saw.
             assert "fuentes omitidas" in task["detail"]
             assert "torznab: sin indexadores habilitados" in task["detail"]
+        finally:
+            release_tasks._tasks.pop(data["task_id"], None)
+
+    @patch("interfaces.http.routes.calendar.search_sources", new_callable=AsyncMock)
+    def test_rows_carry_quality_and_languages_the_title_declares(self, mock_sources):
+        """S1 (filtros-directos): the settled row carries quality/languages
+        derived from the tokens the source's own title declares."""
+        mock_sources.return_value = {
+            "ok": True,
+            "results": [{
+                "source": "torznab",
+                "indexer": "Mi Indexador",
+                "name": "Blade Runner 2049 (2017) SPANISH 1080p BluRay x264-GRP",
+                "size": 54321,
+                "seeders": 3,
+                "guid": "https://t.example/2",
+                "link": "magnet:?xt=urn:btih:cc",
+            }],
+            "skipped": [],
+        }
+        resp = client.post(
+            "/api/calendar/releases",
+            json={"source": "radarr", "type": "movie", "id": 42, "title": "Blade Runner 2049"},
+        )
+        data = resp.json()
+        task = self._await_release(data["task_id"])
+        try:
+            assert task["status"] == "done"
+            assert task["releases"] == [{
+                "title": "Blade Runner 2049 (2017) SPANISH 1080p BluRay x264-GRP",
+                "guid": "https://t.example/2",
+                "link": "magnet:?xt=urn:btih:cc",
+                "size": 54321,
+                "seeders": 3,
+                "indexer": "Mi Indexador",
+                "source": "torznab",
+                "quality": "Bluray-1080p",
+                "languages": ["Spanish"],
+            }]
         finally:
             release_tasks._tasks.pop(data["task_id"], None)
 

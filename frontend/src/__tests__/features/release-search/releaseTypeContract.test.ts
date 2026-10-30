@@ -3,9 +3,10 @@ import type { Release } from '../../../shared/api/releases.ts'
 
 /**
  * S5 (calendario-directo): the `Release` interface must BE the row our own
- * sources return — `_release_row` in backend/routes/calendar.py maps exactly
- * `{title, guid, link, size, indexer, source, seeders?}` (and NEVER invents
- * quality/languages/indexerId/leechers/protocol/releaseGroup/indexerFlags).
+ * sources return — `_release_row` in backend/routes/calendar.py maps
+ * `{title, guid, link, size, indexer, source, seeders?}` plus the title-declared
+ * `quality?`/`languages?` (derived, absent with no token) and NEVER invents
+ * `indexerId/leechers/protocol/releaseGroup/indexerFlags`.
  * A type that claims a field the API cannot send is a lie the UI will later
  * paint as "undefined".
  *
