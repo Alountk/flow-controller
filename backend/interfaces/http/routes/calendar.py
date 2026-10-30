@@ -31,6 +31,7 @@ from application.gateways import (
 )
 from application.use_cases.grab_release import category_for, grab_tasks, start_grab
 from application.use_cases.release_search import release_tasks, start_release_search
+from domain.release_tokens import languages_from_title, quality_from_title
 from models import (
     CalendarSearchRequest,
     CalendarAddRequest,
@@ -225,10 +226,12 @@ def _release_row(row: dict) -> dict:
 
     Only what the sources really said: title/name, guid (falling back to the
     link so the grab always has a target), link, size, seeders when the source
-    stated one, and indexer/source. The arr's fields (quality, languages,
-    indexerId, leechers, protocol, releaseGroup, indexerFlags) are NEVER
-    invented — if a source does not say it, the key is absent and the UI does
-    not paint it.
+    stated one, and indexer/source. The arr's fields (indexerId, leechers,
+    protocol, releaseGroup, indexerFlags) are NEVER invented. `quality` and
+    `languages` are derived from the tokens the source's own title declares
+    (`domain/release_tokens.py`) — the chips died moving off the arr
+    (odd/tasks/filtros-directos.md S1) — and a title with no token leaves the
+    keys absent so the UI paints nothing.
     """
     mapped = {
         "title": row.get("name") or "",
@@ -240,6 +243,12 @@ def _release_row(row: dict) -> dict:
     }
     if row.get("seeders") is not None:
         mapped["seeders"] = row.get("seeders")
+    quality = quality_from_title(mapped["title"])
+    if quality:
+        mapped["quality"] = quality
+    languages = languages_from_title(mapped["title"])
+    if languages:
+        mapped["languages"] = languages
     return mapped
 
 

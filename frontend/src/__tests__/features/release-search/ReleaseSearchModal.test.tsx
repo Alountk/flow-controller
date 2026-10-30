@@ -13,8 +13,8 @@ import type { Release } from '../../../shared/api/releases.ts'
  * on rows the user cannot see.
  */
 
-/** A direct-source release row, exactly as `POST /api/calendar/releases`
- *  serves it (S5): never the arr era's quality/languages/indexerId. */
+/** A direct-source release row as `POST /api/calendar/releases` serves it
+ *  (S5 base — no derived fields; tests override quality/languages). */
 function makeRelease(overrides: Partial<Release> = {}): Release {
   return {
     guid: 'en-1',
@@ -191,11 +191,25 @@ describe('ReleaseSearchModal filter bar', () => {
   it('offers no quality or language chips when the rows carry none (S5)', async () => {
     await openResults()
 
-    // Direct rows never carry quality/languages: the chip groups must not
-    // render at all, and an absent value must never surface as text.
+    // Rows WITHOUT quality/languages fields (S5) contribute no chips: the
+    // groups stay unrendered and an absent value never surfaces as text.
     expect(screen.queryByText('Calidad')).toBeNull()
     expect(screen.queryByText('Idioma')).toBeNull()
     expect(within(releasesRegion()).queryByText('undefined')).toBeNull()
+  })
+
+  it('offers quality and language chips when the rows carry them (S1)', async () => {
+    mockFetch({
+      releases: [makeRelease({ guid: 'q-1', quality: 'Bluray-1080p', languages: ['Spanish'] })],
+    })
+    await openResults()
+
+    // The chips lost in the direct-source migration (S1): both groups render
+    // with the values the rows carry.
+    expect(screen.getByText('Calidad')).toBeInTheDocument()
+    expect(screen.getByText('Idioma')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Bluray-1080p' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Spanish' })).toBeInTheDocument()
   })
 
   it('a row without seeders is unknown, not zero: it survives the seeders floor', async () => {
@@ -357,9 +371,8 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
 })
 
 /**
- * What the grab body may claim. The release quality used to ride the wire so
- * the server could route by it; a direct row never carries one (S5), and the
- * body must say so by omission rather than invent a class.
+ * What the grab body may claim: it forwards only what the row carries. A row
+ * without quality sends none — the body invents no class (S5).
  */
 describe('ReleaseSearchModal grab body honesty', () => {
   afterEach(() => {

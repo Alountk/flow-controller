@@ -726,9 +726,8 @@ export function ReleaseSearchModal({
    * otherwise override "→ Biblioteca"), the folders are the row's own
    * configured routing folders, and 3D forces the flag the chip suggests.
    */
-  /** Where this row lands when nobody pressed a button: the same three rules
-   *  the backend routes with, resolved here only to SUGGEST a button. A row
-   *  without a quality class (every direct row) claims nothing. */
+  /** Where this row lands when nobody pressed a button: the backend's own
+   *  three rules, resolved here only to SUGGEST. No class → claims nothing. */
   function destinationFor(r: Release): string {
     if (foldersUnreadable) return 'la que decida el backend (configuración ilegible)'
     if (isThreeD(r) && path3d) return path3d
