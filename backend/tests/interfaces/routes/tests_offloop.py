@@ -73,6 +73,36 @@ class TestMixerProbeIsOffTheEventLoop:
         )
 
 
+class TestMixerProbeFileIsOffTheEventLoop:
+    """One `subprocess.run(ffprobe, timeout=30)` per request: up to 30 s."""
+
+    def test_probe_file_does_not_run_on_the_event_loop(self):
+        seen: dict = {}
+        probe = {
+            "filename": "video.mkv",
+            "path": "/mnt/storage/video.mkv",
+            "format": "matroska",
+            "duration": 7200.0,
+            "size_bytes": 1000000,
+            "video_tracks": [],
+            "audio_tracks": [],
+            "subtitle_tracks": [],
+        }
+        with patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True), \
+             patch("interfaces.http.routes_mixer.probe_file",
+                   side_effect=lambda p: (seen.__setitem__("probe", _ran_on_the_event_loop()), probe)[1]):
+            resp = client.post(
+                "/api/mixer/probe-file",
+                json={"path": "/mnt/storage/video.mkv"},
+            )
+
+        assert resp.status_code == 200, resp.text
+        assert "probe" in seen, "probe_file was never called"
+        assert seen["probe"] is False, (
+            "ffprobe ran on the event loop: one 30 s probe stalls every other request"
+        )
+
+
 class TestFileEndpointsAreOffTheEventLoop:
     """These run over /mnt/storage, which can be a stalled network mount.
 

@@ -283,6 +283,86 @@ class TestProbeEndpoint:
         assert s0["forced"] is True
 
 
+class TestProbeFileEndpoint:
+    """T1 (S1): ONE file -> its parsed specs, /probe's contract for a single path."""
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_file_returns_parsed_specs(self, mock_probe, _isfile):
+        probe = _probe_fixture(
+            "/mnt/storage/movies/ParaNorman.mkv",
+            subtitle_tracks=(_sub_track("spa"),),
+        )
+        mock_probe.return_value = probe
+
+        resp = client.post(
+            "/api/mixer/probe-file",
+            json={"path": "/mnt/storage/movies/ParaNorman.mkv"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data == probe
+        # T4 renders exactly these; the endpoint must not reshape the parse.
+        assert {"format", "duration", "size_bytes",
+                "video_tracks", "audio_tracks", "subtitle_tracks"} <= set(data)
+        assert mock_probe.call_count == 1
+
+    def test_probe_file_empty_path_is_400(self):
+        resp = client.post("/api/mixer/probe-file", json={"path": ""})
+        assert resp.status_code == 400
+
+    def test_probe_file_outside_allowed_roots_is_403(self):
+        resp = client.post("/api/mixer/probe-file", json={"path": "/etc/passwd"})
+        assert resp.status_code == 403
+        assert "not allowed" in resp.json()["detail"].lower()
+
+    def test_probe_file_missing_file_is_400(self):
+        resp = client.post(
+            "/api/mixer/probe-file",
+            json={"path": "/mnt/storage/nonexistent.mkv"},
+        )
+        assert resp.status_code == 400
+        assert "not found" in resp.json()["detail"].lower()
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_file_unreadable_input_is_400(self, mock_probe, _isfile):
+        # An ffprobe-unreadable file (0-byte .part, .met, no-media) is bad
+        # INPUT — the same 400 /probe answers, never a 500.
+        mock_probe.side_effect = media_mixer.ProbeInputError("ffprobe failed: boom")
+        resp = client.post(
+            "/api/mixer/probe-file",
+            json={"path": "/mnt/storage/temp/001.part"},
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "ffprobe failed: boom"}
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_file_timeout_is_400(self, mock_probe, _isfile):
+        # A 30 s ffprobe timeout is bad input too (probe_file's taxonomy).
+        mock_probe.side_effect = media_mixer.ProbeInputError("ffprobe timed out")
+        resp = client.post(
+            "/api/mixer/probe-file",
+            json={"path": "/mnt/storage/movies/ParaNorman.mkv"},
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "ffprobe timed out"}
+
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_file_missing_ffprobe_is_500(self, mock_probe, _isfile):
+        # A missing binary IS a server fault: the only probe failure at 500.
+        mock_probe.side_effect = RuntimeError("ffprobe not found")
+        resp = client.post(
+            "/api/mixer/probe-file",
+            json={"path": "/mnt/storage/movies/ParaNorman.mkv"},
+        )
+        assert resp.status_code == 500
+        assert resp.json() == {"detail": "ffprobe not found"}
+
+
 class TestProbeFileErrors:
     """probe_file's failure taxonomy: input problems vs a broken server."""
 
