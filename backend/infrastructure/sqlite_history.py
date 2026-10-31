@@ -15,6 +15,7 @@ Schema changes go through ``PRAGMA user_version`` so future migrations — a
 rewrite.
 """
 
+import json
 import logging
 import os
 import sqlite3
@@ -26,7 +27,7 @@ from infrastructure import credentials
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -214,6 +215,12 @@ CREATE TABLE IF NOT EXISTS indexers (
     updated_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_auto_copy_log_newest ON auto_copy_log (at DESC, id DESC);
+-- v12: persisted ffprobe results («ffprobe-masivo» T1/S1), keyed by the file's
+-- identity (path + mtime + size): a row is served only while that identity holds.
+-- Same migration discipline as v2-v11: `CREATE TABLE IF NOT EXISTS` inside the
+-- script `init_db` runs on every start, so an older file simply gains the table
+-- and the version bump only records it.
+CREATE TABLE IF NOT EXISTS probe_results (path TEXT PRIMARY KEY, mtime REAL NOT NULL, size INTEGER NOT NULL, probe_json TEXT NOT NULL, analyzed_at REAL NOT NULL);
 """
 
 # Columns mirrored from the in-memory op. Kept explicit so an unexpected key
@@ -987,6 +994,62 @@ def blocked_acks() -> set[str]:
         except sqlite3.Error as exc:
             log.warning("Could not read blocked acknowledgements: %s", exc)
             return set()
+
+
+# ── Probe results («ffprobe-masivo» T1/S1) ───────────────────────────────────
+
+
+def save_probe_result(path: str, probe: dict) -> None:
+    """Persist one successful probe against the file's identity (S1).
+
+    Best-effort: a vanished file or a down store drops the record silently.
+    """
+    with _lock:
+        if _conn is None:
+            return
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return
+        try:
+            _conn.execute(
+                "INSERT OR REPLACE INTO probe_results (path, mtime, size, probe_json, analyzed_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (path, stat.st_mtime, stat.st_size, json.dumps(probe), time.time()),
+            )
+            _conn.commit()
+        except (sqlite3.Error, TypeError, ValueError) as exc:
+            log.warning("Could not persist probe result %s: %s", path, exc)
+
+
+def get_probe_result(path: str) -> dict | None:
+    """The persisted probe for ``path``, served only while its identity holds (S1).
+
+    Stale, missing and corrupt rows answer None — the caller re-probes.
+    """
+    with _lock:
+        if _conn is None:
+            return None
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return None
+        try:
+            row = _conn.execute(
+                "SELECT mtime, size, probe_json FROM probe_results WHERE path = ?",
+                (path,),
+            ).fetchone()
+        except sqlite3.Error as exc:
+            log.warning("Could not read probe result %s: %s", path, exc)
+            return None
+        # Exact == is the staleness test on purpose: float64 mtime and int size
+        # roundtrip REAL/INTEGER unchanged, so any difference is a real change.
+        if row is None or row["mtime"] != stat.st_mtime or row["size"] != stat.st_size:
+            return None
+        try:
+            return json.loads(row["probe_json"])
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
 
 
 # ── indexers — the direct Torznab registry («indexadores-directos» T3) ────────

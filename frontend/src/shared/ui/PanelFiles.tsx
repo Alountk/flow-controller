@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatSize, useBrowse } from '../hooks/useFilesNavigator.ts'
 import { apiFetch } from '../api/auth.ts'
 import { errorMessage } from '../utils/text.ts'
 import { classifyFile, type FileSectionId, type RoutingFolders } from '../utils/fileSections.ts'
-import { probeFile, type ProbeFile, type ProbeFileResult } from '../api/probe.ts'
+import { probeFile, probeCached, probeHeight, type ProbeFile, type ProbeFileResult } from '../api/probe.ts'
 import { probeSpec } from '../utils/probePreview.ts'
 import type { BrowseResponse, FileItem } from '../types.ts'
 
@@ -68,7 +68,7 @@ function FilesList({ path }: { path: string }) {
 /** The listing table the navigator family renders — one copy for the flat
  *  tab and for every section. Sections pass `actions` (T4's «Analizar»); the
  *  flat tab passes nothing and gains no column. */
-function FilesTable({ items, actions }: { items: FileItem[]; actions?: (item: FileItem) => ReactNode }) {
+function FilesTable({ items, actions, chips }: { items: FileItem[]; actions?: (item: FileItem) => ReactNode; chips?: (item: FileItem) => ReactNode }) {
   return (
     <table className="sec-table sec-files-table">
       <thead>
@@ -84,6 +84,7 @@ function FilesTable({ items, actions }: { items: FileItem[]; actions?: (item: Fi
           <tr key={item.path}>
             <td className="sec-file-name" title={item.path}>
               {item.name}
+              {chips?.(item)}
             </td>
             <td>{item.is_dir ? '—' : formatSize(item.size)}</td>
             <td>{new Date(item.modified * 1000).toLocaleDateString('es-ES')}</td>
@@ -213,6 +214,9 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
 /** ffprobe can only read actual videos — dirs and sidecars prove nothing (T4). */
 const isAnalyzable = (item: FileItem) => !item.is_dir && item.is_video !== false
 
+/** S2: the honest low-quality marker, shown only after a real measurement. */
+const QUALITY_CHIP = 'Baja calidad'
+
 /** One section with its own on-demand probe state (S2: nothing runs alone;
  *  T4: no global state, no cache — a re-click re-probes). */
 function FilesSection({
@@ -232,6 +236,9 @@ function FilesSection({
     setProbes((prev) => ({ ...prev, [path]: result }))
 
   const analyzeFile = (item: FileItem) => {
+    // S4: a fresh persisted probe answers instantly — a click never re-probes
+    // what the cache already knows.
+    if (probes[item.path]?.ok) return
     setRunningFiles((prev) => new Set(prev).add(item.path))
     // probeFile never rejects — no try/catch needed to leave the button state.
     probeFile(item.path).then((result) => {
@@ -252,6 +259,39 @@ function FilesSection({
   }
 
   const analyzable = items.filter(isAnalyzable)
+
+  // T4 (S2): chips read the PERSISTED probes, so rendering never runs ffprobe
+  // — one cache read per section, and only for files nobody analyzed here.
+  const sectionPaths = items.map((item) => item.path).join('|')
+  useEffect(() => {
+    const paths = items.filter(isAnalyzable).map((item) => item.path).filter(Boolean)
+    if (paths.length === 0) return
+    let live = true
+    probeCached(paths).then((cached) => {
+      if (!live) return
+      setProbes((prev) => {
+        const next = { ...prev }
+        for (const [path, probe] of Object.entries(cached)) {
+          if (probe && !next[path]) next[path] = { ok: true, probe }
+        }
+        return next
+      })
+    })
+    return () => {
+      live = false
+    }
+    // `sectionPaths` is the identity that matters: `items` is a fresh array.
+  }, [sectionPaths])
+
+  /** S2: only a MEASURED height below 1080 earns the chip — never a guess. */
+  const qualityChip = (item: FileItem) => {
+    const result = probes[item.path]
+    if (!result?.ok) return null
+    const height = probeHeight(result.probe)
+    if (!height || height >= 1080) return null
+    return <span className="sec-quality-chip">{QUALITY_CHIP}</span>
+  }
+
   return (
     <section className="sec-files-section">
       <h4>{section.label}</h4>
@@ -274,6 +314,7 @@ function FilesSection({
       ) : (
         <FilesTable
           items={items}
+          chips={qualityChip}
           actions={(item) =>
             isAnalyzable(item) ? (
               <>

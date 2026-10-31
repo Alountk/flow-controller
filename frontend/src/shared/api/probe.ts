@@ -91,3 +91,70 @@ export async function probeFile(path: string): Promise<ProbeFileResult> {
   }
   return { ok: true, probe: await res.json() as ProbeFile }
 }
+
+/**
+ * Persisted specs for the visible files: POST the paths, get a map where a
+ * `null` value means «not analyzed yet or stale» — the caller then asks
+ * `probeFile` for that one file. Never runs ffprobe.
+ *
+ * Never rejects: a transport failure resolves to an empty map, which reads
+ * as «nothing analyzed» and simply shows no quality chip.
+ */
+export async function probeCached(paths: string[]): Promise<Record<string, ProbeFile | null>> {
+  if (paths.length === 0) return {}
+  try {
+    const res = await apiFetch('/api/mixer/probe-cached', {
+      method: 'POST',
+      body: JSON.stringify({ paths }),
+    })
+    if (!res.ok) return {}
+    return await res.json() as Record<string, ProbeFile | null>
+  } catch {
+    return {}
+  }
+}
+
+/** The measured height of a probe's chosen video track (0 when it says none). */
+export function probeHeight(probe: ProbeFile): number {
+  const track = probe.video_tracks.find((t) => t.selected) ?? probe.video_tracks[0]
+  return track?.height ?? 0
+}
+
+/** Job status of the library sweep («Analizar biblioteca»). */
+export interface ProbeLibraryStatus {
+  running: boolean
+  total: number
+  analyzed: number
+  skipped: number
+  failed: number
+  started_at: number
+  finished_at: number
+}
+
+/** Start the sweep; a refused start carries the server's own reason. */
+export async function probeLibraryStart(): Promise<{ ok: true } | { ok: false; detail: string }> {
+  try {
+    const res = await apiFetch('/api/mixer/probe-library', { method: 'POST' })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      return {
+        ok: false,
+        detail: (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`,
+      }
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, detail: `Error de conexión: ${err}` }
+  }
+}
+
+/** How far the sweep got; `null` when the status cannot be read right now. */
+export async function probeLibraryStatus(): Promise<ProbeLibraryStatus | null> {
+  try {
+    const res = await apiFetch('/api/mixer/probe-library/status', {})
+    if (!res.ok) return null
+    return await res.json() as ProbeLibraryStatus
+  } catch {
+    return null
+  }
+}

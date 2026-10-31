@@ -13,6 +13,7 @@ os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
 from fastapi.testclient import TestClient
 from app import app
 import media_mixer
+from infrastructure import sqlite_history as history
 from interfaces.http import routes_mixer
 from task_manager import mux_tasks
 
@@ -365,6 +366,174 @@ class TestProbeFileEndpoint:
         )
         assert resp.status_code == 500
         assert resp.json() == {"detail": "ffprobe not found"}
+
+
+class TestProbeFilePersistence:
+    """T1 (S1): a successful probe is stored against the file's identity;
+    a failed probe stores nothing."""
+
+    @pytest.fixture
+    def probe_db(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        yield
+        history.close()
+
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_file_persists_the_probe(self, mock_probe, probe_db, monkeypatch, tmp_path):
+        real = tmp_path / "ParaNorman.mkv"
+        real.write_bytes(b"\x00" * 64)
+        path = os.path.realpath(real)
+        monkeypatch.setattr(routes_mixer, "ALLOWED_ROOTS", [os.path.realpath(str(tmp_path))])
+        probe = _probe_fixture(path)
+        mock_probe.return_value = probe
+
+        resp = client.post("/api/mixer/probe-file", json={"path": path})
+
+        assert resp.status_code == 200
+        assert history.get_probe_result(path) == probe
+
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_file_failure_stores_nothing(self, mock_probe, probe_db, monkeypatch, tmp_path):
+        real = tmp_path / "broken.part"
+        real.write_bytes(b"")
+        path = os.path.realpath(real)
+        monkeypatch.setattr(routes_mixer, "ALLOWED_ROOTS", [os.path.realpath(str(tmp_path))])
+        mock_probe.side_effect = media_mixer.ProbeInputError("ffprobe failed: boom")
+
+        resp = client.post("/api/mixer/probe-file", json={"path": path})
+
+        assert resp.status_code == 400
+        assert history.get_probe_result(path) is None
+
+
+class TestProbeCachedEndpoint:
+    """T2 (S1): /probe-cached serves persisted probes — fresh rows only, no ffprobe."""
+
+    @pytest.fixture
+    def probe_db(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        yield
+        history.close()
+
+    def test_fresh_row_serves_the_full_stored_probe(self, probe_db, monkeypatch, tmp_path):
+        real = tmp_path / "ParaNorman.mkv"
+        real.write_bytes(b"\x00" * 64)
+        path = os.path.realpath(real)
+        monkeypatch.setattr(routes_mixer, "ALLOWED_ROOTS", [os.path.realpath(str(tmp_path))])
+        probe = _probe_fixture(path)
+        history.save_probe_result(path, probe)
+
+        resp = client.post("/api/mixer/probe-cached", json={"paths": [path]})
+
+        assert resp.status_code == 200
+        assert resp.json() == {path: probe}
+
+    def test_stale_row_maps_to_null(self, probe_db, monkeypatch, tmp_path):
+        real = tmp_path / "ParaNorman.mkv"
+        real.write_bytes(b"\x00" * 64)
+        path = os.path.realpath(real)
+        monkeypatch.setattr(routes_mixer, "ALLOWED_ROOTS", [os.path.realpath(str(tmp_path))])
+        history.save_probe_result(path, _probe_fixture(path))
+        # S1: any identity change makes the stored probe untrustworthy.
+        with open(real, "ab") as fh:
+            fh.write(b"\x01" * 32)
+
+        resp = client.post("/api/mixer/probe-cached", json={"paths": [path]})
+
+        assert resp.status_code == 200
+        assert resp.json() == {path: None}
+
+    def test_unanalyzed_and_missing_rows_map_to_null(self, probe_db, monkeypatch, tmp_path):
+        unanalyzed = tmp_path / "Coraline.mkv"
+        unanalyzed.write_bytes(b"\x00" * 64)
+        unanalyzed = os.path.realpath(unanalyzed)
+        missing = os.path.realpath(tmp_path / "ghost.mkv")
+        monkeypatch.setattr(routes_mixer, "ALLOWED_ROOTS", [os.path.realpath(str(tmp_path))])
+
+        resp = client.post(
+            "/api/mixer/probe-cached", json={"paths": [unanalyzed, missing]}
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() == {unanalyzed: None, missing: None}
+
+    def test_non_array_paths_body_is_pinned_422(self, probe_db):
+        resp = client.post(
+            "/api/mixer/probe-cached", json={"paths": "/mnt/storage/movies/x.mkv"}
+        )
+
+        assert resp.status_code == 422
+        assert resp.json() == {
+            "detail": [{"type": "list_type", "loc": ["body", "paths"],
+                        "msg": "Input should be a valid list",
+                        "input": "/mnt/storage/movies/x.mkv"}]
+        }
+
+    def test_wrong_shaped_paths_item_is_pinned_422(self, probe_db):
+        resp = client.post("/api/mixer/probe-cached", json={"paths": [123]})
+
+        assert resp.status_code == 422
+        assert resp.json() == {
+            "detail": [{"type": "string_type", "loc": ["body", "paths", 0],
+                        "msg": "Input should be a valid string", "input": 123}]
+        }
+
+    def test_missing_paths_field_is_pinned_422(self, probe_db):
+        resp = client.post("/api/mixer/probe-cached", json={})
+
+        assert resp.status_code == 422
+        assert resp.json() == {
+            "detail": [{"type": "missing", "loc": ["body", "paths"],
+                        "msg": "Field required", "input": {}}]
+        }
+
+    def test_empty_path_is_the_same_400_as_probe_file(self, probe_db):
+        resp = client.post("/api/mixer/probe-cached", json={"paths": [""]})
+        alone = client.post("/api/mixer/probe-file", json={"path": ""})
+
+        assert resp.status_code == alone.status_code == 400
+        assert resp.json() == alone.json() == {"detail": "Path is empty"}
+
+    def test_outside_allowed_roots_is_the_same_403_as_probe_file(self, probe_db):
+        resp = client.post("/api/mixer/probe-cached", json={"paths": ["/etc/passwd"]})
+        alone = client.post("/api/mixer/probe-file", json={"path": "/etc/passwd"})
+
+        assert resp.status_code == alone.status_code == 403
+        assert resp.json() == alone.json() == {"detail": "Path not allowed: /etc/passwd"}
+
+    def test_first_failing_path_decides_the_error(self, probe_db):
+        resp = client.post(
+            "/api/mixer/probe-cached", json={"paths": ["", "/etc/passwd"]}
+        )
+
+        assert resp.status_code == 400
+        assert resp.json() == {"detail": "Path is empty"}
+
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_cached_never_runs_ffprobe(self, mock_probe, probe_db, monkeypatch, tmp_path):
+        real = tmp_path / "ParaNorman.mkv"
+        real.write_bytes(b"\x00" * 64)
+        path = os.path.realpath(real)
+        monkeypatch.setattr(routes_mixer, "ALLOWED_ROOTS", [os.path.realpath(str(tmp_path))])
+        probe = _probe_fixture(path)
+        history.save_probe_result(path, probe)
+        cold = tmp_path / "Coraline.mkv"
+        cold.write_bytes(b"\x00" * 64)
+        cold = os.path.realpath(cold)
+
+        resp = client.post("/api/mixer/probe-cached", json={"paths": [path, cold]})
+
+        assert resp.status_code == 200
+        assert resp.json() == {path: probe, cold: None}
+        mock_probe.assert_not_called()
+
+    def test_probe_cached_requires_the_api_key_when_auth_is_on(self, probe_db):
+        with patch("infrastructure.settings_store.auth_required", return_value=True):
+            resp = client.post("/api/mixer/probe-cached", json={"paths": []})
+
+        assert resp.status_code == 401
 
 
 class TestProbeFileErrors:

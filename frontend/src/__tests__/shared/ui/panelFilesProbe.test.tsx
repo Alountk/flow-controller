@@ -321,7 +321,9 @@ describe('T4 · fallos y alcance de los botones', () => {
     expect(probeCalls(fn.mock.calls)).toHaveLength(0)
   })
 
-  it('a re-click re-probes and REPLACES the block — no caching', async () => {
+  it('a re-click answers from the persisted probe — no second ffprobe run', async () => {
+    // S4 of «ffprobe-masivo» supersedes the T4-era «no caching» rule: the
+    // click asks the cache first and only a miss re-probes.
     const { fn } = stubFetch()
     renderPanel(<PanelFiles facts={ready} folders={{ path4k: '', path3d: '' }} />)
     const row = (await screen.findByText('ParaNorman.mkv')).closest('tr') as HTMLElement
@@ -332,7 +334,7 @@ describe('T4 · fallos y alcance de los botones', () => {
     fireEvent.click(button)
     await screen.findByText(SPECS)
 
-    expect(probeCalls(fn.mock.calls)).toHaveLength(2)
+    expect(probeCalls(fn.mock.calls)).toHaveLength(1)
     expect(screen.getAllByText(SPECS)).toHaveLength(1)
     expect(screen.getAllByText(FOOTER)).toHaveLength(1)
   })

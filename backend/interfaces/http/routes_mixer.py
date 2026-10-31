@@ -32,12 +32,14 @@ from media_mixer import (
     SHORT_LANGUAGE_SUFFIXES,
 )
 from task_manager import mux_tasks
+from application.use_cases import probe_library
 from application.gateways import (
     arr_movie_exists,
     arr_movie_file,
     arr_movie_lookup,
     download_subtitle,
     get_setting,
+    history,
     prowlarr_search,
     qbit_add_download,
     search_subtitles,
@@ -66,6 +68,12 @@ class ProbeFileRequest(BaseModel):
     """T1 (S1): the single file the movies file view asks specs for."""
 
     path: str = ""
+
+
+class ProbeCachedRequest(BaseModel):
+    """T2 (S1): the visible files whose ALREADY-analyzed specs the view reads."""
+
+    paths: list[str]
 
 
 class MuxRequest(BaseModel):
@@ -456,7 +464,49 @@ async def mixer_probe_file(req: ProbeFileRequest, _key: str = Depends(verify_api
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+    # Persist so the file view can answer from the database instead of paying
+    # ffprobe again (S1); every failure path raised above, so none persists.
+    await asyncio.to_thread(history.save_probe_result, path, probe)
+
     return probe
+
+
+@router.post("/probe-cached")
+async def mixer_probe_cached(
+    req: ProbeCachedRequest, _key: str = Depends(verify_api_key)
+):
+    """T2 (S1): persisted specs for the visible files — zero ffprobe work.
+
+    A stale or unanalyzed path maps to null on purpose: the client then asks
+    `/probe-file` for that one file, so no probe ever runs from rendering.
+    """
+    cached: dict[str, dict | None] = {}
+    for raw in req.paths:
+        path = _validate_mixer_path(raw)
+        cached[path] = await asyncio.to_thread(history.get_probe_result, path)
+    return cached
+
+
+@router.post("/probe-library")
+async def mixer_probe_library(_key: str = Depends(verify_api_key)):
+    """T3 (S3): start the library-wide sweep; one run at a time.
+
+    The universe is resolved here (it needs the arr) and handed to the job,
+    which owns the progress the status endpoint reports.
+    """
+    paths = await probe_library.collect_universe()
+    if not probe_library.start(paths):
+        raise HTTPException(
+            status_code=409,
+            detail="Ya hay un análisis de biblioteca en curso",
+        )
+    return {"started": True, "total": len(paths)}
+
+
+@router.get("/probe-library/status")
+async def mixer_probe_library_status(_key: str = Depends(verify_api_key)):
+    """T3 (S3): how far the sweep got, so the UI can show progress."""
+    return probe_library.status()
 
 
 @router.post("/lookup")

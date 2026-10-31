@@ -39,7 +39,10 @@ visual de dónde se corta el flujo.
 
 ## Calidad de biblioteca — tareas nuevas
 
-- [ ] **ffprobe masivo en la vista de ficheros de películas**
+- [x] **ffprobe masivo en la vista de ficheros de películas** — entregado
+  (`ffprobe-masivo`: sondas persistidas en sqlite v12, «Analizar biblioteca»
+  con progreso y skip de ya analizados, chip «Baja calidad» desde datos
+  medidos). Ver `odd/tasks/ffprobe-masivo.md`.
   - Botón «Analizar todos»: sondea con ffprobe TODOS los archivos de vídeo
     de las secciones 1080/4K/3D/Otros (mismo contrato
     `POST /api/mixer/probe-file`, bajo demanda — nada corre solo).
@@ -51,13 +54,31 @@ visual de dónde se corta el flujo.
   - **Chip de calidad por archivo** en la tabla («720p», «1080p», «4K»…)
     derivado SOLO del resultado medido: fichero sin analizar → sin chip
     (honestidad: nada se inventa).
-- [ ] **Lista de upgrades de calidad**
+- [ ] **Lista de upgrades de calidad** — pendiente; la persistencia de
+  sondas que necesitaba ya está en `main`.
   - Películas cuyo archivo medido queda por debajo del umbral → lista de
     «candidatas a mejorar» con fichero, resolución medida y destino actual.
   - **Umbral configurable en Settings, default «menos de 1080p»**
     (decisión del usuario); la lista relee el umbral guardado.
   - Bebe de la persistencia de la tarea anterior: sin sonda guardada no hay
     lista que mostrar (orden de activación: primero la masiva, luego esto).
+- [ ] **Buscador de duplicidades de la misma calidad**
+  - Agrupa archivos de la biblioteca que son la MISMA película en la MISMA
+    calidad (dos 1080p, dos 4K…) y muestra **las specs completas de cada
+    archivo**, en una comparativa como la del mixer: resolución, codec,
+    perfil/nivel, bitrate, fps, audio por pista con idioma y canales,
+    subtítulos, tamaño y duración.
+  - El buscador **propone** cuál es el mejor (misma lógica de comparación
+    que el mixer: primero las comprobaciones objetivas, no una heurística
+    opaca); **el usuario tiene la última palabra** sobre qué archivo se
+    queda — la app nunca borra por su cuenta.
+  - **Aparcado con selección explícita**: una lista de candidatos a borrar
+    donde el usuario marca uno a uno los que quiere eliminar y confirma el
+    lote; mientras tanto quedan «aparcados» sin tocar. Nada se borra sin esa
+    confirmación final.
+  - Depende de la persistencia de sondas para no re-ejecutar ffprobe por
+    cada archivo comparado; los no analizados se marcan como tales en vez de
+    inventar specs.
 
 ## Trazabilidad del flujo
 
