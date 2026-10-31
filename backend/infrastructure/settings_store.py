@@ -58,6 +58,10 @@ DEFAULTS: dict[str, Any] = {
     # required regardless of this list (L3: «es el minimo») — the route forces
     # it back in, so the config can only ADD required languages, not drop spa.
     "mixer": {"required_languages": ["spa"]},
+    # «umbral-calidad» S2: the minimum ACCEPTABLE resolution class (default
+    # «menos de 1080p») and an optional manual width in pixels that overrides
+    # the class comparison. 0 = "use the class".
+    "quality": {"min_class": "1080p", "min_width": 0},
     "server": {"port": 8000},
 }
 
