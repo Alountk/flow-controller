@@ -32,6 +32,7 @@ from media_mixer import (
     SHORT_LANGUAGE_SUFFIXES,
 )
 from task_manager import mux_tasks
+from application.use_cases import probe_library
 from application.gateways import (
     arr_movie_exists,
     arr_movie_file,
@@ -484,6 +485,28 @@ async def mixer_probe_cached(
         path = _validate_mixer_path(raw)
         cached[path] = await asyncio.to_thread(history.get_probe_result, path)
     return cached
+
+
+@router.post("/probe-library")
+async def mixer_probe_library(_key: str = Depends(verify_api_key)):
+    """T3 (S3): start the library-wide sweep; one run at a time.
+
+    The universe is resolved here (it needs the arr) and handed to the job,
+    which owns the progress the status endpoint reports.
+    """
+    paths = await probe_library.collect_universe()
+    if not probe_library.start(paths):
+        raise HTTPException(
+            status_code=409,
+            detail="Ya hay un análisis de biblioteca en curso",
+        )
+    return {"started": True, "total": len(paths)}
+
+
+@router.get("/probe-library/status")
+async def mixer_probe_library_status(_key: str = Depends(verify_api_key)):
+    """T3 (S3): how far the sweep got, so the UI can show progress."""
+    return probe_library.status()
 
 
 @router.post("/lookup")
