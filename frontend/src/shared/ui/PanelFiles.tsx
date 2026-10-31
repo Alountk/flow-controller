@@ -1,8 +1,11 @@
+import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatSize, useBrowse } from '../hooks/useFilesNavigator.ts'
 import { apiFetch } from '../api/auth.ts'
 import { errorMessage } from '../utils/text.ts'
 import { classifyFile, type FileSectionId, type RoutingFolders } from '../utils/fileSections.ts'
+import { probeFile, type ProbeFile, type ProbeFileResult } from '../api/probe.ts'
+import { probeSpec } from '../utils/probePreview.ts'
 import type { BrowseResponse, FileItem } from '../types.ts'
 
 /** What the Archivos tab reads of each page's RowFacts — pages pass theirs. */
@@ -63,8 +66,9 @@ function FilesList({ path }: { path: string }) {
 }
 
 /** The listing table the navigator family renders — one copy for the flat
- *  tab and for every section. */
-function FilesTable({ items }: { items: FileItem[] }) {
+ *  tab and for every section. Sections pass `actions` (T4's «Analizar»); the
+ *  flat tab passes nothing and gains no column. */
+function FilesTable({ items, actions }: { items: FileItem[]; actions?: (item: FileItem) => ReactNode }) {
   return (
     <table className="sec-table sec-files-table">
       <thead>
@@ -72,6 +76,7 @@ function FilesTable({ items }: { items: FileItem[] }) {
           <th scope="col">Nombre</th>
           <th scope="col">Tamaño</th>
           <th scope="col">Modificado</th>
+          {actions && <th scope="col">Analizar</th>}
         </tr>
       </thead>
       <tbody>
@@ -82,6 +87,7 @@ function FilesTable({ items }: { items: FileItem[] }) {
             </td>
             <td>{item.is_dir ? '—' : formatSize(item.size)}</td>
             <td>{new Date(item.modified * 1000).toLocaleDateString('es-ES')}</td>
+            {actions && <td>{actions(item)}</td>}
           </tr>
         ))}
       </tbody>
@@ -89,11 +95,11 @@ function FilesTable({ items }: { items: FileItem[] }) {
   )
 }
 
-const SECTIONS: Array<{ id: FileSectionId; label: string }> = [
-  { id: '1080', label: '1080' },
-  { id: '4k', label: '4K' },
-  { id: '3d', label: '3D' },
-  { id: 'otros', label: 'Otros' },
+const SECTIONS: Array<{ id: FileSectionId; label: string; specClass: string }> = [
+  { id: '1080', label: '1080', specClass: '1080p' },
+  { id: '4k', label: '4K', specClass: '4K' },
+  { id: '3d', label: '3D', specClass: '3D' },
+  { id: 'otros', label: 'Otros', specClass: 'Otros' },
 ]
 
 /** The movie's folder name: its copies keep it at the FRONT of theirs (the
@@ -192,16 +198,134 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
       {SECTIONS.map((section) => {
         const items = entries.filter((entry) => classifyFile(entry, folders, basePath) === section.id)
         return (
-          <section key={section.id} className="sec-files-section">
-            <h4>{section.label}</h4>
-            {items.length === 0 ? (
-              routingFailed ? null : <p className="sec-tab-note">Sin archivos en esta sección</p>
-            ) : (
-              <FilesTable items={items} />
-            )}
-          </section>
+          <FilesSection
+            key={section.id}
+            section={section}
+            items={items}
+            routingFailed={routingFailed}
+          />
         )
       })}
     </>
+  )
+}
+
+/** ffprobe can only read actual videos — dirs and sidecars prove nothing (T4). */
+const isAnalyzable = (item: FileItem) => !item.is_dir && item.is_video !== false
+
+/** One section with its own on-demand probe state (S2: nothing runs alone;
+ *  T4: no global state, no cache — a re-click re-probes). */
+function FilesSection({
+  section,
+  items,
+  routingFailed,
+}: {
+  section: { label: string; specClass: string }
+  items: FileItem[]
+  routingFailed: boolean
+}) {
+  const [probes, setProbes] = useState<Record<string, ProbeFileResult>>({})
+  const [runningFiles, setRunningFiles] = useState<Set<string>>(() => new Set())
+  const [sectionRunning, setSectionRunning] = useState(false)
+
+  const store = (path: string, result: ProbeFileResult) =>
+    setProbes((prev) => ({ ...prev, [path]: result }))
+
+  const analyzeFile = (item: FileItem) => {
+    setRunningFiles((prev) => new Set(prev).add(item.path))
+    // probeFile never rejects — no try/catch needed to leave the button state.
+    probeFile(item.path).then((result) => {
+      store(item.path, result)
+      setRunningFiles((prev) => {
+        const next = new Set(prev)
+        next.delete(item.path)
+        return next
+      })
+    })
+  }
+
+  const analyzeSection = () => {
+    setSectionRunning(true)
+    Promise.all(
+      items.filter(isAnalyzable).map((item) => probeFile(item.path).then((r) => store(item.path, r))),
+    ).then(() => setSectionRunning(false))
+  }
+
+  const analyzable = items.filter(isAnalyzable)
+  return (
+    <section className="sec-files-section">
+      <h4>{section.label}</h4>
+      {analyzable.length > 0 && (
+        <p className="sec-analyze-row">
+          <button
+            type="button"
+            className="sec-analyze"
+            aria-label={`Analizar sección ${section.label}`}
+            disabled={sectionRunning}
+            onClick={analyzeSection}
+          >
+            Analizar
+          </button>
+          {sectionRunning && <span className="sec-analyze-running">Ejecutando ffprobe…</span>}
+        </p>
+      )}
+      {items.length === 0 ? (
+        routingFailed ? null : <p className="sec-tab-note">Sin archivos en esta sección</p>
+      ) : (
+        <FilesTable
+          items={items}
+          actions={(item) =>
+            isAnalyzable(item) ? (
+              <>
+                <button
+                  type="button"
+                  className="sec-analyze"
+                  aria-label={`Analizar ${item.name}`}
+                  disabled={sectionRunning || runningFiles.has(item.path)}
+                  onClick={() => analyzeFile(item)}
+                >
+                  Analizar
+                </button>
+                {runningFiles.has(item.path) && (
+                  <span className="sec-analyze-running">Ejecutando ffprobe…</span>
+                )}
+              </>
+            ) : null
+          }
+        />
+      )}
+      {analyzable.map((item) => {
+        const result = probes[item.path]
+        if (!result) return null
+        return result.ok ? (
+          <SpecBlock key={item.path} probe={result.probe} specClass={section.specClass} />
+        ) : (
+          <div key={item.path} className="wanted-error" role="alert">
+            <strong>No se pudo analizar</strong>
+            <span>
+              {item.name}: {result.detail}
+            </span>
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+/** The S3 spec block, verbatim — lines from probePreview, header local. */
+function SpecBlock({ probe, specClass }: { probe: ProbeFile; specClass: string }) {
+  const spec = probeSpec(probe)
+  return (
+    <div className="sec-probe-spec">
+      <p>
+        <strong>{specClass}</strong> · <code>{probe.filename}</code>
+      </p>
+      <p>{spec.specs}</p>
+      {spec.audio.map((line, i) => (
+        <p key={probe.audio_tracks[i].index}>{line}</p>
+      ))}
+      {spec.subtitles && <p>{spec.subtitles}</p>}
+      <p>{spec.footer}</p>
+    </div>
   )
 }

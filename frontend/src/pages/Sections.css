@@ -1069,6 +1069,58 @@
   overflow-wrap: anywhere;
 }
 
+/* T4 (S2/S3): on-demand ffprobe — «Analizar» per file/section, its running
+   label, and the S3 spec block under each section. */
+.sec-analyze {
+  margin: 0;
+  padding: 3px 12px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.sec-analyze:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sec-analyze-row {
+  margin: 0 0 8px;
+}
+
+.sec-analyze-running {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.sec-probe-spec {
+  margin: 8px 0 4px;
+  padding: 10px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.sec-probe-spec p {
+  margin: 0;
+}
+
+.sec-probe-spec strong,
+.sec-probe-spec code {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
 /* ---- Implementation notes ---- */
 .sec-notes {
   background: var(--bg-elev);

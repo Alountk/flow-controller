@@ -79,14 +79,14 @@ function formatDelta(seconds: number): string {
   return `${Math.floor(d / 60)} min ${d % 60} s`
 }
 
-function formatBitrate(bps: number): string {
+export function formatBitrate(bps: number): string {
   if (!bps) return '—'
   const kbps = bps / 1000
   if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`
   return `${Math.round(kbps)} kbps`
 }
 
-function formatFps(fps: number): string {
+export function formatFps(fps: number): string {
   return fps ? fps.toFixed(3) : '—'
 }
 
@@ -116,11 +116,11 @@ const CODEC_LABELS: Record<string, string> = {
   truehd: 'TrueHD', mp3: 'MP3', opus: 'Opus', vorbis: 'Vorbis',
 }
 
-function codecLabel(codec: string): string {
+export function codecLabel(codec: string): string {
   return CODEC_LABELS[codec.toLowerCase()] || codec.toUpperCase()
 }
 
-function channelLabel(channels: number): string {
+export function channelLabel(channels: number): string {
   const known: Record<number, string> = { 1: '1.0', 2: '2.0', 6: '5.1', 8: '7.1' }
   return known[channels] || String(channels)
 }

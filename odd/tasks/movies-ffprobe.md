@@ -150,3 +150,21 @@ etiqueta HDR para T4 (honestidad): `smpte2084` → «HDR», `arib-std-b67` →
 `side_data_list` (un DV P8 reporta smpte2084 → se mal etiquetaría sin
 side_data); side_data passthrough = candidato a issue/roadmap. PR #259
 MERGEADO (`37d5d34`) con CI de PR y post-merge verdes (Engram 1505).
+L9 — T4 ENTREGADO (worker `mvvnic57-9-2qnl`, v2 tras Opción A; seam del
+padre PASS): botón «Analizar» por fila y por sección (cero probes en
+render, estado local por sección, sin caché — re-click re-sondea), preview
+S3 VERBATIM (pins en `panelFilesProbe.test.tsx`: SPECS :46, audios/subs
+:172-174, footer :51, jamás «HDR10»/«Dolby Vision» :252), error
+`wanted-error` inline sin try/catch, Serie/flat byte-idéntico (columna
+solo con `actions`). Formatter nuevo `shared/utils/probePreview.ts`:
+labels locales donde el helper contradice el pin — **el pin gana**; resuelto
+el risk1 del worker: footer «1h 35m» local = CORRECTO (formatDuration da
+«1h 35m 00s»). Reusos mínimos: `codecLabel`/`formatFps`/`formatBitrate`/
+`channelLabel` exportados de MediaMixer, `formatSize` ya exportado. RED
+10F→GREEN 12/12, focales 35/35 (worker). GATES del padre: frontend
+**113 ficheros/891 tests** (+1/+12), backend 1755, BUILD/TSC/ESLINT/VITEST
+= 0 (build sin circulares). Slice boundaries para el PR: T3 = 506 L,
+T6 = 121 L, T4 ≈ 650 L — estrategia única de PR con disclosures (L6).
+`ROADMAP.md` viaja como commit de docs aparte (pedido del usuario).
+Risk informational: mapa de contenedores extrapolado más allá de MKV/MP4
+(pin solo fija MKV); «EAC3» por la regla «AC3-style».
