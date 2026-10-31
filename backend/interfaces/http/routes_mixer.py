@@ -69,6 +69,12 @@ class ProbeFileRequest(BaseModel):
     path: str = ""
 
 
+class ProbeCachedRequest(BaseModel):
+    """T2 (S1): the visible files whose ALREADY-analyzed specs the view reads."""
+
+    paths: list[str]
+
+
 class MuxRequest(BaseModel):
     video_source: dict
     audio_sources: list[dict]
@@ -462,6 +468,22 @@ async def mixer_probe_file(req: ProbeFileRequest, _key: str = Depends(verify_api
     await asyncio.to_thread(history.save_probe_result, path, probe)
 
     return probe
+
+
+@router.post("/probe-cached")
+async def mixer_probe_cached(
+    req: ProbeCachedRequest, _key: str = Depends(verify_api_key)
+):
+    """T2 (S1): persisted specs for the visible files — zero ffprobe work.
+
+    A stale or unanalyzed path maps to null on purpose: the client then asks
+    `/probe-file` for that one file, so no probe ever runs from rendering.
+    """
+    cached: dict[str, dict | None] = {}
+    for raw in req.paths:
+        path = _validate_mixer_path(raw)
+        cached[path] = await asyncio.to_thread(history.get_probe_result, path)
+    return cached
 
 
 @router.post("/lookup")
