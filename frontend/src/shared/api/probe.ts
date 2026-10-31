@@ -91,3 +91,31 @@ export async function probeFile(path: string): Promise<ProbeFileResult> {
   }
   return { ok: true, probe: await res.json() as ProbeFile }
 }
+
+/**
+ * Persisted specs for the visible files: POST the paths, get a map where a
+ * `null` value means «not analyzed yet or stale» — the caller then asks
+ * `probeFile` for that one file. Never runs ffprobe.
+ *
+ * Never rejects: a transport failure resolves to an empty map, which reads
+ * as «nothing analyzed» and simply shows no quality chip.
+ */
+export async function probeCached(paths: string[]): Promise<Record<string, ProbeFile | null>> {
+  if (paths.length === 0) return {}
+  try {
+    const res = await apiFetch('/api/mixer/probe-cached', {
+      method: 'POST',
+      body: JSON.stringify({ paths }),
+    })
+    if (!res.ok) return {}
+    return await res.json() as Record<string, ProbeFile | null>
+  } catch {
+    return {}
+  }
+}
+
+/** The measured height of a probe's chosen video track (0 when it says none). */
+export function probeHeight(probe: ProbeFile): number {
+  const track = probe.video_tracks.find((t) => t.selected) ?? probe.video_tracks[0]
+  return track?.height ?? 0
+}

@@ -1350,3 +1350,14 @@
   font-size: 13.5px;
   font-weight: 600;
 }
+
+/* S2 (ffprobe-masivo T4): measured below-1080 marker, never a guess. */
+.sec-quality-chip {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.6rem;
+  background: rgba(214, 122, 46, 0.16);
+  color: #b46a20;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
