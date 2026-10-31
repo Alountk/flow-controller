@@ -104,3 +104,9 @@ per-file «baja calidad» chip rendered only from analyzed data.
   `probe_results` with `SCHEMA_VERSION = 12`; new tables ride the SCHEMA
   script's `CREATE TABLE IF NOT EXISTS` (no `_apply_migrations` edit —
   that hook is for ALTERs on existing tables).
+- L6 — Slice disclosure (harness ~400-line rule, recorded BEFORE T2's
+  commit): after T1 the branch totals **495 authored lines / 3 commits**
+  (`deeb224` T1 unit 203 L incl. its 127 L tests + `61d6d3b` feature doc +
+  `e9e51bf` research doc) — past the ~400 slice. Delivery strategy for this
+  feature = **single PR with disclosures** (same as movies-ffprobe L9);
+  T6 updates this tally per task and the PR body carries the table.
