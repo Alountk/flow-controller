@@ -35,7 +35,9 @@ def _probe_fixture(path, fps=23.976, duration=7200.0, width=1920, height=1080, l
         "size_bytes": 1_000_000,
         "video_tracks": [{
             "index": 0, "track_index": 0, "codec": "hevc", "width": width, "height": height,
-            "fps": fps, "bitrate": 5_000_000, "selected": False,
+            "fps": fps, "bitrate": 5_000_000, "profile": "Main", "level": 120,
+            "color_transfer": "bt709", "color_primaries": "bt709", "pix_fmt": "yuv420p",
+            "selected": False,
         }],
         "audio_tracks": [
             {
@@ -64,7 +66,9 @@ _FFPROBE_MKV_WITH_SUBS = {
     "format": {"format_name": "matroska,webm", "duration": "7200.0", "size": "1000000"},
     "streams": [
         {"index": 0, "codec_type": "video", "codec_name": "hevc", "width": 1920,
-         "height": 1080, "r_frame_rate": "24000/1001", "bit_rate": "5000000"},
+         "height": 1080, "r_frame_rate": "24000/1001", "bit_rate": "5000000",
+         "profile": "Main", "level": 120, "color_transfer": "bt709",
+         "color_primaries": "bt709", "pix_fmt": "yuv420p"},
         {"index": 1, "codec_type": "audio", "codec_name": "aac", "channels": 6,
          "bit_rate": "192000", "tags": {"language": "spa"}, "disposition": {"default": 1}},
         {"index": 2, "codec_type": "subtitle", "codec_name": "subrip",

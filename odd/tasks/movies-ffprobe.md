@@ -52,6 +52,13 @@ clasificable aparece visible en su propia sección».
   reusando los helpers de `MediaMixer.tsx`. Tests RED→GREEN.
 - T5 — Padre: seam review de cada entrega, gates completos (vitest/tsc/eslint/build
   + pytest backend), commits de rebanada (~400 L) en rama feature.
+- T6 — Extensión del payload habilitadora de T4 (parada L7): `parse_probe_data`
+  (`backend/media_mixer.py`) emite en cada pista de vídeo `profile` y `level`
+  (ffprobe `profile`/`level`, p. ej. `High`/`40`) y la evidencia HDR/rango
+  dinámico cruda (`color_transfer`, `color_primaries`, `pix_fmt`) — sin inventar
+  etiquetas (HDR10/HLG se derivan en la UI de T4) — siguiendo la convención de
+  presencia del parser; `frontend/src/shared/api/probe.ts` crece en paralelo
+  (tipos que anclan el parser, T2) y tests del contrato del endpoint. RED→GREEN.
 
 ## Log
 
@@ -115,3 +122,31 @@ Series intacta. Archivos: `fileSections.ts`+test (9), `PanelFiles.tsx`,
 cuarto); T3 = `74ed136` (506 L/1C, **>400 → disclosure obligatorio en el PR**,
 frontera registrada aquí según la estrategia de entrega); doc en commit
 aparte.
+L7 — T4 STOPPED LEGÍTIMO (worker `mvvlyqea-7-a3sl`, 0 ficheros tocados): el
+preview verbatim de S3 exige `H.264 High@4.0` (perfil+nivel) y «perfil HDR/
+rango dinámico», campos que `parse_probe_data` (`media_mixer.py:164-175`)
+descarta — cláusula STOP «falta un campo del payload, no adivinar». DECISIÓN
+padre = **opción A** (el spec es literal; extender el payload es fontanería,
+no producto) → nuevo T6; el preview NO se degrada. Etiquetas del preview
+GANAN sobre los helpers existentes y se anclan en tests de T4: `AC3` (no
+`AC-3`), `640kbps` (sin espacio), `español`/`inglés` (no `Castellano`/`Inglés`),
+subtítulo `(srt)` (no `subrip`). Helpers verificados reutilizables con export
+mínimo: `codecLabel` (`MediaMixer.tsx:119`), `formatFps` (`:89`),
+`formatBitrate` (`:82`), `formatDuration` (`:53`), `formatSize`
+(`useFilesNavigator.ts:10`). Mapeo de estado: PR #259 (fix filtros) creado y
+en CI; assess de su candidato = `reviewDue:false` (under_budget, 390 L/8 paths).
+L8 — T6 ENTREGADO (worker `mvvmgygr-8-qz2f`; seam review del padre PASS):
+`parse_probe_data` emite los 5 campos crudos por pista de vídeo con la
+convención keys-always del parser (sentinela `"unknown"` en strings, `0` en
+nivel, `-999` jamás se filtra: `max(int,0)`) + tipos `probe.ts` 16/16
+(antes 11/11, JSDoc en inglés) + 3 tests nuevos (RED `KeyError: 'profile'`
+→ GREEN 202/202 suites focales) + accounting en los 2 fixtures exact-dict
+de `tests_mixer_api`. STOP legítimo del worker: ratchet legacy 3456→3462
+(+6 = 5 campos + 1 comentario). La regla del contrato autoriza subir el cap
+«as debt on purpose — own that in the PR description» → **padre subió
+`MAX_LEGACY_LOC = 3462`, disclosure obligatorio en el PR**. DECISIÓN de
+etiqueta HDR para T4 (honestidad): `smpte2084` → «HDR», `arib-std-b67` →
+«HLG», ausente → sin etiqueta; **nunca** «HDR10» ni «Dolby Vision» sin
+`side_data_list` (un DV P8 reporta smpte2084 → se mal etiquetaría sin
+side_data); side_data passthrough = candidato a issue/roadmap. PR #259
+MERGEADO (`37d5d34`) con CI de PR y post-merge verdes (Engram 1505).

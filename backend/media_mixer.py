@@ -167,6 +167,12 @@ def parse_probe_data(data: dict, path: str) -> dict:
                 "height": s.get("height", 0),
                 "fps": round(fps, 3),
                 "bitrate": int(s.get("bit_rate", 0) or 0),
+                # Raw values only (T6): HDR labels derive in the UI; -999 level is unknown.
+                "profile": s.get("profile", "unknown"),
+                "level": max(int(s.get("level", 0) or 0), 0),
+                "color_transfer": s.get("color_transfer", "unknown"),
+                "color_primaries": s.get("color_primaries", "unknown"),
+                "pix_fmt": s.get("pix_fmt", "unknown"),
                 "selected": False,
             })
         elif codec_type == "audio":

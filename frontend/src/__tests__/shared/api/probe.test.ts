@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { probeFile } from '../../../shared/api/probe.ts'
+import { probeFile, type ProbeFile } from '../../../shared/api/probe.ts'
 
 /**
  * Contract for `POST /api/mixer/probe-file` (the single-file probe): the
@@ -8,14 +8,20 @@ import { probeFile } from '../../../shared/api/probe.ts'
  */
 
 // The verbatim `parse_probe_data` shape: every field the parser emits, no more.
-const probePayload = {
+// Typed so tsc pins this fixture field-for-field against `ProbeVideoTrack`.
+const probePayload: ProbeFile = {
   filename: 'movie.mkv',
   path: '/srv/media/movie.mkv',
   format: 'matroska,webm',
   duration: 5412.48,
   size_bytes: 734003200,
   video_tracks: [
-    { index: 0, track_index: 0, codec: 'hevc', width: 3840, height: 2160, fps: 23.976, bitrate: 8000000, selected: false },
+    {
+      index: 0, track_index: 0, codec: 'hevc', width: 3840, height: 2160,
+      fps: 23.976, bitrate: 8000000, profile: 'Main 10', level: 120,
+      color_transfer: 'smpte2084', color_primaries: 'bt2020', pix_fmt: 'yuv420p10le',
+      selected: false,
+    },
   ],
   audio_tracks: [
     { index: 1, track_index: 0, codec: 'ac3', language: 'spa', channels: 6, bitrate: 640000, default: true },

@@ -14,6 +14,14 @@ export interface ProbeVideoTrack {
   height: number
   fps: number
   bitrate: number
+  /** ffprobe `profile` verbatim ("unknown" when the stream reports none). */
+  profile: string
+  /** ffprobe level_idc (40 = 4.0); 0 = unknown — ffprobe's -999 never leaks. */
+  level: number
+  /** Raw range evidence verbatim: HDR10/HLG labels derive in the UI, not here. */
+  color_transfer: string
+  color_primaries: string
+  pix_fmt: string
   selected: boolean
 }
 
