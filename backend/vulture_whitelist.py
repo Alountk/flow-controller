@@ -10,6 +10,7 @@ list of names (vulture's generated style) reports as undefined names to every
 other tool.
 """
 
+from infrastructure.sqlite_history import get_probe_result
 from media_mixer import select_best_video
 from state import queue_consumer_task
 
@@ -33,7 +34,11 @@ from state import queue_consumer_task
 #   - delete the function and its tests.
 # Until then it is whitelisted so it cannot hide alongside real findings.
 #
-# The auto-copy policy and marker are NOT whitelisted any more: the T6 sweep
+# Pending T2 debt — REMOVE this entry, not the function: `get_probe_result`
+# («ffprobe-masivo» T1/S1) is covered by tests today but its production caller
+# arrives in T2 (`POST /api/mixer/probe-cached`, the cache read). Vulture
+# excludes `*/tests*.py`, so this reference is what keeps the finding quiet
+# until then. The auto-copy policy and marker are NOT whitelisted any more: the T6 sweep
 # driver (auto_copy_driver.py) calls `decide_copy`, `auto_copy_key`,
 # `matches_own_grab`, `arr_has_file`, `mark_auto_copy` and
 # `is_auto_copy_handled` in production, so the declared T4/T6 debt is repaid.
@@ -42,6 +47,7 @@ from state import queue_consumer_task
 # fails at import in `bind()` instead of being invisible to static analysis.)
 
 __all__ = [
+    "get_probe_result",
     "queue_consumer_task",
     "select_best_video",
 ]

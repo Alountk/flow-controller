@@ -38,6 +38,7 @@ from application.gateways import (
     arr_movie_lookup,
     download_subtitle,
     get_setting,
+    history,
     prowlarr_search,
     qbit_add_download,
     search_subtitles,
@@ -455,6 +456,10 @@ async def mixer_probe_file(req: ProbeFileRequest, _key: str = Depends(verify_api
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+    # Persist so the file view can answer from the database instead of paying
+    # ffprobe again (S1); every failure path raised above, so none persists.
+    await asyncio.to_thread(history.save_probe_result, path, probe)
 
     return probe
 

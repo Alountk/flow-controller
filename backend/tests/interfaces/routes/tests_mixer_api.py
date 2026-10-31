@@ -13,6 +13,7 @@ os.environ.setdefault("FOLDER_OUTPUT_MIXED", "/tmp/mixed-test")
 from fastapi.testclient import TestClient
 from app import app
 import media_mixer
+from infrastructure import sqlite_history as history
 from interfaces.http import routes_mixer
 from task_manager import mux_tasks
 
@@ -365,6 +366,45 @@ class TestProbeFileEndpoint:
         )
         assert resp.status_code == 500
         assert resp.json() == {"detail": "ffprobe not found"}
+
+
+class TestProbeFilePersistence:
+    """T1 (S1): a successful probe is stored against the file's identity;
+    a failed probe stores nothing."""
+
+    @pytest.fixture
+    def probe_db(self, tmp_path):
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        yield
+        history.close()
+
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_file_persists_the_probe(self, mock_probe, probe_db, monkeypatch, tmp_path):
+        real = tmp_path / "ParaNorman.mkv"
+        real.write_bytes(b"\x00" * 64)
+        path = os.path.realpath(real)
+        monkeypatch.setattr(routes_mixer, "ALLOWED_ROOTS", [os.path.realpath(str(tmp_path))])
+        probe = _probe_fixture(path)
+        mock_probe.return_value = probe
+
+        resp = client.post("/api/mixer/probe-file", json={"path": path})
+
+        assert resp.status_code == 200
+        assert history.get_probe_result(path) == probe
+
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_probe_file_failure_stores_nothing(self, mock_probe, probe_db, monkeypatch, tmp_path):
+        real = tmp_path / "broken.part"
+        real.write_bytes(b"")
+        path = os.path.realpath(real)
+        monkeypatch.setattr(routes_mixer, "ALLOWED_ROOTS", [os.path.realpath(str(tmp_path))])
+        mock_probe.side_effect = media_mixer.ProbeInputError("ffprobe failed: boom")
+
+        resp = client.post("/api/mixer/probe-file", json={"path": path})
+
+        assert resp.status_code == 400
+        assert history.get_probe_result(path) is None
 
 
 class TestProbeFileErrors:
