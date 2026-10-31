@@ -37,6 +37,28 @@ visual de dónde se corta el flujo.
 - [ ] Integración con el stack de Portainer existente
 - [ ] Healthchecks y reinicio automático
 
+## Calidad de biblioteca — tareas nuevas
+
+- [ ] **ffprobe masivo en la vista de ficheros de películas**
+  - Botón «Analizar todos»: sondea con ffprobe TODOS los archivos de vídeo
+    de las secciones 1080/4K/3D/Otros (mismo contrato
+    `POST /api/mixer/probe-file`, bajo demanda — nada corre solo).
+  - **Persistencia**: hoy la sonda NO se guarda en ningún sitio (premisa
+    corregida 2026-10-30: `own_grabs.quality` es la calidad del grab de
+    Radarr, otra cosa) → tabla nueva en `sqlite_history` con su migración
+    de esquema: path, resolución/codec/bitrate/perfil/HDR medidos,
+    `analyzed_at`.
+  - **Chip de calidad por archivo** en la tabla («720p», «1080p», «4K»…)
+    derivado SOLO del resultado medido: fichero sin analizar → sin chip
+    (honestidad: nada se inventa).
+- [ ] **Lista de upgrades de calidad**
+  - Películas cuyo archivo medido queda por debajo del umbral → lista de
+    «candidatas a mejorar» con fichero, resolución medida y destino actual.
+  - **Umbral configurable en Settings, default «menos de 1080p»**
+    (decisión del usuario); la lista relee el umbral guardado.
+  - Bebe de la persistencia de la tarea anterior: sin sonda guardada no hay
+    lista que mostrar (orden de activación: primero la masiva, luego esto).
+
 ## Trazabilidad del flujo
 
 El endpoint `/api/trace` correlaciona, por cada descarga, los tres saltos del
