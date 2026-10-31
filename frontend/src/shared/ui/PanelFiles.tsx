@@ -4,7 +4,9 @@ import { formatSize, useBrowse } from '../hooks/useFilesNavigator.ts'
 import { apiFetch } from '../api/auth.ts'
 import { errorMessage } from '../utils/text.ts'
 import { classifyFile, type FileSectionId, type RoutingFolders } from '../utils/fileSections.ts'
-import { probeFile, probeCached, probeHeight, type ProbeFile, type ProbeFileResult } from '../api/probe.ts'
+import { probeFile, probeCached, probeWidth, type ProbeFile, type ProbeFileResult } from '../api/probe.ts'
+import { isBelowThreshold } from '../utils/resolution.ts'
+import { useQualityThreshold } from '../hooks/useQualityThreshold.ts'
 import { probeSpec } from '../utils/probePreview.ts'
 import type { BrowseResponse, FileItem } from '../types.ts'
 
@@ -231,6 +233,7 @@ function FilesSection({
   const [probes, setProbes] = useState<Record<string, ProbeFileResult>>({})
   const [runningFiles, setRunningFiles] = useState<Set<string>>(() => new Set())
   const [sectionRunning, setSectionRunning] = useState(false)
+  const threshold = useQualityThreshold()
 
   const store = (path: string, result: ProbeFileResult) =>
     setProbes((prev) => ({ ...prev, [path]: result }))
@@ -283,12 +286,14 @@ function FilesSection({
     // `sectionPaths` is the identity that matters: `items` is a fresh array.
   }, [sectionPaths])
 
-  /** S2: only a MEASURED height below 1080 earns the chip — never a guess. */
+  /** S1/S3: only a MEASURED class below the configured threshold earns the
+   *  chip — never a guess, and a cropped 1080p file is not a downgrade. */
   const qualityChip = (item: FileItem) => {
     const result = probes[item.path]
     if (!result?.ok) return null
-    const height = probeHeight(result.probe)
-    if (!height || height >= 1080) return null
+    if (!isBelowThreshold(probeWidth(result.probe), threshold.minClass, threshold.minWidth)) {
+      return null
+    }
     return <span className="sec-quality-chip">{QUALITY_CHIP}</span>
   }
 

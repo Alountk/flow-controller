@@ -24,14 +24,14 @@ const listing = {
   ],
 }
 
-const probeOf = (path: string, height: number) => ({
+const probeOfWH = (path: string, width: number, height: number) => ({
   filename: path.split('/').pop() ?? '',
   path,
   format: 'matroska,webm',
   duration: 60,
   size_bytes: 1,
   video_tracks: [{
-    index: 0, track_index: 0, codec: 'h264', width: Math.round(height * 16 / 9),
+    index: 0, track_index: 0, codec: 'h264', width,
     height, fps: 23.976, bitrate: 1_000_000, profile: 'High', level: 40,
     color_transfer: 'bt709', color_primaries: 'bt709', pix_fmt: 'yuv420p',
     selected: true,
@@ -40,17 +40,19 @@ const probeOf = (path: string, height: number) => ({
   subtitle_tracks: [],
 })
 
+const probeOf = (path: string, height: number) => probeOfWH(path, Math.round(height * 16 / 9), height)
+
 function ok(body: unknown) {
   return Promise.resolve({ ok: true, status: 200, json: async () => body } as Response)
 }
 
-function stubFetch(cached: Record<string, unknown>) {
+function stubFetch(cached: Record<string, unknown>, threshold = { min_class: '1080p', min_width: 0 }) {
   const fn = vi.fn((input: RequestInfo | URL) => {
     const url = String(input)
     if (url.includes('/api/mixer/probe-cached')) return ok(cached)
     if (url.includes('/api/mixer/probe-file')) return ok(probeOf('/x.mkv', 720))
     if (url.includes('/api/files/browse')) return ok(listing)
-    return ok({ paths: { path_4k: '', path_3d: '' } })
+    return ok({ paths: { path_4k: '', path_3d: '' }, quality: threshold })
   })
   vi.stubGlobal('fetch', fn)
   return fn
@@ -135,5 +137,37 @@ describe('S4 · «Analizar» pregunta primero a la caché', () => {
     await waitFor(() =>
       expect(fn.mock.calls.filter((c) => String(c[0]).includes('/api/mixer/probe-file'))).toHaveLength(1),
     )
+  })
+})
+
+describe('S1/S3 · el chip obedece el umbral configurado', () => {
+  it('does NOT flag a cropped 1080p file (1920×800)', async () => {
+    stubFetch({ [`${BASE}/Low.mkv`]: probeOfWH(`${BASE}/Low.mkv`, 1920, 800) })
+
+    renderPanel()
+
+    await screen.findByText('Low.mkv', { selector: 'td.sec-file-name' })
+    expect(chips()).toHaveLength(0)
+  })
+
+  it('flags a real 720p file under the default 1080p threshold', async () => {
+    stubFetch({ [`${BASE}/Low.mkv`]: probeOfWH(`${BASE}/Low.mkv`, 1280, 536) })
+
+    renderPanel()
+
+    expect(await screen.findByText(CHIP)).toBeInTheDocument()
+    expect(rowOf('Low.mkv').textContent).toContain(CHIP)
+  })
+
+  it('keeps a 720p file unmarked when the threshold is 720p', async () => {
+    stubFetch(
+      { [`${BASE}/Low.mkv`]: probeOfWH(`${BASE}/Low.mkv`, 1280, 536) },
+      { min_class: '720p', min_width: 0 },
+    )
+
+    renderPanel()
+
+    await screen.findByText('Low.mkv', { selector: 'td.sec-file-name' })
+    expect(chips()).toHaveLength(0)
   })
 })

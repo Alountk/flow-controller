@@ -114,10 +114,11 @@ export async function probeCached(paths: string[]): Promise<Record<string, Probe
   }
 }
 
-/** The measured height of a probe's chosen video track (0 when it says none). */
-export function probeHeight(probe: ProbeFile): number {
+/** The measured width of a probe's chosen video track (0 when it says none).
+ *  Width, not height: the resolution class comes from it (S1). */
+export function probeWidth(probe: ProbeFile): number {
   const track = probe.video_tracks.find((t) => t.selected) ?? probe.video_tracks[0]
-  return track?.height ?? 0
+  return track?.width ?? 0
 }
 
 /** Job status of the library sweep («Analizar biblioteca»). */
