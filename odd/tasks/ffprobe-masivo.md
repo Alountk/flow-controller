@@ -110,3 +110,9 @@ per-file «baja calidad» chip rendered only from analyzed data.
   `e9e51bf` research doc) — past the ~400 slice. Delivery strategy for this
   feature = **single PR with disclosures** (same as movies-ffprobe L9);
   T6 updates this tally per task and the PR body carries the table.
+- L7 — T4/T5 delivered; one T4-era rule SUPERSEDED by S4 (2026-10-31):
+  `panelFilesProbe.test.tsx` pinned «a re-click re-probes and REPLACES the
+  block — no caching»; S4 requires cache-first, so that test now pins «a
+  re-click answers from the persisted probe — no second ffprobe run». The
+  T4 comment «no cache» on `FilesSection` is gone with it. Logged here
+  because a changed test must never look like a weakened one.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PanelFiles } from '../../../shared/ui/PanelFiles.tsx'
 import type { PanelFilesFacts } from '../../../shared/ui/PanelFiles.tsx'
@@ -108,5 +108,32 @@ describe('T4 · chip «Baja calidad» desde la caché persistida (S2)', () => {
 
     await screen.findByText('Low.mkv', { selector: 'td.sec-file-name' })
     expect(chips()).toHaveLength(0)
+  })
+})
+
+describe('S4 · «Analizar» pregunta primero a la caché', () => {
+  it('renders instantly from the persisted probe and never runs ffprobe', async () => {
+    const fn = stubFetch({ [`${BASE}/Low.mkv`]: probeOf(`${BASE}/Low.mkv`, 720) })
+
+    renderPanel()
+
+    await screen.findByText('Low.mkv', { selector: 'td.sec-file-name' })
+    fireEvent.click(screen.getByRole('button', { name: 'Analizar Low.mkv' }))
+
+    await waitFor(() => expect(chips()).toHaveLength(1))
+    expect(fn.mock.calls.filter((c) => String(c[0]).includes('/api/mixer/probe-file'))).toHaveLength(0)
+  })
+
+  it('probes the file only when the cache has no fresh answer', async () => {
+    const fn = stubFetch({ [`${BASE}/Low.mkv`]: null })
+
+    renderPanel()
+
+    await screen.findByText('Low.mkv', { selector: 'td.sec-file-name' })
+    fireEvent.click(screen.getByRole('button', { name: 'Analizar Low.mkv' }))
+
+    await waitFor(() =>
+      expect(fn.mock.calls.filter((c) => String(c[0]).includes('/api/mixer/probe-file'))).toHaveLength(1),
+    )
   })
 })

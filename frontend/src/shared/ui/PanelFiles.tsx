@@ -236,6 +236,9 @@ function FilesSection({
     setProbes((prev) => ({ ...prev, [path]: result }))
 
   const analyzeFile = (item: FileItem) => {
+    // S4: a fresh persisted probe answers instantly — a click never re-probes
+    // what the cache already knows.
+    if (probes[item.path]?.ok) return
     setRunningFiles((prev) => new Set(prev).add(item.path))
     // probeFile never rejects — no try/catch needed to leave the button state.
     probeFile(item.path).then((result) => {

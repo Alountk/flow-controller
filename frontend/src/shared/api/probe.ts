@@ -119,3 +119,42 @@ export function probeHeight(probe: ProbeFile): number {
   const track = probe.video_tracks.find((t) => t.selected) ?? probe.video_tracks[0]
   return track?.height ?? 0
 }
+
+/** Job status of the library sweep («Analizar biblioteca»). */
+export interface ProbeLibraryStatus {
+  running: boolean
+  total: number
+  analyzed: number
+  skipped: number
+  failed: number
+  started_at: number
+  finished_at: number
+}
+
+/** Start the sweep; a refused start carries the server's own reason. */
+export async function probeLibraryStart(): Promise<{ ok: true } | { ok: false; detail: string }> {
+  try {
+    const res = await apiFetch('/api/mixer/probe-library', { method: 'POST' })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>
+      return {
+        ok: false,
+        detail: (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`,
+      }
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, detail: `Error de conexión: ${err}` }
+  }
+}
+
+/** How far the sweep got; `null` when the status cannot be read right now. */
+export async function probeLibraryStatus(): Promise<ProbeLibraryStatus | null> {
+  try {
+    const res = await apiFetch('/api/mixer/probe-library/status', {})
+    if (!res.ok) return null
+    return await res.json() as ProbeLibraryStatus
+  } catch {
+    return null
+  }
+}

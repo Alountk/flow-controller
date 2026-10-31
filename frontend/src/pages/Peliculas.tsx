@@ -6,6 +6,7 @@ import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-
 import { apiFetch } from '../shared/api/auth.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
 import { PanelFiles, ROW_MISSING } from '../shared/ui/PanelFiles.tsx'
+import { ProbeLibraryCard } from '../shared/ui/ProbeLibraryCard.tsx'
 import type { AllMovie, CalendarItem, PaginatedResponse } from '../shared/types.ts'
 import './Sections.css'
 
@@ -691,7 +692,10 @@ export function Peliculas() {
                 <span>{errorMessage(foldersQuery.error)}</span>
               </div>
             ) : foldersQuery.data ? (
-              <PanelFiles facts={facts} folders={foldersQuery.data} />
+              <>
+                <ProbeLibraryCard />
+                <PanelFiles facts={facts} folders={foldersQuery.data} />
+              </>
             ) : (
               <p className="sec-tab-note">Cargando carpetas…</p>
             ))}
