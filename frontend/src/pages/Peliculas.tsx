@@ -486,6 +486,15 @@ export function Peliculas() {
   const uid = useId()
   const active = SUB_VIEWS.find((s) => s.id === view) ?? SUB_VIEWS[0]
   const facts = selectedRowFacts(queryClient, view, selected)
+  // T3: the Archivos tab aggregates the routing folders with the movie's own
+  // folder. Settings are asked only while that tab is open on a selection.
+  const foldersQuery = useQuery({
+    queryKey: ['routing-folders'],
+    queryFn: fetchRoutingFolders,
+    // The folders are settings, not live data: a save invalidates the page anyway.
+    staleTime: 5 * 60_000,
+    enabled: detailTab === 'Archivos' && !!selected,
+  })
 
   function changeView(next: SubView) {
     setView(next)
@@ -675,7 +684,17 @@ export function Peliculas() {
           {/* PR 6: the two tabs that used to be markers. Each renders its own
               honest states; with no selection the panel shows PANEL_EMPTY
               above and no tab content at all. */}
-          {selected && detailTab === 'Archivos' && <PanelFiles facts={facts} />}
+          {selected && detailTab === 'Archivos' &&
+            (foldersQuery.isError ? (
+              <div className="wanted-error" role="alert">
+                <strong>No se pudieron leer las carpetas de enrutado</strong>
+                <span>{errorMessage(foldersQuery.error)}</span>
+              </div>
+            ) : foldersQuery.data ? (
+              <PanelFiles facts={facts} folders={foldersQuery.data} />
+            ) : (
+              <p className="sec-tab-note">Cargando carpetas…</p>
+            ))}
           {selected && detailTab === 'Historial' && <PanelHistory facts={facts} />}
 
           <p className="sec-panel-note">{PANEL_NOTE}</p>

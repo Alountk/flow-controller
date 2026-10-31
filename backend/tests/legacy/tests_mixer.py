@@ -147,6 +147,62 @@ class TestParseProbeData:
         assert result["audio_tracks"][0]["language"] == "und"
         assert result["audio_tracks"][0]["default"] is False
 
+    def test_every_video_track_carries_profile_level_and_hdr_evidence(self):
+        # T6: S3's «H.264 High@4.0» and «perfil HDR» render from these raw values.
+        data = {
+            "format": {"format_name": "matroska,webm", "duration": "5700.0", "size": "5800000000"},
+            "streams": [
+                {"index": 0, "codec_type": "video", "codec_name": "hevc",
+                 "width": 3840, "height": 2160, "r_frame_rate": "24000/1001",
+                 "bit_rate": "8200000", "profile": "Main 10", "level": 120,
+                 "color_transfer": "smpte2084", "color_primaries": "bt2020",
+                 "pix_fmt": "yuv420p10le"},
+                {"index": 1, "codec_type": "video", "codec_name": "h264",
+                 "width": 1920, "height": 1080, "r_frame_rate": "24000/1001",
+                 "bit_rate": "3000000", "profile": "High", "level": 40,
+                 "color_transfer": "bt709", "color_primaries": "bt709",
+                 "pix_fmt": "yuv420p"},
+            ],
+        }
+        result = parse_probe_data(data, "/mnt/storage/movies/ParaNorman.mkv")
+
+        first, second = result["video_tracks"]
+        assert (first["profile"], first["level"]) == ("Main 10", 120)
+        assert (first["color_transfer"], first["color_primaries"], first["pix_fmt"]) == (
+            "smpte2084", "bt2020", "yuv420p10le")
+        assert (second["profile"], second["level"]) == ("High", 40)
+        assert (second["color_transfer"], second["color_primaries"], second["pix_fmt"]) == (
+            "bt709", "bt709", "yuv420p")
+
+    def test_video_hdr_fields_absent_follow_presence_convention(self):
+        # Keys always present, like fps/bitrate: sentinels, never invented values.
+        data = {
+            "format": {},
+            "streams": [
+                {"index": 0, "codec_type": "video", "codec_name": "vp9",
+                 "width": 1920, "height": 1080, "r_frame_rate": "30/1"},
+            ],
+        }
+        result = parse_probe_data(data, "/tmp/test.webm")
+        v = result["video_tracks"][0]
+        assert v["profile"] == "unknown"
+        assert v["level"] == 0
+        assert v["color_transfer"] == "unknown"
+        assert v["color_primaries"] == "unknown"
+        assert v["pix_fmt"] == "unknown"
+
+    def test_video_level_minus_999_is_unknown(self):
+        # ffprobe signals "no level" as -999; the parser must never leak it.
+        data = {
+            "format": {},
+            "streams": [
+                {"index": 0, "codec_type": "video", "codec_name": "h264",
+                 "width": 1280, "height": 720, "r_frame_rate": "30/1", "level": -999},
+            ],
+        }
+        result = parse_probe_data(data, "/tmp/test.mp4")
+        assert result["video_tracks"][0]["level"] == 0
+
 
 # ── select_best_video ───────────────────────────────────────────────────────
 

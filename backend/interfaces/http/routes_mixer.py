@@ -62,6 +62,12 @@ class ProbeRequest(BaseModel):
     path_b: str
 
 
+class ProbeFileRequest(BaseModel):
+    """T1 (S1): the single file the movies file view asks specs for."""
+
+    path: str = ""
+
+
 class MuxRequest(BaseModel):
     video_source: dict
     audio_sources: list[dict]
@@ -417,6 +423,40 @@ async def mixer_probe(req: ProbeRequest, _key: str = Depends(verify_api_key)):
         "language_check": check_required_languages(probe_a, probe_b, _required_languages()),
         "audio_ordered": order_and_mark_audio(probe_a, probe_b),
     }
+
+
+@router.post("/probe-file")
+async def mixer_probe_file(req: ProbeFileRequest, _key: str = Depends(verify_api_key)):
+    """T1 (S1): ONE file -> its parsed ffprobe specs (the movies file view).
+
+    `parse_probe_data`'s shape verbatim, no reshaping. The /probe contract for
+    a single path: a bad/unreadable input is 400, only a missing ffprobe
+    binary is a server fault (500).
+    """
+    try:
+        path = _validate_mixer_path(req.path)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=400, detail=f"File not found: {req.path}")
+
+    try:
+        # ffprobe is a 30 s subprocess; inline it would freeze every other
+        # request for half a minute: there is one event loop, no preemption.
+        probe = await asyncio.to_thread(probe_file, path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ProbeInputError as exc:
+        # Unreadable input is bad input (same 400 /probe answers); a plain
+        # RuntimeError below is ffprobe missing — a broken server, still 500.
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return probe
 
 
 @router.post("/lookup")
