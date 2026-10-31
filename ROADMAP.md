@@ -39,7 +39,10 @@ visual de dónde se corta el flujo.
 
 ## Calidad de biblioteca — tareas nuevas
 
-- [ ] **ffprobe masivo en la vista de ficheros de películas**
+- [x] **ffprobe masivo en la vista de ficheros de películas** — entregado
+  (`ffprobe-masivo`: sondas persistidas en sqlite v12, «Analizar biblioteca»
+  con progreso y skip de ya analizados, chip «Baja calidad» desde datos
+  medidos). Ver `odd/tasks/ffprobe-masivo.md`.
   - Botón «Analizar todos»: sondea con ffprobe TODOS los archivos de vídeo
     de las secciones 1080/4K/3D/Otros (mismo contrato
     `POST /api/mixer/probe-file`, bajo demanda — nada corre solo).
@@ -51,7 +54,8 @@ visual de dónde se corta el flujo.
   - **Chip de calidad por archivo** en la tabla («720p», «1080p», «4K»…)
     derivado SOLO del resultado medido: fichero sin analizar → sin chip
     (honestidad: nada se inventa).
-- [ ] **Lista de upgrades de calidad**
+- [ ] **Lista de upgrades de calidad** — pendiente; la persistencia de
+  sondas que necesitaba ya está en `main`.
   - Películas cuyo archivo medido queda por debajo del umbral → lista de
     «candidatas a mejorar» con fichero, resolución medida y destino actual.
   - **Umbral configurable en Settings, default «menos de 1080p»**

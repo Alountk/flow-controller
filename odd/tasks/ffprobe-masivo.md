@@ -116,3 +116,16 @@ per-file «baja calidad» chip rendered only from analyzed data.
   re-click answers from the persisted probe — no second ffprobe run». The
   T4 comment «no cache» on `FilesSection` is gone with it. Logged here
   because a changed test must never look like a weakened one.
+- L8 — T6 close (2026-10-31): ROADMAP task A marked delivered (bulk +
+  persistence + chip); «Lista de upgrades» stays open and now says its
+  prerequisite (probe persistence) already ships. Slice tally for the PR
+  body: T1 `deeb224` (203 L incl. 127 L tests), docs `61d6d3b`/`e9e51bf`/
+  `11f8b7f`, T2 `f44ae28` (152 L), T3 `4ea1bee` (370 L), T4 `32a7012`
+  (~180 L), T5 `a900550` (~230 L) → whole branch ~1489 authored lines,
+  delivered as ONE PR with this disclosure (same strategy as movies-ffprobe
+  L9). Gates at close: backend 1810 passed, frontend 115 files / 900 tests,
+  tsc/eslint/build 0, vulture 0.
+- L9 — Subagent availability: `gentle-ai-worker` failed twice mid-task
+  (T2 left only its RED tests; T3 wrote nothing). Both units were finished
+  inline by the parent with RED/GREEN observed and full gates rerun; the
+  unavailability is recorded here rather than retried into extra ceremony.
