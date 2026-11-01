@@ -38,6 +38,11 @@ existing function.
   ID chips; **segmented tabs**) and every existing element stays reachable:
   tab contents, honest empty states, the panel footnote, and the release
   search inside its tab.
+- **S7 — Listado de películas L2.** «L2 · Filas con póster»: the left list
+  becomes poster rows (72px) — poster, title + quality, path underneath,
+  class badge and routed-destination chips on the right — keeping every
+  behaviour it has today: click/keyboard selection into the detail panel,
+  the filter chips with counts, the empty state and the selected-row mark.
 - **S6 — Nada más cambia.** Filters (language, quality, min seeders), the 3D
   mark and its routing effect, the grab action and its processing lock, the
   folder picker, polling, error/done steps and the Series view keep behaving
@@ -65,6 +70,11 @@ existing function.
 - T5 — CSS for the table (dense rows, monospace numbers, hairline borders,
   seeder colour scale) and the V1 panel. Route: frontend.
 - T6 — Docs: ROADMAP note, slice tally, PR body.
+- T7 — Movie list L2 «Filas con póster»: each row 72px with a small poster,
+  title + quality on one line, path underneath, class badge and destination
+  chips on the right, selection accent. Keeps click/keyboard selection, the
+  filter chips with counts and the honest empty state. Tests: row content,
+  selection, filter. Route: frontend.
 
 ## Log
 
@@ -102,3 +112,20 @@ existing function.
   copies pulled through the MCP reader (markup/classes/copy intact, the
   generated Tailwind palette block trimmed). Documented in that folder's
   README so nobody treats them as byte-exact exports.
+- L7 — Scope closure, user verbatim: «all in» → T2, T3, T4, T5, T6 and T7
+  (the chosen list variant L2) ship as ONE branch and ONE PR. No separate
+  delivery for the list.
+- L8 — Delivery state (2026-11-02): T1-T5 and T7 delivered on `feat/buscador-tabla`.
+  T4's V1 shape turned out to be mostly already present (the panel already had
+  the sticky-capable header, the `Año/Clase/Calidad/Ruta` meta and the three
+  tabs), so T4 landed as the CSS half: sticky header and the segmented tab
+  treatment, with no behaviour change. T6's ROADMAP note is deliberately
+  skipped: this redesign was never a roadmap item, it came from the design
+  request — recorded here instead of inventing an entry.
+  Gates at close: frontend **120 files / 936 tests**, tsc/eslint/build 0.
+  Test migrations (all justified by S1/S2/S4/S7, none deleted): the release
+  tests moved from per-indexer groups to the single table (`/Biblioteca/` →
+  `'→ 1080'`, `.calendar-*` → `.release-table*`, exact names for the four
+  destinations because `/3D/` also matched the routing toggle); the quality
+  views keep a `rowOf` helper that reads L2 rows for Películas and falls back
+  to the table for Series, which this feature does not touch.
