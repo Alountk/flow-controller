@@ -266,7 +266,9 @@ function App() {
   // Sonarr. The local pages (disk, files, mixer, config) always work.
   const hiddenPages = useMemo<Page[]>(() => {
     if (!servicesReady || hasAnyArr) return []
-    return ['peliculas', 'series', 'seguimiento'] as Page[]
+    // «Películas V2» is the same page with another layout: it reads
+    // Radarr too, so it hides with the rest when no arr is configured.
+    return ['peliculas', 'peliculasV2', 'series', 'seguimiento'] as Page[]
   }, [servicesReady, hasAnyArr])
 
   useEffect(() => {
