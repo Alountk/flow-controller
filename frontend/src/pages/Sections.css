@@ -1464,3 +1464,50 @@
 .sec-dtab.is-active {
   border-bottom: 2px solid #6366f1;
 }
+
+/* S1/S3/S4 («detalle-pantalla»): the list owns the page and the detail
+   replaces it — one screen at a time, with an explicit way back. */
+.sec-page {
+  display: block;
+  width: 100%;
+}
+
+.sec-detail-page {
+  position: relative;
+  width: 100%;
+}
+
+.sec-detail-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 2;
+  width: 2rem;
+  height: 2rem;
+  line-height: 1;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 0.25rem;
+}
+
+.sec-detail-close:hover {
+  background: rgba(148, 163, 184, 0.18);
+}
+
+/* The row's only navigation affordance (S3). */
+.sec-movie-open {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.sec-movie-open:hover {
+  opacity: 1;
+}
