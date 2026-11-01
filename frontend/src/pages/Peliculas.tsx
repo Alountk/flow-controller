@@ -7,6 +7,7 @@ import { apiFetch } from '../shared/api/auth.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
 import { PanelFiles, ROW_MISSING } from '../shared/ui/PanelFiles.tsx'
 import { ProbeLibraryCard } from '../shared/ui/ProbeLibraryCard.tsx'
+import { QualityBelowList } from '../features/quality/QualityBelowList.tsx'
 import type { AllMovie, CalendarItem, PaginatedResponse } from '../shared/types.ts'
 import './Sections.css'
 
@@ -277,6 +278,9 @@ function CalidadMovies({
 
   return (
     <div className="sec-calidad">
+      {/* S4 («umbral-calidad»): what measured below the configured threshold,
+          above the class filters so it reads as the summary of the library. */}
+      <QualityBelowList />
       <div className="sec-class-filters" role="group" aria-label="Filtrar por clase">
         <button
           type="button"
