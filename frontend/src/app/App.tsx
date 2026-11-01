@@ -71,6 +71,7 @@ const SERVICES: { key: ServiceKey; label: string }[] = [
 const PAGE_TITLES: Record<Page, string> = {
   dashboard: 'Dashboard',
   peliculas: 'Películas',
+  peliculasV2: 'Películas V2',
   series: 'Series',
   seguimiento: 'Seguimiento',
   disk: 'Espacio en Disco',
@@ -86,6 +87,7 @@ const PAGE_TITLES: Record<Page, string> = {
 const PAGE_SUBTITLES: Partial<Record<Page, string>> = {
   dashboard: 'Vista general del servidor multimedia',
   peliculas: 'Catálogo cinematográfico y gestión de indexación',
+  peliculasV2: 'La misma biblioteca, con el detalle a pantalla completa',
 }
 
 function App() {
@@ -379,6 +381,8 @@ function App() {
             )}
 
             {page === 'peliculas' && <Peliculas />}
+
+            {page === 'peliculasV2' && <Peliculas layout="page" />}
 
             {page === 'series' && <Series />}
 

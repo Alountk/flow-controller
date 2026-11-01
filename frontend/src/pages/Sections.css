@@ -1465,8 +1465,8 @@
   border-bottom: 2px solid #6366f1;
 }
 
-/* S1/S3/S4 («detalle-pantalla»): the list owns the page and the detail
-   replaces it — one screen at a time, with an explicit way back. */
+/* S1/S3/S4 («detalle-pantalla»): the V2 shape — the list owns the page and the
+   detail REPLACES it, with an explicit way back. V1 keeps .sec-split. */
 .sec-page {
   display: block;
   width: 100%;
@@ -1496,7 +1496,7 @@
   background: rgba(148, 163, 184, 0.18);
 }
 
-/* The row's only navigation affordance (S3). */
+/* The row's explicit way into the detail (S3). */
 .sec-movie-open {
   border: 0;
   background: transparent;

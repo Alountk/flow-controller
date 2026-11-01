@@ -68,3 +68,22 @@ width, and a row's arrow opens the detail — an X comes back.
   but the Estrenos calendar moves to the sidebar instead of being deleted
   (T4), and the class filter survives as the chip row (T2). Both keep the
   feature set whole while honouring «se pierden [las pestañas]».
+
+- L4 — **Plan cambiado (decisión del usuario, 2026-11-02)**: la reescritura en
+  sitio se descarta. «podriamos meter estos cambios en una seccion nueva?
+  Peliculas V2 / Series V2, asi podriamos implementar esto y poco a poco ir
+  trasladando si hemos perdido alguna funcionalidad». Por qué: la primera
+  tentativa sustituyó la lista por la de Calidad y con ella desapareció
+  `MediaPane` (buscador, Faltantes/Todas, bulk search, navegación de escaneo)
+  — 83 tests en rojo lo señalaban. La V2 convive con la V1 como red de
+  seguridad y el traslado es incremental.
+- L5 — Entrega de la V2 v0: `Peliculas` acepta `layout?: 'split' | 'page'`
+  (`split` es la V1 de siempre, sin un solo cambio de comportamiento);
+  `page` es la V2: sin pestañas de sub-vista, lista a ancho completo, el
+  detalle **sustituye** la vista y se cierra con ✕, y cada fila lleva su
+  flecha. Ruta `/peliculas-v2` + entrada «Películas V2» en el sidebar.
+  Gates: frontend **121 ficheros / 940 tests**, tsc/eslint/build 0.
+- L6 — Pendiente consciente (no es un olvido): lo que sigue viviendo solo en
+  la V1 debe **trasladarse** a la V2 antes de retirar aquella — buscador por
+  nombre, chips Faltantes/Todas, bulk search y navegación de escaneo de
+  `MediaPane`; y Series V2 replicando el mismo `layout`.

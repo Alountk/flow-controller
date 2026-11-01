@@ -1,13 +1,14 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import type { MediaDetail, MediaSelection } from '../features/media-pane/MediaPane.tsx'
+import { Calendar } from '../features/calendar/Calendar.tsx'
+import { MediaPane, type MediaDetail, type MediaSelection } from '../features/media-pane/MediaPane.tsx'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
 import { apiFetch } from '../shared/api/auth.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
 import { PanelFiles, ROW_MISSING } from '../shared/ui/PanelFiles.tsx'
 import { ProbeLibraryCard } from '../shared/ui/ProbeLibraryCard.tsx'
 import { QualityBelowList } from '../features/quality/QualityBelowList.tsx'
-import type { AllMovie, PaginatedResponse } from '../shared/types.ts'
+import type { AllMovie, CalendarItem, PaginatedResponse } from '../shared/types.ts'
 import './Sections.css'
 
 /**
@@ -22,7 +23,21 @@ import './Sections.css'
  * list — movies grouped by the quality of the file Radarr owns.
  */
 
+type SubView = 'biblioteca' | 'faltantes' | 'estrenos' | 'calidad'
 
+interface SubViewDef {
+  id: SubView
+  label: string
+}
+
+const SUB_VIEWS: SubViewDef[] = [
+  { id: 'biblioteca', label: 'Biblioteca' },
+  // 'Faltantes' is not a tab any more: it lives in the filter buttons beside
+  // the name search (PR #150). The view itself is unchanged — only the
+  // control that reaches it. `SUB_VIEWS[0]` stays biblioteca.
+  { id: 'estrenos', label: 'Estrenos' },
+  { id: 'calidad', label: 'Calidad' },
+]
 
 const DETAIL_TABS = ['Releases', 'Archivos', 'Historial']
 
@@ -149,9 +164,49 @@ function calidadMovieRelease(movie: AllMovie): ReleaseSearchItem {
   }
 }
 
+/* ── Estrenos (the calendar selects, PR 5's last gap) ───────────────────────
+ * A CalendarItem carries only its own fields: the release date Radarr
+ * reported, the movie's year, the has_file flag and the grab mark. Nothing
+ * else — no path, no quality — so nothing else is built here.
+ */
+
+function estrenoDetail(item: CalendarItem): MediaDetail {
+  const meta: { label: string; value: string }[] = []
+  if (item.year != null) meta.push({ label: 'Año', value: String(item.year) })
+  // The date Radarr's calendar put the card on: physicalRelease (or the
+  // closest date it has) — the only date the item knows.
+  if (item.date) meta.push({ label: 'Fecha', value: item.date })
+  // Straight from the flag the card's own ✓ badge reads: the calendar has no
+  // path_exists, so "En biblioteca" (which needs it) would be a guess.
+  meta.push({ label: 'Estado', value: item.has_file ? 'Con archivo' : 'Sin archivo' })
+  return {
+    title: item.title,
+    poster: item.remotePoster || undefined,
+    meta,
+    grab: formatGrabMark(item.grabbed_at, item.grabbed_destination) ?? undefined,
+  }
+}
 
 /** What a calendar card hands the panel's Releases tab: exactly the item the
  *  overlay modal used to open for it — every field read off the item itself. */
+function estrenoRelease(item: CalendarItem): ReleaseSearchItem {
+  return {
+    type: item.type,
+    id: item.id,
+    title: item.title,
+    source: item.source,
+    date: item.date,
+    year: item.year,
+    series_title: item.series_title,
+    season_number: item.season_number,
+    episode_number: item.episode_number,
+    has_file: item.has_file,
+    remotePoster: item.remotePoster,
+    // A calendar item's id is its own kind — the card says which one, and
+    // the grabs history must be asked under exactly that key.
+    idKind: item.type,
+  }
+}
 
 function CalidadMovies({
   selectedId,
@@ -296,7 +351,12 @@ function CalidadMovies({
                     type="button"
                     className="sec-movie-open"
                     aria-label={`Abrir ${movie.title}`}
-                    onClick={choose}
+                    onClick={(event) => {
+                      // The arrow is the explicit way in (V2/S3); the row body
+                      // keeps working so keyboard users lose nothing.
+                      event.stopPropagation()
+                      choose()
+                    }}
                   >
                     ›
                   </button>
@@ -351,17 +411,45 @@ function loadedRows(queryClient: QueryClient, prefix: string): Record<string, un
 
 function selectedRowFacts(
   queryClient: QueryClient,
+  view: SubView,
   selected: MediaSelection | null,
 ): RowFacts {
   if (!selected) return { state: 'empty' }
-  // S2: one list, one cache. The sub-views are gone — and with them the
-  // calendar prefix this used to probe — so the row is read from the list.
-  const row = loadedRows(queryClient, 'calidad-movies').find((r) => r.id === selected.id)
+  if (view === 'estrenos') {
+    // Estrenos renders the CALENDAR: its rows live in the ['calendar', ...]
+    // cache the Calendar itself fills, and in NONE of the pane's listings —
+    // looking there would report "missing" for a row we hold in full. The
+    // type filter keeps a movie from matching an episode of the same id: the
+    // cache holds BOTH types.
+    const row = loadedRows(queryClient, 'calendar').find(
+      (r) => r.id === selected.id && r.type === 'movie',
+    )
+    if (!row) return { state: 'missing' }
+    return {
+      state: 'ready',
+      // A CalendarItem carries no folder and no series id: null is what the
+      // item said, and Archivos renders it as the honest "no tiene ruta".
+      path: null,
+      grabbedAt: typeof row.grabbed_at === 'number' ? row.grabbed_at : null,
+      grabbedDestination:
+        typeof row.grabbed_destination === 'string' ? row.grabbed_destination : null,
+      seriesId: null,
+    }
+  }
+  const prefix =
+    view === 'faltantes'
+      ? 'wanted-movies-infinite'
+      : view === 'calidad'
+        ? 'calidad-movies'
+        : 'all-movies-infinite'
+  const row = loadedRows(queryClient, prefix).find((r) => r.id === selected.id)
   if (!row) return { state: 'missing' }
   const rawPath = typeof row.path === 'string' ? row.path : ''
   return {
     state: 'ready',
-    path: rawPath || null,
+    // A WantedMovie has no `path` field at all: "" here is what the row said,
+    // and the Archivos tab renders it as the honest "no tiene ruta".
+    path: view === 'faltantes' || !rawPath ? null : rawPath,
     grabbedAt: typeof row.grabbed_at === 'number' ? row.grabbed_at : null,
     grabbedDestination:
       typeof row.grabbed_destination === 'string' ? row.grabbed_destination : null,
@@ -387,13 +475,21 @@ function PanelHistory({ facts }: { facts: RowFacts }) {
   )
 }
 
-export function Peliculas() {
+export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
+  // S1/S3 («detalle-pantalla»): the same page in two shapes. `split` is the
+  // shipped V1 (side panel, sub-view tabs) and stays untouched; `page` is the
+  // V2 experiment reached from its own sidebar entry — no tabs, and the detail
+  // REPLACES the list instead of sitting beside it.
+  const pageMode = layout === 'page'
+  const [view, setView] = useState<SubView>('biblioteca')
   const [selected, setSelected] = useState<MediaSelection | null>(null)
   // Which detail tab is on screen. Releases first: it is the tab the panel
   // has opened with since PR 5, and every other tab is live since PR 6.
   const [detailTab, setDetailTab] = useState<string>('Releases')
   const queryClient = useQueryClient()
-  const facts = selectedRowFacts(queryClient, selected)
+  const uid = useId()
+  const active = SUB_VIEWS.find((s) => s.id === view) ?? SUB_VIEWS[0]
+  const facts = selectedRowFacts(queryClient, view, selected)
   // T3: the Archivos tab aggregates the routing folders with the movie's own
   // folder. Settings are asked only while that tab is open on a selection.
   const foldersQuery = useQuery({
@@ -404,31 +500,106 @@ export function Peliculas() {
     enabled: detailTab === 'Archivos' && !!selected,
   })
 
+  function changeView(next: SubView) {
+    setView(next)
+    // The selection belongs to the list it came from: a switch resets it,
+    // and with it the tab that was showing the deselected row's data.
+    setSelected(null)
+    setDetailTab('Releases')
+  }
 
   return (
     <section className="section-shell sec-peliculas">
-      <div className="sec-page">
-        {!selected && (
-        <section className="sec-master sec-page" aria-label="Listado de películas">
+      {!pageMode && <div className="sec-subtabs" role="tablist" aria-label="Sub-vistas de Películas">
+        {SUB_VIEWS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            role="tab"
+            id={`${uid}-tab-${s.id}`}
+            aria-selected={view === s.id}
+            aria-controls={`${uid}-list`}
+            className={`sec-subtab${view === s.id ? ' is-active' : ''}`}
+            onClick={() => changeView(s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>}
+
+      <div className={pageMode ? 'sec-page' : 'sec-split'}>
+        {(!pageMode || !selected) && (
+        <section
+          className="sec-master"
+          role="tabpanel"
+          id={`${uid}-list`}
+          aria-labelledby={`${uid}-tab-${active.id}`}
+        >
           <div className="sec-master-head">
             <span className="sec-master-title">Películas</span>
+            <span className="sec-master-sub">{active.label}</span>
           </div>
 
-          <CalidadMovies selectedId={null} onSelect={setSelected} />
+          {pageMode ? (
+            <CalidadMovies selectedId={selected?.id ?? null} onSelect={setSelected} />
+          ) : view === 'estrenos' ? (
+            // The calendar IS the list of this sub-view — movie items only.
+            // It keeps its own date range and navigation; a card click
+            // reports the selection instead of opening the release search
+            // as a modal, which is what the other sub-views' rows do.
+            <Calendar
+              type="movie"
+              onSelect={(item) =>
+                setSelected({
+                  id: item.id,
+                  detail: estrenoDetail(item),
+                  release: estrenoRelease(item),
+                })
+              }
+            />
+          ) : view === 'calidad' ? (
+            // PR 4: the class list. Its rows are selectable like the pane's.
+            <CalidadMovies selectedId={selected?.id ?? null} onSelect={setSelected} />
+          ) : (
+            // The pane styles its rows under a `.wanted` ancestor (its action
+            // buttons are `.wanted .search-item`), so the column provides it.
+            // 'section' is what gives them the prototype's dense shape.
+            <div className="wanted">
+              <MediaPane
+                kind="movies"
+                namespace="peliculas"
+                filter={view === 'biblioteca' ? 'all' : 'missing'}
+                // The two buttons ARE the two sub-views: "Faltantes" and
+                // "Todas" are the same choice as the tab above, so they are
+                // wired to it rather than holding a second filter the tabs
+                // would contradict. The name search beside them is independent.
+                showFilterButtons
+                onFilterChange={(f) => changeView(f === 'missing' ? 'faltantes' : 'biblioteca')}
+                selectedId={selected?.id ?? null}
+                onSelect={setSelected}
+                variant="section"
+              />
+            </div>
+          )}
         </section>
 
         )}
 
-        {selected && (
-        <section className="sec-detail sec-detail-page" aria-label="Panel de detalle">
-          <button
-            type="button"
-            className="sec-detail-close"
-            aria-label="Cerrar detalle"
-            onClick={() => setSelected(null)}
-          >
-            ✕
-          </button>
+        {(!pageMode || selected) && (
+        <section
+          className={pageMode ? 'sec-detail sec-detail-page' : 'sec-detail'}
+          aria-label="Panel de detalle"
+        >
+          {pageMode && (
+            <button
+              type="button"
+              className="sec-detail-close"
+              aria-label="Cerrar detalle"
+              onClick={() => setSelected(null)}
+            >
+              ✕
+            </button>
+          )}
           <div className="sec-detail-head">
             {selected?.detail.poster ? (
               <img
