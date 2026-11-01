@@ -323,10 +323,10 @@ describe('sections · the release search in the panel', () => {
     // The three destination buttons are what the row offers now (F-12):
     // there is no separate "Acción principal" readout to check — the row
     // itself shows where the press would go.
-    expect(within(panel()).getByRole('button', { name: /Biblioteca/ })).toBeInTheDocument()
+    expect(within(panel()).getByRole('button', { name: '→ 1080' })).toBeInTheDocument()
     expect(within(panel()).getByRole('button', { name: /4K/ })).toBeInTheDocument()
 
-    fireEvent.click(within(panel()).getByRole('button', { name: /Biblioteca/ }))
+    fireEvent.click(within(panel()).getByRole('button', { name: '→ 1080' }))
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     expect(grabBodies(fn)[0]).toMatchObject({
@@ -390,7 +390,7 @@ describe('sections · the release search in the panel', () => {
     // Selection as a concept is gone (F-12): the rows carry their own
     // destination buttons, and — the contract this test always guarded —
     // neither searching nor rendering them has fired a single grab.
-    expect(within(panel()).getByRole('button', { name: /Biblioteca/ })).toBeInTheDocument()
+    expect(within(panel()).getByRole('button', { name: '→ 1080' })).toBeInTheDocument()
     expect(grabBodies(fn)).toHaveLength(0)
   })
 

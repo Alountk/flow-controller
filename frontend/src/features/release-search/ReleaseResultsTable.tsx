@@ -13,15 +13,15 @@ export interface ReleaseRow {
   seeders?: number
 }
 
-export interface ReleaseTableActions {
+export interface ReleaseTableActions<T extends ReleaseRow> {
   isProcessing: boolean
   path4k: string
   path3d: string
   /** The value `destinationFor` returns for «the arr library» — compared only,
    *  never printed: the button says 1080 (S2). */
   libraryValue: string
-  destinationFor: (r: ReleaseRow) => string
-  isThreeD: (r: ReleaseRow) => boolean
+  destinationFor: (r: T) => string
+  isThreeD: (r: T) => boolean
   onToggleThreeD: (guid: string) => void
   onGrab: (guid: string, target: 'library' | '4k' | '3d') => void
   onPickFolder: (guid: string) => void
@@ -41,12 +41,12 @@ function sourceLabel(r: ReleaseRow): string {
   return r.indexer || r.source || 'Desconocido'
 }
 
-export function ReleaseResultsTable({
+export function ReleaseResultsTable<T extends ReleaseRow>({
   releases,
   actions,
 }: {
-  releases: ReleaseRow[]
-  actions: ReleaseTableActions
+  releases: T[]
+  actions: ReleaseTableActions<T>
 }) {
   const [sort, setSort] = useState<SortState>({ key: null, dir: 'asc' })
   const rows = sortReleases(releases, sort)

@@ -138,18 +138,18 @@ function renderModal() {
 async function openResults() {
   const view = renderModal()
   fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
-  await waitFor(() => expect(document.querySelector('.calendar-releases')).not.toBeNull())
+  await waitFor(() => expect(document.querySelector('.release-table-wrap')).not.toBeNull())
   return view
 }
 
-const rows = () => [...document.querySelectorAll('.calendar-release')]
+const rows = () => [...document.querySelectorAll('.release-table tbody tr')]
 const groupNames = () =>
-  [...document.querySelectorAll('.calendar-indexer-name')].map((el) => el.textContent ?? '')
+  [...document.querySelectorAll('.release-source')].map((el) => el.textContent ?? '')
 
 /** Press one row's destination button (F-12), scoped to that row's block. */
-function pressDest(target: 'Biblioteca' | '4K' | '3D', row = 0) {
+function pressDest(target: '1080' | '4K' | '3D', row = 0) {
   const rowEl = document.querySelectorAll('.release-dest')[row] as HTMLElement
-  const name = target === 'Biblioteca' ? /Biblioteca/ : target === '4K' ? /4K/ : /3D/
+  const name = target === '1080' ? '→ 1080' : target === '4K' ? '→ 4K' : '→ 3D'
   fireEvent.click(within(rowEl).getByRole('button', { name }))
 }
 
@@ -186,7 +186,8 @@ describe('ReleaseSearchModal renders direct-source rows (S5)', () => {
 
     // The header is the indexer's own label; when the label IS the source
     // (aMule) or the source gave none, the source names the group.
-    expect(groupNames()).toEqual(['🌐 TorrentLeech', '🌐 amule', '🌐 prowlarr'])
+    // S4: the indexer rides as a badge under the name, one per row.
+    expect(groupNames()).toEqual(['TorrentLeech', 'amule', 'prowlarr'])
   })
 
   it('the search call carries the item title', async () => {
@@ -213,7 +214,7 @@ describe('ReleaseSearchModal grab payload on direct rows (S5)', () => {
     const fn = mockFetch([torznabRow])
     await openResults()
 
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     const body = grabBodies(fn)[0]
@@ -226,7 +227,7 @@ describe('ReleaseSearchModal grab payload on direct rows (S5)', () => {
     const fn = mockFetch([amuleRow])
     await openResults()
 
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     const body = grabBodies(fn)[0]

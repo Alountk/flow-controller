@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef, useCallback, useEffect, useContext } from 'react'
+import { useState, useRef, useCallback, useEffect, useContext } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { addCalendarItem } from '../../shared/api/calendar.ts'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
@@ -14,6 +14,7 @@ import { slug } from '../../shared/utils/slug.ts'
 import { fetchIndexers } from '../../shared/api/indexers.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
 import { FileNavigator } from '../../shared/ui/FileNavigator.tsx'
+import { ReleaseResultsTable } from './ReleaseResultsTable.tsx'
 import { looksThreeD } from '../../shared/utils/threeD.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import {
@@ -75,49 +76,12 @@ const SEARCH_TIMEOUT = 240 // seconds — must match backend REQUEST_TIMEOUT * 4
  *  terminal-set idea TraceActions applies to copy tasks. */
 const TERMINAL_STATUSES = ['done', 'error']
 
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '?'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
-}
-
-/** The facts under a file's name — `idioma · calidad · size · semillas`, in
- *  the order the operator reads them. Only the fields the row REALLY has
- *  contribute (S5): an absent `languages`/`quality`/`seeders` contributes
- *  NOTHING, not even a separator — the `·` is a node between rendered spans,
- *  so it can never appear in front of a missing field, and nothing may ever
- *  print the string "undefined". `size` is the one fact every row carries. */
-function releaseMetaParts(r: Release): { className: string; text: string }[] {
-  const parts: { className: string; text: string }[] = []
-  if (r.languages && r.languages.length > 0) {
-    parts.push({ className: 'release-lang', text: r.languages.join(', ') })
-  }
-  if (r.quality) parts.push({ className: 'release-quality', text: r.quality })
-  parts.push({ className: 'release-size', text: formatSize(r.size) })
-  if (typeof r.seeders === 'number') {
-    parts.push({ className: 'release-seeders', text: `⬆ ${r.seeders}` })
-  }
-  return parts
-}
 
 /** The label a row groups AND filters under (S5): its indexer's own label;
  *  when the label IS the source (aMule rows) or the source gave none, the
  *  source names it. One definition — the groups, the select's options and the
  *  filter all read the row through this. */
-function releaseLabel(r: Release): string {
-  return r.indexer || r.source || 'Desconocido'
-}
 
-function groupByIndexer(releases: Release[]): Map<string, Release[]> {
-  const map = new Map<string, Release[]>()
-  for (const r of releases) {
-    const key = releaseLabel(r)
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(r)
-  }
-  return map
-}
 
 interface RoutingFolders {
   path4k: string
@@ -1265,88 +1229,20 @@ export function ReleaseSearchModal({
               {visibleReleases.length === 0 ? (
                 <div className="wanted-empty">Ningún release coincide con los filtros</div>
               ) : (
-                Array.from(groupByIndexer(visibleReleases).entries()).map(([indexer, items]) => (
-                <div key={indexer} className="calendar-indexer-group">
-                  <div className="calendar-indexer-name">🌐 {indexer}</div>
-                  <div className="calendar-releases-list">
-                    {items.map((r) => (
-                      <div
-                        key={r.guid}
-                        className="calendar-release"
-                      >
-                        <div className="release-content">
-                          {/* The file selector's row: the file's name alone on
-                              its line, the four facts that pick a file beneath
-                              it. The 3D mark rides the facts line — it changes
-                              where the row routes, and that is what the line
-                              describes. */}
-                          <div className="release-title">{r.title}</div>
-                          <div className="release-meta">
-                            {releaseMetaParts(r).map((part, i) => (
-                              <Fragment key={part.className}>
-                                {i > 0 && (
-                                  <span className="release-sep" aria-hidden="true">·</span>
-                                )}
-                                <span className={part.className}>{part.text}</span>
-                              </Fragment>
-                            ))}
-                            <button
-                              type="button"
-                              className={`release-3d ${isThreeD(r) ? 'active' : ''}`}
-                              aria-pressed={isThreeD(r)}
-                              aria-label={
-                                isThreeD(r)
-                                  ? `Quitar la marca 3D de ${r.title}`
-                                  : `Marcar ${r.title} como 3D`
-                              }
-                              onClick={() => toggleThreeD(r.guid)}
-                            >
-                              3D
-                            </button>
-                          </div>
-                          <div className="release-dest">
-                            <button
-                              type="button"
-                              className={`release-dest-btn ${destinationFor(r) === LIBRARY ? 'suggest' : ''}`}
-                              onClick={() => void handleGrab(r.guid, 'library')}
-                              disabled={isProcessing}
-                              title={LIBRARY}
-                            >
-                              → Biblioteca
-                            </button>
-                            <button
-                              type="button"
-                              className={`release-dest-btn ${path4k && destinationFor(r) === path4k ? 'suggest' : ''}`}
-                              onClick={() => void handleGrab(r.guid, '4k')}
-                              disabled={isProcessing || !path4k}
-                              title={path4k || '4K sin configurar'}
-                            >
-                              → 4K
-                            </button>
-                            <button
-                              type="button"
-                              className={`release-dest-btn ${path3d && destinationFor(r) === path3d ? 'suggest' : ''}`}
-                              onClick={() => void handleGrab(r.guid, '3d')}
-                              disabled={isProcessing || !path3d}
-                              title={path3d || '3D sin configurar'}
-                            >
-                              → 3D
-                            </button>
-                            <button
-                              type="button"
-                              className="release-dest-btn"
-                              onClick={() => openPicker(r.guid)}
-                              disabled={isProcessing}
-                            >
-                              → Carpeta
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                ))
+                <ReleaseResultsTable
+                  releases={visibleReleases}
+                  actions={{
+                    isProcessing,
+                    path4k,
+                    path3d,
+                    libraryValue: LIBRARY,
+                    destinationFor,
+                    isThreeD,
+                    onToggleThreeD: toggleThreeD,
+                    onGrab: (guid: string, target: 'library' | '4k' | '3d') => void handleGrab(guid, target),
+                    onPickFolder: openPicker,
+                  }}
+                />
               )}
             </div>
           )}

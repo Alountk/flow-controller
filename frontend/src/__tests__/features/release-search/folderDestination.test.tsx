@@ -117,7 +117,7 @@ function renderModal(onClose: () => void = () => {}) {
 /** Search → results step (the sync POST answer carries the rows). */
 async function showResults() {
   fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
-  await waitFor(() => expect(document.querySelector('.calendar-releases')).not.toBeNull())
+  await waitFor(() => expect(document.querySelector('.release-table-wrap')).not.toBeNull())
 }
 
 describe('Carpeta destination (folder navigator)', () => {
@@ -130,7 +130,7 @@ describe('Carpeta destination (folder navigator)', () => {
     renderModal()
     await showResults()
     expect(await screen.findByRole('button', { name: /^→ Carpeta$/ })).toBeEnabled()
-    expect(screen.getByRole('button', { name: /Biblioteca/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '→ 1080' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^→ 4K$/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /^→ 3D$/ })).toBeDisabled()
   })
@@ -208,7 +208,7 @@ describe('Carpeta destination (folder navigator)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'storage' }))
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(document.querySelector('.folder-picker')).toBeNull()
-    expect(document.querySelector('.calendar-releases')).not.toBeNull()
+    expect(document.querySelector('.release-table-wrap')).not.toBeNull()
     expect(onClose).not.toHaveBeenCalled()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)

@@ -108,9 +108,9 @@ function grabBodies(fn: FetchMock): Record<string, unknown>[] {
 }
 
 /** Press one of the row's three destination buttons (F-12), row 0 by default. */
-function pressDest(target: 'Biblioteca' | '4K' | '3D', row = 0) {
+function pressDest(target: '1080' | '4K' | '3D', row = 0) {
   const rowEl = document.querySelectorAll('.release-dest')[row] as HTMLElement
-  const name = target === 'Biblioteca' ? /Biblioteca/ : target === '4K' ? /4K/ : /3D/
+  const name = target === '1080' ? '→ 1080' : target === '4K' ? '→ 4K' : '→ 3D'
   fireEvent.click(within(rowEl).getByRole('button', { name }))
 }
 
@@ -141,7 +141,7 @@ const filterInput = () => screen.getByPlaceholderText('Filtrar por título...')
  * Scope queries to the releases region: the modal header also renders the item
  * title, so a document-wide text query would match the header too.
  */
-const releasesRegion = () => document.querySelector('.calendar-releases') as HTMLElement
+const releasesRegion = () => document.querySelector('.release-table-wrap') as HTMLElement
 
 const releaseTitles = () =>
   [...document.querySelectorAll('.release-title')].map((el) => el.textContent ?? '')
@@ -191,11 +191,13 @@ describe('ReleaseSearchModal filter bar', () => {
   it('offers no quality or language chips when the rows carry none (S5)', async () => {
     await openResults()
 
-    // Rows WITHOUT quality/languages fields (S5) contribute no chips: the
-    // groups stay unrendered and an absent value never surfaces as text.
-    expect(screen.queryByText('Calidad')).toBeNull()
-    expect(screen.queryByText('Idioma')).toBeNull()
-    expect(within(releasesRegion()).queryByText('undefined')).toBeNull()
+    // S1/S2: the table ALWAYS carries the columns; what a row without the
+    // fact may never do is invent a value — it reads as a dash, never as
+    // "undefined" and never as a fake chip.
+    expect(screen.getByRole('columnheader', { name: 'Idioma' })).toBeInTheDocument()
+    const row = document.querySelector('.release-table tbody tr') as HTMLElement
+    expect(within(row).queryByText('undefined')).toBeNull()
+    expect(within(row).getAllByText('—').length).toBeGreaterThan(0)
   })
 
   it('offers quality and language chips when the rows carry them (S1)', async () => {
@@ -207,7 +209,9 @@ describe('ReleaseSearchModal filter bar', () => {
     // The chips lost in the direct-source migration (S1): both groups render
     // with the values the rows carry.
     expect(screen.getByText('Calidad')).toBeInTheDocument()
-    expect(screen.getByText('Idioma')).toBeInTheDocument()
+    // S2 added the «Idioma» column, so the word legitimately appears twice:
+    // the filter label and the sortable header.
+    expect(screen.getAllByText('Idioma').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByRole('button', { name: 'Bluray-1080p' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Spanish' })).toBeInTheDocument()
   })
@@ -246,9 +250,12 @@ describe('ReleaseSearchModal filter bar', () => {
 
     fireEvent.change(filterInput(), { target: { value: 'Todo' } })
 
-    const groups = document.querySelectorAll('.calendar-indexer-group')
-    expect(groups).toHaveLength(1)
-    expect(within(groups[0] as HTMLElement).getByText(/Todo a la vez/)).toBeInTheDocument()
+    // S1: filtering narrows the single table; it never leaves empty groups,
+    // because there are no groups to leave.
+    expect(document.querySelectorAll('.calendar-indexer-group')).toHaveLength(0)
+    const rows = document.querySelectorAll('.release-table tbody tr')
+    expect(rows).toHaveLength(1)
+    expect(within(rows[0] as HTMLElement).getByText(/Todo a la vez/)).toBeInTheDocument()
   })
 
   it('binds the seeders floor label to its input with htmlFor/id/name (S2)', async () => {
@@ -288,22 +295,22 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
     expect(document.querySelectorAll('.release-dest')).toHaveLength(2)
     const row = document.querySelectorAll('.release-dest')[0] as HTMLElement
     // The folders arrive with the settings read: enabled means they answered.
-    await waitFor(() => expect(within(row).getByRole('button', { name: /4K/ })).toBeEnabled())
-    expect(within(row).getByRole('button', { name: /Biblioteca/ })).toBeEnabled()
-    expect(within(row).getByRole('button', { name: /3D/ })).toBeEnabled()
+    await waitFor(() => expect(within(row).getByRole('button', { name: '→ 4K' })).toBeEnabled())
+    expect(within(row).getByRole('button', { name: '→ 1080' })).toBeEnabled()
+    expect(within(row).getByRole('button', { name: '→ 3D' })).toBeEnabled()
     // A 3D title + the configured folder: the rules say → 3D, and the row
     // says so (S5 rows carry no quality class to route by).
-    expect(within(row).getByRole('button', { name: /3D/ })).toHaveClass('suggest')
+    expect(within(row).getByRole('button', { name: '→ 3D' })).toHaveClass('suggest')
     // …and a row with no class to claim suggests the library.
     const plain = document.querySelectorAll('.release-dest')[1] as HTMLElement
-    expect(within(plain).getByRole('button', { name: /Biblioteca/ })).toHaveClass('suggest')
+    expect(within(plain).getByRole('button', { name: '→ 1080' })).toHaveClass('suggest')
   })
 
   it('the library button sends no destination and says so explicitly', async () => {
     const fn = mockFetch()
     await openResults()
 
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     const body = grabBodies(fn)[0]
@@ -333,7 +340,7 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
 
     await waitFor(() =>
       expect(
-        within(document.querySelectorAll('.release-dest')[0] as HTMLElement).getByRole('button', { name: /3D/ }),
+        within(document.querySelectorAll('.release-dest')[0] as HTMLElement).getByRole('button', { name: '→ 3D' }),
       ).toBeEnabled(),
     )
     pressDest('3D')
@@ -353,7 +360,7 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
 
     const row = document.querySelectorAll('.release-dest')[0] as HTMLElement
     expect(within(row).getByRole('button', { name: /4K/ })).toBeDisabled()
-    expect(within(row).getByRole('button', { name: /Biblioteca/ })).toBeEnabled()
+    expect(within(row).getByRole('button', { name: '→ 1080' })).toBeEnabled()
   })
 
   it('a failed settings read still allows the library grab', async () => {
@@ -363,7 +370,7 @@ describe('ReleaseSearchModal per-row destination buttons', () => {
     const row = document.querySelectorAll('.release-dest')[0] as HTMLElement
     expect(within(row).getByRole('button', { name: /4K/ })).toBeDisabled()
 
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     expect(grabBodies(fn)[0].library).toBe(true)
@@ -383,7 +390,7 @@ describe('ReleaseSearchModal grab body honesty', () => {
     const fn = mockFetch({ releases: [makeRelease({ guid: 'no-q-1' })] })
     await openResults()
 
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     expect(grabBodies(fn)[0]).not.toHaveProperty('quality')
@@ -417,7 +424,7 @@ describe('ReleaseSearchModal 3D routing', () => {
     const fn = mockFetch({ releases: [suggested] })
     await openResults()
 
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     expect(grabBodies(fn)[0].is3d).toBe(true)
@@ -427,7 +434,7 @@ describe('ReleaseSearchModal 3D routing', () => {
     const fn = mockFetch({ releases: [plain] })
     await openResults()
 
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     expect(grabBodies(fn)[0]).not.toHaveProperty('is3d')
@@ -438,7 +445,7 @@ describe('ReleaseSearchModal 3D routing', () => {
     await openResults()
 
     fireEvent.click(screen.getByRole('button', { name: /Quitar la marca 3D/ }))
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     // What the title said is a hint; what the operator says is the answer.
@@ -450,7 +457,7 @@ describe('ReleaseSearchModal 3D routing', () => {
     await openResults()
 
     fireEvent.click(screen.getByRole('button', { name: /Marcar .* como 3D/ }))
-    pressDest('Biblioteca')
+    pressDest('1080')
 
     await waitFor(() => expect(grabBodies(fn)).toHaveLength(1))
     expect(grabBodies(fn)[0].is3d).toBe(true)
