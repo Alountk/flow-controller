@@ -54,8 +54,11 @@ visual de dónde se corta el flujo.
   - **Chip de calidad por archivo** en la tabla («720p», «1080p», «4K»…)
     derivado SOLO del resultado medido: fichero sin analizar → sin chip
     (honestidad: nada se inventa).
-- [ ] **Lista de upgrades de calidad** — pendiente; la persistencia de
-  sondas que necesitaba ya está en `main`.
+- [x] **Lista de upgrades de calidad** — entregada (`umbral-calidad`):
+  umbral configurable (slider de clases + ancho manual) en Ajustes, el chip
+  obedece ese umbral y la vista Calidad lista las películas medidas por
+  debajo, contando aparte las que aún no se han analizado. Ver
+  `odd/tasks/umbral-calidad.md`.
   - Películas cuyo archivo medido queda por debajo del umbral → lista de
     «candidatas a mejorar» con fichero, resolución medida y destino actual.
   - **Umbral configurable en Settings, default «menos de 1080p»**
