@@ -99,7 +99,7 @@ async function openAndPress() {
 
   fireEvent.click(await screen.findByRole('button', { name: /Buscar Releases/ }))
   await screen.findByPlaceholderText('Filtrar por título...')
-  fireEvent.click(screen.getByRole('button', { name: /Biblioteca/ }))
+  fireEvent.click(screen.getByRole('button', { name: '→ 1080' }))
 }
 
 describe('grab error feedback', () => {
@@ -187,7 +187,7 @@ describe('grab error feedback', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('Filtrar por título...')).toBeInTheDocument())
 
     failing = false
-    fireEvent.click(screen.getByRole('button', { name: /Biblioteca/ }))
+    fireEvent.click(screen.getByRole('button', { name: '→ 1080' }))
     await waitFor(() =>
       expect(screen.getByText('Release encolado para descarga')).toBeInTheDocument(),
     )

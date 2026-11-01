@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>FlowController - Búsqueda unificada de indexadores</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Inter Google Font -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "outline-variant": "#c7c4d8",
+            "surface": "#fbf8fc",
+            "primary-container": "#4f46e5",
+            "on-surface": "#1b1b1e",
+            "background": "#fbf8fc",
+            "error": "#ba1a1a",
+            "surface-container": "#f0edf1",
+            "surface-container-high": "#eae7eb",
+            "outline": "#777587"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "body-md": ["Inter"],
+            "body-sm": ["Inter"],
+            "body-lg": ["Inter"],
+            "label-sm": ["Inter"],
+            "label-md": ["Inter"],
+            "headline-sm": ["Inter"],
+            "headline-md": ["Inter"],
+            "headline-lg": ["Inter"],
+            "code-sm": ["\"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace\""],
+            "code-md": ["\"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace\""]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body {
+      background-color: #0f1117;
+      color: #f1f5f9;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #0f1117; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #282f3e; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #3b455b; }
+  </style>
+</head>
+<body class="min-h-screen bg-[#0f1117] text-[#f1f5f9] flex flex-col font-body-sm antialiased selection:bg-[#6366f1] selection:text-white">
+<!-- TOP STATUS BAR / BREADCRUMB -->
+<header class="w-full bg-[#161922] border-b border-[#282f3e] px-4 py-2 flex items-center justify-between select-none">
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1.5 text-xs font-mono text-[#94a3b8]">
+<span class="font-bold text-white tracking-tight flex items-center gap-1">
+<span class="material-symbols-outlined text-[#6366f1] text-[18px]">dns</span>
+          FlowController
+        </span>
+<span class="text-[#475569]">/</span>
+<span class="text-[#cbd5e1] font-medium">Búsqueda unificada de indexadores</span>
+</div>
+</div>
+<!-- CONNECTION BADGES -->
+<div class="flex items-center gap-2 text-[11px] font-mono">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#111827] border border-[#1f293d] text-[#cbd5e1]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+<span class="text-[#64748b]">Radarr:</span>
+<span class="text-emerald-400 font-medium">Conectado</span>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#111827] border border-[#1f293d] text-[#cbd5e1]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+<span class="text-[#64748b]">Sonarr:</span>
+<span class="text-emerald-400 font-medium">Conectado</span>
+</div>
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#111827] border border-[#1f293d] text-[#cbd5e1]">
+<span class="w-1.5 h-1.5 rounded-full bg-[#6366f1]"></span>
+<span class="text-[#64748b]">Indexadores:</span>
+<span class="text-[#818cf8] font-medium">4 activos</span>
+</div>
+</div>
+</header>
+<!-- SEARCH & FILTER TOOLBAR -->
+<section class="w-full bg-[#161922] border-b border-[#282f3e] px-4 py-2.5 flex flex-col gap-2">
+<!-- Row 1: Search input & Meta summary -->
+<div class="flex items-center justify-between gap-4">
+<div class="relative flex-1 max-w-2xl">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[#64748b] text-[18px]">search</span>
+<input class="w-full h-8 bg-[#0f1117] border border-[#282f3e] pl-8 pr-16 text-xs text-[#f1f5f9] placeholder-[#475569] focus:outline-none focus:border-[#6366f1] rounded-none font-body-sm transition-colors" placeholder="Buscar en los indexadores" type="text" value="Dune"/>
+<div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+<kbd class="px-1.5 py-0.5 text-[10px] font-mono text-[#64748b] bg-[#1c212d] border border-[#282f3e] rounded">Ctrl+K</kbd>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-xs text-[#94a3b8] font-mono whitespace-nowrap">
+          38 resultados · 4 indexadores
+        </span>
+<button class="h-8 px-2.5 flex items-center gap-1.5 text-xs text-[#cbd5e1] hover:text-white bg-[#1c212d] hover:bg-[#252c3c] border border-[#282f3e] rounded-none transition-colors">
+<span class="material-symbols-outlined text-[15px] text-[#94a3b8]">refresh</span>
+<span>Actualizar</span>
+</button>
+</div>
+</div>
+<!-- Row 2: Filter chips row -->
+<div class="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
+<div class="flex flex-wrap items-center gap-4">
+<!-- Language Group -->
+<div class="flex items-center gap-1.5">
+<span class="text-[11px] text-[#64748b] font-mono uppercase tracking-wider">Idioma:</span>
+<div class="flex items-center gap-1">
+<button class="px-2 py-0.5 text-[11px] font-medium bg-[#6366f1] text-white border border-[#6366f1] rounded-sm transition-colors">Castellano</button>
+<button class="px-2 py-0.5 text-[11px] font-medium bg-[#1c212d] text-[#94a3b8] hover:text-[#f1f5f9] border border-[#282f3e] rounded-sm transition-colors">Inglés</button>
+<button class="px-2 py-0.5 text-[11px] font-medium bg-[#1c212d] text-[#94a3b8] hover:text-[#f1f5f9] border border-[#282f3e] rounded-sm transition-colors">Dual</button>
+<button class="px-2 py-0.5 text-[11px] font-medium bg-[#1c212d] text-[#94a3b8] hover:text-[#f1f5f9] border border-[#282f3e] rounded-sm transition-colors">VOSE</button>
+</div>
+</div>
+<div class="h-3.5 w-px bg-[#282f3e]"></div>
+<!-- Quality Group -->
+<div class="flex items-center gap-1.5">
+<span class="text-[11px] text-[#64748b] font-mono uppercase tracking-wider">Calidad:</span>
+<div class="flex items-center gap-1">
+<button class="px-2 py-0.5 text-[11px] font-medium bg-[#1c212d] text-[#94a3b8] hover:text-[#f1f5f9] border border-[#282f3e] rounded-sm transition-colors">2160p</button>
+<button class="px-2 py-0.5 text-[11px] font-medium bg-[#6366f1] text-white border border-[#6366f1] rounded-sm transition-colors">1080p</button>
+<button class="px-2 py-0.5 text-[11px] font-medium bg-[#1c212d] text-[#94a3b8] hover:text-[#f1f5f9] border border-[#282f3e] rounded-sm transition-colors">720p</button>
+</div>
+</div>
+<div class="h-3.5 w-px bg-[#282f3e]"></div>
+<!-- Numeric Filter: Seeders mín. -->
+<div class="flex items-center gap-1.5">
+<span class="text-[11px] text-[#64748b] font-mono uppercase tracking-wider">Seeders mín.:</span>
+<div class="inline-flex items-center bg-[#0f1117] border border-[#282f3e] px-1.5 py-0.5 rounded-sm gap-2">
+<span class="font-mono text-xs text-[#cbd5e1] font-semibold">5</span>
+<div class="flex flex-col -space-y-1">
+<button class="text-[#64748b] hover:text-white leading-none text-[9px]">▲</button>
+<button class="text-[#64748b] hover:text-white leading-none text-[9px]">▼</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick status counter -->
+<div class="flex items-center gap-2 text-[11px] text-[#64748b] font-mono">
+<span>Filtro activo: <span class="text-[#cbd5e1]">Castellano + 1080p</span></span>
+<button class="text-[#6366f1] hover:underline">Restablecer</button>
+</div>
+</div>
+</section>
+<!-- MAIN VIEWPORT CONTAINER -->
+<main class="flex-1 w-full flex flex-col overflow-hidden bg-[#0f1117]">
+<div class="flex-1 overflow-x-auto overflow-y-auto custom-scroll">
+<table class="w-full text-left border-collapse select-text">
+<!-- STICKY TABLE HEADER -->
+<thead class="sticky top-0 z-20 bg-[#161922] border-b border-[#282f3e] text-[11px] uppercase tracking-wider font-mono text-[#94a3b8]">
+<tr>
+<!-- Col 1: Nombre (Active Sort) -->
+<th class="py-2.5 px-4 font-semibold text-[#818cf8] cursor-pointer hover:bg-[#1c212d] transition-colors whitespace-nowrap" scope="col">
+<div class="flex items-center gap-1.5">
+<span>Nombre</span>
+<span class="text-[10px] text-[#818cf8]">▲</span>
+</div>
+</th>
+<!-- Col 2: Tamaño -->
+<th class="py-2.5 px-4 font-medium text-right cursor-pointer hover:bg-[#1c212d] transition-colors whitespace-nowrap w-28" scope="col">
+<div class="flex items-center justify-end gap-1">
+<span>Tamaño</span>
+<span class="text-[10px] text-[#475569]">▲</span>
+</div>
+</th>
+<!-- Col 3: Idioma -->
+<th class="py-2.5 px-4 font-medium cursor-pointer hover:bg-[#1c212d] transition-colors whitespace-nowrap w-44" scope="col">
+<div class="flex items-center gap-1">
+<span>Idioma</span>
+<span class="text-[10px] text-[#475569]">▲</span>
+</div>
+</th>
+<!-- Col 4: Seeders -->
+<th class="py-2.5 px-4 font-medium text-right cursor-pointer hover:bg-[#1c212d] transition-colors whitespace-nowrap w-32" scope="col">
+<div class="flex items-center justify-end gap-1">
+<span>Seeders</span>
+<span class="text-[10px] text-[#475569]">▲</span>
+</div>
+</th>
+<!-- Col 5: Destino -->
+<th class="py-2.5 px-4 font-medium whitespace-nowrap w-64 text-center" scope="col">
+<span>Destino</span>
+</th>
+</tr>
+</thead>
+<!-- TABLE BODY: 8 DETAILED HOMELAB ROWS -->
+<tbody class="divide-y divide-[#282f3e]/60 text-xs font-body-sm">
+<!-- ROW 1 -->
+<tr class="hover:bg-[#1e2433] bg-[#0f1117] transition-colors group">
+<td class="py-2 px-4 align-middle">
+<div class="flex flex-col gap-0.5">
+<span class="font-semibold text-[#f1f5f9] group-hover:text-white truncate font-mono text-[12px] leading-tight">
+                  Dune.Parte.Dos.2024.1080p.BluRay.x264-SPARKS
+                </span>
+<div class="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">
+<span class="px-1.5 py-0.2 rounded bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1]">TorrentLand</span>
+<span>·</span>
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px] text-[#64748b]">schedule</span> 2h 46m
+                  </span>
+<span>·</span>
+<span class="text-[#64748b]">video/mkv</span>
+</div>
+</div>
+</td>
+<td class="py-2 px-4 align-middle text-right font-mono text-xs text-[#cbd5e1] whitespace-nowrap">
+              12.4 GB
+            </td>
+<td class="py-2 px-4 align-middle whitespace-nowrap">
+<span class="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#1e2433] border border-[#282f3e] text-[#cbd5e1] text-[11px] font-medium">
+                Castellano
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-right whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
+<span>⬆</span> 312
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-center whitespace-nowrap">
+<div class="inline-flex items-center bg-[#161922] border border-[#282f3e] p-0.5 rounded-sm gap-0.5">
+<button class="px-2.5 py-1 text-[11px] font-semibold bg-[#6366f1] text-white rounded-none shadow-sm">1080</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">4K</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">3D</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">folder</span> Carpeta
+                </button>
+</div>
+</td>
+</tr>
+<!-- ROW 2 -->
+<tr class="hover:bg-[#1e2433] bg-[#141721] transition-colors group">
+<td class="py-2 px-4 align-middle">
+<div class="flex flex-col gap-0.5">
+<span class="font-semibold text-[#f1f5f9] group-hover:text-white truncate font-mono text-[12px] leading-tight">
+                  Oppenheimer.2023.2160p.UHD.Remux.HEVC.DV-FLUX
+                </span>
+<div class="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">
+<span class="px-1.5 py-0.2 rounded bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1]">DivisionToro</span>
+<span>·</span>
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px] text-[#64748b]">schedule</span> 3h 00m
+                  </span>
+<span>·</span>
+<span class="text-[#64748b]">Dolby Vision · TrueHD</span>
+</div>
+</div>
+</td>
+<td class="py-2 px-4 align-middle text-right font-mono text-xs text-[#cbd5e1] whitespace-nowrap">
+              48.2 GB
+            </td>
+<td class="py-2 px-4 align-middle whitespace-nowrap">
+<span class="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#1e2433] border border-[#282f3e] text-[#cbd5e1] text-[11px] font-medium">
+                Dual
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-right whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
+<span>⬆</span> 145
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-center whitespace-nowrap">
+<div class="inline-flex items-center bg-[#161922] border border-[#282f3e] p-0.5 rounded-sm gap-0.5">
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">1080</button>
+<button class="px-2.5 py-1 text-[11px] font-semibold bg-[#6366f1] text-white rounded-none shadow-sm">4K</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">3D</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">folder</span> Carpeta
+                </button>
+</div>
+</td>
+</tr>
+<!-- ROW 3 -->
+<tr class="hover:bg-[#1e2433] bg-[#0f1117] transition-colors group">
+<td class="py-2 px-4 align-middle">
+<div class="flex flex-col gap-0.5">
+<span class="font-semibold text-[#f1f5f9] group-hover:text-white truncate font-mono text-[12px] leading-tight">
+                  Alien.Romulus.2024.1080p.WEB-DL.DDP5.1.Atmos.H.264
+                </span>
+<div class="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">
+<span class="px-1.5 py-0.2 rounded bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1]">EliteTorrent</span>
+<span>·</span>
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px] text-[#64748b]">schedule</span> 1h 59m
+                  </span>
+<span>·</span>
+<span class="text-[#64748b]">E-AC3 JOC</span>
+</div>
+</div>
+</td>
+<td class="py-2 px-4 align-middle text-right font-mono text-xs text-[#cbd5e1] whitespace-nowrap">
+              8.1 GB
+            </td>
+<td class="py-2 px-4 align-middle whitespace-nowrap">
+<span class="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#1e2433] border border-[#282f3e] text-[#cbd5e1] text-[11px] font-medium">
+                Castellano + Inglés
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-right whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-amber-950/60 text-amber-400 border border-amber-800/50">
+<span>⬆</span> 84
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-center whitespace-nowrap">
+<div class="inline-flex items-center bg-[#161922] border border-[#282f3e] p-0.5 rounded-sm gap-0.5">
+<button class="px-2.5 py-1 text-[11px] font-semibold bg-[#6366f1] text-white rounded-none shadow-sm">1080</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">4K</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">3D</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">folder</span> Carpeta
+                </button>
+</div>
+</td>
+</tr>
+<!-- ROW 4 -->
+<tr class="hover:bg-[#1e2433] bg-[#141721] transition-colors group">
+<td class="py-2 px-4 align-middle">
+<div class="flex flex-col gap-0.5">
+<span class="font-semibold text-[#f1f5f9] group-hover:text-white truncate font-mono text-[12px] leading-tight">
+                  Interstellar.2014.IMAX.2160p.HDR.x265-EPSILON
+                </span>
+<div class="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">
+<span class="px-1.5 py-0.2 rounded bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1]">MejorTorrent</span>
+<span>·</span>
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px] text-[#64748b]">schedule</span> 2h 49m
+                  </span>
+<span>·</span>
+<span class="text-[#64748b]">IMAX Enhanced</span>
+</div>
+</div>
+</td>
+<td class="py-2 px-4 align-middle text-right font-mono text-xs text-[#cbd5e1] whitespace-nowrap">
+              24.7 GB
+            </td>
+<td class="py-2 px-4 align-middle whitespace-nowrap">
+<span class="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#1e2433] border border-[#282f3e] text-[#cbd5e1] text-[11px] font-medium">
+                VOSE
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-right whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-amber-950/60 text-amber-400 border border-amber-800/50">
+<span>⬆</span> 52
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-center whitespace-nowrap">
+<div class="inline-flex items-center bg-[#161922] border border-[#282f3e] p-0.5 rounded-sm gap-0.5">
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">1080</button>
+<button class="px-2.5 py-1 text-[11px] font-semibold bg-[#6366f1] text-white rounded-none shadow-sm">4K</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">3D</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">folder</span> Carpeta
+                </button>
+</div>
+</td>
+</tr>
+<!-- ROW 5 -->
+<tr class="hover:bg-[#1e2433] bg-[#0f1117] transition-colors group">
+<td class="py-2 px-4 align-middle">
+<div class="flex flex-col gap-0.5">
+<span class="font-semibold text-[#f1f5f9] group-hover:text-white truncate font-mono text-[12px] leading-tight">
+                  The.Godfather.1972.50th.Anniversary.1080p.BluRay
+                </span>
+<div class="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">
+<span class="px-1.5 py-0.2 rounded bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1]">TorrentLand</span>
+<span>·</span>
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px] text-[#64748b]">schedule</span> 2h 55m
+                  </span>
+<span>·</span>
+<span class="text-[#64748b]">Restored Master</span>
+</div>
+</div>
+</td>
+<td class="py-2 px-4 align-middle text-right font-mono text-xs text-[#cbd5e1] whitespace-nowrap">
+              18.3 GB
+            </td>
+<td class="py-2 px-4 align-middle whitespace-nowrap">
+<span class="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#1e2433] border border-[#282f3e] text-[#cbd5e1] text-[11px] font-medium">
+                Castellano
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-right whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-amber-950/60 text-amber-400 border border-amber-800/50">
+<span>⬆</span> 39
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-center whitespace-nowrap">
+<div class="inline-flex items-center bg-[#161922] border border-[#282f3e] p-0.5 rounded-sm gap-0.5">
+<button class="px-2.5 py-1 text-[11px] font-semibold bg-[#6366f1] text-white rounded-none shadow-sm">1080</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">4K</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">3D</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">folder</span> Carpeta
+                </button>
+</div>
+</td>
+</tr>
+<!-- ROW 6 -->
+<tr class="hover:bg-[#1e2433] bg-[#141721] transition-colors group">
+<td class="py-2 px-4 align-middle">
+<div class="flex flex-col gap-0.5">
+<span class="font-semibold text-[#f1f5f9] group-hover:text-white truncate font-mono text-[12px] leading-tight">
+                  Blade.Runner.2049.2017.1080p.3D.HSBS.x264
+                </span>
+<div class="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">
+<span class="px-1.5 py-0.2 rounded bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1]">DivisionToro</span>
+<span>·</span>
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px] text-[#64748b]">schedule</span> 2h 44m
+                  </span>
+<span>·</span>
+<span class="text-[#64748b]">Half-SBS 3D</span>
+</div>
+</div>
+</td>
+<td class="py-2 px-4 align-middle text-right font-mono text-xs text-[#cbd5e1] whitespace-nowrap">
+              14.1 GB
+            </td>
+<td class="py-2 px-4 align-middle whitespace-nowrap">
+<span class="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#1e2433] border border-[#282f3e] text-[#cbd5e1] text-[11px] font-medium">
+                Inglés
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-right whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-rose-950/60 text-rose-400 border border-rose-800/50">
+<span>⬆</span> 14
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-center whitespace-nowrap">
+<div class="inline-flex items-center bg-[#161922] border border-[#282f3e] p-0.5 rounded-sm gap-0.5">
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">1080</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">4K</button>
+<button class="px-2.5 py-1 text-[11px] font-semibold bg-[#6366f1] text-white rounded-none shadow-sm">3D</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">folder</span> Carpeta
+                </button>
+</div>
+</td>
+</tr>
+<!-- ROW 7 -->
+<tr class="hover:bg-[#1e2433] bg-[#0f1117] transition-colors group">
+<td class="py-2 px-4 align-middle">
+<div class="flex flex-col gap-0.5">
+<span class="font-semibold text-[#f1f5f9] group-hover:text-white truncate font-mono text-[12px] leading-tight">
+                  Poor.Things.2023.1080p.BluRay.DTS-HD.MA.5.1
+                </span>
+<div class="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">
+<span class="px-1.5 py-0.2 rounded bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1]">EliteTorrent</span>
+<span>·</span>
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px] text-[#64748b]">schedule</span> 2h 21m
+                  </span>
+<span>·</span>
+<span class="text-[#64748b]">Lossless Audio</span>
+</div>
+</div>
+</td>
+<td class="py-2 px-4 align-middle text-right font-mono text-xs text-[#cbd5e1] whitespace-nowrap">
+              9.8 GB
+            </td>
+<td class="py-2 px-4 align-middle whitespace-nowrap">
+<span class="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#1e2433] border border-[#282f3e] text-[#cbd5e1] text-[11px] font-medium">
+                Dual
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-right whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-amber-950/60 text-amber-400 border border-amber-800/50">
+<span>⬆</span> 91
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-center whitespace-nowrap">
+<div class="inline-flex items-center bg-[#161922] border border-[#282f3e] p-0.5 rounded-sm gap-0.5">
+<button class="px-2.5 py-1 text-[11px] font-semibold bg-[#6366f1] text-white rounded-none shadow-sm">1080</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">4K</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">3D</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">folder</span> Carpeta
+                </button>
+</div>
+</td>
+</tr>
+<!-- ROW 8 -->
+<tr class="hover:bg-[#1e2433] bg-[#141721] transition-colors group">
+<td class="py-2 px-4 align-middle">
+<div class="flex flex-col gap-0.5">
+<span class="font-semibold text-[#f1f5f9] group-hover:text-white truncate font-mono text-[12px] leading-tight">
+                  Dune.Part.One.2021.2160p.HDR.WEB-DL.DDP5.1
+                </span>
+<div class="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">
+<span class="px-1.5 py-0.2 rounded bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1]">MejorTorrent</span>
+<span>·</span>
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px] text-[#64748b]">schedule</span> 2h 35m
+                  </span>
+<span>·</span>
+<span class="text-[#64748b]">HDR10</span>
+</div>
+</div>
+</td>
+<td class="py-2 px-4 align-middle text-right font-mono text-xs text-[#cbd5e1] whitespace-nowrap">
+              16.5 GB
+            </td>
+<td class="py-2 px-4 align-middle whitespace-nowrap">
+<span class="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#1e2433] border border-[#282f3e] text-[#cbd5e1] text-[11px] font-medium">
+                Castellano
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-right whitespace-nowrap">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-rose-950/60 text-rose-400 border border-rose-800/50">
+<span>⬆</span> 8
+              </span>
+</td>
+<td class="py-2 px-4 align-middle text-center whitespace-nowrap">
+<div class="inline-flex items-center bg-[#161922] border border-[#282f3e] p-0.5 rounded-sm gap-0.5">
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">1080</button>
+<button class="px-2.5 py-1 text-[11px] font-semibold bg-[#6366f1] text-white rounded-none shadow-sm">4K</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors">3D</button>
+<button class="px-2.5 py-1 text-[11px] text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#252c3c] rounded-none transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">folder</span> Carpeta
+                </button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</main>
+<!-- TABLE FOOTER / STATUS BAR -->
+<footer class="w-full bg-[#161922] border-t border-[#282f3e] px-4 py-2 flex items-center justify-between text-xs select-none">
+<div class="flex items-center gap-4 text-[#94a3b8] font-mono text-[11px]">
+<span>Mostrando 8 de 38</span>
+<span class="text-[#475569]">|</span>
+<span class="flex items-center gap-1 text-[#64748b]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        API Torznab respondieron en 412ms
+      </span>
+</div>
+<!-- PAGINATION & QUICK ACTION SUMMARY -->
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1">
+<span class="text-[11px] text-[#64748b] font-mono mr-1">Página</span>
+<button class="px-2 py-0.5 bg-[#1c212d] border border-[#282f3e] text-[#64748b] hover:text-white disabled:opacity-40 rounded-none text-xs" disabled="">←</button>
+<span class="px-2 py-0.5 bg-[#0f1117] border border-[#282f3e] font-mono text-xs text-[#cbd5e1]">1 / 5</span>
+<button class="px-2 py-0.5 bg-[#1c212d] border border-[#282f3e] text-[#cbd5e1] hover:text-white rounded-none text-xs">→</button>
+</div>
+<div class="h-3 w-px bg-[#282f3e]"></div>
+<div class="flex items-center gap-2">
+<span class="text-[11px] text-[#94a3b8] font-mono">Cola activa: <strong class="text-white font-medium">3 descargas</strong></span>
+<button class="px-2 py-0.5 bg-[#1c212d] hover:bg-[#252c3c] border border-[#282f3e] text-xs text-[#818cf8] font-mono">Ver cola</button>
+</div>
+</div>
+</footer>
+<script>
+    // Lightweight interaction for segmented controls
+    document.querySelectorAll('tbody tr').forEach(row => {
+      const buttons = row.querySelectorAll('td:last-child button');
+      buttons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          buttons.forEach(b => {
+            b.classList.remove('bg-[#6366f1]', 'text-white', 'font-semibold', 'shadow-sm');
+            b.classList.add('text-[#94a3b8]');
+          });
+          btn.classList.add('bg-[#6366f1]', 'text-white', 'font-semibold', 'shadow-sm');
+          btn.classList.remove('text-[#94a3b8]');
+        });
+      });
+    });
+  </script>
+</body></html>

@@ -7,7 +7,7 @@ import { test, expect, login } from '../fixtures/app';
  * Row → search inside the detail panel's Releases tab (PR 5 of F-08) →
  * results from OUR sources (S1: the app's Torznab registry, seeded in Phase 2
  * against fake-arr's /torznab/api — Radarr is not a search source anymore) →
- * press the row's "→ Biblioteca" destination button → the single grab, which
+ * press the row's "→ 1080" destination button → the single grab, which
  * dispatches the row's link to the qBittorrent Web API fake-arr now also
  * serves (S2). The stub adds no torrent, so this proves the UI flow end to
  * end; it does NOT download anything (see e2e/README.md).
@@ -26,7 +26,7 @@ import { test, expect, login } from '../fixtures/app';
  * request (and toggling a site re-runs it), the rows read as the file
  * selector (name · size · semillas — S5: chips only for fields the source
  * really states, never invented quality/language) and carry their three
- * destination buttons (→ Biblioteca / → 4K / → 3D) — the press on one of them
+ * destination buttons (→ 1080 / → 4K / → 3D) — the press on one of them
  * is what grabs. The overlay modal keeps its button and its initial step; this
  * spec never leaves the panel to prove the split.
  *
@@ -94,10 +94,11 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
   // div.release-title (no role → text selector, justified as above).
   await expect(app.getByText('Your.Name.2016.1080p.BluRay.x264-GRP')).toBeVisible({ timeout: 15000 });
 
-  // The three destination buttons are the row's action now (F-12): library
-  // always offered, the folders the deployment has NOT configured disable
-  // their buttons instead of lying (CI sets no PATH_4K/PATH_3D).
-  const libraryBtn = app.locator('.release-dest-btn', { hasText: 'Biblioteca' }).first();
+  // The destination buttons are the row's action now (F-12): the arr library
+  // — labelled «1080» since «buscador-tabla» S2 — is always offered, the
+  // folders the deployment has NOT configured disable their buttons instead of
+  // lying (CI sets no PATH_4K/PATH_3D).
+  const libraryBtn = app.locator('.release-dest-btn', { hasText: '1080' }).first();
   await expect(libraryBtn).toBeEnabled({ timeout: 15000 });
   await expect(app.locator('.release-dest-btn', { hasText: '4K' }).first()).toBeDisabled();
   await expect(app.locator('.release-dest-btn', { hasText: '3D' }).first()).toBeDisabled();
