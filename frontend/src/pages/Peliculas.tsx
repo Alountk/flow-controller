@@ -65,7 +65,6 @@ type QualityClass = '4K' | '3D' | 'en biblioteca' | 'desconocida'
 
 const QUALITY_CLASSES: QualityClass[] = ['4K', '3D', 'en biblioteca', 'desconocida']
 
-const CALIDAD_COLUMNS = ['Título', 'Año', 'Clase', 'Calidad', 'Ruta', 'Enrutado']
 
 interface RoutingFolders {
   path4k: string
@@ -252,16 +251,7 @@ function CalidadMovies({
   const folders = foldersQuery.data
   if (!folders) {
     return (
-      <table className="sec-table sec-q-table">
-        <TableHead />
-        <tbody>
-          <tr>
-            <td className="sec-empty" colSpan={CALIDAD_COLUMNS.length}>
-              Cargando títulos...
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <p className="sec-empty">Cargando títulos...</p>
     )
   }
 
@@ -308,74 +298,65 @@ function CalidadMovies({
         carpeta en la que vive: 3D manda sobre la resolución.
       </p>
 
-      <table className="sec-table sec-q-table">
-        <TableHead />
-        <tbody>
-          {titles.isPending || visible.length === 0 ? (
-            <tr>
-              <td className="sec-empty" colSpan={CALIDAD_COLUMNS.length}>
-                {emptyMessage()}
-              </td>
-            </tr>
-          ) : (
-            visible.map((movie) => {
-              const cls = movieClass(movie, folders)
-              const routed = routedIn(movie.path, folders)
-              return (
-                <tr
-                  key={movie.id}
-                  className="sec-q-row"
-                  tabIndex={0}
-                  aria-current={selectedId === movie.id ? 'true' : undefined}
-                  onClick={() => onSelect({
-                    id: movie.id,
-                    detail: calidadMovieDetail(movie, folders),
-                    release: calidadMovieRelease(movie),
-                  })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      onSelect({
-                        id: movie.id,
-                        detail: calidadMovieDetail(movie, folders),
-                        release: calidadMovieRelease(movie),
-                      })
-                    }
-                  }}
-                >
-                  <td>{movie.title}</td>
-                  <td>{movie.year ?? '—'}</td>
-                  <td>
-                    <span className="sec-class-badge">{cls}</span>
-                  </td>
-                  <td>{movie.quality || '—'}</td>
-                  <td className="sec-q-path" title={movie.path || undefined}>
-                    {movie.path || '—'}
-                  </td>
-                  <td>{routed.join(' · ') || '—'}</td>
-                </tr>
-              )
+      {titles.isPending || visible.length === 0 ? (
+        <p className="sec-empty">{emptyMessage()}</p>
+      ) : (
+        <div className="sec-movie-list" role="list">
+          {visible.map((movie) => {
+            const cls = movieClass(movie, folders)
+            const routed = routedIn(movie.path, folders)
+            const choose = () => onSelect({
+              id: movie.id,
+              detail: calidadMovieDetail(movie, folders),
+              release: calidadMovieRelease(movie),
             })
-          )}
-        </tbody>
-      </table>
+            return (
+              <div
+                key={movie.id}
+                role="listitem"
+                className={`sec-movie-row${selectedId === movie.id ? ' is-selected' : ''}`}
+                tabIndex={0}
+                aria-current={selectedId === movie.id ? 'true' : undefined}
+                onClick={choose}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    choose()
+                  }
+                }}
+              >
+                {movie.remotePoster ? (
+                  <img
+                    className="sec-movie-poster"
+                    src={movie.remotePoster}
+                    alt=""
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="sec-movie-poster" aria-hidden="true" />
+                )}
+                <span className="sec-movie-main">
+                  <span className="sec-movie-title">{movie.title}</span>
+                  <span className="sec-movie-sub">
+                    {movie.year ?? '—'} · {movie.quality || '—'}
+                  </span>
+                  <span className="sec-movie-path" title={movie.path || undefined}>
+                    {movie.path || '—'}
+                  </span>
+                </span>
+                <span className="sec-movie-side">
+                  <span className="sec-class-badge">{cls}</span>
+                  <span className="sec-movie-dest">{routed.join(' · ') || '—'}</span>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
-function TableHead() {
-  return (
-    <thead>
-      <tr>
-        {CALIDAD_COLUMNS.map((c) => (
-          <th key={c} scope="col">
-            {c}
-          </th>
-        ))}
-      </tr>
-    </thead>
-  )
-}
 
 /* ── Detail-panel tabs (PR 6) ──────────────────────────────────────────────
  * The tabs read facts the SELECTION does not carry: MediaPane hands the panel

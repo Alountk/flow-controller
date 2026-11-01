@@ -120,13 +120,26 @@ async function openCalidad() {
   await screen.findByRole('group', { name: 'Filtrar por clase' })
 }
 
-// Scoped to the table: the detail panel repeats the title as its heading,
-// and the row must be found without ambiguity.
-const rowOf = (title: string) =>
-  within(screen.getByRole('table')).getByText(title).closest('tr') as HTMLElement
+// Scoped to the list: the detail panel repeats the title as its heading, and
+// the row must be found without ambiguity. Películas renders L2 poster rows
+// («buscador-tabla» S7) while Series keeps its own table — the helper reads
+// whichever the section mounts.
+const rowOf = (title: string) => {
+  const list = document.querySelector('.sec-movie-list')
+  if (list) {
+    const rows = [...list.querySelectorAll('.sec-movie-row')] as HTMLElement[]
+    const row = rows.find((candidate) => candidate.textContent?.includes(title))
+    expect(row, `row for ${title}`).not.toBeUndefined()
+    return row as HTMLElement
+  }
+  return within(screen.getByRole('table')).getByText(title).closest('tr') as HTMLElement
+}
 const panel = () => screen.getByRole('region', { name: 'Panel de detalle' })
 
-/** The row's cells in column order: Título, Año, Clase, Calidad, Ruta, Enrutado. */
+/** Everything a row prints: title, «año · calidad», path, class badge, destinos. */
+const textOf = (title: string) => rowOf(title).textContent ?? ''
+
+/** Series keeps its table, so its rows still expose cells by column. */
 const cellsOf = (title: string) => within(rowOf(title)).getAllByRole('cell')
 
 describe('Películas · Calidad', () => {
@@ -152,12 +165,12 @@ describe('Películas · Calidad', () => {
     expect(within(rowOf('Unknown Movie')).getByText('desconocida')).toBeInTheDocument()
 
     // The unknown quality cell reads "—", never a guessed name.
-    expect(cellsOf('Unknown Movie')[3]).toHaveTextContent('—')
+    expect(textOf('Unknown Movie')).toContain('—')
     // The folder fact is shown independently of the class chip: the 3D movie
     // says path_3d, and the 4K-class movie that lives in the library folder
     // honestly says it is in neither routing folder.
-    expect(cellsOf('3D Movie')[5]).toHaveTextContent('path_3d')
-    expect(cellsOf('4K Movie')[5]).toHaveTextContent('—')
+    expect(textOf('3D Movie')).toContain('path_3d')
+    expect(textOf('4K Movie')).toContain('—')
   })
 
   it('filters the rows with the class chips', async () => {

@@ -562,7 +562,7 @@ describe('the ids · what each section card puts on the item', () => {
 
   /** The pane's rows (Biblioteca) and the Calidad table's rows. */
   const rowOf = (title: string) =>
-    Array.from(document.querySelectorAll('.sec-row, .sec-q-row')).find((row) =>
+    Array.from(document.querySelectorAll('.sec-row, .sec-q-row, .sec-movie-row')).find((row) =>
       row.textContent?.includes(title),
     ) as HTMLElement
 

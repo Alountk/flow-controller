@@ -191,8 +191,16 @@ it('offers the sub-view tabs and switches the visible content', async () => {
       expect(await screen.findByText(catalogEmpty)).toBeInTheDocument()
 
       const master = screen.getByRole('tabpanel')
-      const headers = within(master).getAllByRole('columnheader').map((el) => el.textContent)
-      expect(headers).toEqual(['Título', 'Año', 'Clase', 'Calidad', 'Ruta', 'Enrutado'])
+      if (title === 'Películas') {
+        // L2 («buscador-tabla» S7): poster rows, no column headers — the
+        // facts live inside each row.
+        expect(within(master).queryAllByRole('columnheader')).toHaveLength(0)
+        expect(master.querySelectorAll('.sec-movie-row').length).toBe(0)
+      } else {
+        // Series keeps its own table: this feature does not touch it.
+        const headers = within(master).getAllByRole('columnheader').map((el) => el.textContent)
+        expect(headers).toEqual(['Título', 'Año', 'Clase', 'Calidad', 'Ruta', 'Enrutado'])
+      }
 
       const panel = screen.getByRole('region', { name: 'Panel de detalle' })
       for (const tab of detailTabs) {

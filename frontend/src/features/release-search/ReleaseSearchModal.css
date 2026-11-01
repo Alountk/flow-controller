@@ -706,3 +706,78 @@
   color: var(--danger, #e5484d);
 }
 
+
+/* S1/S2/S3 («buscador-tabla»): one sortable table for every release — dense
+   rows, monospace numbers, and the destination cell at the right edge. */
+.release-table-wrap {
+  overflow-x: auto;
+}
+
+.release-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.release-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.68rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  background: inherit;
+  white-space: nowrap;
+}
+
+.release-table th.is-numeric,
+.release-table td.is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.release-sort {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.release-sort:hover {
+  text-decoration: underline;
+}
+
+.release-table td {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  vertical-align: top;
+}
+
+.release-table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* S4: provenance stays visible without stacking the results again. */
+.release-title-cell .release-source {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.68rem;
+  opacity: 0.65;
+}
+
+.release-unknown {
+  opacity: 0.5;
+}
+
+/* Seeder triage: plenty, thin, dying. */
+.release-seeders.is-good { color: #34d399; }
+.release-seeders.is-ok { color: #fbbf24; }
+.release-seeders.is-bad { color: #f87171; }
