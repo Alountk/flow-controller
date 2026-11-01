@@ -32,7 +32,7 @@ from media_mixer import (
     SHORT_LANGUAGE_SUFFIXES,
 )
 from task_manager import mux_tasks
-from application.use_cases import probe_library
+from application.use_cases import probe_library, quality_report
 from application.gateways import (
     arr_movie_exists,
     arr_movie_file,
@@ -501,6 +501,28 @@ async def mixer_probe_library(_key: str = Depends(verify_api_key)):
             detail="Ya hay un análisis de biblioteca en curso",
         )
     return {"started": True, "total": len(paths)}
+
+
+@router.get("/quality/below")
+async def mixer_quality_below(_key: str = Depends(verify_api_key)):
+    """T2 (S4): library files measured below the configured threshold.
+
+    The universe is the sweep's own (movie + routing folders), so the report
+    and «Analizar biblioteca» always talk about the same files.
+    """
+    min_class = str(get_setting("quality", "min_class", default="1080p") or "1080p")
+    try:
+        min_width = int(get_setting("quality", "min_width", default=0) or 0)
+    except (TypeError, ValueError):
+        min_width = 0
+    files = await probe_library.collect_universe()
+    return await asyncio.to_thread(
+        quality_report.build,
+        files,
+        cache_get=history.get_probe_result,
+        min_class=min_class,
+        min_width=min_width,
+    )
 
 
 @router.get("/probe-library/status")

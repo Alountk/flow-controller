@@ -294,6 +294,9 @@ export interface Settings {
   /** Mirrors `DEFAULTS["retention"]` in backend/settings.py. Read live through
    *  `config.rebuild()`, so a change needs no restart. */
   retention: { amule_days: number }
+  /** Mirrors `DEFAULTS["quality"]` («umbral-calidad» S2): the minimum
+   *  acceptable class and an optional manual width (0 = use the class). */
+  quality: { min_class: string; min_width: number }
   server: { port: number }
 }
 

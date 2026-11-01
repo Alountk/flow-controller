@@ -44,3 +44,55 @@ def destination_for_quality(
     if name.endswith("2160p") and path_4k:
         return path_4k
     return None
+
+
+# ── Resolution class («umbral-calidad» S1) ───────────────────────────────────
+#
+# The class comes from the WIDTH on purpose: a 1080p transfer with its black
+# bars cropped measures 1920×800, and keying off the bare height would call
+# every widescreen movie low quality.
+_CLASS_RANK = {"desconocido": 0, "sd": 1, "720p": 2, "1080p": 3, "4k": 4}
+
+#: Widths, not heights: 1100-1699 is a 720p-class file, 1700 and up is at
+#: least 1080p (so 2560-wide counts as 1080p+, never as low quality), 3000+
+#: is 4K. Heights are deliberately unused — see the module comment.
+_CLASS_WIDTH_FLOOR = (("4k", 3000), ("1080p", 1700), ("720p", 1100))
+
+
+def resolution_class(width: int | None, height: int | None = None) -> str:
+    """Measured resolution class: «4k» | «1080p» | «720p» | «sd» | «desconocido».
+
+    `height` is accepted so callers can pass the probe verbatim; it never
+    changes the answer (cropped bars are not a downgrade).
+    """
+    if not width or width <= 0:
+        return "desconocido"
+    for name, floor in _CLASS_WIDTH_FLOOR:
+        if width >= floor:
+            return name
+    return "sd"
+
+
+def class_rank(name: str | None) -> int:
+    """Ordering for comparisons; anything unknown sinks below `sd` (never low)."""
+    return _CLASS_RANK.get((name or "").strip().lower(), 0)
+
+
+def is_below_threshold(
+    width: int | None,
+    height: int | None = None,
+    *,
+    min_class: str = "1080p",
+    min_width: int = 0,
+) -> bool:
+    """Whether a measured file sits below the configured quality threshold.
+
+    `min_width > 0` overrides the class comparison (the manual field); an
+    unmeasured file is never "below" anything — it is not analyzed yet.
+    """
+    measured = resolution_class(width, height)
+    if measured == "desconocido":
+        return False
+    if min_width and min_width > 0:
+        return (width or 0) < min_width
+    return class_rank(measured) < class_rank(min_class)

@@ -10,6 +10,7 @@ import {
 } from '../../shared/api/services.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import { SharedDirsSection } from './SharedDirsSection.tsx'
+import { QualityThresholdSection } from './QualityThresholdSection.tsx'
 import { IndexadoresSection } from './IndexadoresSection.tsx'
 import { AmuleEcSection, type AmuleEcValues } from './AmuleEcSection.tsx'
 import { AmuleServerActions } from './AmuleServerActions.tsx'
@@ -571,6 +572,20 @@ export function Settings() {
             in days instead of seconds; no `restart` badge because the backend
             reads it live through config.rebuild(). */}
         <Field label="Días antes de poder borrar una descarga" value={form.retention.amule_days} onChange={(v) => update('retention.amule_days', v)} type="number" />
+      </Section>
+
+      <Section title="Calidad de biblioteca">
+        {/* S2 («umbral-calidad»): what «baja calidad» means. The chip and the
+            below-threshold list both read this, so it lives with the rest of
+            the saved configuration — no separate save button. */}
+        <QualityThresholdSection
+          minClass={form.quality?.min_class ?? '1080p'}
+          minWidth={form.quality?.min_width ?? 0}
+          onClass={(value) => update('quality.min_class', value)}
+          onWidth={(value) => {
+            setForm((prev) => (prev ? { ...prev, quality: { ...prev.quality, min_width: value } } : prev))
+          }}
+        />
       </Section>
 
       <Section title="Seguimiento">
