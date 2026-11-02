@@ -504,13 +504,13 @@ def subtitle_sidecar_path(output_path: str, language_code: str) -> str:
     return str(p.with_name(f"{p.stem}.{suffix}.srt"))
 
 
-def _generate_output_path(video_source: dict, output_dir: str) -> str:
-    """Generate output path with timestamp naming convention."""
+def _generate_output_path(video_source: dict, output_dir: str, name: str = "") -> str:
+    """Generate output path with timestamp naming convention (or `name`)."""
     video_path = Path(video_source["path"])
     stem = video_path.stem
     ext = video_path.suffix
     timestamp = time.strftime("%Y%m%dT%H%M%S")
-    filename = f"{stem}_{timestamp}_mixed{ext}"
+    filename = name or f"{stem}_{timestamp}_mixed{ext}"
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -597,6 +597,7 @@ def start_mux(
     subtitle_plan: list[dict] | None = None,
     destination_path: str = "",
     audio_languages: list[str | None] | None = None,
+    output_name: str = "",
 ) -> str:
     """Start a mux task (or queue it — one mux at a time, S11-4). Returns task_id.
 
@@ -608,7 +609,7 @@ def start_mux(
     — ffmpeg writes a hidden temp NEXT TO the destination and the atomic
     `os.replace` is the last step of the task; the `output_path` reported for
     the task is the destination itself. Empty `destination_path` keeps the
-    legacy generated-name directory mode unchanged.
+    legacy generated-name directory mode, unless `output_name` names the file.
     """
     task_id = str(uuid.uuid4())
     subtitles = [dict(entry) for entry in (subtitle_plan or [])]
@@ -616,7 +617,7 @@ def start_mux(
         write_path = _substitution_temp_path(destination_path, task_id)
         output_path = destination_path
     else:
-        write_path = _generate_output_path(video_source, output_dir)
+        write_path = _generate_output_path(video_source, output_dir, output_name)
         output_path = write_path
 
     job = {

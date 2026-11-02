@@ -903,6 +903,30 @@ vista previa), aplica a las seleccionadas y deja editar una a mano. Una copia qu
 identificar aparece con su aviso y **no** entra en el lote: no hay nombre propuesto que aplicar.
 Spec en `odd/tasks/renombrar-seccion.md`.
 
+### F-15 — Mixer: una tercera salida, a la carpeta que elijas · **Pequeña** · ✅ *Entregada*
+
+Pedida: «en el mixer en la parte del final deberíamos dar una opción de mover el archivo
+generado a una carpeta que escojamos, ahora mismo solo tenemos carpeta de a o de b y eso hace
+sustitución del que esté ahí, pero hay ocasiones que no querremos eso».
+
+El backend **ya sabía** no sustituir (`start_mux` sin `destination_path` escribe en
+`output_dir` con nombre generado); la UI siempre le mandaba destino, así que esa rama estaba
+muerta. Ahora hay una tercera opción, «Otra carpeta…», con selector de carpeta y nombre
+editable.
+
+| Decisión | Detalle |
+|---|---|
+| No sustituye | A y B quedan como están; el archivo se crea con el nombre que escribas |
+| Nunca sobrescribe | Si ya existe un archivo con ese nombre, el backend responde `409 output_exists` y no escribe nada |
+| Carpeta validada | `output_path` **no se validaba** contra las raíces permitidas y `_generate_output_path` hacía `mkdir(parents=True)`: un `output_path` creativo creaba carpetas fuera. Ahora se exige que la carpeta exista y esté permitida |
+| Nombre, una sola pieza | `/`, `\`, `..`, punto inicial o caracteres de control se rechazan con `400 invalid_output_name`; no se «sanea» en silencio |
+| Compatibilidad | Sin `output_name` en la petición nada cambia: el nombre generado con fecha sigue siendo el camino por defecto |
+
+`output_name` **presente** es lo que define el modo carpeta: un cliente antiguo no manda la
+clave, así que un nombre vacío ahí es un nombre vacío de verdad y se rechaza.
+
+Spec y tareas en `odd/tasks/mixer-carpeta-destino.md`.
+
 ## 🔵 Recomendaciones y reglas del ciclo
 
 C-01…C-07 y C-09…C-11 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.

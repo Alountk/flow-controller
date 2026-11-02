@@ -50,8 +50,7 @@ en el explorador no sirve para una biblioteca.
 - **L2** Decisiones del cuestionario: «Moverlo a la sección y quitarlo del
   explorador»; carpeta y nombre editables siguen como en #275.
 - **Base**: esta rama nace de `feat/renombrar-4k-3d` (#275) porque el motor vive
-  ahí; el PR se abre contra esa rama y tras el merge de #275 el diff queda limpio
-  contra `main`.
+  ahí y se mergeó en `main` como `2d5e6bb`; este PR va ya contra `main`.
 
 ## Slices
 

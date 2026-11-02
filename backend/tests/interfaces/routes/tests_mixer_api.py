@@ -2479,3 +2479,101 @@ class TestCancelQueuedTask:
         # Consistent terminal vocabulary: `cancelled`, never left to run.
         assert resp.json()["status"] == "cancelled"
         mux_tasks._tasks.clear()
+
+
+class TestMuxFolderDestination:
+    """S1–S6 of `odd/tasks/mixer-carpeta-destino.md`.
+
+    The folder mode creates a NEW file in a folder the user picked: it
+    substitutes nothing, and it never overwrites.
+    """
+
+    PAYLOAD = {
+        "video_source": {"path": "/mnt/storage/video.mkv", "track_index": 0},
+        "audio_sources": [{"path": "/mnt/storage/audio.mkv", "track_index": 1}],
+        "output_path": "/mnt/storage/mixed-out",
+        "output_name": "Movie (2020) 2160p.mkv",
+    }
+
+    @patch("interfaces.http.routes_mixer.os.path.lexists", return_value=False)
+    @patch("interfaces.http.routes_mixer.os.path.isdir", return_value=True)
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_named_folder_output_substitutes_nothing(
+        self, mock_probe, mock_start, mock_isfile, mock_isdir, mock_lexists
+    ):
+        mock_start.return_value = "folder-task"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
+
+        with patch("config.path_is_allowed", return_value=True):
+            resp = client.post("/api/mixer/mux", json=self.PAYLOAD)
+
+        assert resp.status_code == 200
+        kwargs = mock_start.call_args.kwargs
+        assert kwargs["output_name"] == "Movie (2020) 2160p.mkv"
+        # Substitution mode is exactly what the folder mode must NOT be.
+        assert "destination_path" not in kwargs
+        assert mock_start.call_args.args[2] == "/mnt/storage/mixed-out"
+
+    @patch("interfaces.http.routes_mixer.os.path.lexists", return_value=False)
+    @patch("interfaces.http.routes_mixer.os.path.isdir", return_value=True)
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    @patch("interfaces.http.routes_mixer.probe_file")
+    def test_legacy_generated_name_is_untouched_without_output_name(
+        self, mock_probe, mock_start, mock_isfile, mock_isdir, mock_lexists
+    ):
+        mock_start.return_value = "legacy-task"
+        mock_probe.side_effect = [
+            _probe_fixture("/mnt/storage/video.mkv"),
+            _probe_fixture("/mnt/storage/audio.mkv"),
+        ]
+
+        payload = dict(self.PAYLOAD)
+        payload.pop("output_name")
+        resp = client.post("/api/mixer/mux", json=payload)
+
+        assert resp.status_code == 200
+        # No `output_name` on the wire ⇒ the timestamp path stays in charge.
+        assert "output_name" not in mock_start.call_args.kwargs
+        assert mock_start.call_args.args[2] == "/mnt/storage/mixed-out"
+
+    @patch("interfaces.http.routes_mixer.os.path.lexists", return_value=True)
+    @patch("interfaces.http.routes_mixer.os.path.isdir", return_value=True)
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    @patch("interfaces.http.routes_mixer.start_mux")
+    def test_existing_target_is_409_and_never_overwritten(
+        self, mock_start, mock_isfile, mock_isdir, mock_lexists
+    ):
+        with patch("config.path_is_allowed", return_value=True):
+            resp = client.post("/api/mixer/mux", json=self.PAYLOAD)
+
+        assert resp.status_code == 409
+        detail = resp.json()["detail"]
+        assert detail["code"] == "output_exists"
+        assert "Movie (2020) 2160p.mkv" in detail["message"]
+        mock_start.assert_not_called()
+
+    @patch("interfaces.http.routes_mixer.os.path.isdir", return_value=True)
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    def test_name_with_separators_is_400_and_sanitizing_is_refused(self, mock_isfile, mock_isdir):
+        for bad in ("carpeta/archivo.mkv", "..", ".oculto.mkv", "", "a\\b.mkv"):
+            payload = dict(self.PAYLOAD)
+            payload["output_name"] = bad
+            resp = client.post("/api/mixer/mux", json=payload)
+            assert resp.status_code == 400, bad
+            assert resp.json()["detail"]["code"] == "invalid_output_name", bad
+
+    @patch("interfaces.http.routes_mixer.os.path.lexists", return_value=False)
+    @patch("interfaces.http.routes_mixer.os.path.isdir", return_value=True)
+    @patch("interfaces.http.routes_mixer.os.path.isfile", return_value=True)
+    def test_folder_outside_the_allowed_roots_is_400(self, mock_isfile, mock_isdir, mock_lexists):
+        with patch("config.path_is_allowed", return_value=False):
+            resp = client.post("/api/mixer/mux", json=self.PAYLOAD)
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "invalid_output_dir"
