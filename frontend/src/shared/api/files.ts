@@ -76,8 +76,33 @@ export async function renameCandidates(): Promise<RenameCandidatesResponse> {
   return (await res.json()) as RenameCandidatesResponse
 }
 
-export async function renamePreview(path: string): Promise<RenameProposal> {
-  const res = await apiFetch(`/api/files/rename-preview?remote_path=${encodeURIComponent(path)}`, {})
+/** One catalog row the person can pick when the filename cannot identify the film. */
+export interface RenameMovie {
+  id?: number
+  title?: string
+  year?: number | null
+  folder?: string
+  quality?: string
+}
+
+export interface RenameMoviesResponse {
+  ok: boolean
+  items: RenameMovie[]
+  detail: string
+}
+
+export async function renameMovies(q: string): Promise<RenameMoviesResponse> {
+  const res = await apiFetch(`/api/files/rename-movies?q=${encodeURIComponent(q)}`, {})
+  return (await res.json()) as RenameMoviesResponse
+}
+
+/** `movieId` is the film the person named by hand, for copies the name cannot identify. */
+export async function renamePreview(path: string, movieId?: number): Promise<RenameProposal> {
+  const id = movieId ? `&movie_id=${movieId}` : ''
+  const res = await apiFetch(
+    `/api/files/rename-preview?remote_path=${encodeURIComponent(path)}${id}`,
+    {},
+  )
   return (await res.json()) as RenameProposal
 }
 

@@ -314,20 +314,11 @@ async def file_rename_candidates(_key: str = Depends(verify_api_key)):
             "detail": "No hay raíces 4K/3D configuradas",
         }
 
-    movies: list[dict] = []
-    naming_cfg: dict = {}
-    service = find_service("radarr", "arr")
-    if service:
-        async with http_session() as session:
-            page, naming_cfg = await asyncio.gather(
-                fetch_all_movies_detailed(session, service, page_size=0),
-                arr_naming_config(session, service),
-            )
-        movies = [m for m in (page.get("items") or []) if isinstance(m, dict)]
+    movies, naming_cfg = await _radarr_catalog()
 
     # S6: without Radarr there is no identity to propose — say so instead of
     # listing every file with a guessed name.
-    if not service or not movies:
+    if not movies:
         return {
             "ok": True,
             "items": [],
@@ -346,33 +337,56 @@ async def file_rename_candidates(_key: str = Depends(verify_api_key)):
     )
 
 
+async def _radarr_catalog() -> tuple[list[dict], dict]:
+    """Every movie Radarr knows, plus its naming config. Empty without a service."""
+    service = find_service("radarr", "arr")
+    if not service:
+        return [], {}
+    async with http_session() as session:
+        page, naming_cfg = await asyncio.gather(
+            fetch_all_movies_detailed(session, service, page_size=0),
+            arr_naming_config(session, service),
+        )
+    return [m for m in (page.get("items") or []) if isinstance(m, dict)], naming_cfg or {}
+
+
+@router.get("/api/files/rename-movies")
+async def file_rename_movies(q: str = "", _key: str = Depends(verify_api_key)):
+    """The catalog rows the rename dialog can offer when auto-match fails."""
+    movies, _cfg = await _radarr_catalog()
+    return {"ok": True, "items": library_rename.search_movies(q, movies), "detail": ""}
+
+
 @router.get("/api/files/rename-preview")
-async def file_rename_preview(remote_path: str = "", _key: str = Depends(verify_api_key)):
-    """What the rename dialog should prefill for a 4K/3D copy. Writes nothing."""
+async def file_rename_preview(
+    remote_path: str = "", movie_id: int = 0, _key: str = Depends(verify_api_key)
+):
+    """What the rename dialog should prefill for a 4K/3D copy. Writes nothing.
+
+    `movie_id` carries the movie the user picked by hand, for the copies the
+    filename alone cannot identify.
+    """
     src = _validate_path(remote_path)
     roots = _quality_roots()
     if not src or not library_rename.in_root(src, roots):
         return {"ok": False, "detail": "Solo se renombran las copias de las raíces 4K/3D"}
 
-    movies: list[dict] = []
-    naming_cfg: dict = {}
-    service = find_service("radarr", "arr")
-    if service:
-        async with http_session() as session:
-            page, naming_cfg = await asyncio.gather(
-                fetch_all_movies_detailed(session, service, page_size=0),
-                arr_naming_config(session, service),
-            )
-        movies = [m for m in (page.get("items") or []) if isinstance(m, dict)]
+    movies, naming_cfg = await _radarr_catalog()
+    chosen = None
+    if movie_id:
+        chosen = library_rename.find_movie(movie_id, movies)
+        if chosen is None:
+            return {"ok": False, "detail": "Esa película no está en el catálogo de Radarr"}
 
     siblings = await asyncio.to_thread(_folder_names, os.path.dirname(src))
     return await asyncio.to_thread(
         library_rename.proposal,
         video_path=src,
         movies=movies,
-        naming_cfg=naming_cfg or {},
+        naming_cfg=naming_cfg,
         siblings=siblings,
         roots=roots,
+        chosen_movie=chosen,
     )
 
 
