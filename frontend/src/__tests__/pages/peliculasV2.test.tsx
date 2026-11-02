@@ -401,6 +401,38 @@ describe('V2 · la fila selecciona y el chevron abre', () => {
   })
 })
 
+describe('V2 · el detalle tiene sus propias acciones (S1)', () => {
+  it('offers exactly the movie actions: releases and folder scan', async () => {
+    renderV2()
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir ParaNorman' }))
+    const panel = await screen.findByRole('region', { name: 'Panel de detalle' })
+
+    // The list owns the library's actions and the list is hidden while the
+    // detail is open (S8), so the detail needs its own trigger.
+    fireEvent.click(within(panel).getByRole('button', { name: 'Acciones rápidas' }))
+    const menu = await within(panel).findByRole('menu', { name: 'Acciones rápidas' })
+
+    expect(within(menu).getByRole('menuitem', { name: 'Buscar releases' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Escanear carpeta' })).toBeInTheDocument()
+    // «Ver detalle» is where you already are; the sweep is the list's (S4).
+    expect(within(menu).queryByRole('menuitem', { name: 'Ver detalle' })).toBeNull()
+    expect(within(menu).queryByRole('button', { name: 'Analizar biblioteca' })).toBeNull()
+  })
+
+  it('«Buscar releases» lands on the Releases tab, where the search already lives', async () => {
+    renderV2()
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir ParaNorman' }))
+    const panel = await screen.findByRole('region', { name: 'Panel de detalle' })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Archivos' }))
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Acciones rápidas' }))
+    const menu = await within(panel).findByRole('menu', { name: 'Acciones rápidas' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Buscar releases' }))
+
+    expect(within(panel).getByRole('button', { name: 'Releases' })).toHaveClass('is-active')
+  })
+})
+
 describe('V2 · el detalle delega lo que es de la biblioteca', () => {
   it('shows the roots as cards in its Archivos tab, and no sweep (S3/S4)', async () => {
     renderV2()
