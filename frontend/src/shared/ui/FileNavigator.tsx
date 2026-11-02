@@ -14,6 +14,8 @@ export interface FileNavigatorEntry {
   name: string
   path: string
   isDir: boolean
+  /** The backend's `is_video`; absent means unknown, never "not a video". */
+  isVideo?: boolean
   size: number
   modified: number
 }
@@ -167,6 +169,7 @@ export function FileNavigator({
             name: entry.name,
             path: entry.path,
             isDir: entry.is_dir,
+            isVideo: entry.is_video,
             size: entry.size,
             modified: entry.modified,
           }))
@@ -347,16 +350,27 @@ export function FileNavigator({
               >
                 {renderRowStart?.(entry)}
                 {showIcons && <span className="fm-icon">{entry.isDir ? '📁' : '📄'}</span>}
-                {renderRowName ? (
-                  renderRowName(entry)
-                ) : (
-                  <span className="fm-name">{entry.name}</span>
-                )}
-                {renderFileMeta?.(entry)}
+                {/* One block owns the row's leftover width: the name on top,
+                    everything that explains it underneath. Two flex siblings
+                    per line is what let a long name shove the columns apart. */}
+                <div className="fm-row-main">
+                  {renderRowName ? (
+                    renderRowName(entry)
+                  ) : (
+                    <span className="fm-name">{entry.name}</span>
+                  )}
+                  {(renderFileMeta || showDates) && (
+                    <div className="fm-row-sub">
+                      {renderFileMeta?.(entry)}
+                      {showDates && (
+                        <span className="fm-date">{formatDate(entry.modified)}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
                 {showSizes && (
                   <span className="fm-size">{entry.isDir ? '—' : formatSize(entry.size)}</span>
                 )}
-                {showDates && <span className="fm-date">{formatDate(entry.modified)}</span>}
                 {renderRowActions && (
                   <div className="fm-item-actions">{renderRowActions(entry)}</div>
                 )}

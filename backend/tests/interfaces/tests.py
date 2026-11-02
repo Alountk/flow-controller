@@ -858,7 +858,11 @@ class TestCalendarReleases:
         try:
             assert task["status"] == "done"
             first, second = task["releases"]
-            assert set(first) == {"title", "guid", "link", "size", "indexer", "source"}
+            # `sources` rides along since «peliculas-acciones-y-pares» S3: the
+            # aMule ED2K count the table paints as «Pares», under its own name.
+            assert set(first) == {
+                "title", "guid", "link", "size", "indexer", "source", "sources",
+            }
             assert first == {
                 "title": "Otra Pelicula (2020)",
                 "guid": "0123456789abcdef0123456789abcdef",
@@ -866,6 +870,7 @@ class TestCalendarReleases:
                 "size": 9,
                 "indexer": "amule",
                 "source": "amule",
+                "sources": 12,
             }
             assert set(second) == {"title", "guid", "link", "size", "indexer", "source"}
             assert second["title"] == "Tercer Titulo S01E02"

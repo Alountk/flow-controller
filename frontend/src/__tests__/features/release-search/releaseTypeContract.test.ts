@@ -31,6 +31,8 @@ describe('Release type contract — the direct-source row (S5)', () => {
     expectTypeOf<Release['link']>().toEqualTypeOf<string | undefined>()
     expectTypeOf<Release['source']>().toEqualTypeOf<string | undefined>()
     expectTypeOf<Release['seeders']>().toEqualTypeOf<number | undefined>()
+    // aMule states ED2K sources, which travel under their own name (S3).
+    expectTypeOf<Release['sources']>().toEqualTypeOf<number | undefined>()
   })
 
   it('keeps the row identity required and honest', () => {

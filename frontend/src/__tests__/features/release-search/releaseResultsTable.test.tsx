@@ -61,7 +61,7 @@ describe('S2 · columnas y destinos', () => {
   it('shows the five columns with the library labelled 1080', () => {
     setup()
 
-    for (const name of ['Nombre', 'Tamaño', 'Idioma', 'Seeders', 'Destino']) {
+    for (const name of ['Nombre', 'Tamaño', 'Idioma', 'Pares', 'Destino']) {
       expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
     }
     const row = screen.getByText('Alien.1979.1080p').closest('tr') as HTMLElement

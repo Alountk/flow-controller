@@ -337,7 +337,7 @@
   font-weight: 600;
 }
 
-.release-seeders {
+.release-peers {
   color: var(--ok);
 }
 
@@ -778,6 +778,6 @@
 }
 
 /* Seeder triage: plenty, thin, dying. */
-.release-seeders.is-good { color: #34d399; }
-.release-seeders.is-ok { color: #fbbf24; }
-.release-seeders.is-bad { color: #f87171; }
+.release-peers.is-good { color: #34d399; }
+.release-peers.is-ok { color: #fbbf24; }
+.release-peers.is-bad { color: #f87171; }

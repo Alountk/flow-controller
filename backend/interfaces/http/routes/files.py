@@ -13,13 +13,14 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 import state
 from config import find_service
 from traces import host_path
 from application import gateways
-from application.gateways import arr_root_folders, history
-from application.use_cases import place_file
+from application.gateways import arr_naming_config, arr_root_folders, fetch_all_movies_detailed, history
+from application.use_cases import library_rename, place_file
 from application.use_cases.file_provenance import file_provenance
 from import_service import post_move_import
 from models import ActionRequest
@@ -274,6 +275,90 @@ async def file_rename(req: ActionRequest, _key: str = Depends(verify_api_key)):
     if blocked:
         return {"ok": False, "detail": blocked}
     return await asyncio.to_thread(place_file.rename_path, src, dst)
+
+
+class RenameRequest(BaseModel):
+    """A rename the dialog confirmed: where the file goes, and what it is called.
+
+    The sidecars are absent on purpose: the route re-reads the folder, so the
+    client cannot name the files that travel with the video.
+    """
+
+    remote_path: str = ""
+    folder: str = ""
+    name: str = ""
+
+
+def _quality_roots() -> list[str]:
+    """The roots a library rename may touch: the 4K and 3D destinations."""
+    return [p for p in (config.PATH_4K, config.PATH_3D) if p]
+
+
+def _folder_names(directory: str) -> list[str]:
+    """The names in `directory`, or [] — a listing that cannot be read proposes nothing."""
+    try:
+        return sorted(os.listdir(directory))
+    except OSError:
+        return []
+
+
+@router.get("/api/files/rename-preview")
+async def file_rename_preview(remote_path: str = "", _key: str = Depends(verify_api_key)):
+    """What the rename dialog should prefill for a 4K/3D copy. Writes nothing."""
+    src = _validate_path(remote_path)
+    roots = _quality_roots()
+    if not src or not library_rename.in_root(src, roots):
+        return {"ok": False, "detail": "Solo se renombran las copias de las raíces 4K/3D"}
+
+    movies: list[dict] = []
+    naming_cfg: dict = {}
+    service = find_service("radarr", "arr")
+    if service:
+        async with http_session() as session:
+            page, naming_cfg = await asyncio.gather(
+                fetch_all_movies_detailed(session, service, page_size=0),
+                arr_naming_config(session, service),
+            )
+        movies = [m for m in (page.get("items") or []) if isinstance(m, dict)]
+
+    siblings = await asyncio.to_thread(_folder_names, os.path.dirname(src))
+    return await asyncio.to_thread(
+        library_rename.proposal,
+        video_path=src,
+        movies=movies,
+        naming_cfg=naming_cfg or {},
+        siblings=siblings,
+        roots=roots,
+    )
+
+
+@router.post("/api/files/rename-apply")
+async def file_rename_apply(req: RenameRequest, _key: str = Depends(verify_api_key)):
+    """Apply a confirmed rename: the video and its sidecars, or nothing.
+
+    The sidecars are re-read from disk instead of trusted from the request, so a
+    client can never name the files that move with it.
+    """
+    src = _validate_path(req.remote_path or "")
+    roots = _quality_roots()
+    if not src or not library_rename.in_root(src, roots):
+        return {"ok": False, "detail": "Solo se renombran las copias de las raíces 4K/3D"}
+
+    siblings = await asyncio.to_thread(_folder_names, os.path.dirname(src))
+    result = await asyncio.to_thread(
+        library_rename.apply_rename,
+        video_path=src,
+        folder=req.folder or "",
+        stem=req.name or "",
+        siblings=siblings,
+        roots=roots,
+        blocked=lambda path, verb: place_file.seed_block_reason(
+            path, config.FOLDER_DOWNLOAD_TORRENT, verb
+        ),
+    )
+    for moved in result.get("moved") or []:
+        log.info("rename-apply %s -> %s", moved["from"], moved["to"])
+    return result
 
 
 @router.post("/api/files/delete")

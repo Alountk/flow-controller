@@ -116,6 +116,17 @@
   position: relative;
 }
 
+/* The detail's trigger sits in the title row, not the list's header: no
+   absolute overlay, no primary weight — it is a quiet affordance there. */
+.sec-detail-titlerow .sec-l2-quick {
+  flex: none;
+}
+
+.sec-detail-titlerow .sec-l2-quick > .sec-l2-btn {
+  padding: 4px 8px;
+  font-size: 11.5px;
+}
+
 /* Anchored to its trigger: the menu belongs to the button that opened it. */
 .sec-l2-menu {
   position: absolute;

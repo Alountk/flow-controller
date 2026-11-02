@@ -272,6 +272,11 @@ def check_service(*args, **kwargs):
     return _arr.check_service(*args, **kwargs)
 
 
+def arr_naming_config(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _arr.arr_naming_config(*args, **kwargs)
+
+
 def fetch_all_movies_detailed(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.fetch_all_movies_detailed(*args, **kwargs)
