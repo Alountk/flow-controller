@@ -77,3 +77,7 @@ Consecuencias de diseño:
 - **La compuerta es lo que impide proponer un nombre con agujeros**: `proposal` se niega a renderizar una plantilla medida si no pudo sondear la copia, porque la compuerta compara el archivo de Radarr y no el nuestro y pasaría igual.
 - El grupo vacío se queda vacío aunque Radarr escriba `Radarr`: escribir esa palabra sería inventar un dato.
 - `media_mixer.parse_probe_data` gana `profile` en las pistas de audio (+3 líneas legacy, `MAX_LEGACY_LOC` 3463 → 3466, declarado en el PR): sin el perfil, `DTS-HD MA` se leería como `DTS`.
+
+## Frontera de rebanada
+
+Cinco commits, 1379 líneas authored, una sola conducta: el nombre se compone con lo que el archivo dice de sí mismo. No se parte en PRs encadenados porque el dominio (`media_info.py`), los tokens (`naming.py`), el sondeo en lote (`library_rename.py`) y la compuerta son **un solo camino**: separarlos dejaría un PR con el valor correcto pero sin quien lo use, y otro con la compuerta sin nada que comparar. La entrega es el squash de `feat/renombrar-formato-radarr` (#282), con la rebanada declarada aquí y en el PR.
