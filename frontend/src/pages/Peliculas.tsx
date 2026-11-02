@@ -2,8 +2,8 @@ import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { Calendar } from '../features/calendar/Calendar.tsx'
 import { MediaPane, type MediaDetail, type MediaSelection } from '../features/media-pane/MediaPane.tsx'
-import { ScanModal, type ScanItem } from '../features/media-pane/components/ScanModal.tsx'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
+import { PeliculasV2List } from './PeliculasV2List.tsx'
 import { apiFetch } from '../shared/api/auth.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
 import { PanelFiles, ROW_MISSING } from '../shared/ui/PanelFiles.tsx'
@@ -212,33 +212,11 @@ function estrenoRelease(item: CalendarItem): ReleaseSearchItem {
 function CalidadMovies({
   selectedId,
   onSelect,
-  onOpen,
-  l2 = false,
-  search,
-  onSearchChange,
 }: {
   selectedId: number | null
   onSelect: (selection: MediaSelection) => void
-  /** The arrow's way in. Absent (V1) means selecting IS opening: the side
-   *  panel is already on screen and a row click fills it. */
-  onOpen?: (selection: MediaSelection) => void
-  /** Draw the design's L2 header (title, search, refresh, quick actions). V1
-   *  keeps its own chrome: only the V2 page asks for this. */
-  l2?: boolean
-  /** Controlled search text. The V2 list unmounts while the detail is open,
-   *  so the page owns this to give S4 back the list exactly as it was. */
-  search?: string
-  onSearchChange?: (value: string) => void
 }) {
   const [classFilter, setClassFilter] = useState<QualityClass | 'todas'>('todas')
-  const [ownSearch, setOwnSearch] = useState('')
-  const term = (search ?? ownSearch).trim()
-  const setSearch = onSearchChange ?? setOwnSearch
-  const [quickOpen, setQuickOpen] = useState(false)
-  const [releaseItem, setReleaseItem] = useState<ReleaseSearchItem | null>(null)
-  const [scanItem, setScanItem] = useState<ScanItem | null>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
-  const quickRef = useRef<HTMLDivElement>(null)
   const titles = useQuery({ queryKey: ['calidad-movies'], queryFn: fetchCalidadMovies })
   const foldersQuery = useQuery({
     queryKey: ['routing-folders'],
@@ -246,36 +224,6 @@ function CalidadMovies({
     // The folders are settings, not live data: a save invalidates the page anyway.
     staleTime: 5 * 60_000,
   })
-
-  // Ctrl+K puts the cursor in the design's search box from anywhere on the page.
-  useEffect(() => {
-    if (!l2) return
-    function onKey(event: KeyboardEvent) {
-      if (event.key !== 'k' && event.key !== 'K') return
-      if (!event.ctrlKey && !event.metaKey) return
-      event.preventDefault()
-      searchRef.current?.focus()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [l2])
-
-  // A menu that outlives its click would be a trap: outside click and Escape.
-  useEffect(() => {
-    if (!quickOpen) return
-    function onDown(event: MouseEvent) {
-      if (quickRef.current && !quickRef.current.contains(event.target as Node)) setQuickOpen(false)
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setQuickOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [quickOpen])
 
   const listError = titles.isError
     ? errorMessage(titles.error)
@@ -311,105 +259,16 @@ function CalidadMovies({
   const items = titles.data?.items ?? []
   const counts = { '4K': 0, '3D': 0, 'en biblioteca': 0, 'desconocida': 0 } as Record<QualityClass, number>
   for (const movie of items) counts[movieClass(movie, folders)] += 1
-  const byClass = classFilter === 'todas' ? items : items.filter((m) => movieClass(m, folders) === classFilter)
-  const needle = term.toLowerCase()
-  const visible = needle ? byClass.filter((m) => m.title.toLowerCase().includes(needle)) : byClass
-  const selectedMovie = items.find((m) => m.id === selectedId) ?? null
-  const busy = titles.isFetching || foldersQuery.isFetching
+  const visible = classFilter === 'todas' ? items : items.filter((m) => movieClass(m, folders) === classFilter)
 
   function emptyMessage(): string {
     if (titles.isPending) return 'Cargando títulos...'
     if (items.length === 0) return 'No hay películas en el catálogo'
-    if (needle && visible.length === 0) return `Ninguna película coincide con «${term}».`
     return `Ninguna película en la clase ${classFilter}.`
-  }
-
-  /** What the quick actions act on: the selected row, and nothing else. */
-  const quickActions = selectedMovie
-    ? {
-        id: selectedMovie.id,
-        detail: calidadMovieDetail(selectedMovie, folders),
-        release: calidadMovieRelease(selectedMovie),
-      }
-    : null
-
-  function runQuick(action: 'open' | 'releases' | 'scan') {
-    if (!quickActions || !selectedMovie) return
-    setQuickOpen(false)
-    if (action === 'open') (onOpen ?? onSelect)(quickActions)
-    if (action === 'releases') setReleaseItem(quickActions.release)
-    if (action === 'scan') {
-      setScanItem({ type: 'movie', id: selectedMovie.id, title: selectedMovie.title, source: 'radarr' })
-    }
   }
 
   return (
     <div className="sec-calidad">
-      {l2 && (
-        <div className="sec-l2-head">
-          <div className="sec-l2-titles">
-            <h2 className="sec-l2-title">Películas</h2>
-            <p className="sec-l2-sub">
-              {items.length} {items.length === 1 ? 'película' : 'películas'} ·{' '}
-              {items.filter((m) => !m.has_file).length} sin archivo
-            </p>
-          </div>
-          <div className="sec-l2-tools">
-            <div className="sec-l2-search">
-              <input
-                ref={searchRef}
-                type="search"
-                className="sec-l2-search-input"
-                aria-label="Buscar película"
-                placeholder="Buscar película..."
-                value={search ?? ownSearch}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-              <kbd className="sec-l2-kbd" aria-hidden="true">
-                Ctrl+K
-              </kbd>
-            </div>
-            <button
-              type="button"
-              className="sec-l2-btn"
-              disabled={busy}
-              onClick={() => {
-                void titles.refetch()
-                void foldersQuery.refetch()
-              }}
-            >
-              {busy ? 'Actualizando…' : 'Actualizar'}
-            </button>
-            <div className="sec-l2-quick" ref={quickRef}>
-              <button
-                type="button"
-                className="sec-l2-btn is-primary"
-                aria-haspopup="menu"
-                aria-expanded={quickOpen}
-                // Nothing selected → nothing to act on. The menu exists to
-                // serve the row that is marked, not to guess one.
-                disabled={!selectedMovie}
-                onClick={() => setQuickOpen((open) => !open)}
-              >
-                Acciones rápidas
-              </button>
-              {quickOpen && selectedMovie && (
-                <div className="sec-l2-menu" role="menu" aria-label="Acciones rápidas">
-                  <button type="button" role="menuitem" onClick={() => runQuick('open')}>
-                    Ver detalle
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => runQuick('releases')}>
-                    Buscar releases
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => runQuick('scan')}>
-                    Escanear carpeta
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
       {/* S4 («umbral-calidad»): what measured below the configured threshold,
           above the class filters so it reads as the summary of the library. */}
       <QualityBelowList />
@@ -447,13 +306,11 @@ function CalidadMovies({
           {visible.map((movie) => {
             const cls = movieClass(movie, folders)
             const routed = routedIn(movie.path, folders)
-            const pick = {
+            const choose = () => onSelect({
               id: movie.id,
               detail: calidadMovieDetail(movie, folders),
               release: calidadMovieRelease(movie),
-            }
-            const select = () => onSelect(pick)
-            const open = () => (onOpen ?? onSelect)(pick)
+            })
             return (
               <div
                 key={movie.id}
@@ -461,11 +318,11 @@ function CalidadMovies({
                 className={`sec-movie-row${selectedId === movie.id ? ' is-selected' : ''}`}
                 tabIndex={0}
                 aria-current={selectedId === movie.id ? 'true' : undefined}
-                onClick={select}
+                onClick={choose}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    select()
+                    choose()
                   }
                 }}
               >
@@ -496,11 +353,10 @@ function CalidadMovies({
                     className="sec-movie-open"
                     aria-label={`Abrir ${movie.title}`}
                     onClick={(event) => {
-                      // S3: only the arrow opens the detail. The row body
-                      // selects — otherwise there is nothing for the quick
-                      // actions to act on.
+                      // The arrow is the explicit way in (V2/S3); the row body
+                      // keeps working so keyboard users lose nothing.
                       event.stopPropagation()
-                      open()
+                      choose()
                     }}
                   >
                     ›
@@ -511,10 +367,6 @@ function CalidadMovies({
           })}
         </div>
       )}
-      {releaseItem && (
-        <ReleaseSearchModal item={releaseItem} onClose={() => setReleaseItem(null)} />
-      )}
-      {scanItem && <ScanModal item={scanItem} onClose={() => setScanItem(null)} />}
     </div>
   )
 }
@@ -636,9 +488,11 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
   // row marks the selection — what the quick actions act on — and only the
   // arrow sets this flag, which is what replaces the list with the detail.
   const [detailOpen, setDetailOpen] = useState(false)
-  // S4: the list unmounts while the detail is open, so the search text lives
-  // here — coming back must find the list exactly as it was left.
-  const [search, setSearch] = useState('')
+  // S8 («peliculas-v2-pulido»): the list stays MOUNTED while the detail is on
+  // screen and is only hidden, so the way back keeps its chips, its search, its
+  // page and its scroll. The window's own scroll is saved here and restored on
+  // return, since hiding the list shortens the document.
+  const scrollY = useRef(0)
   // Which detail tab is on screen. Releases first: it is the tab the panel
   // has opened with since PR 5, and every other tab is live since PR 6.
   const [detailTab, setDetailTab] = useState<string>('Releases')
@@ -647,14 +501,20 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
   const active = SUB_VIEWS.find((s) => s.id === view) ?? SUB_VIEWS[0]
   const facts = selectedRowFacts(queryClient, view, selected)
   // T3: the Archivos tab aggregates the routing folders with the movie's own
-  // folder. Settings are asked only while that tab is open on a selection.
+  // folder, and the V2 list needs them for its destination chips.
   const foldersQuery = useQuery({
     queryKey: ['routing-folders'],
     queryFn: fetchRoutingFolders,
     // The folders are settings, not live data: a save invalidates the page anyway.
     staleTime: 5 * 60_000,
-    enabled: detailTab === 'Archivos' && !!selected,
+    enabled: pageMode || (detailTab === 'Archivos' && !!selected),
   })
+
+  // The detail is gone and the list is back: put the scroll where it was.
+  useEffect(() => {
+    if (!pageMode || detailOpen) return
+    window.scrollTo({ top: scrollY.current })
+  }, [pageMode, detailOpen])
 
   function changeView(next: SubView) {
     setView(next)
@@ -671,6 +531,7 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
   }
 
   function openDetail(selection: MediaSelection) {
+    scrollY.current = window.scrollY
     setSelected(selection)
     setDetailOpen(true)
   }
@@ -698,12 +559,14 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
       </div>}
 
       <div className={pageMode ? 'sec-page' : 'sec-split'}>
-        {(!pageMode || !detailOpen) && (
         <section
           className="sec-master"
           role="tabpanel"
           id={`${uid}-list`}
           aria-labelledby={`${uid}-tab-${active.id}`}
+          // Hidden, never unmounted: the detail replaces the list on screen but
+          // the list keeps its own state for the way back (S8).
+          hidden={pageMode && detailOpen}
         >
           {!pageMode && (
             <div className="sec-master-head">
@@ -713,13 +576,11 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
           )}
 
           {pageMode ? (
-            <CalidadMovies
+            <PeliculasV2List
               selectedId={selected?.id ?? null}
+              paths={foldersQuery.data ?? { path4k: '', path3d: '' }}
               onSelect={selectRow}
               onOpen={openDetail}
-              l2
-              search={search}
-              onSearchChange={setSearch}
             />
           ) : view === 'estrenos' ? (
             // The calendar IS the list of this sub-view — movie items only.
@@ -761,8 +622,6 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
             </div>
           )}
         </section>
-
-        )}
 
         {showDetail && (
         <section
