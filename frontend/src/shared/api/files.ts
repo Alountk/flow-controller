@@ -58,6 +58,22 @@ export interface RenameResult {
   failed?: { name: string; detail: string }[]
 }
 
+export interface RenameCandidate extends RenameProposal {
+  src: string
+}
+
+export interface RenameCandidatesResponse {
+  ok: boolean
+  items: RenameCandidate[]
+  scanned: number
+  detail: string
+}
+
+export async function renameCandidates(): Promise<RenameCandidatesResponse> {
+  const res = await apiFetch('/api/files/rename-candidates', {})
+  return (await res.json()) as RenameCandidatesResponse
+}
+
 export async function renamePreview(path: string): Promise<RenameProposal> {
   const res = await apiFetch(`/api/files/rename-preview?remote_path=${encodeURIComponent(path)}`, {})
   return (await res.json()) as RenameProposal

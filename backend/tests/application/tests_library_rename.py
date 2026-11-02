@@ -416,3 +416,79 @@ def test_roots_are_compared_on_their_real_path(tmp_path, seed):
     )
 
     assert got["loose"] is True
+
+
+class TestCandidates:
+    """S2 and S5: what the section lists, and what it refuses to hide."""
+
+    NAMING = {
+        "standard_movie_format": "{Movie Title} ({Release Year}) {Quality Full}",
+        "movie_folder_format": "{Movie Title} ({Release Year})",
+    }
+
+    MOVIE = {
+        "id": 7,
+        "title": "Alien",
+        "year": 1979,
+        "path": "/mnt/1080/Alien (1979)",
+        "quality": "Bluray-1080p",
+        "file_name": "Alien (1979) Bluray-1080p.mkv",
+    }
+
+    def _tree(self, tmp_path, *files):
+        root = tmp_path / "4k"
+        root.mkdir()
+        for rel in files:
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"x")
+        return str(root)
+
+    def test_lists_a_copy_that_does_not_follow_the_template(self, tmp_path):
+        root = self._tree(tmp_path, "Alien.1979.2160p.mkv")
+
+        got = library_rename.candidates(
+            roots=[root], movies=[self.MOVIE], naming_cfg=self.NAMING
+        )
+
+        assert [item["src"] for item in got["items"]] == [f"{root}/Alien.1979.2160p.mkv"]
+        assert got["items"][0]["ok"] is True
+        assert got["scanned"] == 1
+
+    def test_skips_a_copy_that_already_follows_the_template(self, tmp_path):
+        # Exactly what the template renders for that movie and that 2160p copy
+        # (Radarr's quality plus the copy's own resolution): nothing to do.
+        root = self._tree(tmp_path, "Alien (1979)/Alien (1979) Bluray-2160p.mkv")
+        naming = {
+            "standard_movie_format": "{Movie Title} ({Release Year}) {Quality Full}",
+            "movie_folder_format": "{Movie Title} ({Release Year})",
+        }
+
+        got = library_rename.candidates(
+            roots=[root], movies=[self.MOVIE], naming_cfg=naming
+        )
+
+        assert got["items"] == []
+        assert got["scanned"] == 1
+
+    def test_a_copy_it_cannot_propose_appears_with_its_warning(self, tmp_path):
+        # S5: an unidentified file is shown, not hidden — the library is not complete.
+        root = self._tree(tmp_path, "Unknown.Thing.2020.mkv")
+
+        got = library_rename.candidates(
+            roots=[root], movies=[self.MOVIE], naming_cfg=self.NAMING
+        )
+
+        assert len(got["items"]) == 1
+        assert got["items"][0]["ok"] is True
+        assert got["items"][0]["warnings"]
+
+    def test_ignores_a_file_that_is_not_media_and_a_missing_root(self, tmp_path):
+        root = self._tree(tmp_path, "notas.txt")
+
+        got = library_rename.candidates(
+            roots=[root, str(tmp_path / "missing")], movies=[self.MOVIE], naming_cfg=self.NAMING
+        )
+
+        assert got["items"] == []
+        assert got["scanned"] == 0

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Iterator
 
 from domain import naming
 from domain import rename_plan
@@ -273,3 +273,77 @@ def apply_rename(
     if failed:
         detail += "; no se pudo: " + ", ".join(f["name"] for f in failed)
     return {"ok": True, "moved": moved, "failed": failed, "detail": detail}
+
+
+def _iter_videos(root: str) -> Iterator[tuple[str, list[str]]]:
+    """(video path, sibling names) for each video in `root`, two levels deep.
+
+    That is the shape of the library: a copy loose in the root, or one inside
+    its movie folder. Deeper is an extras/season structure and not our business.
+    """
+    for entry in _walk(root, depth=2):
+        yield entry
+
+
+def _walk(directory: str, depth: int, seen: set[str] | None = None) -> Iterator[tuple[str, list[str]]]:
+    seen = seen if seen is not None else set()
+    real = _real(directory)
+    if real in seen or depth < 0:
+        return
+    seen.add(real)
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return
+    if any(Path(n).suffix.lower() in naming.MEDIA_EXTENSIONS for n in names):
+        videos = [
+            n for n in names
+            if Path(n).suffix.lower() in naming.MEDIA_EXTENSIONS
+            and os.path.isfile(os.path.join(directory, n))
+        ]
+        for name in videos:
+            yield os.path.join(directory, name), names
+    if depth == 0:
+        return
+    for name in names:
+        child = os.path.join(directory, name)
+        if os.path.isdir(child) and not os.path.islink(child):
+            yield from _walk(child, depth - 1, seen)
+
+
+def candidates(*, roots: Iterable[str], movies: list[dict], naming_cfg: dict) -> dict:
+    """Every 4K/3D copy that does NOT already follow Radarr's template (S2).
+
+    A copy whose proposal matches what it already is does not appear. One that
+    could not be proposed appears WITH its warning and `ok: false` (S5): hiding
+    it would make the library look complete when it is not.
+    """
+    roots = [r for r in roots if r]
+    items: list[dict] = []
+    scanned = 0
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for video_path, siblings in _iter_videos(root):
+            scanned += 1
+            got = proposal(
+                video_path=video_path,
+                movies=movies,
+                naming_cfg=naming_cfg,
+                siblings=siblings,
+                roots=roots,
+            )
+            if got["ok"]:
+                current = rename_plan.base_name(os.path.basename(video_path))
+                # Unidentifiable is not "done": nothing was proposed for it, so
+                # hiding it would make the root look finished when it is not.
+                needs_work = (
+                    got["movie"] is None
+                    or got["name"] != current
+                    or (got["loose"] and bool(got["folder"]))
+                )
+                if not needs_work:
+                    continue
+            items.append(got)
+    items.sort(key=lambda item: str(item.get("src") or ""))
+    return {"ok": True, "items": items, "scanned": scanned, "detail": ""}

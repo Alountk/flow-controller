@@ -41,6 +41,9 @@ const Prototypes = lazy(() =>
 const FileManager = lazy(() =>
   import('../features/file-manager/FileManager.tsx').then((m) => ({ default: m.FileManager })),
 )
+const Renombrar = lazy(() =>
+  import('../pages/Renombrar.tsx').then((m) => ({ default: m.Renombrar })),
+)
 const Settings = lazy(() =>
   import('../features/settings/Settings.tsx').then((m) => ({ default: m.Settings })),
 )
@@ -104,6 +107,7 @@ const PAGE_TITLES: Record<Page, string> = {
   seguimiento: 'Seguimiento',
   disk: 'Espacio en Disco',
   files: 'Archivos',
+  renombrar: 'Renombrar',
   mixer: 'Media Mixer',
   config: 'Configuración',
   prototypes: 'Prototipos',
@@ -442,6 +446,8 @@ function App() {
             {page === 'files' && (
               <FileManager />
             )}
+
+            {page === 'renombrar' && <Renombrar />}
 
             {page === 'mixer' && <MediaMixer onSubmitted={handleMixSubmitted} />}
 

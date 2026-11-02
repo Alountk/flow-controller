@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'seguimiento', label: 'Seguimiento', icon: '📡' },
   { key: 'disk', label: 'Disco', icon: '💾' },
   { key: 'files', label: 'Archivos', icon: '📂' },
+  { key: 'renombrar', label: 'Renombrar', icon: '🏷️' },
   { key: 'mixer', label: 'Media Mixer', icon: '🎬' },
   { key: 'config', label: 'Configuración', icon: '⚙️' },
 ]

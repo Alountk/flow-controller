@@ -895,6 +895,14 @@ Solo aplica a las raíces 4K/3D, la guarda de semillas se aplica al renombrado i
 movimiento, y el destino no puede salirse de la raíz. Detalle completo y specs en
 `odd/tasks/renombrar-4k-3d.md`.
 
+**Y vive en su propia sección, «Renombrar»** (L: «debería ser en otra sección del menú
+lateral, renombrar tal vez»). La acción `🏷` del explorador se retiró: renombrar de uno en uno
+no sirve para una biblioteca, y dos puertas con reglas propias acaban divergiendo. La sección
+lista **solo** las copias que no siguen la plantilla, muestra el par viejo → nuevo (esa es la
+vista previa), aplica a las seleccionadas y deja editar una a mano. Una copia que no se puede
+identificar aparece con su aviso y **no** entra en el lote: no hay nombre propuesto que aplicar.
+Spec en `odd/tasks/renombrar-seccion.md`.
+
 ### F-15 — Mixer: una tercera salida, a la carpeta que elijas · **Pequeña** · ✅ *Entregada*
 
 Pedida: «en el mixer en la parte del final deberíamos dar una opción de mover el archivo

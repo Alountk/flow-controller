@@ -29,19 +29,19 @@ en el explorador no sirve para una biblioteca.
 
 ## Tasks
 
-- **T1** Backend: `GET /api/files/rename-candidates` — recorre las raíces 4K/3D, se
+- **T1** ✅ `ad12e8d` — Backend: `GET /api/files/rename-candidates` — recorre las raíces 4K/3D, se
   queda con los vídeos y devuelve, por copia, carpeta/nombre propuestos, sidecars,
   avisos y `ok`; **una sola** lectura del catálogo de Radarr (nada de N+1 por
   archivo). Respeta el contrato de #275 (`proposal`, `refusal`).
-- **T2** Frontend: entrada en el menú, ruta con `lazy`, página `Renombrar`
+- **T2** ✅ — Frontend: entrada en el menú, ruta con `lazy`, página `Renombrar`
   (`features/rename/`) con lista, selección, vista previa y «Aplicar a las
   seleccionadas»; reutiliza `LibraryRenameDialog` para editar una fila concreta.
-- **T3** Quitar `🏷` y el montaje del diálogo de `FileManager.tsx`; migrar los tests
+- **T3** ✅ — Quitar `🏷` y el montaje del diálogo de `FileManager.tsx`; migrar los tests
   del explorador que asumían esa acción (no borrarlos).
-- **T4** Tests: backend de candidatos (vídeo suelto, dentro de carpeta ya correcta,
+- **T4** ✅ — Tests: backend de candidatos (vídeo suelto, dentro de carpeta ya correcta,
   sin Radarr, plantilla no reproducible) y frontend de la página (lista, vista
   previa, selección, aplicar, lista vacía con explicación).
-- **T5** Docs: `BACKLOG.md` (la entrada F-14 pasa a describir la sección) y la tabla
+- **T5** ✅ — Docs: `BACKLOG.md` (la entrada F-14 pasa a describir la sección) y la tabla
   del `README.md`.
 
 ## Log
@@ -50,5 +50,12 @@ en el explorador no sirve para una biblioteca.
 - **L2** Decisiones del cuestionario: «Moverlo a la sección y quitarlo del
   explorador»; carpeta y nombre editables siguen como en #275.
 - **Base**: esta rama nace de `feat/renombrar-4k-3d` (#275) porque el motor vive
-  ahí; el PR se abre contra esa rama y tras el merge de #275 el diff queda limpio
-  contra `main`.
+  ahí y se mergeó en `main` como `2d5e6bb`; este PR va ya contra `main`.
+
+## Slices
+
+Dos rebanadas: `ad12e8d` el backend (endpoint de candidatos y sus pruebas, que
+no depende de la UI) y el commit siguiente la sección (página, ruta, entrada del
+menú, retirada del `🏷` y la migración de sus cinco tests al sitio nuevo).
+Juntas pasan de las ~400 líneas: el corte honesto no deja una sección que
+funcione sin el endpoint, ni un endpoint que nadie llama.

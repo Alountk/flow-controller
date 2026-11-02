@@ -302,6 +302,50 @@ def _folder_names(directory: str) -> list[str]:
         return []
 
 
+@router.get("/api/files/rename-candidates")
+async def file_rename_candidates(_key: str = Depends(verify_api_key)):
+    """Every 4K/3D copy that does not follow Radarr's template yet. Writes nothing."""
+    roots = _quality_roots()
+    if not roots:
+        return {
+            "ok": True,
+            "items": [],
+            "scanned": 0,
+            "detail": "No hay raíces 4K/3D configuradas",
+        }
+
+    movies: list[dict] = []
+    naming_cfg: dict = {}
+    service = find_service("radarr", "arr")
+    if service:
+        async with http_session() as session:
+            page, naming_cfg = await asyncio.gather(
+                fetch_all_movies_detailed(session, service, page_size=0),
+                arr_naming_config(session, service),
+            )
+        movies = [m for m in (page.get("items") or []) if isinstance(m, dict)]
+
+    # S6: without Radarr there is no identity to propose — say so instead of
+    # listing every file with a guessed name.
+    if not service or not movies:
+        return {
+            "ok": True,
+            "items": [],
+            "scanned": 0,
+            "detail": (
+                "Radarr no está configurado o su catálogo está vacío: sin identificar "
+                "las películas no se propone ningún nombre"
+            ),
+        }
+
+    return await asyncio.to_thread(
+        library_rename.candidates,
+        roots=roots,
+        movies=movies,
+        naming_cfg=naming_cfg or {},
+    )
+
+
 @router.get("/api/files/rename-preview")
 async def file_rename_preview(remote_path: str = "", _key: str = Depends(verify_api_key)):
     """What the rename dialog should prefill for a 4K/3D copy. Writes nothing."""
