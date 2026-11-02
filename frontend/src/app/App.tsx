@@ -16,6 +16,7 @@ import { ActivityTable } from './ActivityTable.tsx'
 import { MediaMixer } from '../pages/MediaMixer.tsx'
 import { Peliculas } from '../pages/Peliculas.tsx'
 import { Series } from '../pages/Series.tsx'
+import { Estrenos } from '../pages/Estrenos.tsx'
 import { Seguimiento } from '../pages/Seguimiento.tsx'
 import { ToastViewport } from './ToastViewport.tsx'
 import {
@@ -73,6 +74,7 @@ const PAGE_TITLES: Record<Page, string> = {
   peliculas: 'Películas',
   peliculasV2: 'Películas V2',
   series: 'Series',
+  estrenos: 'Estrenos',
   seguimiento: 'Seguimiento',
   disk: 'Espacio en Disco',
   files: 'Archivos',
@@ -88,6 +90,7 @@ const PAGE_SUBTITLES: Partial<Record<Page, string>> = {
   dashboard: 'Vista general del servidor multimedia',
   peliculas: 'Catálogo cinematográfico y gestión de indexación',
   peliculasV2: 'La misma biblioteca, con el detalle a pantalla completa',
+  estrenos: 'Calendario de estrenos: películas y series',
 }
 
 function App() {
@@ -268,7 +271,7 @@ function App() {
     if (!servicesReady || hasAnyArr) return []
     // «Películas V2» is the same page with another layout: it reads
     // Radarr too, so it hides with the rest when no arr is configured.
-    return ['peliculas', 'peliculasV2', 'series', 'seguimiento'] as Page[]
+    return ['peliculas', 'peliculasV2', 'series', 'estrenos', 'seguimiento'] as Page[]
   }, [servicesReady, hasAnyArr])
 
   useEffect(() => {
@@ -387,6 +390,8 @@ function App() {
             {page === 'peliculasV2' && <Peliculas layout="page" />}
 
             {page === 'series' && <Series />}
+
+            {page === 'estrenos' && <Estrenos />}
 
             {page === 'seguimiento' && (
               <Seguimiento

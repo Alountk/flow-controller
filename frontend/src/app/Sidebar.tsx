@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'peliculas', label: 'Películas', icon: '🎬' },
   { key: 'peliculasV2', label: 'Películas V2', icon: '🧪' },
   { key: 'series', label: 'Series', icon: '📺' },
+  { key: 'estrenos', label: 'Estrenos', icon: '🗓️' },
   { key: 'seguimiento', label: 'Seguimiento', icon: '📡' },
   { key: 'disk', label: 'Disco', icon: '💾' },
   { key: 'files', label: 'Archivos', icon: '📂' },

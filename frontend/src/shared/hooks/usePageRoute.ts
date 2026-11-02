@@ -5,6 +5,7 @@ export type Page =
   | 'peliculas'
   | 'peliculasV2'
   | 'series'
+  | 'estrenos'
   | 'seguimiento'
   | 'disk'
   | 'files'
@@ -18,6 +19,7 @@ export const PAGE_PATHS: Record<Page, string> = {
   peliculas: '/peliculas',
   peliculasV2: '/peliculas-v2',
   series: '/series',
+  estrenos: '/estrenos',
   seguimiento: '/seguimiento',
   disk: '/disco',
   files: '/archivos',
