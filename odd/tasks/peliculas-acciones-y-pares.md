@@ -45,3 +45,13 @@ la columna muestra, no solo los seeders.
   lista queda oculta al abrir el detalle (S8 del pulido), así que el detalle no
   tenía de dónde colgarse. Y `_release_row` descartaba `sources` en el backend,
   no solo la UI: la cifra no llegaba al navegador.
+- **L4** — Rebanadas entregadas (total 508 líneas, ninguna por encima de ~400):
+  `cab9652` el backend que no descartaba `sources`; `882b39a` la columna
+  «Pares» con el filtro y el orden leyendo el mismo número; `6e6ed48` el menú
+  del detalle con un solo dueño de los modales.
+- **L5** — Verificación visual con `/tmp/biblio-visual.mjs` (desechable, fuera
+  del repo): el detalle enseña «Buscar releases» y «Escanear carpeta» y nada
+  más, y las cards de Archivos siguen intactas. El color de la columna «Pares»
+  solo se aplica a seeders de torrent: 17 fuentes ED2K y 17 seeders no son la
+  misma cosa, y pintarlas en la misma escala sería afirmar algo que el número no
+  puede sostener.
