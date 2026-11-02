@@ -1472,9 +1472,31 @@
   width: 100%;
 }
 
+/* The pager rides the scrollport's bottom edge, so the shell's own bottom
+   padding is the only thing that would leave it floating above it. */
+.content:has(.sec-page) {
+  padding-bottom: 0;
+}
+
 .sec-detail-page {
   position: relative;
+  /* The split's sticky offset must not survive here: `top` shifts a relative
+     box without moving the flow, so the detail would paint over whatever
+     comes after it. */
+  top: auto;
+  overflow: visible;
   width: 100%;
+}
+
+/* Page mode is not a split: the design frames the rows, not the two panes, so
+   the screen must not wrap the whole page in a second card. */
+.sec-page > .sec-master,
+.sec-page > .sec-detail-page {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  max-height: none;
+  overflow: visible;
 }
 
 .sec-detail-close {

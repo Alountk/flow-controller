@@ -766,6 +766,9 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
         )}
       </div>
 
+      {/* The implementation notes are for whoever builds this screen, not for
+          whoever uses it: the V2 page is the design, so it leaves them to V1. */}
+      {!pageMode && (
       <section className="sec-notes">
         <h3>Notas de implementación</h3>
         <ol>
@@ -776,6 +779,7 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
           ))}
         </ol>
       </section>
+      )}
     </section>
   )
 }

@@ -298,6 +298,34 @@ describe('V2 · la fila selecciona y el chevron abre', () => {
     expect(within(row).getByText('4K')).toBeInTheDocument()
   })
 
+  it('always names the four resolutions and lights the ones the file has (S6)', async () => {
+    stubFetch([paraNorman, dune, missing])
+    renderV2()
+
+    const lit = (row: HTMLElement) =>
+      [...row.querySelectorAll('.sec-res-chip')]
+        .filter((chip) => chip.classList.contains('is-on'))
+        .map((chip) => chip.textContent)
+
+    // A 1080p file: every chip is drawn, exactly one is lit.
+    const bluray = await rowOf('ParaNorman')
+    expect([...bluray.querySelectorAll('.sec-res-chip')].map((c) => c.textContent)).toEqual([
+      '4K',
+      '3D',
+      '1080p',
+      'SD',
+    ])
+    expect(lit(bluray)).toEqual(['1080p'])
+
+    // A 4K remux lights 4K — and nothing else.
+    expect(lit(await rowOf('Dune: Parte Dos'))).toEqual(['4K'])
+
+    // No file, no resolution: the four chips stay, dimmed, with the amber pill.
+    const gone = await rowOf('Sin Copia')
+    expect(lit(gone)).toEqual([])
+    expect(gone).toHaveTextContent('Sin archivo')
+  })
+
   it('serves the selection from the quick actions, disabled without one (S5)', async () => {
     renderV2()
     const trigger = await screen.findByRole('button', { name: 'Acciones rápidas' })
