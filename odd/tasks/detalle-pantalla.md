@@ -185,3 +185,12 @@ acceder a los detalles».
   - Gates del padre: frontend **949 tests**, tsc/eslint/build rc=0.
   - Fuera del alcance (L8): renombrar los chips de clase a `1080`/`Otros` como
     en el diseño, porque redefine las clases de la vista Calidad de la V1.
+- L11 — Hueco de S4 cerrado en `5f08d99`: el buscador de la cabecera perdía el
+  texto al abrir el detalle (la lista se desmonta con el modelo de sustitución
+  de S1) y la ✕ devolvía la lista sin filtro. El texto pasa a vivir en la
+  página y `CalidadMovies` lo acepta controlado; el resto del estado de la
+  lista (chip de clase y scroll) sigue reiniciándose al volver — decisión
+  abierta, no un olvido: conservarlo pide mantener la lista montada y oculta,
+  que cambia S1 y el pin de `.sec-movie-list` ausente.
+  - Gates del padre sobre el head final: frontend **950 tests**, tsc/eslint /
+    build rc=0; CI del PR #266 verde.
