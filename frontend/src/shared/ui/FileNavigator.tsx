@@ -14,6 +14,8 @@ export interface FileNavigatorEntry {
   name: string
   path: string
   isDir: boolean
+  /** The backend's `is_video`; absent means unknown, never "not a video". */
+  isVideo?: boolean
   size: number
   modified: number
 }
@@ -167,6 +169,7 @@ export function FileNavigator({
             name: entry.name,
             path: entry.path,
             isDir: entry.is_dir,
+            isVideo: entry.is_video,
             size: entry.size,
             modified: entry.modified,
           }))

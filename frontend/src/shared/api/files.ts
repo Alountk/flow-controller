@@ -32,6 +32,50 @@ export interface QueueStatusResponse {
   running: boolean
 }
 
+export interface RenameSidecar {
+  from: string
+  to: string
+}
+
+/** What `GET /api/files/rename-preview` offers for one 4K/3D copy. */
+export interface RenameProposal {
+  ok: boolean
+  detail: string
+  src?: string
+  loose?: boolean
+  folder?: string
+  name?: string
+  extension?: string
+  sidecars?: RenameSidecar[]
+  warnings?: string[]
+  movie?: { id?: number; title?: string; year?: number | null } | null
+}
+
+export interface RenameResult {
+  ok: boolean
+  detail: string
+  moved?: { from: string; to: string }[]
+  failed?: { name: string; detail: string }[]
+}
+
+export async function renamePreview(path: string): Promise<RenameProposal> {
+  const res = await apiFetch(`/api/files/rename-preview?remote_path=${encodeURIComponent(path)}`, {})
+  return (await res.json()) as RenameProposal
+}
+
+export async function renameApply(body: {
+  remote_path: string
+  folder: string
+  name: string
+}): Promise<RenameResult> {
+  const res = await apiFetch('/api/files/rename-apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as RenameResult
+}
+
 export async function fetchRoots(): Promise<RootsResponse> {
   const res = await apiFetch('/api/files/roots', {})
   return (await res.json()) as RootsResponse
