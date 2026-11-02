@@ -737,3 +737,82 @@ describe('mixer — label↔control bindings (S2)', () => {
     expect(new Set(allIds).size).toBe(allIds.length)
   })
 })
+
+/* ── S1–S3 del destino carpeta (`odd/tasks/mixer-carpeta-destino.md`) ────── */
+
+describe('mixer — tercera salida: una carpeta elegida', () => {
+  it('offers «Otra carpeta…» as a third, exclusive destination', async () => {
+    await driveToResults(probeBody())
+
+    const otra = screen.getByRole('button', { name: 'Otra carpeta…' })
+    expect(otra).toHaveAttribute('aria-pressed', 'false')
+
+    pickDest('Carpeta de A')
+    expect(screen.getByRole('button', { name: 'Carpeta de A' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    fireEvent.click(otra)
+    expect(screen.getByRole('button', { name: 'Otra carpeta…' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    // Exclusive: picking the folder clears the substitution target.
+    expect(screen.getByRole('button', { name: 'Carpeta de A' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it('never says «Sustituirá» in the folder mode', async () => {
+    await driveToResults(probeBody())
+
+    pickDest('Carpeta de A')
+    expect(screen.getByText(/Sustituirá/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Otra carpeta…' }))
+    expect(screen.queryByText(/Sustituirá/)).toBeNull()
+    expect(screen.getByText(/no se sustituye nada/)).toBeInTheDocument()
+  })
+
+  it('keeps «Mezclar» disabled until a folder is chosen', async () => {
+    await driveToResults(probeBody())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Otra carpeta…' }))
+    expect(screen.getByRole('button', { name: 'Mezclar' })).toBeDisabled()
+
+    // The picker opens on the same chrome the file picker uses; confirming the
+    // current folder is the FileNavigator's own «Elegir esta carpeta».
+    const confirm = await screen.findByRole('button', { name: 'Elegir esta carpeta' })
+    fireEvent.click(confirm)
+
+    expect(screen.getByRole('button', { name: 'Mezclar' })).toBeEnabled()
+  })
+
+  it('sends the folder and an explicit name with destination_path empty', async () => {
+    const calls = await driveToResults(probeBody())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Otra carpeta…' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Elegir esta carpeta' }))
+
+    const nameInput = screen.getByRole('textbox')
+    fireEvent.change(nameInput, { target: { value: 'Dune (2024) 2160p.mkv' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Mezclar' }))
+
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/api/mixer/mux'))).toBe(true))
+    const body = calls.find((c) => c.url.includes('/api/mixer/mux'))?.body
+    expect(body?.destination_path).toBe('')
+    expect(body?.output_path).toBe('/mnt')
+    expect(body?.output_name).toBe('Dune (2024) 2160p.mkv')
+  })
+
+  it('pre-fills a name with the generated pattern so the field is never empty', async () => {
+    await driveToResults(probeBody())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Otra carpeta…' }))
+    const nameInput = screen.getByRole('textbox') as HTMLInputElement
+
+    expect(nameInput.value).toMatch(/_\d{8}T\d{6}_mixed\.mkv$/)
+  })
+})

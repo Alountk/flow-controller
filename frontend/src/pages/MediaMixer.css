@@ -849,6 +849,26 @@
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
+.mixer-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+
+.mixer-name-input {
+  flex: 1 1 22ch;
+  min-width: 14ch;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+}
+
 .mixer-dest-replace {
   font-size: 11px;
   color: var(--text-dim);
