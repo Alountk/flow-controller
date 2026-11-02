@@ -270,18 +270,20 @@
   flex-shrink: 0;
 }
 
-/* Name spans the row's name line; the rest mirror the row cells' widths. */
+/* Three cells mirror the three the row still lays out: the name block takes the
+   leftover width, size and actions keep the widths their cells reserve. */
 .fm-head-row span:nth-child(1) {
   flex: 1;
+  min-width: 0;
 }
 
-.fm-head-row span:nth-child(4) {
+.fm-head-row span:nth-child(2) {
   min-width: 60px;
   text-align: right;
 }
 
-.fm-head-row span:nth-child(5) {
-  min-width: 80px;
+.fm-head-row span:nth-child(3) {
+  min-width: 96px;
   text-align: right;
 }
 
@@ -419,8 +421,30 @@
   flex-shrink: 0;
 }
 
+/* The row's one flexible block: the name on top, what explains it underneath.
+   `min-width: 0` is the whole point — without it a long name claims its
+   intrinsic width and pushes size and actions out of the pane. */
+.fm-row-main {
+  /* Basis 0, not `auto`: with `flex-wrap` on the row, the hypothetical size of
+     this block decides the line break, and a long name's intrinsic width would
+     push size and actions to a third line. */
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fm-row-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
 .fm-name {
-  flex: 1;
+  min-width: 0;
   font-size: 12px;
   color: var(--text);
   overflow: hidden;
@@ -433,8 +457,8 @@
    `--mono`. Long paths ellipsize inside the row's flex line instead of
    pushing the size/date columns off the pane. */
 .fm-row-path {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 1 1 10ch;
+  min-width: 6ch;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-dim);
@@ -459,7 +483,7 @@
 
 /* Retention age: quiet while inside the window. */
 .fm-age {
-  flex-shrink: 0;
+  flex: none;
   font-size: 10px;
   padding: 1px 6px;
   border: 1px solid var(--border);
@@ -477,7 +501,11 @@
 /* F-07: procedencia — same quiet pill family as the age chip, italic so two
    chips side by side still read as two different questions. */
 .fm-prov {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 4ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10px;
   padding: 1px 6px;
   border: 1px solid var(--border);
@@ -487,13 +515,19 @@
   font-style: italic;
 }
 
+/* Inside the sub-line the date sizes to its content: the column it used to
+   hold is what stole the width from the name. */
 .fm-date {
-  min-width: 80px;
+  min-width: 0;
+  text-align: left;
 }
 
 .fm-item-actions {
   display: flex;
   gap: 2px;
+  flex: none;
+  min-width: 96px;
+  justify-content: flex-end;
   opacity: 0;
   transition: opacity 0.15s;
 }

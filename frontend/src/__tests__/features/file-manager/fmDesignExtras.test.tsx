@@ -104,13 +104,19 @@ describe('F3 breadcrumb clicable (S11a)', () => {
 })
 
 describe('F3 cabeceras de columna (S11b)', () => {
-  it('renders the design header row: Nombre/Procedencia/Retención/Tamaño/Modificado/Acciones', async () => {
+  // The design's six columns could not survive a long file name: provenance,
+  // retention and the date are now the row's second line, so the header names
+  // the three cells that are still columns and nothing it cannot align.
+  it('renders the header row for the cells the rows still present', async () => {
     mockFetch({ '/mnt/storage': [file('A.mkv')] })
     renderFileManager()
     await screen.findByText('A.mkv')
 
-    for (const header of ['Nombre', 'Procedencia', 'Retención', 'Tamaño', 'Modificado', 'Acciones']) {
-      expect(screen.getAllByText(header).length).toBeGreaterThan(0) // RED: no headers today
+    for (const header of ['Nombre', 'Tamaño', 'Acciones']) {
+      expect(screen.getAllByText(header).length).toBeGreaterThan(0)
+    }
+    for (const moved of ['Procedencia', 'Retención', 'Modificado']) {
+      expect(screen.queryByText(moved)).toBeNull()
     }
   })
 })
