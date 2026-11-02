@@ -139,6 +139,14 @@ body {
   overflow-y: auto;
 }
 
+/* The one thing between a slow chunk and a blank screen (`carga-por-vista` S2). */
+.page-loading {
+  margin: 0;
+  padding: 28px 2px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 .content-and-queue {
   flex: 1;
   display: flex;

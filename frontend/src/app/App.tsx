@@ -1,24 +1,50 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AuthGate } from './AuthGate.tsx'
 import { SetupPage } from '../pages/SetupPage.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { Topbar } from './Topbar.tsx'
-import { FileManager } from '../features/file-manager/FileManager.tsx'
 import './Dashboard.css'
-import { Prototypes } from '../pages/Prototypes.tsx'
-import { Settings } from '../features/settings/Settings.tsx'
-import { DiskSpace } from '../pages/DiskSpace.tsx'
 import { ServiceChips } from './ServiceChips.tsx'
 import { DashboardCards } from './DashboardCards.tsx'
 import { IncidentsBand } from './IncidentsBand.tsx'
 import { ActivityTable } from './ActivityTable.tsx'
-import { MediaMixer } from '../pages/MediaMixer.tsx'
-import { Peliculas } from '../pages/Peliculas.tsx'
-import { Series } from '../pages/Series.tsx'
-import { Estrenos } from '../pages/Estrenos.tsx'
-import { Seguimiento } from '../pages/Seguimiento.tsx'
 import { ToastViewport } from './ToastViewport.tsx'
+
+/**
+ * One chunk per page (`carga-por-vista` S1): the shell and the dashboard stay
+ * in the first chunk, because the dashboard is where the app lands, and every
+ * other screen brings its own JS and its own CSS the first time it opens.
+ *
+ * The named exports become `default` here, which is the only shape `lazy`
+ * accepts — the components themselves keep their names.
+ */
+const Peliculas = lazy(() =>
+  import('../pages/Peliculas.tsx').then((m) => ({ default: m.Peliculas })),
+)
+const Series = lazy(() => import('../pages/Series.tsx').then((m) => ({ default: m.Series })))
+const Estrenos = lazy(() =>
+  import('../pages/Estrenos.tsx').then((m) => ({ default: m.Estrenos })),
+)
+const Seguimiento = lazy(() =>
+  import('../pages/Seguimiento.tsx').then((m) => ({ default: m.Seguimiento })),
+)
+const DiskSpace = lazy(() =>
+  import('../pages/DiskSpace.tsx').then((m) => ({ default: m.DiskSpace })),
+)
+const MediaMixer = lazy(() =>
+  import('../pages/MediaMixer.tsx').then((m) => ({ default: m.MediaMixer })),
+)
+const Prototypes = lazy(() =>
+  import('../pages/Prototypes.tsx').then((m) => ({ default: m.Prototypes })),
+)
+const FileManager = lazy(() =>
+  import('../features/file-manager/FileManager.tsx').then((m) => ({ default: m.FileManager })),
+)
+const Settings = lazy(() =>
+  import('../features/settings/Settings.tsx').then((m) => ({ default: m.Settings })),
+)
+
 import {
   apiFetch,
   forgetApiKey,
@@ -348,6 +374,15 @@ function App() {
                   <span>{String(configData.encryption_error ?? '')}</span>
                 </div>
               )}
+              {/* One Suspense for every page: the dashboard never suspends,
+                  so it paints without waiting for anything. */}
+              <Suspense
+                fallback={
+                  <p className="page-loading" role="status">
+                    Cargando…
+                  </p>
+                }
+              >
               {page === 'dashboard' && (
                 <>
                   {nothingConfigured ? (
@@ -413,6 +448,7 @@ function App() {
             {page === 'config' && <Settings />}
 
             {page === 'prototypes' && <Prototypes />}
+              </Suspense>
             </div>
 
             {/* Ambient messages: one viewport for every surface that needs to say something. */}

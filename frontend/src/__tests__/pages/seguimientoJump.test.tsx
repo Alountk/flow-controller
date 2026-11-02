@@ -192,6 +192,11 @@ async function expectSeguimientoLanding() {
   await screen.findByText('mezcla nueva')
   expect(screen.getByRole('tab', { name: /Activas/ })).toHaveAttribute('aria-selected', 'true')
 
+  // The page arrives in its own chunk (`carga-por-vista` S1): the rows are
+  // there when the page is, not when the click is.
+  await waitFor(() =>
+    expect(document.querySelectorAll('.sg-list .sg-row')).toHaveLength(3),
+  )
   const rows = [...document.querySelectorAll('.sg-list .sg-row')]
   expect(rows.map((r) => r.getAttribute('aria-label'))).toEqual([
     'mezcla nueva',
