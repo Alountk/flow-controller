@@ -144,6 +144,42 @@
   cursor: pointer;
 }
 
+/* The library's own action inside the menu (S2/S5): the row actions above it
+   are the row's, this one is not — the line says where one ends. */
+.sec-l2-menu-sep {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.sec-l2-menu .sec-probe-library {
+  margin: 0;
+  padding: 2px 0 0;
+}
+
+.sec-l2-menu .sec-analyze {
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+
+.sec-l2-menu .sec-analyze:hover {
+  background: var(--accent-soft);
+}
+
+.sec-l2-menu .sec-probe-library-progress {
+  margin: 2px 9px 6px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .sec-l2-menu [role='menuitem']:hover,
 .sec-l2-menu [role='menuitem']:focus-visible {
   background: var(--accent-soft);

@@ -578,7 +578,6 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
           {pageMode ? (
             <PeliculasV2List
               selectedId={selected?.id ?? null}
-              paths={foldersQuery.data ?? { path4k: '', path3d: '' }}
               onSelect={selectRow}
               onOpen={openDetail}
             />
@@ -752,8 +751,11 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
                 <span>{errorMessage(foldersQuery.error)}</span>
               </div>
             ) : foldersQuery.data ? (
+              // The sweep belongs to the library, not to one movie: in the V2
+              // it lives in the list's Acciones rápidas, so the detail keeps
+              // only the files (S4). V1 has no such menu and keeps it here.
               <>
-                <ProbeLibraryCard />
+                {!pageMode && <ProbeLibraryCard />}
                 <PanelFiles facts={facts} folders={foldersQuery.data} />
               </>
             ) : (
