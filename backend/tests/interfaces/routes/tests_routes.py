@@ -25,6 +25,7 @@ import pytest
 
 from app import app
 from tests._stubs import CONFIGURED_RADARR_URL, _StubSession, client, post_grab_and_settle  # noqa: F401
+import config
 from config import SERVICES, ALLOWED_ROOTS
 
 ARR_SERVICES = [s for s in SERVICES if s["kind"] == "arr"]
@@ -1136,6 +1137,137 @@ class TestAllListingsTextFilter:
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["title"] == "Rick and Morty"
+
+
+class TestAllListingsLibraryClass:
+    """The V2 list's chips: a class per movie, a filter by class, and counts.
+
+    With real pagination the client cannot count what it has not received, so
+    the route classifies the catalogue it already fetched and answers both the
+    page and the chips. The rule itself is tested in `tests/domain`; here it is
+    the wiring that is under test.
+    """
+
+    MOVIES = [
+        {
+            "id": 1,
+            "title": "Cuatro K",
+            "year": 2024,
+            "hasFile": True,
+            "path": "/mnt/movies/Cuatro K (2024)",
+            "movieFile": {"quality": {"quality": {"name": "Bluray-2160p"}}},
+        },
+        {
+            "id": 2,
+            "title": "Tres D",
+            "year": 2023,
+            "hasFile": True,
+            "path": "/mnt/3d/Tres D (2023)",
+            "movieFile": {"quality": {"quality": {"name": "Bluray-1080p"}}},
+        },
+        {
+            "id": 3,
+            "title": "Diez Ochenta",
+            "year": 2022,
+            "hasFile": True,
+            "path": "/mnt/movies/Diez Ochenta (2022)",
+            "movieFile": {"quality": {"quality": {"name": "WEBDL-1080p"}}},
+        },
+        {
+            "id": 4,
+            "title": "Setecientos Veinte",
+            "year": 2021,
+            "hasFile": True,
+            "path": "/mnt/movies/Setecientos Veinte (2021)",
+            "movieFile": {"quality": {"quality": {"name": "HDTV-720p"}}},
+        },
+        {
+            "id": 5,
+            "title": "Sin Archivo",
+            "year": 2020,
+            "hasFile": False,
+            "path": "/mnt/movies/Sin Archivo (2020)",
+        },
+    ]
+
+    def _get(self, **params):
+        routes = {f"{CONFIGURED_RADARR_URL}/api/v3/movie": (200, self.MOVIES)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            return client.get("/api/wanted/all", params=params)
+
+    def test_every_item_carries_its_class(self, monkeypatch):
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+
+        body = self._get(page=1, page_size=50).json()
+
+        classes = {item["title"]: item["class"] for item in body["items"]}
+        assert classes == {
+            "Cuatro K": "4K",
+            "Tres D": "3D",
+            "Diez Ochenta": "1080",
+            "Setecientos Veinte": "otros",
+            "Sin Archivo": "sin archivo",
+        }
+
+    def test_counts_cover_the_whole_catalogue_not_the_page(self, monkeypatch):
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+
+        body = self._get(page=1, page_size=2).json()
+
+        assert len(body["items"]) == 2
+        assert body["counts"] == {
+            "todos": 5,
+            "sin archivo": 1,
+            "4K": 1,
+            "3D": 1,
+            "1080": 1,
+            "otros": 1,
+        }
+
+    def test_the_class_filter_selects_only_that_class(self, monkeypatch):
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+
+        body = self._get(**{"class": "1080"}).json()
+
+        assert [i["title"] for i in body["items"]] == ["Diez Ochenta"]
+        assert body["total"] == 1
+        # The chips keep counting everything: a filter narrows the list, not
+        # the catalogue the counts describe.
+        assert body["counts"]["todos"] == 5
+
+    def test_the_class_filter_paginates(self, monkeypatch):
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+        monkeypatch.setitem(
+            self.MOVIES[3], "movieFile", {"quality": {"quality": {"name": "WEBDL-1080p"}}}
+        )
+
+        first = self._get(**{"class": "1080"}, page=1, page_size=1).json()
+        second = self._get(**{"class": "1080"}, page=2, page_size=1).json()
+
+        assert first["total"] == 2
+        assert [i["title"] for i in first["items"]] == ["Diez Ochenta"]
+        assert [i["title"] for i in second["items"]] == ["Setecientos Veinte"]
+
+    def test_the_class_filter_combines_with_the_name_filter(self, monkeypatch):
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+
+        body = self._get(q="ochenta", **{"class": "otros"}).json()
+
+        assert body["items"] == []
+        assert body["total"] == 0
+
+    def test_an_unknown_class_is_rejected(self):
+        """Silently ignoring it would answer a filter with the whole list."""
+        resp = self._get(**{"class": "8k"})
+
+        assert resp.status_code == 422
+
+    def test_an_unconfigured_3d_folder_never_lends_its_class(self):
+        """`PATH_3D` empty is "not configured": the 3D bucket stays empty."""
+        body = self._get().json()
+
+        assert body["counts"]["3D"] == 0
+        assert [i["class"] for i in body["items"] if i["title"] == "Tres D"] == ["1080"]
 
 
 # ── Failures must not masquerade as "nothing missing" ────────────────────────
