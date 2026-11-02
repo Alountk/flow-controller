@@ -627,12 +627,12 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         <div className="fm-empty">Sin resultados</div>
       ) : (
         <>
+          {/* Only the cells that are still COLUMNS: provenance, retention and
+              the date moved under the name, where the name block's width is
+              the row's leftover width instead of a fixed share. */}
           <div className="fm-head-row">
             <span>Nombre</span>
-            <span>Procedencia</span>
-            <span>Retención</span>
             <span>Tamaño</span>
-            <span>Modificado</span>
             <span>Acciones</span>
           </div>
           <FileNavigator

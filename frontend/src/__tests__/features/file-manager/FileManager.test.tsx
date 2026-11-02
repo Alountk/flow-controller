@@ -353,6 +353,67 @@ describe('FileManager multi-file selection', () => {
     expect(within(row).queryByText(/días|día|hoy|caducado/)).toBeNull()
   })
 
+  it('keeps the name, its provenance and its date in ONE block, stacked (S1)', async () => {
+    // Long file names and long provenance labels fought for the same line and
+    // broke every column: the name block now owns the row's leftover width and
+    // carries its own second line.
+    mockFetch({
+      listings: {
+        '/mnt/storage': [
+          { ...file('UnNombreLarguisimo.De.Pelicula.2024.2160p.mkv'), modified: 1_759_382_400_000 },
+        ],
+      },
+      retention: {
+        '/mnt/storage': [
+          {
+            name: 'UnNombreLarguisimo.De.Pelicula.2024.2160p.mkv',
+            first_seen_at: 1759000000, age_days: 2.4, expired: false,
+            provenance: 'queue', provenance_label: 'cola · importando',
+          },
+        ],
+      },
+    })
+    await openPane('UnNombreLarguisimo.De.Pelicula.2024.2160p.mkv')
+
+    const row = screen
+      .getByText('UnNombreLarguisimo.De.Pelicula.2024.2160p.mkv')
+      .closest('.fm-item') as HTMLElement
+    const main = row.querySelector('.fm-row-main') as HTMLElement
+    expect(main).not.toBeNull()
+    expect(main.querySelector('.fm-name')?.textContent).toBe(
+      'UnNombreLarguisimo.De.Pelicula.2024.2160p.mkv',
+    )
+
+    // The second line carries provenance, age and date together…
+    const sub = main.querySelector('.fm-row-sub') as HTMLElement
+    expect(sub).not.toBeNull()
+    expect(await within(sub).findByText('cola · importando')).toBeInTheDocument()
+    expect(sub.querySelector('.fm-age')).not.toBeNull()
+    // The date is a fact of the row, so it is here even when nothing else is.
+    expect(sub.querySelector('.fm-date')?.textContent).not.toBe('—')
+
+    // …and none of them is a column of its own any more.
+    expect(row.querySelector(':scope > .fm-prov')).toBeNull()
+    expect(row.querySelector(':scope > .fm-date')).toBeNull()
+    expect(row.querySelector(':scope > .fm-age')).toBeNull()
+  })
+
+  it('names only the columns the rows still have (S2)', async () => {
+    mockFetch({ listings: { '/mnt/storage': [file('Uno.mkv')] } })
+    await openPane('Uno.mkv')
+
+    const head = document.querySelector('.fm-head-row') as HTMLElement
+    expect(head).not.toBeNull()
+    expect(within(head).getByText('Nombre')).toBeInTheDocument()
+    expect(within(head).getByText('Tamaño')).toBeInTheDocument()
+    expect(within(head).getByText('Acciones')).toBeInTheDocument()
+    // Provenance, retention and date live under the name now: a header cell
+    // for them would promise a column that does not exist.
+    expect(within(head).queryByText('Procedencia')).toBeNull()
+    expect(within(head).queryByText('Retención')).toBeNull()
+    expect(within(head).queryByText('Modificado')).toBeNull()
+  })
+
   it('marks each row with its provenance chip, and shows nothing when no source claims it', async () => {
     // F-07: procedencia — cola · importando / histórico / lo pedimos nosotros.
     // Display-only: the chip explains why the file is there, it never gates
