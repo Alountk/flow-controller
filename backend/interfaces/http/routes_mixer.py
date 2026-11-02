@@ -80,6 +80,10 @@ class MuxRequest(BaseModel):
     video_source: dict
     audio_sources: list[dict]
     output_path: str = ""
+    # S3 (mixer-carpeta-destino): the exact file name to write into
+    # `output_path`, so the folder mode creates a NEW file instead of
+    # substituting an input. Empty keeps the generated timestamp name.
+    output_name: str = ""
     # S11-1/S11-5: full path of the mux input file the output must SUBSTITUTE
     # («Carpeta de A» / «Carpeta de B»). Empty = legacy output-directory mode.
     destination_path: str = ""
@@ -202,6 +206,23 @@ def _resolve_language_overrides(
             )
         resolved[(path, ordinal)] = code
     return resolved
+
+
+def _output_name_problem(name: str) -> str:
+    """Why `name` cannot be a single file name, or "" when it can.
+
+    S6 (mixer-carpeta-destino): a name is one path component. Anything that
+    could escape the folder the user picked is refused, not sanitized.
+    """
+    if not name or name in {".", ".."}:
+        return "El nombre del archivo está vacío"
+    if "/" in name or "\\" in name:
+        return "El nombre no puede contener separadores de carpeta"
+    if name.startswith("."):
+        return "El nombre no puede empezar por punto"
+    if any(ord(ch) < 32 for ch in name):
+        return "El nombre no puede contener caracteres de control"
+    return ""
 
 
 def _resolve_subtitle_languages(raw: list[str] | None) -> list[str] | None:
@@ -840,6 +861,38 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
                 "message": f"destination_path is not allowed: {destination_path}",
             })
 
+    # S4 (mixer-carpeta-destino): the folder mode writes a NEW file, so its
+    # target is settled here — before any probe or ffmpeg work — and it can
+    # never land outside the allowed roots nor over an existing file.
+    from application.gateways import get_setting
+    output_dir = req.output_path or get_setting("paths", "output_mixed", default="/mnt/storage/mixed")
+    # The key PRESENT is what makes this the folder mode: a legacy client never
+    # sends it, so an empty value there is a real empty name and gets refused.
+    folder_mode = "output_name" in req.model_fields_set
+    output_name = (req.output_name or "").strip()
+    if folder_mode:
+        problem = _output_name_problem(output_name)
+        if problem:
+            raise HTTPException(status_code=400, detail={
+                "code": "invalid_output_name",
+                "message": problem,
+            })
+        if not os.path.isdir(os.path.realpath(output_dir)):
+            raise HTTPException(status_code=400, detail={
+                "code": "invalid_output_dir",
+                "message": f"La carpeta de destino no existe: {output_dir}",
+            })
+        if not config.path_is_allowed(os.path.realpath(output_dir)):
+            raise HTTPException(status_code=400, detail={
+                "code": "invalid_output_dir",
+                "message": f"La carpeta de destino no está permitida: {output_dir}",
+            })
+        if os.path.lexists(os.path.join(output_dir, output_name)):
+            raise HTTPException(status_code=409, detail={
+                "code": "output_exists",
+                "message": f"Ya existe {output_name} en esa carpeta: no se sobrescribe",
+            })
+
     # S3 compatibility gate: the client's badge is UI sugar — the backend
     # re-probes every distinct file involved and blocks an incompatible mux
     # with 409 BEFORE any ffmpeg process starts.
@@ -899,10 +952,6 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
             list(probes), overrides_map, requested_subtitle_languages
         )
 
-    # Determine output directory
-    from application.gateways import get_setting
-    output_dir = req.output_path or get_setting("paths", "output_mixed", default="/mnt/storage/mixed")
-
     # Build validated video source with absolute path
     video_source = {
         "path": validated_video_path,
@@ -930,6 +979,8 @@ async def mixer_mux(req: MuxRequest, _key: str = Depends(verify_api_key)):
             # S11-2: substitution mode — the task reports the destination as
             # its output_path. Empty keeps the legacy call untouched.
             start_kwargs["destination_path"] = destination_path
+        if output_name:
+            start_kwargs["output_name"] = output_name
         task_id = start_mux(video_source, audio_sources, output_dir, **start_kwargs)
     except Exception as exc:
         log.exception("mux start failed")

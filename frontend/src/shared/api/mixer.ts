@@ -189,6 +189,7 @@ export async function startMux(
   outputPath?: string,
   languageOverrides: MuxLanguageOverride[] = [],
   subtitleLanguages?: string[],
+  outputName?: string,
 ): Promise<MuxResponse> {
   const body: Record<string, unknown> = {
     video_source: videoSource,
@@ -196,6 +197,9 @@ export async function startMux(
     destination_path: destinationPath,
   }
   if (outputPath) body.output_path = outputPath
+  // Sent even when empty: the key PRESENT is what makes the folder mode, so a
+  // client that picks a folder with no name is refused instead of falling back.
+  if (outputName !== undefined) body.output_name = outputName
   // L24: omitted when empty so the wire keeps its old shape.
   if (languageOverrides.length > 0) body.language_overrides = languageOverrides
   if (subtitleLanguages && subtitleLanguages.length > 0) body.subtitle_languages = subtitleLanguages

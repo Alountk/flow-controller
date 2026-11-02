@@ -148,6 +148,19 @@ function folderOf(path: string): string {
   return idx <= 0 ? '/' : path.slice(0, idx)
 }
 
+/** The generated name the folder mode opens with: the same pattern the backend
+ *  used before this choice existed, so the field starts from something real. */
+function defaultOutputName(videoPath: string, now = new Date()): string {
+  const name = baseName(videoPath)
+  const dot = name.lastIndexOf('.')
+  const stem = dot > 0 ? name.slice(0, dot) : name
+  const ext = dot > 0 ? name.slice(dot) : ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}T${
+    p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`
+  return `${stem}_${stamp}_mixed${ext}`
+}
+
 /** Display-only mirror of the backend's `_title_from_filename` (S7's mockup
  *  line «Busca la película por el título del archivo — …»). The lookup itself
  *  still derives its title server-side. */
@@ -542,6 +555,15 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   // slot, and revalidated below: a destination that stops matching a current
   // input re-disables «Mezclar» instead of silently rebinding to another file.
   const [destinationPath, setDestinationPath] = useState<string | null>(null)
+  // S1/S3 (mixer-carpeta-destino) — the third choice: a folder the user picks
+  // where the mix lands as a NEW file. A/B keep substituting; this never does.
+  const [destMode, setDestMode] = useState<'a' | 'b' | 'folder' | null>(null)
+  const [folderDest, setFolderDest] = useState<string | null>(null)
+  const [outputName, setOutputName] = useState('')
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false)
+  // The picker's own current folder: the region navigator reports where it is,
+  // and the modal's footer is what commits it to `folderDest`.
+  const [pickerPath, setPickerPath] = useState('')
 
   // Poll tasks while any are active
   const { data: tasksData } = useQuery({
@@ -687,6 +709,12 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
           : null
       : null
 
+  // S3 — the folder mode names its own file; both the folder and a non-empty
+  // name are needed before «Mezclar» can be pressed.
+  const selectedVideoPath =
+    videoRows.find((r) => r.key === selectedVideoKey)?.path ?? probeResult?.file_a.path ?? ''
+  const folderReady = destMode === 'folder' && folderDest !== null && outputName.trim() !== ''
+
   const probeMut = useMutation({
     mutationFn: () => probeFiles(pathA, pathB),
     onSuccess: (result) => {
@@ -751,18 +779,23 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
         (r) => (subtitleLangChoice[r.code] ?? r.code) !== r.code,
       )
 
+      const videoRef = { path: videoRow.path, track_index: videoRow.track_index }
+      const subs = subtitlesRetagged ? subtitleLanguages : undefined
+
+      // S1/S3 — the folder mode substitutes nothing: `destination_path` travels
+      // empty and the folder plus an explicit name take its place.
+      if (destMode === 'folder') {
+        if (!folderDest) throw new Error('Selecciona la carpeta de destino')
+        const name = outputName.trim()
+        if (!name) throw new Error('Escribe el nombre del archivo')
+        return startMux(videoRef, audioSources, '', folderDest, languageOverrides, subs, name)
+      }
+
       // S11/L30 — `canMux` holds destFile, but the guard keeps the payload
       // honest on its own: `destination_path` is always the chosen input path.
       if (!destFile) throw new Error('Selecciona el destino de la mezcla')
 
-      return startMux(
-        { path: videoRow.path, track_index: videoRow.track_index },
-        audioSources,
-        destFile!.path,
-        undefined,
-        languageOverrides,
-        subtitlesRetagged ? subtitleLanguages : undefined,
-      )
+      return startMux(videoRef, audioSources, destFile.path, undefined, languageOverrides, subs)
     },
     onSuccess: (resp) => {
       // S11/L31 — the mix went to the serial queue; its state lives in Seguimiento.
@@ -904,7 +937,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
     audioCheckedCount > 0 &&
     compatOk &&
     langOk &&
-    destFile !== null
+    (destMode === 'folder' ? folderReady : destFile !== null)
   const canSearch = !!latestTask && subtitleRows.some((r) => r.searchable)
 
   const mismatch = {
@@ -1248,21 +1281,79 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
                 <button
                   type="button"
                   className="mixer-dest-btn"
-                  aria-pressed={destinationPath === probeResult.file_a.path}
-                  onClick={() => setDestinationPath(probeResult.file_a.path)}
+                  aria-pressed={destMode !== 'folder' && destinationPath === probeResult.file_a.path}
+                  onClick={() => {
+                    setDestMode('a')
+                    setDestinationPath(probeResult.file_a.path)
+                  }}
                 >
                   Carpeta de A
                 </button>
                 <button
                   type="button"
                   className="mixer-dest-btn"
-                  aria-pressed={destinationPath === probeResult.file_b.path}
-                  onClick={() => setDestinationPath(probeResult.file_b.path)}
+                  aria-pressed={destMode !== 'folder' && destinationPath === probeResult.file_b.path}
+                  onClick={() => {
+                    setDestMode('b')
+                    setDestinationPath(probeResult.file_b.path)
+                  }}
                 >
                   Carpeta de B
                 </button>
+                {/* S1 — the choice that does NOT substitute: a new file in a
+                    folder the user picks. It clears the A/B target on purpose:
+                    leaving it set would light the other button as chosen. */}
+                <button
+                  type="button"
+                  className="mixer-dest-btn"
+                  aria-pressed={destMode === 'folder'}
+                  onClick={() => {
+                    setDestMode('folder')
+                    setDestinationPath(null)
+                    setOutputName((prev) => prev || defaultOutputName(selectedVideoPath))
+                    setPickerPath(folderDest ?? roots[0]?.path ?? '')
+                    setFolderPickerOpen(true)
+                  }}
+                >
+                  Otra carpeta…
+                </button>
               </div>
-              {destFile && (
+              {destMode === 'folder' && (
+                <div className="mixer-destino">
+                  <span className="mixer-meta-label">Destino:</span>{' '}
+                  <span className="mixer-mono" title={folderDest ?? ''}>
+                    {folderDest ?? 'Sin carpeta elegida'}
+                  </span>
+                  <div className="mixer-name-row">
+                    <label className="mixer-meta-label" htmlFor="mixer-output-name">
+                      Nombre
+                    </label>
+                    <input
+                      id="mixer-output-name"
+                      className="mixer-name-input"
+                      value={outputName}
+                      spellCheck={false}
+                      onChange={(e) => setOutputName(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="fm-action-btn"
+                      onClick={() => {
+                        setPickerPath(folderDest ?? roots[0]?.path ?? '')
+                        setFolderPickerOpen(true)
+                      }}
+                    >
+                      Elegir carpeta…
+                    </button>
+                  </div>
+                  <div className="mixer-dest-replace">
+                    {folderDest
+                      ? `Se creará ${outputName.trim() || '(sin nombre)'} en ${folderDest} · A y B quedan como están`
+                      : 'Elige una carpeta: el archivo se crea ahí y no se sustituye nada'}
+                  </div>
+                </div>
+              )}
+              {destMode !== 'folder' && destFile && (
                 <div className="mixer-destino">
                   <span className="mixer-meta-label">Destino:</span>{' '}
                   <span className="mixer-mono" title={destFile.path}>{destFile.path}</span>
@@ -1297,6 +1388,63 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
 
           {error && <div className="fm-error">{error}</div>}
         </>
+      )}
+
+      {/* ── S2: folder picker for the folder destination ─────────────── */}
+      {folderPickerOpen && (
+        <div
+          className="scan-modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setFolderPickerOpen(false)
+          }}
+        >
+          <div className="scan-modal" role="dialog" aria-label="Elegir carpeta de destino">
+            <div className="scan-modal-header">
+              <div className="scan-selected-info">
+                <span className="scan-selected-type">📂</span>
+                <strong>Elegir carpeta</strong>
+              </div>
+              <button className="scan-modal-close" onClick={() => setFolderPickerOpen(false)}>
+                ×
+              </button>
+            </div>
+            <div className="scan-modal-body">
+              <div className="scan-controls">
+                <FileNavigator
+                  variant="region"
+                  rootPicker="select"
+                  rootLabel="Volumen:"
+                  showFilter
+                  showIcons
+                  layout="split"
+                  mode="folder"
+                  initialPath={pickerPath || folderDest || roots[0]?.path}
+                  onNavigate={setPickerPath}
+                />
+              </div>
+              <div className="scan-actions">
+                <button
+                  type="button"
+                  className="action-btn"
+                  disabled={!pickerPath && !folderDest}
+                  onClick={() => {
+                    setFolderDest(pickerPath || folderDest || roots[0]?.path || '')
+                    setFolderPickerOpen(false)
+                  }}
+                >
+                  Elegir esta carpeta
+                </button>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => setFolderPickerOpen(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Releases of the movie the indexer lookup found (S7) ───────── */}
