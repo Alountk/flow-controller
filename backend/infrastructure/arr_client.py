@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 import aiohttp
 
-from domain.media_info import compose
+from domain.media_info import compose, language_token
 
 from config import (
     AMUTORRENT_API_KEY,
@@ -1515,8 +1515,12 @@ def _movie_media_info(movie: dict) -> dict:
         "audio_codec": info.get("audioCodec") or "",
         # Radarr reports channels as 5.1, not as a count; keep its own number.
         "audio_channels": str(channels) if channels not in (None, "") else "",
-        "audio_languages": info.get("audioLanguages") or "",
-        "subtitle_languages": info.get("subtitles") or "",
+        # Radarr stores `en/es`; the token it writes is `[EN+ES]`, and the
+        # self-check compares token text, so it is converted with the same rule.
+        "audio_languages": language_token(
+            info.get("audioLanguages") or "", skip_english_only=True
+        ),
+        "subtitle_languages": language_token(info.get("subtitles") or ""),
         "release_group": movie_file.get("releaseGroup") or "",
     }
     return compose({k: v for k, v in facts.items() if v})

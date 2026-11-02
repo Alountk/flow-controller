@@ -39,19 +39,31 @@ SDR_1080 = {
 
 
 class TestValues:
+    """Radarr's own source is the spec: `MediaInfoFormatter` + `FileNameBuilder`."""
+
     def test_reads_the_codec_the_way_radarr_spells_it(self):
-        assert media_info.video_codec(REAL) == "x265"
-        assert media_info.video_codec(SDR_1080) == "x264"
+        # FormatVideoCodec: `HEVC`/`x265`/`h265` come from the release name, and
+        # the last one is the default when the name says nothing.
+        assert media_info.video_codec(REAL) == "h265"
+        assert media_info.video_codec(REAL, "Film.2022.2160p.x265-GRP.mkv") == "x265"
+        assert media_info.video_codec(REAL, "Film.2022.2160p.HEVC-GRP.mkv") == "HEVC"
+        assert media_info.video_codec(SDR_1080) == "h264"
+        assert media_info.video_codec({"video_tracks": [{"codec": "av1"}]}) == "AV1"
+        assert media_info.video_codec({"video_tracks": [{"codec": "mpeg2video"}]}) == "MPEG2"
 
     def test_reads_the_bit_depth_from_the_pixel_format(self):
         assert media_info.video_bit_depth(REAL) == "10"
         assert media_info.video_bit_depth(SDR_1080) == "8"
 
-    def test_names_the_dynamic_range_with_radarrs_three_words(self):
+    def test_names_the_dynamic_range_with_radarrs_own_words(self):
+        # FormatVideoDynamicRange answers "" for SDR: Radarr writes nothing.
         assert media_info.video_dynamic_range(REAL) == "HDR"
-        assert media_info.video_dynamic_range(SDR_1080) == "SDR"
+        assert media_info.video_dynamic_range(SDR_1080) == ""
         dv = {"video_tracks": [{"codec": "hevc", "profile": "Dolby Vision / SMPTE ST 2086"}]}
-        assert media_info.video_dynamic_range(dv) == "DV"
+        assert media_info.video_dynamic_range(dv) == "HDR"
+        assert media_info.video_dynamic_range_type(dv) == "DV"
+        assert media_info.video_dynamic_range_type(REAL) == "HDR10"
+        assert media_info.video_dynamic_range_type(SDR_1080) == "SDR"
 
     def test_keeps_the_dts_flavour_the_stream_declares(self):
         assert media_info.audio_codec(REAL) == "DTS-HD MA"
@@ -59,18 +71,34 @@ class TestValues:
         assert media_info.audio_codec({"audio_tracks": [{"codec": "dts"}]}) == "DTS"
 
     def test_writes_channels_the_way_radarr_does(self):
-        assert media_info.audio_channels(REAL) == "5.1"
+        # One decimal, from channel positions when the stream has them.
         assert media_info.audio_channels(SDR_1080) == "2.0"
-        assert media_info.audio_channels({"audio_tracks": [{"channels": 8}]}) == "7.1"
+        assert media_info.audio_channels({"audio_tracks": [{"channels": 8}]}) == "8.0"
+        positioned = {"audio_tracks": [{"channels": 6, "channel_layout": "5.1(side)"}]}
+        assert media_info.audio_channels(positioned) == "5.1"
 
-    def test_translates_language_codes_to_the_short_ones(self):
-        assert media_info.audio_languages(REAL) == "en/es"
-        assert media_info.subtitle_languages(REAL) == "es/en"
+    def test_writes_languages_the_way_radarr_does(self):
+        # `[ES+EN+RU]`: capitals, distinct, `+` joined, brackets around them.
+        probe = {
+            "audio_tracks": [
+                {"language": "spa"}, {"language": "eng"}, {"language": "rus"},
+                {"language": "spa"},
+            ]
+        }
+        assert media_info.audio_languages(probe) == "[ES+EN+RU]"
+        assert media_info.subtitle_languages(REAL) == "[ES+EN]"
+
+    def test_an_english_only_track_says_nothing(self):
+        # GetLanguagesToken drops a lone EN, so Radarr's name has no segment.
+        assert media_info.audio_languages({"audio_tracks": [{"language": "eng"}]}) == ""
+        assert media_info.subtitle_languages({"subtitle_tracks": [{"language": "eng"}]}) == "[EN]"
 
     def test_composes_the_short_and_full_lines_radarr_writes(self):
-        assert media_info.simple(REAL) == "x265 10bit HDR DTS-HD MA 5.1"
-        assert media_info.full(REAL) == "x265 10bit HDR DTS-HD MA 5.1 en/es subtitles es/en"
-        assert media_info.simple(SDR_1080) == "x264 8bit EAC3 2.0"
+        # `Simple` is codec plus audio codec and nothing else; `Full` glues the
+        # audio languages to the codec with no space.
+        assert media_info.simple(REAL) == "h265 DTS-HD MA"
+        assert media_info.full(REAL) == "h265 DTS-HD MA[EN+ES] [ES+EN]"
+        assert media_info.simple(SDR_1080) == "h264 EAC3"
 
     def test_a_probe_with_no_streams_yields_nothing_rather_than_a_guess(self):
         empty: dict = {}

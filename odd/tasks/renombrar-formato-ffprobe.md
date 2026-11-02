@@ -51,3 +51,29 @@ Render verificado con la plantilla real:
 The Batman (2022) Remux-2160p - x265 10bit HDR DTS-HD MA 5.1 - en/es
 Alien (1979) Bluary-1080p - x264 8bit AC3 5.1 - en
 ```
+
+## El nombre real de la instancia (S7, cerrado)
+
+```
+(2012) Bluray-1080p - h265 AC3 - [ES+EN+RU].mkv
+```
+
+Contrastado con el **código fuente de Radarr** (`FileNameBuilder.cs` y `MediaInfoFormatter.cs`), no con una idea de cómo se ve un nombre:
+
+| Token | Regla real | Lo que yo tenía |
+|---|---|---|
+| `{MediaInfo Simple}` | `"{VideoCodec} {AudioCodec}"` — nada más | códec + bit depth + HDR + canales |
+| `{MediaInfo AudioLanguages}` | `[ES+EN+RU]`: mayúsculas, `+`, corchetes; **vacío si solo hay inglés** | `en/es` |
+| `{MediaInfo VideoCodec}` | `hevc` → busca `HEVC`/`x265`/`h265` **en el nombre del release**, por defecto `h265` | siempre `x265` |
+| `{MediaInfo AudioChannels}` | un decimal, de las posiciones de canal si existen | tabla fija 6→5.1 |
+| `{MediaInfo VideoDynamicRange}` | `HDR` o **vacío** para SDR | `SDR` |
+| `{MediaInfo VideoBitDepth}` | entero, `8` por defecto | vacío si no se sabía |
+| `{Quality Title}` | la calidad sin banderas: `Bluray-1080p` | token desconocido → sin nombre |
+| `{Release Group}` | el del archivo, o `Radarr` si falta | vacío |
+
+Consecuencias de diseño:
+
+- **Un token medido vacío se rinde vacío, no rompe el render.** Radarr escribe nombres que terminan en `- ` cuando el audio es solo inglés; negarse dejaba la plantilla inservible para media biblioteca. La compuerta sigue siendo la que decide: si nuestro hueco no coincide con el nombre de Radarr, no hay nombre.
+- **La compuerta es lo que impide proponer un nombre con agujeros**: `proposal` se niega a renderizar una plantilla medida si no pudo sondear la copia, porque la compuerta compara el archivo de Radarr y no el nuestro y pasaría igual.
+- El grupo vacío se queda vacío aunque Radarr escriba `Radarr`: escribir esa palabra sería inventar un dato.
+- `media_mixer.parse_probe_data` gana `profile` en las pistas de audio (+3 líneas legacy, `MAX_LEGACY_LOC` 3463 → 3466, declarado en el PR): sin el perfil, `DTS-HD MA` se leería como `DTS`.

@@ -6,48 +6,66 @@ facts are read here with `media_mixer.probe_file`. Nothing is guessed from the
 release name except the two things a probe cannot see — the source and the
 group — and both come from Radarr's own fields or the name on disk.
 
-Radarr's spellings are the contract: a name is only useful if it is the one
-Radarr would have written, so `hevc` becomes `x265` and `dts` with the
-`DTS-HD MA` profile stays `DTS-HD MA`.
+Radarr's spellings are the contract, and they are read off its own source
+(`FileNameBuilder` + `MediaInfoFormatter`), not off a memory of what a name
+looks like: `{MediaInfo Simple}` is `"{VideoCodec} {AudioCodec}"` and nothing
+else, `{MediaInfo AudioLanguages}` writes `[ES+EN+RU]` in capitals and is
+**empty when the only audio is English**. A name that differs by one of those
+would be refused by the self-check, which is the right outcome but leaves the
+copy unnamed — so getting these exactly right is the whole job.
 """
 
 from __future__ import annotations
 
 import re
 
-_VIDEO_CODEC = {
-    "hevc": "x265",
-    "h264": "x264",
+#: `FormatVideoCodec`: mpeg/av1 are fixed words, h264/hevc defer to the scene
+#: name and fall back to `x264`/`h265`. The fallback is why a name can say
+#: `h265` where another says `x265` — it is the release name, not the codec.
+_VIDEO_FIXED = {
+    "mpeg2video": "MPEG2",
+    "mpeg1video": "MPEG",
+    "vc1": "VC1",
     "av1": "AV1",
-    "vp9": "VP9",
-    "vp8": "VP8",
-    "mpeg2video": "MPEG-2",
-    "vc1": "VC-1",
-    "mpeg4": "XviD",
-    "msmpeg4v3": "DivX",
+}
+_SCENE_VIDEO = {
+    "h264": ("AVC", "x264", "h264"),
+    "hevc": ("HEVC", "x265", "h265"),
 }
 
+#: `FormatAudioCodec`: profiles that Radarr promotes to their own name.
+_DTS_PROFILES = (
+    ("DTS:X", "DTS-X"),
+    ("DTS-HD MA", "DTS-HD MA"),
+    ("DTS-ES", "DTS-ES"),
+    ("DTS-HD HRA", "DTS-HD HRA"),
+    ("DTS EXPRESS", "DTS Express"),
+    ("DTS 96/24", "DTS 96/24"),
+)
 _AUDIO_CODEC = {
     "truehd": "TrueHD",
     "eac3": "EAC3",
     "ac3": "AC3",
     "aac": "AAC",
     "flac": "FLAC",
-    "opus": "Opus",
     "mp3": "MP3",
-    "vorbis": "Vorbis",
-    "pcm_s16le": "PCM",
-    "pcm_s24le": "PCM",
 }
 
-#: Radarr writes channels as `5.1`, never as a count.
-_CHANNELS = {1: "1.0", 2: "2.0", 3: "2.1", 4: "4.0", 6: "5.1", 8: "7.1"}
-
-#: ISO 639-2 -> the 639-1 codes Radarr prints in `{MediaInfo AudioLanguages}`.
+#: ISO 639-2 (B and T) -> the 639-1 codes Radarr prints. Unknown codes are
+#: dropped rather than spelled out: a wrong code would fail the self-check, and
+#: a silent extra token would be worse than a refused name.
 _LANG = {
-    "spa": "es", "eng": "en", "rus": "ru", "fra": "fr", "fre": "fr", "deu": "de",
-    "ger": "de", "ita": "it", "por": "pt", "jpn": "ja", "chi": "zh", "zho": "zh",
-    "cat": "ca", "kor": "ko", "nld": "nl", "dut": "nl", "swe": "sv", "pol": "pl",
+    "ara": "ar", "ben": "bn", "bul": "bg", "cat": "ca", "chi": "zh", "zho": "zh",
+    "ces": "cs", "cze": "cs", "dan": "da", "deu": "de", "ger": "de", "ell": "el",
+    "gre": "el", "eng": "en", "spa": "es", "est": "et", "eus": "eu", "baq": "eu",
+    "fas": "fa", "per": "fa", "fin": "fi", "fra": "fr", "fre": "fr", "gle": "ga",
+    "glg": "gl", "heb": "he", "hin": "hi", "hrv": "hr", "hun": "hu", "ind": "id",
+    "isl": "is", "ice": "is", "ita": "it", "jpn": "ja", "kor": "ko", "lit": "lt",
+    "lav": "lv", "mkd": "mk", "mac": "mk", "msa": "ms", "may": "ms", "mlt": "mt",
+    "nld": "nl", "dut": "nl", "nor": "no", "nob": "nb", "pol": "pl", "por": "pt",
+    "ron": "ro", "rum": "ro", "rus": "ru", "slk": "sk", "slo": "sk", "slv": "sl",
+    "srp": "sr", "swe": "sv", "tam": "ta", "tel": "te", "tha": "th", "tur": "tr",
+    "ukr": "uk", "urd": "ur", "vie": "vi", "yue": "zh", "zxx": "",
 }
 
 #: Transfer functions that mean high dynamic range; PQ is what HDR10 uses.
@@ -67,9 +85,23 @@ def _first(tracks: list[dict]) -> dict:
     return tracks[0] if tracks else {}
 
 
-def video_codec(probe: dict) -> str:
+def _scene_match(name: str, tokens: tuple[str, ...]) -> str:
+    """`GetSceneNameMatch`: the first token the release name contains, else the last."""
+    stem = name.rsplit(".", 1)[0] if "." in name else name
+    lowered = stem.lower()
+    for token in tokens:
+        if token.lower() in lowered:
+            return token
+    return tokens[-1]
+
+
+def video_codec(probe: dict, name: str = "") -> str:
     codec = (_first(probe.get("video_tracks") or []).get("codec") or "").lower()
-    return _VIDEO_CODEC.get(codec, codec.upper() if codec else "")
+    if not codec:
+        return ""
+    if codec in _SCENE_VIDEO:
+        return _scene_match(name, _SCENE_VIDEO[codec])
+    return _VIDEO_FIXED.get(codec, codec.upper())
 
 
 def video_bit_depth(probe: dict) -> str:
@@ -82,12 +114,23 @@ def video_bit_depth(probe: dict) -> str:
 
 
 def video_dynamic_range(probe: dict) -> str:
-    """`DV`, `HDR` or `SDR` — Radarr's own three words."""
+    """`HDR` or `""` — Radarr says nothing at all for an SDR picture."""
+    track = _first(probe.get("video_tracks") or [])
+    transfer = (track.get("color_transfer") or "").lower()
+    return "HDR" if (transfer in _HDR_TRANSFERS or _is_dolby_vision(track)) else ""
+
+
+def video_dynamic_range_type(probe: dict) -> str:
+    """`DV`, `HDR10`, `DV HDR10`, `HLG` … the finer word Radarr offers."""
     track = _first(probe.get("video_tracks") or [])
     if _is_dolby_vision(track):
-        return "DV"
+        return "DV HDR10" if (track.get("color_transfer") or "").lower() == "smpte2084" else "DV"
     transfer = (track.get("color_transfer") or "").lower()
-    return "HDR" if transfer in _HDR_TRANSFERS else "SDR"
+    if transfer == "smpte2084":
+        return "HDR10"
+    if transfer == "arib-std-b67":
+        return "HLG"
+    return "SDR"
 
 
 def _is_dolby_vision(track: dict) -> bool:
@@ -101,32 +144,58 @@ def audio_codec(probe: dict) -> str:
     profile = (track.get("profile") or "").upper()
     if codec == "dts":
         # ffprobe reports plain `dts` and keeps the flavour in the profile.
-        return "DTS-HD MA" if "MA" in profile else ("DTS-X" if "X" in profile else "DTS")
+        for prefix, label in _DTS_PROFILES:
+            if prefix in profile:
+                return label
+        return "DTS"
+    if codec == "truehd":
+        return "TrueHD Atmos" if "ATMOS" in profile else "TrueHD"
+    if codec == "eac3":
+        return "EAC3 Atmos" if "ATMOS" in profile else "EAC3"
+    if codec == "aac":
+        return "HE-AAC" if "HE-AAC" in profile else "AAC"
     return _AUDIO_CODEC.get(codec, codec.upper() if codec else "")
 
 
 def audio_channels(probe: dict) -> str:
-    channels = int(_first(probe.get("audio_tracks") or []).get("channels") or 0)
-    if not channels:
-        return ""
-    return _CHANNELS.get(channels, f"{channels}.0")
+    """Radarr prints one decimal, taking MediaInfo's channel positions if it has them."""
+    track = _first(probe.get("audio_tracks") or [])
+    layout = track.get("channel_layout") or ""
+    match = re.match(r"(\d+(?:\.\d+)?)", layout)
+    if match and "." in match.group(1):
+        return match.group(1)
+    channels = int(track.get("channels") or 0)
+    return f"{channels}.0" if channels else ""
 
 
 def audio_languages(probe: dict) -> str:
-    return _languages(probe.get("audio_tracks") or [])
+    """Radarr's `{MediaInfo AudioLanguages}`: `[ES+EN]`, and empty for English only."""
+    return language_token(_codes(probe.get("audio_tracks") or []), skip_english_only=True)
 
 
 def subtitle_languages(probe: dict) -> str:
-    return _languages(probe.get("subtitle_tracks") or [])
+    return language_token(_codes(probe.get("subtitle_tracks") or []))
 
 
-def _languages(tracks: list[dict]) -> str:
+def language_token(codes: "str | list[str]", skip_english_only: bool = False) -> str:
+    """`[ES+EN+RU]` from `en/es/ru`, Radarr's `GetLanguagesToken` rule for rule."""
+    items = re.split(r"[/+,]", codes) if isinstance(codes, str) else list(codes)
     seen: list[str] = []
-    for track in tracks:
-        code = _LANG.get((track.get("language") or "").lower())
-        if code and code not in seen:
+    for item in items:
+        code = _LANG.get((item or "").strip().lower(), (item or "").strip().lower())
+        if not code or code == "und":
+            continue
+        code = code.upper()
+        if code not in seen:
             seen.append(code)
-    return "/".join(seen)
+    if skip_english_only and seen == ["EN"]:
+        return ""
+    return f"[{'+'.join(seen)}]" if seen else ""
+
+
+def _codes(tracks: list[dict]) -> list[str]:
+    return [str(track.get("language") or "") for track in tracks]
+
 
 
 def resolution(probe: dict) -> str:
@@ -138,25 +207,14 @@ def resolution(probe: dict) -> str:
     return "480" if height else ""
 
 
-def simple(probe: dict) -> str:
-    """Radarr's `{MediaInfo Simple}`: codec depth range audio channels."""
-    parts = [
-        video_codec(probe),
-        f"{video_bit_depth(probe)}bit" if video_bit_depth(probe) else "",
-        video_dynamic_range(probe) if video_dynamic_range(probe) != "SDR" else "",
-        audio_codec(probe),
-        audio_channels(probe),
-    ]
-    return " ".join(part for part in parts if part)
+def simple(probe: dict, name: str = "") -> str:
+    """Radarr's `{MediaInfo Simple}`."""
+    return compose(from_probe(probe, name))["simple"]
 
 
-def full(probe: dict) -> str:
-    """Radarr's `{MediaInfo Full}`: the simple line plus its languages."""
-    parts = [simple(probe), audio_languages(probe)]
-    subtitles = subtitle_languages(probe)
-    if subtitles:
-        parts.append(f"subtitles {subtitles}")
-    return " ".join(part for part in parts if part)
+def full(probe: dict, name: str = "") -> str:
+    """Radarr's `{MediaInfo Full}`."""
+    return compose(from_probe(probe, name))["full"]
 
 
 def release_group(name: str) -> str:
@@ -181,43 +239,33 @@ def release_group(name: str) -> str:
 
 
 def compose(facts: dict) -> dict:
-    """Fill `Simple` and `Full` from the other keys, whichever side produced them.
+    """Fill `Simple` and `Full` the way `FileNameBuilder` builds them.
 
-    Radarr sends the parts, not these two lines; a probe gives the parts too.
-    Composing here keeps one spelling for both, which is what makes the
-    self-check against Radarr's own file meaningful.
+    `Simple` is `"{VideoCodec} {AudioCodec}"` — no bit depth, no dynamic range,
+    no channels — and `Full` glues the audio languages to the codec:
+    `x264 DTS[EN+ES] [ES]`. A tidier line would be a different line, and the
+    self-check compares strings.
     """
     facts = {k: (v if v is not None else "") for k, v in facts.items()}
-    parts = [
-        facts.get("video_codec", ""),
-        f"{facts['video_bit_depth']}bit" if facts.get("video_bit_depth") else "",
-        facts.get("video_dynamic_range", "")
-        if facts.get("video_dynamic_range") not in ("", "SDR")
-        else "",
-        facts.get("audio_codec", ""),
-        facts.get("audio_channels", ""),
-    ]
-    simple = " ".join(part for part in parts if part)
-    full = " ".join(
-        part
-        for part in (
-            simple,
-            facts.get("audio_languages", ""),
-            f"subtitles {facts['subtitle_languages']}" if facts.get("subtitle_languages") else "",
-        )
-        if part
-    )
-    return {**facts, "simple": facts.get("simple") or simple, "full": facts.get("full") or full}
+    video = facts.get("video_codec", "")
+    audio = facts.get("audio_codec", "")
+    simple = " ".join(part for part in (video, audio) if part)
+    full = f"{video} {audio}{facts.get('audio_languages', '')} {facts.get('subtitle_languages', '')}"
+    return {
+        **facts,
+        "simple": facts.get("simple") or simple,
+        "full": facts.get("full") or full.strip(),
+    }
 
 
 def from_probe(probe: dict, name: str) -> dict:
     """Everything the file itself can say about itself, keyed for the tokens."""
     return compose(
         {
-            "video_codec": video_codec(probe),
+            "video_codec": video_codec(probe, name),
             "video_bit_depth": video_bit_depth(probe),
             "video_dynamic_range": video_dynamic_range(probe),
-            "video_dynamic_range_type": video_dynamic_range(probe),
+            "video_dynamic_range_type": video_dynamic_range_type(probe),
             "audio_codec": audio_codec(probe),
             "audio_channels": audio_channels(probe),
             "audio_languages": audio_languages(probe),

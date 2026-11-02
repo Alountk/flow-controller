@@ -184,7 +184,11 @@ def proposal(
                 quality=quality,
                 media_info=facts,
             )
-            rendered = naming.evaluate(pattern, values)
+            # A measured pattern rendered without a probe would be a name with
+            # holes in it — and the self-check would pass, because it compares
+            # Radarr's file, not ours. Refuse instead.
+            unread = naming.needs_file_facts(pattern) and not probed
+            rendered = None if unread else naming.evaluate(pattern, values)
             if rendered:
                 proposed_stem = Path(rendered).name
                 named = True

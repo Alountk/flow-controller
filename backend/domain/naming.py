@@ -168,6 +168,29 @@ def _media_values(facts: dict) -> dict:
     }
 
 
+#: Tokens Radarr happily renders as nothing: an English-only file has no
+#: `[EN+ES]` segment, and its name simply ends one word earlier. Refusing here
+#: would make the real template unusable for half a library, so the self-check
+#: stays the guard instead: if our empty segment is not what Radarr wrote, the
+#: name is refused anyway.
+_EMPTY_OK = {
+    "edition",
+    "quality_short",
+    "release_group",
+    "video_codec",
+    "video_bit_depth",
+    "video_bitrate",
+    "video_dynamic_range",
+    "video_dynamic_range_type",
+    "audio_codec",
+    "audio_channels",
+    "audio_languages",
+    "subtitle_languages",
+    "media_info_simple",
+    "media_info_full",
+}
+
+
 def _token_value(body: str, values: dict) -> tuple[str | None, bool]:
     """Resolve one token name -> (value or None, known).
 
@@ -206,7 +229,12 @@ def _resolve_group(body: str, values: dict) -> tuple[str, bool]:
             return f"[{value}]", True
         return f"-{value}", True
     value, known = _token_value(inner, values)
-    if not known or value is None:
+    if not known:
+        return "", False
+    if value is None:
+        key = _TOKENS.get(re.sub(r"\s+", " ", inner).strip().lower())
+        if key in _EMPTY_OK:
+            return "", True
         return "", False
     return value, True
 
