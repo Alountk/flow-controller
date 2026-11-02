@@ -107,3 +107,65 @@
   opacity: 0.55;
   cursor: default;
 }
+
+/* The identified movie, and the picker for the ones the name cannot identify. */
+.fm-rename-movie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fm-rename-movie .fm-rename-subject {
+  margin: 0;
+}
+
+.fm-rename-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.fm-rename-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fm-rename-result {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 160px);
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fm-rename-result:hover {
+  background: var(--bg-elev);
+}
+
+.fm-rename-result-year,
+.fm-rename-result-folder {
+  color: var(--text-dim);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

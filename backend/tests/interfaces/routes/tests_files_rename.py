@@ -61,8 +61,17 @@ def env(tmp_path, monkeypatch):
     return SimpleNamespace(root=four_k, answers=answers, tmp=tmp_path)
 
 
-def _preview(path: str) -> dict:
-    resp = client.get("/api/files/rename-preview", params={"remote_path": path})
+def _preview(path: str, movie_id: int = 0) -> dict:
+    params = {"remote_path": path}
+    if movie_id:
+        params["movie_id"] = movie_id
+    resp = client.get("/api/files/rename-preview", params=params)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _search(q: str) -> dict:
+    resp = client.get("/api/files/rename-movies", params={"q": q})
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -117,6 +126,33 @@ class TestPreview:
         assert body["ok"] is True, body
         assert body["name"] == "The.Batman.2022.2160p"
         assert body["warnings"], "a proposal it could not derive must say so"
+
+    def test_a_movie_picked_by_hand_names_a_copy_the_pattern_could_not(self, env):
+        # What the instance showed: Radarr knows the movie, but has no file of
+        # its own to reproduce the pattern against, so nothing could be named.
+        env.answers.movies = [{k: v for k, v in MOVIE.items() if k != "file_name"}]
+        video = env.root / "The.Batman.2022.2160p.REMUX.mkv"
+        video.write_bytes(b"x")
+        blind = _preview(str(video))
+        assert blind["named"] is False, blind
+        assert blind["folder"] == ""
+
+        body = _preview(str(video), movie_id=7)
+
+        assert body["ok"] is True, body
+        assert body["named"] is True
+        assert body["folder"] == "The Batman (2022)"
+        assert "2160p" in body["name"]
+        assert any("mano" in w for w in body["warnings"]), "the gate it skipped is admitted"
+
+    def test_an_unknown_movie_id_refuses_instead_of_guessing(self, env):
+        video = env.root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"x")
+
+        body = _preview(str(video), movie_id=999)
+
+        assert body["ok"] is False
+        assert "catálogo" in body["detail"]
 
     def test_a_path_outside_every_root_is_forbidden(self, env):
         resp = client.get(
@@ -180,9 +216,69 @@ class TestApply:
         assert video.exists()
         assert not (env.tmp / "escape").exists()
 
+    def test_a_movie_picked_by_hand_names_a_copy_the_pattern_could_not(self, env):
+        # What the instance showed: Radarr knows the movie, but has no file of
+        # its own to reproduce the pattern against, so nothing could be named.
+        env.answers.movies = [{k: v for k, v in MOVIE.items() if k != "file_name"}]
+        video = env.root / "The.Batman.2022.2160p.REMUX.mkv"
+        video.write_bytes(b"x")
+        blind = _preview(str(video))
+        assert blind["named"] is False, blind
+        assert blind["folder"] == ""
+
+        body = _preview(str(video), movie_id=7)
+
+        assert body["ok"] is True, body
+        assert body["named"] is True
+        assert body["folder"] == "The Batman (2022)"
+        assert "2160p" in body["name"]
+        assert any("mano" in w for w in body["warnings"]), "the gate it skipped is admitted"
+
+    def test_an_unknown_movie_id_refuses_instead_of_guessing(self, env):
+        video = env.root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"x")
+
+        body = _preview(str(video), movie_id=999)
+
+        assert body["ok"] is False
+        assert "catálogo" in body["detail"]
+
     def test_a_path_outside_every_root_is_forbidden(self, env):
         resp = client.post(
             "/api/files/rename-apply",
             json={"remote_path": "/etc/passwd", "folder": "", "name": "x"},
         )
         assert resp.status_code == 403
+
+
+class TestSearch:
+    def test_finds_the_movie_by_what_the_person_typed(self, env):
+        env.answers.movies = [
+            MOVIE,
+            {"id": 9, "title": "Alien", "year": 1979, "path": "/data/movies/Alien (1979)"},
+            {"id": 10, "title": "Batman Begins", "year": 2005, "path": "/data/movies/Batman Begins (2005)"},
+        ]
+
+        body = _search("batman")
+
+        assert [m["title"] for m in body["items"]] == ["Batman Begins", "The Batman"]
+        assert body["items"][1]["folder"] == "The Batman (2022)", "the folder Radarr uses"
+
+    def test_finds_by_spanish_title_and_year(self, env):
+        env.answers.movies = [
+            {"id": 11, "title": "El caballero oscuro", "year": 2008, "path": "/data/movies/El caballero oscuro (2008)"}
+        ]
+
+        assert [m["id"] for m in _search("caballero")["items"]] == [11]
+        assert [m["id"] for m in _search("El caballero oscuro 2008")["items"]] == [11]
+
+    def test_an_empty_query_offers_nothing_to_pick(self, env):
+        assert _search("")["items"] == []
+
+    def test_says_nothing_when_radarr_is_not_configured(self, env, monkeypatch):
+        monkeypatch.setattr(config, "SERVICES", [])
+
+        body = _search("batman")
+
+        assert body["ok"] is True
+        assert body["items"] == []
