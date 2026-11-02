@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Iterable, Iterator
 
 from domain import media_info, naming
@@ -114,18 +116,21 @@ def proposal(
     pattern = (naming_cfg or {}).get("standard_movie_format", "") or ""
     folder_pattern = (naming_cfg or {}).get("movie_folder_format", "") or ""
     declared_quality = quality_from_title(name) or ""
-    facts: dict = {}
+    # The group is written in the name, so it survives without a probe; only the
+    # `{MediaInfo …}` family needs the file itself.
+    facts: dict = {"release_group": media_info.release_group(name)}
+    probed = False
     warnings_probe = ""
     if probe is not None:
         try:
-            facts = media_info.from_probe(probe(video_path), name)
+            facts.update(media_info.from_probe(probe(video_path), name))
+            probed = True
         except Exception as exc:  # ffprobe is external: any failure means "not read"
-            facts = {}
             warnings_probe = f"no se pudo leer el archivo para rellenar el nombre: {exc}"
-    quality = media_info.quality(name, declared_quality, "", facts) if facts else declared_quality
+    quality = media_info.quality(name, declared_quality, "", facts) if probed else declared_quality
 
     warnings: list[str] = []
-    if probe is not None and not facts:
+    if warnings_probe:
         warnings.append(warnings_probe)
     movie, reason = (
         (chosen_movie, "") if chosen_movie is not None else match_movie(stem, movies)
@@ -398,7 +403,72 @@ def _walk(directory: str, depth: int, seen: set[str] | None = None) -> Iterator[
             yield from _walk(child, depth - 1, seen)
 
 
-def candidates(*, roots: Iterable[str], movies: list[dict], naming_cfg: dict) -> dict:
+#: ffprobe costs ~0.3 s a file and the same copy is asked about on every refresh
+#: and on apply. Keyed by what makes the answer stale, never by path alone.
+_PROBE_CACHE: "dict[tuple[str, int, int], dict]" = {}
+_PROBE_LOCK = threading.Lock()
+_PROBE_CACHE_MAX = 4096
+
+
+def _probe_key(path: str) -> tuple[str, int, int]:
+    stat = os.stat(path)
+    return (os.path.realpath(path), stat.st_mtime_ns, stat.st_size)
+
+
+def cached_probe(probe: Callable[[str], dict]) -> Callable[[str], dict]:
+    """Wrap a probe so a copy is read once per (path, mtime, size)."""
+
+    def read(path: str) -> dict:
+        key = _probe_key(path)
+        with _PROBE_LOCK:
+            hit = _PROBE_CACHE.get(key)
+        if hit is not None:
+            return hit
+        facts = probe(path)
+        with _PROBE_LOCK:
+            if len(_PROBE_CACHE) >= _PROBE_CACHE_MAX:
+                _PROBE_CACHE.clear()
+            _PROBE_CACHE[key] = facts
+        return facts
+
+    return read
+
+
+def _probe_all(paths: list[str], read: Callable[[str], dict]) -> Callable[[str], dict]:
+    """Read every copy in parallel and answer from the results, failures included.
+
+    A failing file must fail the same way it would have on its own, so each
+    result carries either the facts or the exception that kept them away.
+    """
+
+    def one(path: str):
+        try:
+            return path, read(path), None
+        except Exception as exc:  # reported per file, never for the whole batch
+            return path, None, exc
+
+    workers = min(8, max(1, len(paths)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = {path: (facts, exc) for path, facts, exc in pool.map(one, paths)}
+
+    def answer(path: str) -> dict:
+        facts, exc = results.get(path, (None, None))
+        if exc is not None:
+            raise exc
+        if facts is None:
+            raise OSError("no se leyó el archivo")
+        return facts
+
+    return answer
+
+
+def candidates(
+    *,
+    roots: Iterable[str],
+    movies: list[dict],
+    naming_cfg: dict,
+    probe: Callable[[str], dict] | None = None,
+) -> dict:
     """Every 4K/3D copy that does NOT already follow Radarr's template (S2).
 
     A copy whose proposal matches what it already is does not appear. One that
@@ -406,32 +476,43 @@ def candidates(*, roots: Iterable[str], movies: list[dict], naming_cfg: dict) ->
     it would make the library look complete when it is not.
     """
     roots = [r for r in roots if r]
-    items: list[dict] = []
-    scanned = 0
+    found: list[tuple[str, list[str]]] = []
     for root in roots:
         if not os.path.isdir(root):
             continue
-        for video_path, siblings in _iter_videos(root):
-            scanned += 1
-            got = proposal(
-                video_path=video_path,
-                movies=movies,
-                naming_cfg=naming_cfg,
-                siblings=siblings,
-                roots=roots,
+        found.extend(_iter_videos(root))
+
+    # S2: only when the pattern asks for what the name cannot answer, and then
+    # the whole list at once rather than one file per row.
+    read: Callable[[str], dict] | None = None
+    pattern = (naming_cfg or {}).get("standard_movie_format", "") or ""
+    if probe is not None and found and naming.needs_file_facts(pattern):
+        read = _probe_all([path for path, _ in found], cached_probe(probe))
+
+    items: list[dict] = []
+    scanned = 0
+    for video_path, siblings in found:
+        scanned += 1
+        got = proposal(
+            video_path=video_path,
+            movies=movies,
+            naming_cfg=naming_cfg,
+            siblings=siblings,
+            roots=roots,
+            probe=read,
+        )
+        if got["ok"]:
+            current = rename_plan.base_name(os.path.basename(video_path))
+            # Unidentifiable is not "done": nothing was proposed for it, so
+            # hiding it would make the root look finished when it is not.
+            needs_work = (
+                got["movie"] is None
+                or not got["named"]
+                or got["name"] != current
+                or (got["loose"] and bool(got["folder"]))
             )
-            if got["ok"]:
-                current = rename_plan.base_name(os.path.basename(video_path))
-                # Unidentifiable is not "done": nothing was proposed for it, so
-                # hiding it would make the root look finished when it is not.
-                needs_work = (
-                    got["movie"] is None
-                    or not got["named"]
-                    or got["name"] != current
-                    or (got["loose"] and bool(got["folder"]))
-                )
-                if not needs_work:
-                    continue
-            items.append(got)
+            if not needs_work:
+                continue
+        items.append(got)
     items.sort(key=lambda item: str(item.get("src") or ""))
     return {"ok": True, "items": items, "scanned": scanned, "detail": ""}

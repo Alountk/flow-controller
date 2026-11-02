@@ -224,3 +224,63 @@ class TestMediaInfoTokens:
         values = self._values(release_group="")
 
         assert naming.evaluate("{Movie Title}-{Release Group}", values) is None
+
+
+class TestTheRealTemplate:
+    """S7: the templates Radarr has configured on the user's instance, verbatim.
+
+    `{Quality Title}` is why this exists: it was not a token we knew, so the
+    whole pattern refused to render — the name came out as "no proposal".
+    """
+
+    FILE = (
+        "{Movie Title} ({Release Year}) {Quality Title} - "
+        "{MediaInfo Simple} - {MediaInfo AudioLanguages}"
+    )
+    FOLDER = "{Movie Title} ({Release Year})"
+
+    def test_a_4k_remux_copia_se_nombra_como_radarr(self):
+        values = naming.build_values(
+            title="The Batman",
+            year=2022,
+            quality="Remux-2160p",
+            media_info={
+                "video_codec": "x265",
+                "video_bit_depth": "10",
+                "video_dynamic_range": "HDR",
+                "audio_codec": "DTS-HD MA",
+                "audio_channels": "5.1",
+                "audio_languages": "en/es",
+            },
+        )
+
+        assert naming.evaluate(self.FILE, values) == (
+            "The Batman (2022) Remux-2160p - x265 10bit HDR DTS-HD MA 5.1 - en/es"
+        )
+        assert naming.evaluate(self.FOLDER, values) == "The Batman (2022)"
+        assert naming.missing(self.FILE, values) == []
+
+    def test_a_1080p_copy_keeps_its_quality_title(self):
+        values = naming.build_values(
+            title="Alien",
+            year=1979,
+            quality="Bluray-1080p",
+            media_info={
+                "video_codec": "x264",
+                "video_bit_depth": "8",
+                "video_dynamic_range": "SDR",
+                "audio_codec": "AC3",
+                "audio_channels": "5.1",
+                "audio_languages": "en",
+            },
+        )
+
+        assert naming.evaluate(self.FILE, values) == (
+            "Alien (1979) Bluray-1080p - x264 8bit AC3 5.1 - en"
+        )
+
+    def test_the_quality_token_spellings_radarr_offers_all_render_it(self):
+        values = naming.build_values(title="Alien", year=1979, quality="Bluray-1080p")
+
+        for spelling in ("{Quality}", "{Quality Full}", "{Quality Title}", "{Quality Name}"):
+            assert naming.evaluate(spelling, values) == "Bluray-1080p", spelling

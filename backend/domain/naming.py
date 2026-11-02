@@ -24,6 +24,8 @@ import re
 import unicodedata
 from pathlib import PurePosixPath
 
+from domain.media_info import compose as _compose_media_facts
+
 #: Pattern body -> the key it reads out of a value dict. Everything else is a
 #: token we refuse to guess: see the module docstring.
 _TOKENS = {
@@ -36,7 +38,12 @@ _TOKENS = {
     "clean title": "clean_title",
     "release year": "year",
     "movie year": "year",
+    # Radarr spells the plain quality three ways and writes the same text for
+    # all of them: the real template uses `{Quality Title}`, so missing it did
+    # not shorten the name — it made `evaluate` refuse the whole pattern.
     "quality full": "quality",
+    "quality title": "quality",
+    "quality name": "quality",
     "quality": "quality",
     "quality-short": "quality_short",
     "quality short": "quality_short",
@@ -139,7 +146,12 @@ def build_values(
 
 
 def _media_values(facts: dict) -> dict:
-    """The probed facts, keyed the way the tokens read them."""
+    """The probed facts, keyed the way the tokens read them.
+
+    `Simple` and `Full` are composed here so a caller that hands over the parts
+    gets the same line Radarr would write, instead of a missing token.
+    """
+    facts = _compose_media_facts(dict(facts))
     return {
         "video_codec": facts.get("video_codec", ""),
         "video_bit_depth": facts.get("video_bit_depth", ""),
@@ -220,6 +232,45 @@ def evaluate(pattern: str, values: dict) -> str | None:
     out.append(pattern[cursor:])
     result = "".join(out)
     return result if result.strip() else None
+
+
+#: Tokens whose value can only come from reading the file. `{Release Group}` is
+#: not here: it is written in the name, so a pattern that only asks for it needs
+#: no probe at all.
+_MEASURED_TOKENS = {
+    "video_codec",
+    "video_bit_depth",
+    "video_bitrate",
+    "video_dynamic_range",
+    "video_dynamic_range_type",
+    "audio_codec",
+    "audio_channels",
+    "audio_languages",
+    "subtitle_languages",
+    "media_info_simple",
+    "media_info_full",
+}
+
+
+def needs_file_facts(pattern: str) -> bool:
+    """Whether rendering `pattern` requires probing the file.
+
+    The whole list is probed only when the pattern asks for something the name
+    cannot answer; the usual `{Movie Title} ({Release Year}) {Quality Full}`
+    renders from Radarr alone and costs nothing.
+    """
+    if not pattern:
+        return False
+    for match in _GROUP_RE.finditer(pattern):
+        inner = match.group(1).strip()
+        if inner.startswith("[") and inner.endswith("]") and len(inner) > 2:
+            inner = inner[1:-1]
+        elif inner.startswith("-") and len(inner) > 1:
+            inner = inner[1:]
+        key = _TOKENS.get(re.sub(r"\s+", " ", inner).strip().lower())
+        if key in _MEASURED_TOKENS:
+            return True
+    return False
 
 
 def missing(pattern: str, values: dict) -> list[str]:

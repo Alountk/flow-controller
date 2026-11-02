@@ -230,23 +230,47 @@ def from_probe(probe: dict, name: str) -> dict:
 def quality(name: str, declared: str, fallback: str, probe: dict) -> str:
     """`Container-Resolution` with the resolution the disk reports.
 
-    The container is the file's source, which only a name or Radarr can tell;
-    the resolution is a fact about the picture, so the probe wins over both. A
-    pattern that asked for 2160p while Radarr stores the 1080p file gets the
-    copy's own number, which is the whole point of reading the file.
+    Both halves can come from a different place and picking the wrong one is
+    what the user saw: the source is only ever declared (the name, or Radarr's
+    quality), while the resolution is measured. Taking the resolution from the
+    declared quality gave `Remux-1080p` for a 2160p remux, because Radarr holds
+    that movie's 1080p file.
     """
-    container = _container(name, declared) or (fallback or "").partition("-")[0]
-    pixels = resolution(probe) or (declared or "").partition("-")[2] or (
-        fallback or ""
-    ).partition("-")[2]
-    pixels = pixels.replace("p", "")
+    container = _container(name) or _container(declared) or _container(fallback)
+    pixels = resolution(probe) or _pixels(declared) or _pixels(fallback)
     if not container or not pixels:
         return ""
     return f"{container}-{pixels}p"
 
 
-def _container(name: str, declared: str) -> str:
-    """Radarr keeps a remux as its own quality (`Remux-2160p`), not as a Bluray."""
-    if re.search(r"(?<![a-z0-9])remux(?![a-z0-9])", name or "", re.IGNORECASE):
-        return "Remux"
-    return (declared or "").partition("-")[0]
+_QUALITY_RE = re.compile(r"^[A-Za-z0-9]+-\d{3,4}p$")
+
+#: Source tokens, in the order Radarr ranks them. A remux outranks a Bluray and
+#: keeps its own quality name, which is why it has to be asked for first.
+_CONTAINERS = (
+    (r"remux", "Remux"),
+    (r"web[-. ]?dl", "WEBDL"),
+    (r"web[-. ]?rip", "WEBRip"),
+    (r"blu[-. ]?ray|bdrip|brrip|bd25|bd50|bdmv", "Bluray"),
+    (r"hdtv", "HDTV"),
+    (r"dvd", "DVD"),
+)
+
+
+def _container(text: str) -> str:
+    """The source, from a release name or from a `Container-Resolution` string.
+
+    Only a quality string is split on its dash: `WEB-DL` in a file name carries
+    a dash of its own, and splitting there hid the token it was looking for.
+    """
+    text = text or ""
+    head = text.partition("-")[0] if _QUALITY_RE.match(text) else text
+    for token, label in _CONTAINERS:
+        if re.search(rf"(?<![a-z0-9]){token}(?![a-z0-9])", head, re.IGNORECASE):
+            return label
+    return ""
+
+
+def _pixels(text: str) -> str:
+    match = re.search(r"(\d{3,4})p", text or "", re.IGNORECASE)
+    return match.group(1) if match else ""

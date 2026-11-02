@@ -31,3 +31,23 @@ L2 (usuario, decidido): «Sondear la lista en lote (unos segundos)» — la list
 L3 (decidido): la compuerta `reproduced_radarr` se re-renderiza con el `mediaInfo` **de Radarr**, no con el de nuestra copia; mezclar los dos archivos haría fallar toda comparación y apagaría el nombrado.
 
 L4: `probe` es inyectable para que el dominio no dependa de ffprobe ni de un proceso externo en los tests.
+
+## Plantilla real (S7, verbatim del usuario)
+
+```
+archivo: {Movie Title} ({Release Year}) {Quality Title} - {MediaInfo Simple} - {MediaInfo AudioLanguages}
+carpeta: {Movie Title} ({Release Year})
+```
+
+Lo que enseñó:
+
+- **`{Quality Title}` no era un token conocido**, y un token desconocido no acorta el nombre: `evaluate` devuelve `None` y no hay propuesta. Con la plantilla anterior, elegir película a mano no servía de nada. Añadidos `Quality Title` y `Quality Name` (Radarr escribe lo mismo que `Quality` / `Quality Full`).
+- **La resolución se estaba leyendo de la calidad declarada**, no del disco: `Remux-1080p` para un remux 2160p porque Radarr guarda el archivo 1080p de esa película. Ahora la fuente se declara (nombre o calidad) y los píxeles se miden.
+- **`WEB-DL` lleva un guion**: partir la cadena por `-` para buscar la fuente escondía el token. Solo se parte cuando la cadena ya es una calidad (`Bluray-1080p`).
+
+Render verificado con la plantilla real:
+
+```
+The Batman (2022) Remux-2160p - x265 10bit HDR DTS-HD MA 5.1 - en/es
+Alien (1979) Bluary-1080p - x264 8bit AC3 5.1 - en
+```

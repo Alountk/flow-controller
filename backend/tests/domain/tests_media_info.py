@@ -120,3 +120,40 @@ class TestQuality:
 
     def test_an_unreadable_file_leaves_the_declared_quality_alone(self):
         assert media_info.quality("Film.mkv", "WEBDL-1080p", "", {}) == "WEBDL-1080p"
+
+
+class TestTheCopyDecidesItsResolution:
+    """S3: the source is declared, the resolution is measured.
+
+    Taken from the user's report: a 2160p remux was proposed as `Remux-1080p`
+    because Radarr holds that movie's 1080p file, and the resolution was read
+    off the declared quality instead of off the picture.
+    """
+
+    UHD = {"video_tracks": [{"codec": "hevc", "height": 2160}], "audio_tracks": [], "subtitle_tracks": []}
+    FHD = {"video_tracks": [{"codec": "h264", "height": 1080}], "audio_tracks": [], "subtitle_tracks": []}
+
+    def _quality(self, name, probe, declared="", fallback="Bluray-1080p"):
+        return media_info.quality(name, declared, fallback, probe)
+
+    def test_a_remux_from_radarr_s_1080p_movie_is_2160p(self):
+        got = self._quality(
+            "The.Batman.2022.2160p.UHD.BluRay.REMUX.HDR.HEVC-FraMeSToR.mkv", self.UHD
+        )
+
+        assert got == "Remux-2160p"
+
+    def test_web_dl_keeps_its_dash_out_of_the_way(self):
+        got = self._quality("Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1-NTb.mkv", self.UHD)
+
+        assert got == "WEBDL-2160p", "Radarr spells it without the dash"
+
+    def test_a_1080p_copy_in_a_4k_root_stays_1080p(self):
+        got = self._quality("Alien.1979.BluRay.x264-AMIABLE.mkv", self.FHD)
+
+        assert got == "Bluray-1080p"
+
+    def test_the_declared_quality_answers_when_the_probe_cannot(self):
+        got = self._quality("Alien.1979.1080p.BluRay.x264-AMIABLE.mkv", {}, declared="Bluray-1080p")
+
+        assert got == "Bluray-1080p"
