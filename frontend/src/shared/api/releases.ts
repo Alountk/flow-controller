@@ -8,8 +8,9 @@ import { apiFetch } from './auth.ts'
  *
  * The core is required because every row carries it. Everything else is
  * optional with meaning:
- * - `link`/`source`/`seeders` are the direct rows' own fields — `seeders`
- *   only when the source stated one, `link` only when the row has one;
+ * - `link`/`source`/`seeders`/`sources` are the direct rows' own fields —
+ *   `seeders` or `sources` only when the source stated one, `link` only when
+ *   the row has one;
  * - `quality`, `languages`, `indexerId`, `indexerFlags`, `leechers`,
  *   `protocol` and `releaseGroup` are the ARR era's fields. The API never
  *   emits them any more, so the type never REQUIRES them: a missing key is
@@ -26,6 +27,10 @@ export interface Release {
   link?: string
   /** Only when the source stated one (S1). */
   seeders?: number
+  /** aMule's ED2K source count — the peer number eD2K has, and NEVER
+   *  `seeders`: the magnitudes differ, so the column renders whichever the
+   *  row declared and the row keeps its own name. */
+  sources?: number
   /** Legacy arr rows only — direct rows never carry the seven below. */
   quality?: string
   languages?: string[]

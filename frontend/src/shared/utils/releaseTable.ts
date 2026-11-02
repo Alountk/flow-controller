@@ -3,12 +3,12 @@
  *
  * Pure on purpose — the table renders what this returns, so the rule is
  * testable on its own. Two decisions worth knowing: rows are never mutated
- * (React state is the caller's), and a fact a row does NOT carry (no seeders,
+ * (React state is the caller's), and a fact a row does NOT carry (no peers,
  * no languages) sinks to the bottom in BOTH directions instead of pretending
  * to be zero and stealing the top of a descending sort.
  */
 
-export type SortKey = 'name' | 'size' | 'language' | 'seeders'
+export type SortKey = 'name' | 'size' | 'language' | 'peers'
 export type SortDir = 'asc' | 'desc'
 
 export interface SortState {
@@ -21,6 +21,8 @@ export interface SortableRelease {
   size: number
   languages?: string[]
   seeders?: number
+  /** aMule's ED2K source count: the same «peers» column, another magnitude. */
+  sources?: number
 }
 
 /** A click on a header: same column flips, a new column starts ascending. */
@@ -40,8 +42,15 @@ function valueOf(r: SortableRelease, key: SortKey): string | number | null {
       return r.title.toLowerCase()
     case 'size':
       return typeof r.size === 'number' ? r.size : null
-    case 'seeders':
-      return typeof r.seeders === 'number' ? r.seeders : null
+    case 'peers':
+      // One column, two provenances: a torrent's seeders, else aMule's
+      // ED2K sources. Both are "how many others have this", which is what the
+      // header promises; a row with neither still sinks.
+      return typeof r.seeders === 'number'
+        ? r.seeders
+        : typeof r.sources === 'number'
+          ? r.sources
+          : null
     case 'language': {
       const label = languageLabel(r)
       return label === '' ? null : label

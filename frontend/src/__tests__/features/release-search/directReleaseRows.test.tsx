@@ -25,7 +25,8 @@ const torznabRow: Release = {
   seeders: 12,
 }
 
-/** An aMule row: no link, no seeders — its indexer label IS the source. */
+/** An aMule row: no link, no seeders — it states ED2K sources instead, and
+ *  its indexer label IS the source. */
 const amuleRow: Release = {
   title: 'Otra Película 2021',
   guid: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
@@ -33,6 +34,7 @@ const amuleRow: Release = {
   size: 734_003_200,
   indexer: 'amule',
   source: 'amule',
+  sources: 17,
 }
 
 /** A row whose source gave no indexer label at all: the source names it. */
@@ -168,15 +170,19 @@ describe('ReleaseSearchModal renders direct-source rows (S5)', () => {
     expect(document.querySelectorAll('.release-lang')).toHaveLength(0)
     expect(container.textContent).not.toContain('undefined')
 
-    // …while the facts the rows DO carry render: size always, seeders only
-    // when the source stated one.
+    // …while the facts the rows DO carry render: size always, the «Pares»
+    // number only when the source stated one.
     const rendered = rows()
     expect(rendered).toHaveLength(2)
     expect(within(rendered[0] as HTMLElement).getByText('4.0 GB')).toBeInTheDocument()
     expect(
-      rendered[0]!.querySelector('.release-seeders')?.textContent,
+      rendered[0]!.querySelector('.release-peers')?.textContent,
     ).toBe('⬆ 12')
-    expect(rendered[1]!.querySelector('.release-seeders')).toBeNull()
+    // aMule's ED2K sources fill the same column (S2): under its own name in
+    // the data, and without the torrent colour scale.
+    expect(
+      rendered[1]!.querySelector('.release-peers')?.textContent,
+    ).toBe('⬆ 17')
     expect(within(rendered[1] as HTMLElement).getByText('700.0 MB')).toBeInTheDocument()
   })
 

@@ -100,11 +100,20 @@ describe('filterReleases', () => {
   })
 
   it('filters by minimum seeders', () => {
-    expect(filterReleases(all, withFilters({ minSeeders: 10 }))).toEqual([english4k, english1080])
+    expect(filterReleases(all, withFilters({ minPeers: 10 }))).toEqual([english4k, english1080])
+  })
+
+  it('counts aMule ED2K sources as the peers the column shows (S2/S4)', () => {
+    // A row whose ONLY number is aMule's `sources`: the filter has to read the
+    // same number the «Pares» column paints, or eD2K sources become invisible.
+    const fromAmule = makeRelease({ guid: 'ed2k', indexer: 'amule', seeders: undefined, sources: 30 })
+    const thinTorrent = makeRelease({ guid: 'thin', seeders: 3 })
+
+    expect(filterReleases([fromAmule, thinTorrent], withFilters({ minPeers: 10 }))).toEqual([fromAmule])
   })
 
   it('excludes zero-seeder releases with a positive minimum', () => {
-    expect(filterReleases(all, withFilters({ minSeeders: 1 }))).toEqual([
+    expect(filterReleases(all, withFilters({ minPeers: 1 }))).toEqual([
       english4k,
       english1080,
       spanish,
@@ -117,7 +126,7 @@ describe('filterReleases', () => {
       withFilters({
         languages: new Set(['English']),
         qualities: new Set(['Remux-2160p']),
-        minSeeders: 20,
+        minPeers: 20,
       }),
     )
 
@@ -133,7 +142,7 @@ describe('filterReleases', () => {
   it('does not mutate the input list', () => {
     const before = [...all]
 
-    filterReleases(all, withFilters({ minSeeders: 999 }))
+    filterReleases(all, withFilters({ minPeers: 999 }))
 
     expect(all).toEqual(before)
   })
@@ -188,11 +197,11 @@ describe('hasActiveFilters', () => {
     expect(hasActiveFilters(withFilters({ text: 'a' }))).toBe(true)
     expect(hasActiveFilters(withFilters({ qualities: new Set(['SDTV']) }))).toBe(true)
     expect(hasActiveFilters(withFilters({ languages: new Set(['English']) }))).toBe(true)
-    expect(hasActiveFilters(withFilters({ minSeeders: 1 }))).toBe(true)
+    expect(hasActiveFilters(withFilters({ minPeers: 1 }))).toBe(true)
   })
 
   it('is true for a minimum of zero only when text/quality/language are set', () => {
-    expect(hasActiveFilters(withFilters({ minSeeders: 0 }))).toBe(false)
+    expect(hasActiveFilters(withFilters({ minPeers: 0 }))).toBe(false)
   })
 })
 

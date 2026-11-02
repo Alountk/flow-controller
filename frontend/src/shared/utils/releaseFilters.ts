@@ -16,14 +16,14 @@ export interface ReleaseFilters {
   /** Empty means "any language". A release matching ANY selected language passes. */
   languages: ReadonlySet<string>
   /** 0 means "no minimum". */
-  minSeeders: number
+  minPeers: number
 }
 
 export const NO_RELEASE_FILTERS: ReleaseFilters = {
   text: '',
   qualities: new Set<string>(),
   languages: new Set<string>(),
-  minSeeders: 0,
+  minPeers: 0,
 }
 
 /** Selection key for releases: the guid. */
@@ -35,7 +35,7 @@ export function hasActiveFilters(filters: ReleaseFilters): boolean {
     filters.text.trim() !== '' ||
     filters.qualities.size > 0 ||
     filters.languages.size > 0 ||
-    filters.minSeeders > 0
+    filters.minPeers > 0
   )
 }
 
@@ -67,7 +67,11 @@ export function filterReleases(
     }
     // Absent seeders is UNKNOWN, not zero: the floor excludes what is KNOWN
     // to be below it, never a row whose source never stated one.
-    if (release.seeders !== undefined && release.seeders < filters.minSeeders) return false
+    // The number the «Pares» column paints: a torrent's seeders, else aMule's
+    // ED2K sources. Reading only `seeders` would hide every eD2K row the moment
+    // a minimum is set.
+    const peers = release.seeders ?? release.sources
+    if (peers !== undefined && peers < filters.minPeers) return false
     return true
   })
 }
