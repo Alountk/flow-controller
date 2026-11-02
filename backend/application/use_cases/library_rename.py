@@ -115,6 +115,11 @@ def proposal(
     movie, reason = match_movie(stem, movies)
     proposed_stem = stem
     folder = ""
+    # Whether the template proved it can write this movie's name. Without that
+    # proof a copy is not relocated either: moving a file we cannot name gives
+    # a half rename —a tidier folder around the same scene name— and reads as
+    # though the rename failed.
+    named = False
 
     if movie is None:
         warnings.append(reason)
@@ -146,10 +151,11 @@ def proposal(
             )
             if rendered:
                 proposed_stem = Path(rendered).name
+                named = True
             else:
                 warnings.append("la plantilla no se pudo evaluar con la calidad de esta copia")
 
-        if loose:
+        if loose and named:
             folder = _folder_of(movie)
             if not folder and folder_pattern:
                 folder = naming.evaluate(
@@ -170,6 +176,7 @@ def proposal(
         "ok": True,
         "src": video_path,
         "loose": loose,
+        "named": named,
         "folder": folder,
         "name": proposed_stem,
         "extension": extension,
@@ -339,6 +346,7 @@ def candidates(*, roots: Iterable[str], movies: list[dict], naming_cfg: dict) ->
                 # hiding it would make the root look finished when it is not.
                 needs_work = (
                     got["movie"] is None
+                    or not got["named"]
                     or got["name"] != current
                     or (got["loose"] and bool(got["folder"]))
                 )

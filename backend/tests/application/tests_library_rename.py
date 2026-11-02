@@ -153,7 +153,12 @@ class TestProposal:
         got = self._proposal(str(video), naming=lying, roots=[str(root)])
 
         assert got["name"] == "The.Batman.2022.2160p", "falls back to the name it has"
-        assert got["folder"] == "The Batman (2022)", "the folder comes from Radarr's own path"
+        assert got["named"] is False
+        # The folder is NOT offered either: moving the copy into a tidy folder
+        # around the same scene name is a half rename, and it reads as though
+        # the rename had failed. The copy stays where it is until someone names
+        # it in the dialog.
+        assert got["folder"] == ""
         assert any("plantilla" in w for w in got["warnings"])
 
     def test_falls_back_to_the_current_name_when_no_movie_matches(self, tmp_path):
@@ -492,3 +497,24 @@ class TestCandidates:
 
         assert got["items"] == []
         assert got["scanned"] == 0
+
+    def test_lists_a_copy_it_cannot_name_without_offering_a_folder(self, tmp_path):
+        """The reported half rename: a folder appeared, the file kept its name."""
+        untracked = {k: v for k, v in self.MOVIE.items() if k != "file_name"}
+        root = self._tree(tmp_path, "Alien.1979.2160p.REMASTERED.mkv")
+
+        got = library_rename.candidates(roots=[root], movies=[untracked], naming_cfg=self.NAMING)
+
+        assert [item["named"] for item in got["items"]] == [False]
+        assert got["items"][0]["folder"] == ""
+        assert got["items"][0]["name"] == "Alien.1979.2160p.REMASTERED", "no invented name"
+
+    def test_never_lists_a_named_copy_without_its_folder_plan(self, tmp_path):
+        root = self._tree(tmp_path, "Alien.1979.2160p.mkv")
+
+        got = library_rename.candidates(roots=[root], movies=[self.MOVIE], naming_cfg=self.NAMING)
+
+        item = got["items"][0]
+        assert item["named"] is True
+        assert item["folder"] == "Alien (1979)"
+        assert item["name"] == "Alien (1979) Bluray-1080p", "the quality it could place"
