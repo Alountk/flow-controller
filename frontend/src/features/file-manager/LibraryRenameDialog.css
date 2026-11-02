@@ -1,0 +1,109 @@
+/* The Radarr-style rename dialog, in its own sheet: it opens from Archivos
+   and from Renombrar, so it cannot borrow a page stylesheet. */
+.fm-rename-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.fm-rename-dialog {
+  width: min(520px, calc(100vw - 32px));
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+.fm-rename-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.fm-rename-subject {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-rename-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.fm-rename-field input {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.fm-rename-hint {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+
+.fm-rename-sidecars,
+.fm-rename-warnings {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.fm-rename-warnings {
+  padding-left: 18px;
+  color: #d97706;
+}
+
+.fm-rename-error {
+  margin: 0;
+  font-size: 12px;
+  color: #dc2626;
+}
+
+.fm-rename-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.fm-rename-actions .fm-btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.fm-rename-actions .fm-btn.accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.fm-rename-actions .fm-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

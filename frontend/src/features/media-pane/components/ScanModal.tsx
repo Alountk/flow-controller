@@ -8,6 +8,7 @@ import { useRoots } from '../../../shared/hooks/useFilesNavigator.ts'
 import { FileNavigator } from '../../../shared/ui/FileNavigator.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../../shared/utils/selection.ts'
 import { filterScanMatches, scanMatchKey } from '../../../shared/utils/scanResults.ts'
+import '../../../shared/ui/atoms.css'
 
 /** What a row asked the pane to scan for: one movie, or one series (possibly
  *  narrowed to a single episode by the "En carpeta" action). */

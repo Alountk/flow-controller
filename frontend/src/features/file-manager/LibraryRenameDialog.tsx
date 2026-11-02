@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { renameApply, renamePreview, type RenameProposal } from '../../shared/api/files.ts'
+import './LibraryRenameDialog.css'
 
 interface Props {
   /** Absolute path of the video the user picked in the explorer. */

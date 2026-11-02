@@ -31,6 +31,7 @@ import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-
 import { AlternativeModal } from '../features/alternative/AlternativeModal.tsx'
 import type { MixerLookupResponse } from '../shared/types.ts'
 import './MediaMixer.css'
+import '../shared/ui/atoms.css'
 
 /** S7 — the lookup behind «Buscar en el indexador»: the backend parses the
  *  title from the filename and answers with the in-library movie, if any. */
