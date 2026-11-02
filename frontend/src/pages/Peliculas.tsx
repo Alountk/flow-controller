@@ -4,6 +4,8 @@ import { Calendar } from '../features/calendar/Calendar.tsx'
 import { MediaPane, type MediaDetail, type MediaSelection } from '../features/media-pane/MediaPane.tsx'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
 import { PeliculasV2List } from './PeliculasV2List.tsx'
+import { QuickActionsMenu } from './QuickActionsMenu.tsx'
+import { ScanModal, type ScanItem } from '../features/media-pane/components/ScanModal.tsx'
 import { apiFetch } from '../shared/api/auth.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
 import { PanelFiles, ROW_MISSING } from '../shared/ui/PanelFiles.tsx'
@@ -501,6 +503,10 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
   // Which detail tab is on screen. Releases first: it is the tab the panel
   // has opened with since PR 5, and every other tab is live since PR 6.
   const [detailTab, setDetailTab] = useState<string>('Releases')
+  // Two modals, one owner: the V2 list's menu and the detail's menu open the
+  // same search and the same scan, so the state cannot live in either of them.
+  const [quickRelease, setQuickRelease] = useState<ReleaseSearchItem | null>(null)
+  const [quickScan, setQuickScan] = useState<ScanItem | null>(null)
   const queryClient = useQueryClient()
   const uid = useId()
   const active = SUB_VIEWS.find((s) => s.id === view) ?? SUB_VIEWS[0]
@@ -585,6 +591,8 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
               selectedId={selected?.id ?? null}
               onSelect={selectRow}
               onOpen={openDetail}
+              onReleases={setQuickRelease}
+              onScan={setQuickScan}
             />
           ) : view === 'estrenos' ? (
             // The calendar IS the list of this sub-view — movie items only.
@@ -655,6 +663,26 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
             <div className="sec-detail-titles">
               <div className="sec-detail-titlerow">
                 <h3>{selected ? selected.detail.title : 'Sin selección'}</h3>
+                {pageMode && selected && (
+                  <QuickActionsMenu
+                    items={[
+                      // The search already lives in the Releases tab: the
+                      // action takes you there instead of opening a second,
+                      // identical search over the same panel.
+                      { label: 'Buscar releases', onSelect: () => setDetailTab('Releases') },
+                      {
+                        label: 'Escanear carpeta',
+                        onSelect: () =>
+                          setQuickScan({
+                            type: 'movie',
+                            id: selected.id,
+                            title: selected.detail.title,
+                            source: 'radarr',
+                          }),
+                      },
+                    ]}
+                  />
+                )}
                 {selected?.detail.monitored != null && (
                   <span
                     className={`sec-detail-mon${selected.detail.monitored ? ' on' : ''}`}
@@ -775,6 +803,11 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
 
       {/* The implementation notes are for whoever builds this screen, not for
           whoever uses it: the V2 page is the design, so it leaves them to V1. */}
+      {quickRelease && (
+        <ReleaseSearchModal item={quickRelease} onClose={() => setQuickRelease(null)} />
+      )}
+      {quickScan && <ScanModal item={quickScan} onClose={() => setQuickScan(null)} />}
+
       {!pageMode && (
       <section className="sec-notes">
         <h3>Notas de implementación</h3>

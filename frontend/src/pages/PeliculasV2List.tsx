@@ -4,8 +4,9 @@ import { apiFetch } from '../shared/api/auth.ts'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue.ts'
 import { QualityBelowList } from '../features/quality/QualityBelowList.tsx'
 import { ProbeLibraryCard } from '../shared/ui/ProbeLibraryCard.tsx'
-import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
-import { ScanModal, type ScanItem } from '../features/media-pane/components/ScanModal.tsx'
+import type { ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
+import type { ScanItem } from '../features/media-pane/components/ScanModal.tsx'
+import { QuickActionsMenu } from './QuickActionsMenu.tsx'
 import type { MediaDetail, MediaSelection } from '../features/media-pane/types.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
 import type { AllMovie, PaginatedResponse } from '../shared/types.ts'
@@ -104,20 +105,22 @@ export function PeliculasV2List({
   selectedId,
   onSelect,
   onOpen,
+  onReleases,
+  onScan,
 }: {
   selectedId: number | null
   onSelect: (selection: MediaSelection) => void
   onOpen: (selection: MediaSelection) => void
+  /** The page owns both modals: opening one from here and from the detail's
+   *  own menu is the same gesture, so there is a single owner of that state. */
+  onReleases: (item: ReleaseSearchItem) => void
+  onScan: (item: ScanItem) => void
 }) {
   const [page, setPage] = useState(1)
   const [className, setClassName] = useState('')
   const [search, setSearch] = useState('')
-  const [quickOpen, setQuickOpen] = useState(false)
-  const [releaseItem, setReleaseItem] = useState<ReleaseSearchItem | null>(null)
-  const [scanItem, setScanItem] = useState<ScanItem | null>(null)
   const debounced = useDebouncedValue(search, 350)
   const searchRef = useRef<HTMLInputElement>(null)
-  const quickRef = useRef<HTMLDivElement>(null)
   const rowsRef = useRef(new Map<number, HTMLDivElement>())
 
   const query = useQuery({
@@ -148,23 +151,6 @@ export function PeliculasV2List({
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // A menu that outlives its click would be a trap: outside click and Escape.
-  useEffect(() => {
-    if (!quickOpen) return
-    function onDown(event: MouseEvent) {
-      if (quickRef.current && !quickRef.current.contains(event.target as Node)) setQuickOpen(false)
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setQuickOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [quickOpen])
-
   function pick(movie: AllMovie & { class?: string }): MediaSelection {
     return { id: movie.id, detail: movieDetail(movie), release: movieRelease(movie) }
   }
@@ -186,11 +172,10 @@ export function PeliculasV2List({
 
   function runQuick(action: 'open' | 'releases' | 'scan') {
     if (!selected) return
-    setQuickOpen(false)
     if (action === 'open') onOpen(pick(selected))
-    if (action === 'releases') setReleaseItem(movieRelease(selected))
+    if (action === 'releases') onReleases(movieRelease(selected))
     if (action === 'scan') {
-      setScanItem({ type: 'movie', id: selected.id, title: selected.title, source: 'radarr' })
+      onScan({ type: 'movie', id: selected.id, title: selected.title, source: 'radarr' })
     }
   }
 
@@ -239,40 +224,23 @@ export function PeliculasV2List({
             <span aria-hidden="true">↻</span>
             {query.isFetching ? 'Actualizando…' : 'Actualizar'}
           </button>
-          <div className="sec-l2-quick" ref={quickRef}>
-            <button
-              type="button"
-              className="sec-l2-btn is-primary"
-              aria-haspopup="menu"
-              aria-expanded={quickOpen}
-              onClick={() => setQuickOpen((open) => !open)}
-            >
-              <span aria-hidden="true">⚡</span>
-              Acciones rápidas
-            </button>
-            {/* Always open (S2): the menu is where the library's own actions
-                live. The row actions appear only for the row that is marked —
-                the menu never guesses one — and the library's do not need one. */}
-            {quickOpen && (
-              <div className="sec-l2-menu" role="menu" aria-label="Acciones rápidas">
-                {selected && (
-                  <>
-                    <button type="button" role="menuitem" onClick={() => runQuick('open')}>
-                      Ver detalle
-                    </button>
-                    <button type="button" role="menuitem" onClick={() => runQuick('releases')}>
-                      Buscar releases
-                    </button>
-                    <button type="button" role="menuitem" onClick={() => runQuick('scan')}>
-                      Escanear carpeta
-                    </button>
-                    <hr className="sec-l2-menu-sep" />
-                  </>
-                )}
-                <ProbeLibraryCard />
-              </div>
-            )}
-          </div>
+          {/* The library's actions need no row; the row's need one, and the
+              menu never guesses which (S2 of «peliculas-v2-biblioteca»). */}
+          <QuickActionsMenu
+            primary
+            items={
+              selected
+                ? [
+                    { label: 'Ver detalle', onSelect: () => runQuick('open') },
+                    { label: 'Buscar releases', onSelect: () => runQuick('releases') },
+                    { label: 'Escanear carpeta', onSelect: () => runQuick('scan') },
+                  ]
+                : []
+            }
+          >
+            {selected && <hr className="sec-l2-menu-sep" />}
+            <ProbeLibraryCard />
+          </QuickActionsMenu>
         </div>
       </div>
 
@@ -420,10 +388,6 @@ export function PeliculasV2List({
           sits below the list instead of pushing the design's header down. */}
       <QualityBelowList />
 
-      {releaseItem && (
-        <ReleaseSearchModal item={releaseItem} onClose={() => setReleaseItem(null)} />
-      )}
-      {scanItem && <ScanModal item={scanItem} onClose={() => setScanItem(null)} />}
     </div>
   )
 }
