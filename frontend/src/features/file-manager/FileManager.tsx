@@ -13,6 +13,7 @@ import { filterByName, useBrowse } from '../../shared/hooks/useFilesNavigator.ts
 import { FileNavigator, type FileNavigatorEntry } from '../../shared/ui/FileNavigator.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../shared/utils/selection.ts'
 import './FileManager.css'
+import '../../shared/ui/atoms.css'
 
 /** "1 colocado" / "7 colocados" — a count without an agreement is noise. */
 function countWord(n: number, one: string, many: string): string {

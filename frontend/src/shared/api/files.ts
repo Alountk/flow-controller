@@ -43,6 +43,8 @@ export interface RenameProposal {
   detail: string
   src?: string
   loose?: boolean
+  /** The template proved it can write this movie's name; without it there is no plan. */
+  named?: boolean
   folder?: string
   name?: string
   extension?: string

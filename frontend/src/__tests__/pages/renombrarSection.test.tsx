@@ -28,6 +28,7 @@ function candidate(over: Partial<RenameCandidate> = {}): RenameCandidate {
     detail: '',
     src: `${FOUR_K}/The.Batman.2022.2160p.mkv`,
     loose: true,
+    named: true,
     folder: 'The Batman (2022)',
     name: 'The Batman (2022) Remux-2160p',
     extension: '.mkv',
@@ -45,7 +46,7 @@ interface Mock {
 function mockFetch(options: {
   items?: RenameCandidate[]
   detail?: string
-  apply?: { ok: boolean; detail: string }
+  apply?: { ok: boolean; detail: string; moved?: { from: string; to: string }[] }
 } = {}): Mock {
   const applied: Record<string, unknown>[] = []
   const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -174,6 +175,53 @@ describe('la sección Renombrar', () => {
     // Nothing selected ⇒ the batch button cannot move anything.
     expect(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(0\)/ })).toBeDisabled()
     expect(mock.applied).toHaveLength(0)
+  })
+
+  it('never batch-applies a copy the template could not name', async () => {
+    // Reported from the real instance: the folder appeared, the file kept its
+    // scene name, and the run read as a failure. No name, no plan.
+    const mock = mockFetch({
+      items: [
+        candidate(),
+        candidate({
+          src: `${FOUR_K}/Dune.2021.2160p.mkv`,
+          named: false,
+          folder: '',
+          name: 'Dune.2021.2160p',
+          sidecars: [],
+          warnings: ['la plantilla de Radarr no se pudo reproducir con el archivo de esa película'],
+        }),
+      ],
+    })
+    renderSection()
+
+    await screen.findByText(`${FOUR_K}/The.Batman.2022.2160p.mkv`)
+    expect(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(1\)/ })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(1\)/ }))
+
+    await waitFor(() => expect(mock.applied).toHaveLength(1))
+    expect(mock.applied[0]).toEqual({
+      remote_path: `${FOUR_K}/The.Batman.2022.2160p.mkv`,
+      folder: 'The Batman (2022)',
+      name: 'The Batman (2022) Remux-2160p',
+    })
+  })
+
+  it('says so when a move only filed the copy without renaming it', async () => {
+    mockFetch({
+      apply: {
+        ok: true,
+        detail: 'Renombrado',
+        moved: [{ from: `${FOUR_K}/Dune.2021.mkv`, to: `${FOUR_K}/Dune (2021)/Dune.2021.mkv` }],
+      },
+    })
+    renderSection()
+
+    await screen.findByText(`${FOUR_K}/The.Batman.2022.2160p.mkv`)
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(1\)/ }))
+
+    expect(await screen.findByText(/solo se movió a su carpeta/)).toBeTruthy()
   })
 
   it('says why it has nothing to list instead of showing an empty library', async () => {

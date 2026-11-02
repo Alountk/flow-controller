@@ -9,6 +9,7 @@ import {
 import { LibraryRenameDialog } from '../features/file-manager/LibraryRenameDialog.tsx'
 import { toast } from '../shared/utils/toast.ts'
 import './Renombrar.css'
+import '../shared/ui/atoms.css'
 
 /**
  * Every 4K/3D copy that does not follow Radarr's template yet.
@@ -43,12 +44,13 @@ export function Renombrar() {
   })
 
   const items = data?.items ?? []
-  // A copy nobody could identify has no proposed name to batch-apply: it can
-  // only be fixed by editing it by hand, so it never travels with the batch.
+  // A copy nobody could identify, or one the template could not name, has no
+  // proposal to batch-apply: it can only be fixed by editing it by hand, so it
+  // never travels with the batch.
   const selected = useMemo(
     () =>
       items
-        .filter((item) => item.ok && item.movie && !skipped.has(item.src))
+        .filter((item) => item.ok && item.movie && item.named && !skipped.has(item.src))
         .map((item) => item.src),
     [items, skipped],
   )
@@ -81,7 +83,13 @@ export function Renombrar() {
     },
     onSuccess: (results) => {
       const lines = results.flatMap((result) =>
-        (result.moved ?? []).map((entry) => `${entry.from} → ${entry.to}`),
+        (result.moved ?? []).map((entry) =>
+          // A move that keeps the file's name is a filing, not a rename: saying
+          // only "renombrado" is what made a half plan look like a failure.
+          entry.from.split('/').pop() === entry.to.split('/').pop()
+            ? `${entry.from} → ${entry.to} (solo se movió a su carpeta)`
+            : `${entry.from} → ${entry.to}`,
+        ),
       )
       const failures = results.flatMap((result) =>
         result.detail && !result.ok ? [result.detail] : (result.failed ?? []).map((f) => f.detail),
@@ -138,7 +146,9 @@ export function Renombrar() {
             <span>{doneCount > 0 ? `${doneCount} sin marcar` : ''}</span>
           </div>
           {items.map((item) => {
-            const selectable = item.ok && item.movie != null
+            // `named` false means the template could not write this movie's
+            // name: there is no proposal, so nothing to batch.
+            const selectable = item.ok && item.movie != null && item.named === true
             const checked = selectable && !skipped.has(item.src)
             return (
               <div key={item.src} className={`renombrar-row${item.ok ? '' : ' blocked'}`}>
@@ -155,7 +165,7 @@ export function Renombrar() {
                     {currentPath(item)}
                   </span>
                   <span className="renombrar-to" title={proposedPath(item)}>
-                    {item.ok ? proposedPath(item) : 'Sin propuesta'}
+                    {item.ok && item.named ? proposedPath(item) : 'Sin propuesta'}
                   </span>
                 </div>
                 <div className="renombrar-sidecars">
