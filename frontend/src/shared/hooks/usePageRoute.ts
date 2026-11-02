@@ -9,6 +9,7 @@ export type Page =
   | 'seguimiento'
   | 'disk'
   | 'files'
+  | 'renombrar'
   | 'mixer'
   | 'config'
   | 'prototypes'
@@ -23,6 +24,7 @@ export const PAGE_PATHS: Record<Page, string> = {
   seguimiento: '/seguimiento',
   disk: '/disco',
   files: '/archivos',
+  renombrar: '/renombrar',
   mixer: '/mixer',
   config: '/configuracion',
   prototypes: '/prototipos',
