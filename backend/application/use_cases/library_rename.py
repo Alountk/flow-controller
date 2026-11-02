@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 from typing import Callable, Iterable, Iterator
 
-from domain import naming
+from domain import media_info, naming
 from domain import rename_plan
 from domain.release_tokens import quality_from_title
 
@@ -92,6 +92,7 @@ def proposal(
     siblings: Iterable[str],
     roots: Iterable[str],
     chosen_movie: dict | None = None,
+    probe: Callable[[str], dict] | None = None,
 ) -> dict:
     """What the dialog should prefill: folder, name, sidecars and warnings.
 
@@ -112,9 +113,20 @@ def proposal(
 
     pattern = (naming_cfg or {}).get("standard_movie_format", "") or ""
     folder_pattern = (naming_cfg or {}).get("movie_folder_format", "") or ""
-    quality = quality_from_title(name) or ""
+    declared_quality = quality_from_title(name) or ""
+    facts: dict = {}
+    warnings_probe = ""
+    if probe is not None:
+        try:
+            facts = media_info.from_probe(probe(video_path), name)
+        except Exception as exc:  # ffprobe is external: any failure means "not read"
+            facts = {}
+            warnings_probe = f"no se pudo leer el archivo para rellenar el nombre: {exc}"
+    quality = media_info.quality(name, declared_quality, "", facts) if facts else declared_quality
 
     warnings: list[str] = []
+    if probe is not None and not facts:
+        warnings.append(warnings_probe)
     movie, reason = (
         (chosen_movie, "") if chosen_movie is not None else match_movie(stem, movies)
     )
@@ -135,7 +147,12 @@ def proposal(
                 warnings.append("el nombre del archivo no declara calidad; se usó la de Radarr")
 
         reference = naming.build_values(
-            title=movie.get("title", ""), year=movie.get("year"), quality=movie.get("quality", "")
+            title=movie.get("title", ""),
+            year=movie.get("year"),
+            quality=movie.get("quality", ""),
+            # Radarr's own file, not our copy: the gate re-renders Radarr's
+            # pattern against the file Radarr named, and only Radarr knows it.
+            media_info=movie.get("media_info") or {},
         )
         reproduced = bool(pattern) and naming.reproduced_radarr(
             pattern, reference, movie.get("file_name", "")
@@ -156,17 +173,23 @@ def proposal(
                 "se propone el nombre actual"
             )
         else:
-            rendered = naming.evaluate(
-                pattern,
-                naming.build_values(
-                    title=movie.get("title", ""), year=movie.get("year"), quality=quality
-                ),
+            values = naming.build_values(
+                title=movie.get("title", ""),
+                year=movie.get("year"),
+                quality=quality,
+                media_info=facts,
             )
+            rendered = naming.evaluate(pattern, values)
             if rendered:
                 proposed_stem = Path(rendered).name
                 named = True
             else:
-                warnings.append("la plantilla no se pudo evaluar con la calidad de esta copia")
+                gaps = naming.missing(pattern, values)
+                warnings.append(
+                    "la plantilla pide datos que este archivo no dio: " + ", ".join(gaps)
+                    if gaps
+                    else "la plantilla no se pudo evaluar con la calidad de esta copia"
+                )
 
         if loose and named:
             folder = _folder_of(movie)

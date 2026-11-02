@@ -42,6 +42,29 @@ _TOKENS = {
     "quality short": "quality_short",
     "edition": "edition",
     "edition tags": "edition",
+    "release group": "release_group",
+    # The `{MediaInfo …}` family describes the file itself. Filling it in was
+    # invention until the caller started probing the copy; a caller that does
+    # not probe now gets an honest "no data" instead of a shortened name.
+    "mediainfo videocodec": "video_codec",
+    "mediainfo video codec": "video_codec",
+    "mediainfo videobitdepth": "video_bit_depth",
+    "mediainfo video bit depth": "video_bit_depth",
+    "mediainfo videodatarate": "video_bitrate",
+    "mediainfo video dynamic range": "video_dynamic_range",
+    "mediainfo videodynamicrange": "video_dynamic_range",
+    "mediainfo video dynamic range type": "video_dynamic_range_type",
+    "mediainfo videodynamicrangetype": "video_dynamic_range_type",
+    "mediainfo audio codec": "audio_codec",
+    "mediainfo audiocodec": "audio_codec",
+    "mediainfo audio channels": "audio_channels",
+    "mediainfo audiochannels": "audio_channels",
+    "mediainfo audio languages": "audio_languages",
+    "mediainfo audiolanguages": "audio_languages",
+    "mediainfo subtitle languages": "subtitle_languages",
+    "mediainfo subtitleLanguages".lower(): "subtitle_languages",
+    "mediainfo simple": "media_info_simple",
+    "mediainfo full": "media_info_full",
 }
 
 _GROUP_RE = re.compile(r"\{([^{}]*)\}")
@@ -93,6 +116,7 @@ def build_values(
     quality: str,
     original_title: str = "",
     edition: str = "",
+    media_info: dict | None = None,
 ) -> dict:
     """The only facts this module is allowed to use.
 
@@ -110,6 +134,25 @@ def build_values(
         "title_the": _the_form(title),
         "original_title": (original_title or "").strip() or title,
         "edition": (edition or "").strip(),
+        **_media_values(media_info or {}),
+    }
+
+
+def _media_values(facts: dict) -> dict:
+    """The probed facts, keyed the way the tokens read them."""
+    return {
+        "video_codec": facts.get("video_codec", ""),
+        "video_bit_depth": facts.get("video_bit_depth", ""),
+        "video_bitrate": facts.get("video_bitrate", ""),
+        "video_dynamic_range": facts.get("video_dynamic_range", ""),
+        "video_dynamic_range_type": facts.get("video_dynamic_range_type", ""),
+        "audio_codec": facts.get("audio_codec", ""),
+        "audio_channels": facts.get("audio_channels", ""),
+        "audio_languages": facts.get("audio_languages", ""),
+        "subtitle_languages": facts.get("subtitle_languages", ""),
+        "media_info_simple": facts.get("simple", ""),
+        "media_info_full": facts.get("full", ""),
+        "release_group": facts.get("release_group", ""),
     }
 
 
@@ -177,6 +220,28 @@ def evaluate(pattern: str, values: dict) -> str | None:
     out.append(pattern[cursor:])
     result = "".join(out)
     return result if result.strip() else None
+
+
+def missing(pattern: str, values: dict) -> list[str]:
+    """The known tokens of `pattern` this value set cannot fill.
+
+    `evaluate` answers None, which says a name cannot be written but not why.
+    Naming the tokens is what turns "no se propone" into something a person can
+    act on — usually by opening the file, which is what probes it.
+    """
+    if not pattern:
+        return []
+    out: list[str] = []
+    for match in _GROUP_RE.finditer(pattern):
+        inner = match.group(1).strip()
+        if inner.startswith("[") and inner.endswith("]") and len(inner) > 2:
+            inner = inner[1:-1]
+        elif inner.startswith("-") and len(inner) > 1:
+            inner = inner[1:]
+        value, known = _token_value(inner, values)
+        if known and value is None:
+            out.append("{" + inner.strip() + "}")
+    return out
 
 
 def _basename(path: str) -> str:

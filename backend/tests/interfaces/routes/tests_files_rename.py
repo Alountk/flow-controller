@@ -56,6 +56,17 @@ def env(tmp_path, monkeypatch):
     async def fake_naming(session, service):
         return dict(answers.naming)
 
+    async def fake_probe(_path):
+        return {
+            "video_tracks": [{"codec": "hevc", "height": 2160, "pix_fmt": "yuv420p10le",
+                              "color_transfer": "smpte2084"}],
+            "audio_tracks": [{"codec": "dts", "profile": "DTS-HD MA", "channels": 6,
+                              "language": "eng"}],
+            "subtitle_tracks": [],
+        }
+
+    # ffprobe is external: the route gets a stand-in that answers like one.
+    monkeypatch.setattr(files_route, "probe_file", fake_probe)
     monkeypatch.setattr(files_route, "fetch_all_movies_detailed", fake_movies)
     monkeypatch.setattr(files_route, "arr_naming_config", fake_naming)
     return SimpleNamespace(root=four_k, answers=answers, tmp=tmp_path)

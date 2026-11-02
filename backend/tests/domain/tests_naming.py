@@ -6,6 +6,7 @@ covered there; what is pinned here is the part that can silently write a wrong
 name.
 """
 
+from domain import naming
 from domain.naming import build_values, clean_title, evaluate, reproduced_radarr
 
 
@@ -158,3 +159,68 @@ def test_a_pattern_that_writes_its_own_extension_still_matches():
     assert reproduced_radarr(
         pattern, existing, "Película (2020) - Bluray-1080p.mkv"
     ) is True
+
+
+class TestMediaInfoTokens:
+    """S1: the pattern Radarr writes with probed facts, rendered the same way."""
+
+    PATTERN = (
+        "{Movie Title} ({Release Year}) {Quality Full} "
+        "{MediaInfo VideoDynamicRange} {MediaInfo AudioCodec} "
+        "{MediaInfo AudioChannels} {Release Group}"
+    )
+
+    FACTS = {
+        "video_codec": "x265",
+        "video_bit_depth": "10",
+        "video_dynamic_range": "HDR",
+        "audio_codec": "DTS-HD MA",
+        "audio_channels": "5.1",
+        "audio_languages": "en/es",
+        "simple": "x265 10bit HDR DTS-HD MA 5.1",
+        "full": "x265 10bit HDR DTS-HD MA 5.1 en/es subtitles es/en",
+        "release_group": "FraMeSToR",
+    }
+
+    def _values(self, **over):
+        return naming.build_values(
+            title="The Batman",
+            year=2022,
+            quality="Remux-2160p",
+            media_info={**self.FACTS, **over},
+        )
+
+    def test_renders_the_name_radarr_would_write(self):
+        assert naming.evaluate(self.PATTERN, self._values()) == (
+            "The Batman (2022) Remux-2160p HDR DTS-HD MA 5.1 FraMeSToR"
+        )
+
+    def test_keeps_the_spelling_radarr_uses_for_each_token(self):
+        rendered = naming.evaluate(
+            "{MediaInfo VideoCodec} {MediaInfo VideoBitDepth} {MediaInfo Simple}", self._values()
+        )
+
+        assert rendered == "x265 10 x265 10bit HDR DTS-HD MA 5.1"
+
+    def test_an_unprobed_file_cannot_be_named_and_the_token_is_listed(self):
+        values = naming.build_values(title="The Batman", year=2022, quality="Remux-2160p")
+
+        assert naming.evaluate(self.PATTERN, values) is None
+        assert naming.missing(self.PATTERN, values) == [
+            "{MediaInfo VideoDynamicRange}",
+            "{MediaInfo AudioCodec}",
+            "{MediaInfo AudioChannels}",
+            "{Release Group}",
+        ], "every token that needs the file is named"
+
+    def test_an_optional_media_token_degrades_instead_of_failing(self):
+        values = naming.build_values(title="Dune", year=2021, quality="Bluray-2160p")
+
+        assert naming.evaluate("{Movie Title} ({Release Year}){[MediaInfo VideoCodec]}", values) == (
+            "Dune (2021)"
+        )
+
+    def test_a_group_the_name_does_not_declare_is_never_invented(self):
+        values = self._values(release_group="")
+
+        assert naming.evaluate("{Movie Title}-{Release Group}", values) is None

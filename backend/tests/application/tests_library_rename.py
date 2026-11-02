@@ -518,3 +518,96 @@ class TestCandidates:
         assert item["named"] is True
         assert item["folder"] == "Alien (1979)"
         assert item["name"] == "Alien (1979) Bluray-1080p", "the quality it could place"
+
+
+class TestProbe:
+    """S1/S4: the pattern Radarr writes needs the file, and says what it lacked."""
+
+    PROBE = {
+        "video_tracks": [
+            {
+                "codec": "hevc",
+                "height": 2160,
+                "pix_fmt": "yuv420p10le",
+                "color_transfer": "smpte2084",
+            }
+        ],
+        "audio_tracks": [{"codec": "dts", "profile": "DTS-HD MA", "channels": 6, "language": "eng"}],
+        "subtitle_tracks": [],
+    }
+
+    NAMING = {
+        "standard_movie_format": (
+            "{Movie Title} ({Release Year}) {Quality Full} "
+            "{MediaInfo VideoDynamicRange} {MediaInfo AudioCodec} {Release Group}"
+        ),
+        "movie_folder_format": "{Movie Title} ({Release Year})",
+    }
+
+    MOVIE = {
+        "id": 7,
+        "title": "The Batman",
+        "year": 2022,
+        "quality": "Bluray-1080p",
+        "path": "/data/movies/The Batman (2022)",
+        "file_name": "The Batman (2022) Bluray-1080p HDR DTS-HD MA FraMeSToR.mkv",
+        "media_info": {
+            "video_codec": "x265",
+            "video_bit_depth": "10",
+            "video_dynamic_range": "HDR",
+            "audio_codec": "DTS-HD MA",
+            "audio_channels": "5.1",
+            "release_group": "FraMeSToR",
+        },
+    }
+
+    def _proposal(self, tmp_path, *, probe):
+        root = tmp_path / "4k"
+        root.mkdir()
+        video = root / "The.Batman.2022.2160p.REMUX-FraMeSToR.mkv"
+        video.write_bytes(b"x")
+        return library_rename.proposal(
+            video_path=str(video),
+            movies=[self.MOVIE],
+            naming_cfg=self.NAMING,
+            siblings=[],
+            roots=[str(root)],
+            probe=(lambda _p: self.PROBE) if probe else None,
+        )
+
+    def test_writes_the_name_the_file_earned(self, tmp_path):
+        got = self._proposal(tmp_path, probe=True)
+
+        assert got["named"] is True, got["warnings"]
+        # The copy is a 2160p remux: the disk decides the resolution, not the
+        # 1080p file Radarr stores.
+        assert got["name"] == "The Batman (2022) Remux-2160p HDR DTS-HD MA FraMeSToR"
+        assert got["folder"] == "The Batman (2022)"
+
+    def test_without_reading_the_file_it_says_which_tokens_it_lacks(self, tmp_path):
+        got = self._proposal(tmp_path, probe=False)
+
+        assert got["named"] is False
+        assert any("pide datos que este archivo no dio" in w for w in got["warnings"])
+        assert any("{MediaInfo AudioCodec}" in w for w in got["warnings"])
+
+    def test_an_unreadable_file_is_reported_not_guessed(self, tmp_path):
+        root = tmp_path / "4k"
+        root.mkdir()
+        video = root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"x")
+
+        def broken(_path):
+            raise RuntimeError("ffprobe failed")
+
+        got = library_rename.proposal(
+            video_path=str(video),
+            movies=[self.MOVIE],
+            naming_cfg=self.NAMING,
+            siblings=[],
+            roots=[str(root)],
+            probe=broken,
+        )
+
+        assert got["named"] is False
+        assert any("no se pudo leer el archivo" in w for w in got["warnings"])

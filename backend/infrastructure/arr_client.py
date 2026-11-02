@@ -11,6 +11,8 @@ from xml.etree import ElementTree
 
 import aiohttp
 
+from domain.media_info import compose
+
 from config import (
     AMUTORRENT_API_KEY,
     AMUTORRENT_PASSWORD,
@@ -1488,6 +1490,38 @@ def _movie_file_name(movie: dict) -> str:
     return relative_path if isinstance(relative_path, str) else ""
 
 
+def _movie_media_info(movie: dict) -> dict:
+    """Radarr's own `movieFile.mediaInfo`, keyed like `domain.media_info`.
+
+    This is what makes a pattern with `{MediaInfo …}` tokens checkable at all:
+    the self-check re-renders Radarr's pattern for the file Radarr owns, and
+    that file's facts can only come from Radarr. Our probe describes the 4K copy
+    instead, which is often a different file — mixing the two would fail every
+    comparison and quietly disable naming.
+    """
+    movie_file = movie.get("movieFile")
+    if not isinstance(movie_file, dict):
+        return {}
+    info = movie_file.get("mediaInfo")
+    if not isinstance(info, dict):
+        return {}
+
+    channels = info.get("audioChannels")
+    facts = {
+        "video_codec": info.get("videoCodec") or "",
+        "video_bit_depth": str(info.get("videoBitDepth") or ""),
+        "video_dynamic_range": info.get("videoDynamicRange") or "",
+        "video_dynamic_range_type": info.get("videoDynamicRangeType") or "",
+        "audio_codec": info.get("audioCodec") or "",
+        # Radarr reports channels as 5.1, not as a count; keep its own number.
+        "audio_channels": str(channels) if channels not in (None, "") else "",
+        "audio_languages": info.get("audioLanguages") or "",
+        "subtitle_languages": info.get("subtitles") or "",
+        "release_group": movie_file.get("releaseGroup") or "",
+    }
+    return compose({k: v for k, v in facts.items() if v})
+
+
 def _movie_languages(movie: dict) -> list[str]:
     """The names in ``movieFile.languages``, or ``[]`` when unknown.
 
@@ -1633,6 +1667,7 @@ async def fetch_all_movies_detailed(
                     # came from: its name and its languages. "" / [] mean "not
                     # available", never a title-derived name or a placeholder.
                     "file_name": _movie_file_name(m),
+                    "media_info": _movie_media_info(m),
                     "languages": _movie_languages(m),
                     "path_exists": path_exists,
                     "monitored": m.get("monitored", False),
