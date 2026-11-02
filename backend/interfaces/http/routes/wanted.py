@@ -192,6 +192,21 @@ def _filter_all_endpoint(result: dict, q: str, page: int, page_size: int) -> dic
     }
 
 
+def _root_children(folder: str) -> list[str]:
+    """The entries of a configured root, or nothing when it cannot be read.
+
+    Nothing is the honest answer here: an unconfigured folder (""), a mount that
+    is not there and a permission problem all prove the same thing about a
+    movie — nothing — and none of them may take the list down with them.
+    """
+    if not folder:
+        return []
+    try:
+        return os.listdir(folder)
+    except OSError:
+        return []
+
+
 def _classified_movies_page(
     result: dict, q: str, class_filter: str, page: int, page_size: int
 ) -> dict:
@@ -213,6 +228,11 @@ def _classified_movies_page(
         # A failed fetch must not be reported as "no matches for your filter".
         return {**_empty_page(page, page_size), **failure, "filtered": True, "counts": counts}
 
+    # Read once for the whole catalogue: two listings per request, never two
+    # per row — and the copies are what proves a 4K/3D resolution the movie's
+    # own path cannot (it lives in exactly one folder).
+    copies_4k = _root_children(config.PATH_4K)
+    copies_3d = _root_children(config.PATH_3D)
     items = [
         {
             **item,
@@ -221,6 +241,17 @@ def _classified_movies_page(
                 quality=str(item.get("quality") or ""),
                 path=str(item.get("path") or ""),
                 path_3d=config.PATH_3D,
+            ),
+            # What the row lights up (S1): resolved here for the same reason the
+            # class is — the browser has no disk to look at.
+            "libraries": library_class.available_resolutions(
+                has_file=bool(item.get("has_file")),
+                quality=str(item.get("quality") or ""),
+                path=str(item.get("path") or ""),
+                path_4k=config.PATH_4K,
+                path_3d=config.PATH_3D,
+                copies_4k=copies_4k,
+                copies_3d=copies_3d,
             ),
         }
         for item in result.get("items") or []

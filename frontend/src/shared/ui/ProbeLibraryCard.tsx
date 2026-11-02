@@ -18,6 +18,23 @@ export function ProbeLibraryCard({ intervalMs = 2000 }: { intervalMs?: number } 
     }
   }, [])
 
+  // The sweep outlives this card: it lives in a menu that opens and closes, so
+  // mounting asks the server what is happening instead of assuming nothing is.
+  useEffect(() => {
+    let live = true
+    probeLibraryStatus().then((next) => {
+      if (!live || !next) return
+      setStatus(next)
+      if (next.running && timer.current === null) {
+        timer.current = window.setInterval(poll, intervalMs)
+      }
+    })
+    return () => {
+      live = false
+    }
+    // Mount only: re-running would restart the timer on every status change.
+  }, [])
+
   const poll = () => {
     probeLibraryStatus().then((next) => {
       if (!next) return

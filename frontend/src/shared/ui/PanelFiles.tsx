@@ -105,6 +105,16 @@ const SECTIONS: Array<{ id: FileSectionId; label: string; specClass: string }> =
   { id: 'otros', label: 'Otros', specClass: 'Otros' },
 ]
 
+/** The folder a section's files come from: the movie's own for 1080 (that is
+ *  where the library default lives), each configured root for its own, and
+ *  none for Otros — those come from all three, so naming one would be a lie. */
+function rootOf(section: FileSectionId, basePath: string, folders: RoutingFolders): string {
+  if (section === '1080') return basePath
+  if (section === '4k') return folders.path4k
+  if (section === '3d') return folders.path3d
+  return ''
+}
+
 /** The movie's folder name: its copies keep it at the FRONT of theirs (the
  *  same prefix rule ReleaseSearchModal's holdsCopy uses). No name, no proof. */
 function copyPrefixOf(path: string): string {
@@ -204,6 +214,7 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
           <FilesSection
             key={section.id}
             section={section}
+            root={rootOf(section.id, basePath, folders)}
             items={items}
             routingFailed={routingFailed}
           />
@@ -223,10 +234,12 @@ const QUALITY_CHIP = 'Baja calidad'
  *  T4: no global state, no cache — a re-click re-probes). */
 function FilesSection({
   section,
+  root,
   items,
   routingFailed,
 }: {
-  section: { label: string; specClass: string }
+  section: { id: FileSectionId; label: string; specClass: string }
+  root: string
   items: FileItem[]
   routingFailed: boolean
 }) {
@@ -298,22 +311,31 @@ function FilesSection({
   }
 
   return (
-    <section className="sec-files-section">
-      <h4>{section.label}</h4>
-      {analyzable.length > 0 && (
-        <p className="sec-analyze-row">
-          <button
-            type="button"
-            className="sec-analyze"
-            aria-label={`Analizar sección ${section.label}`}
-            disabled={sectionRunning}
-            onClick={analyzeSection}
-          >
-            Analizar
-          </button>
-          {sectionRunning && <span className="sec-analyze-running">Ejecutando ffprobe…</span>}
-        </p>
-      )}
+    <section className="sec-files-section sec-file-card" aria-label={`Archivos ${section.label}`}>
+      {/* One card per root (S3): the label says which copy, the path says where
+          it came from and the count says how much — a file explorer, not a
+          heading over a shared list. */}
+      <header className="sec-file-card-head">
+        <h4>{section.label}</h4>
+        {root && <code className="sec-file-card-root" title={root}>{root}</code>}
+        <span className="sec-file-card-count">
+          {items.length} {items.length === 1 ? 'archivo' : 'archivos'}
+        </span>
+        {analyzable.length > 0 && (
+          <span className="sec-analyze-row">
+            <button
+              type="button"
+              className="sec-analyze"
+              aria-label={`Analizar sección ${section.label}`}
+              disabled={sectionRunning}
+              onClick={analyzeSection}
+            >
+              Analizar
+            </button>
+            {sectionRunning && <span className="sec-analyze-running">Ejecutando ffprobe…</span>}
+          </span>
+        )}
+      </header>
       {items.length === 0 ? (
         routingFailed ? null : <p className="sec-tab-note">Sin archivos en esta sección</p>
       ) : (

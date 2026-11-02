@@ -22,6 +22,8 @@ type Movie = {
   monitored: boolean
   quality: string
   class: string
+  /** What the backend proved the disk holds (S1): the class plus the copies. */
+  libraries: string[]
   grabbed_at: number | null
   grabbed_destination: string | null
 }
@@ -36,6 +38,7 @@ function makeMovie(over: Partial<Movie> & { id: number; title: string }): Movie 
     monitored: true,
     quality: 'Bluray-1080p',
     class: '1080',
+    libraries: ['1080p'],
     grabbed_at: null,
     grabbed_destination: null,
     ...over,
@@ -49,6 +52,7 @@ const dune = makeMovie({
   year: 2024,
   quality: 'Bluray-2160p',
   class: '4K',
+  libraries: ['4K'],
   path: '/movies/Dune Parte Dos (2024)',
 })
 const missing = makeMovie({
@@ -57,6 +61,7 @@ const missing = makeMovie({
   year: 1999,
   quality: '',
   class: 'sin archivo',
+  libraries: [],
   has_file: false,
 })
 
@@ -93,6 +98,15 @@ function stubFetch(items: Movie[] = [paraNorman], total = items.length) {
     }
     if (url.includes('/api/settings')) {
       return ok({ paths: { path_4k: '/movies/4k', path_3d: '/movies/3d' } })
+    }
+    if (url.includes('/api/mixer/probe-library/status')) {
+      return ok({ running: false, total: 10, analyzed: 6, skipped: 4, failed: 0, started_at: 1, finished_at: 2 })
+    }
+    if (url.includes('/api/mixer/probe-library')) {
+      return ok({ started: true, total: 10 })
+    }
+    if (url.includes('/api/files/browse')) {
+      return ok({ ok: true, path: '/movies/ParaNorman', items: [] })
     }
     return ok({})
   })
@@ -298,6 +312,26 @@ describe('V2 · la fila selecciona y el chevron abre', () => {
     expect(within(row).getByText('4K')).toBeInTheDocument()
   })
 
+  it('lights every resolution the disk proves, copies included (S1)', async () => {
+    // The bug this fixes: the movie's own path can only be in ONE root, so a
+    // 1080 copy plus a 4K remux and a 3D rip used to light a single chip.
+    const alien = makeMovie({
+      id: 21,
+      title: 'Alien',
+      year: 1979,
+      libraries: ['4K', '3D', '1080p'],
+    })
+    stubFetch([alien])
+    renderV2()
+
+    const row = await rowOf('Alien')
+    const lit = [...row.querySelectorAll('.sec-res-chip')]
+      .filter((chip) => chip.classList.contains('is-on'))
+      .map((chip) => chip.textContent)
+
+    expect(lit).toEqual(['4K', '3D', '1080p'])
+  })
+
   it('always names the four resolutions and lights the ones the file has (S6)', async () => {
     stubFetch([paraNorman, dune, missing])
     renderV2()
@@ -326,20 +360,66 @@ describe('V2 · la fila selecciona y el chevron abre', () => {
     expect(gone).toHaveTextContent('Sin archivo')
   })
 
-  it('serves the selection from the quick actions, disabled without one (S5)', async () => {
+  it('serves the selection from the quick actions (S5)', async () => {
     renderV2()
-    const trigger = await screen.findByRole('button', { name: 'Acciones rápidas' })
-    expect(trigger).toBeDisabled()
-    expect(screen.queryByRole('menu')).toBeNull()
-
     fireEvent.click(await rowOf('ParaNorman'))
-    expect(trigger).toBeEnabled()
 
-    fireEvent.click(trigger)
+    fireEvent.click(await screen.findByRole('button', { name: 'Acciones rápidas' }))
     const menu = await screen.findByRole('menu', { name: 'Acciones rápidas' })
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Ver detalle' }))
 
     expect(await screen.findByRole('region', { name: 'Panel de detalle' })).toBeInTheDocument()
+  })
+
+  it('opens the quick actions with no row selected and carries the library analysis (S2/S4)', async () => {
+    renderV2()
+    const trigger = await screen.findByRole('button', { name: 'Acciones rápidas' })
+    expect(trigger).toBeEnabled()
+
+    fireEvent.click(trigger)
+    const menu = await screen.findByRole('menu', { name: 'Acciones rápidas' })
+
+    // Row actions need a row. The library's own action does not.
+    expect(within(menu).queryByRole('menuitem', { name: 'Ver detalle' })).toBeNull()
+    expect(within(menu).getByRole('button', { name: 'Analizar biblioteca' })).toBeInTheDocument()
+  })
+
+  it('starts the sweep from the menu and reports it there (S5)', async () => {
+    const { calls } = stubFetch()
+    renderV2()
+    fireEvent.click(await screen.findByRole('button', { name: 'Acciones rápidas' }))
+    const menu = await screen.findByRole('menu', { name: 'Acciones rápidas' })
+
+    fireEvent.click(within(menu).getByRole('button', { name: 'Analizar biblioteca' }))
+
+    await waitFor(() =>
+      expect(calls.some((url) => url.includes('/api/mixer/probe-library'))).toBe(true),
+    )
+    expect(
+      await within(menu).findByText(/analizados/),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('V2 · el detalle delega lo que es de la biblioteca', () => {
+  it('shows the roots as cards in its Archivos tab, and no sweep (S3/S4)', async () => {
+    renderV2()
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir ParaNorman' }))
+    const panel = await screen.findByRole('region', { name: 'Panel de detalle' })
+
+    const tab = within(panel).getByRole('button', { name: 'Archivos' })
+    fireEvent.click(tab)
+    expect(tab).toHaveClass('is-active')
+
+    // The V2 list keeps its rows under its own query key: the panel has to find
+    // the selected row THERE, or it renders "row unreadable" with nothing to show.
+    expect(within(panel).queryByText('No se pudo leer la fila seleccionada.')).toBeNull()
+    const card = await within(panel).findByRole('region', { name: 'Archivos 1080' })
+    expect(card).toHaveClass('sec-file-card')
+    expect(within(card).getByText('/movies/ParaNorman', { selector: 'code' })).toBeInTheDocument()
+
+    // The sweep is a library action: it lives in the list's menu, not here.
+    expect(within(panel).queryByRole('button', { name: 'Analizar biblioteca' })).toBeNull()
   })
 })
 

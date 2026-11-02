@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../shared/api/auth.ts'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue.ts'
 import { QualityBelowList } from '../features/quality/QualityBelowList.tsx'
+import { ProbeLibraryCard } from '../shared/ui/ProbeLibraryCard.tsx'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
 import { ScanModal, type ScanItem } from '../features/media-pane/components/ScanModal.tsx'
 import type { MediaDetail, MediaSelection } from '../features/media-pane/types.ts'
@@ -91,45 +92,20 @@ function movieRelease(movie: AllMovie): ReleaseSearchItem {
  *  not the five buckets the chips on top filter by. */
 const RESOLUTIONS = ['4K', '3D', '1080p', 'SD'] as const
 
-const CLASS_RESOLUTION: Record<string, string> = {
-  '4K': '4K',
-  '3D': '3D',
-  '1080': '1080p',
-  otros: 'SD',
-}
-
-function insideFolder(path: string, folder: string): boolean {
-  if (!path || !folder) return false
-  const root = folder.replace(/\/+$/, '')
-  return path === root || path.startsWith(`${root}/`)
-}
-
-/** What the row lights up: the resolution the backend classified, plus the
- *  routing folders that actually hold the file — the two things the app knows
- *  without guessing. */
-function availableResolutions(
-  movie: AllMovie & { class?: string },
-  path4k: string,
-  path3d: string,
-): string[] {
-  if (movie.has_file === false) return []
-  const have = new Set<string>()
-  const byClass = CLASS_RESOLUTION[movie.class ?? '']
-  if (byClass) have.add(byClass)
-  if (insideFolder(movie.path, path4k)) have.add('4K')
-  if (insideFolder(movie.path, path3d)) have.add('3D')
-  return RESOLUTIONS.filter((label) => have.has(label))
+/** What the row lights up. The backend resolved it from the disk — the file's
+ *  own class plus the copies the configured roots hold — because the browser
+ *  cannot look at the folders, and a guess here would be a lie on screen. */
+function availableResolutions(movie: AllMovie): string[] {
+  const proved = new Set(movie.libraries ?? [])
+  return RESOLUTIONS.filter((label) => proved.has(label))
 }
 
 export function PeliculasV2List({
   selectedId,
-  paths,
   onSelect,
   onOpen,
 }: {
   selectedId: number | null
-  /** The routing folders, for the destination chips; "" is "not configured". */
-  paths: { path4k: string; path3d: string }
   onSelect: (selection: MediaSelection) => void
   onOpen: (selection: MediaSelection) => void
 }) {
@@ -269,25 +245,31 @@ export function PeliculasV2List({
               className="sec-l2-btn is-primary"
               aria-haspopup="menu"
               aria-expanded={quickOpen}
-              // Nothing selected → nothing to act on. The menu serves the row
-              // that is marked, it does not guess one.
-              disabled={!selected}
               onClick={() => setQuickOpen((open) => !open)}
             >
               <span aria-hidden="true">⚡</span>
               Acciones rápidas
             </button>
-            {quickOpen && selected && (
+            {/* Always open (S2): the menu is where the library's own actions
+                live. The row actions appear only for the row that is marked —
+                the menu never guesses one — and the library's do not need one. */}
+            {quickOpen && (
               <div className="sec-l2-menu" role="menu" aria-label="Acciones rápidas">
-                <button type="button" role="menuitem" onClick={() => runQuick('open')}>
-                  Ver detalle
-                </button>
-                <button type="button" role="menuitem" onClick={() => runQuick('releases')}>
-                  Buscar releases
-                </button>
-                <button type="button" role="menuitem" onClick={() => runQuick('scan')}>
-                  Escanear carpeta
-                </button>
+                {selected && (
+                  <>
+                    <button type="button" role="menuitem" onClick={() => runQuick('open')}>
+                      Ver detalle
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => runQuick('releases')}>
+                      Buscar releases
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => runQuick('scan')}>
+                      Escanear carpeta
+                    </button>
+                    <hr className="sec-l2-menu-sep" />
+                  </>
+                )}
+                <ProbeLibraryCard />
               </div>
             )}
           </div>
@@ -326,7 +308,7 @@ export function PeliculasV2List({
           onKeyDown={onListKeyDown}
         >
           {items.map((movie) => {
-            const have = availableResolutions(movie, paths.path4k, paths.path3d)
+            const have = availableResolutions(movie)
             const isSelected = movie.id === selectedId
             return (
               <div

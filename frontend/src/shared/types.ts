@@ -361,6 +361,11 @@ export interface AllMovie {
   languages?: string[]
   path_exists: boolean
   monitored: boolean
+  /** What the disk proves the movie holds (S1): its own class plus the copies
+   *  found in the configured 4K/3D roots, in chip order. Resolved by the
+   *  backend — the browser has no disk to look at. Missing means "not
+   *  answered", which lights nothing, never a guess. */
+  libraries?: string[]
   /** Radarr has NOT imported a file for this title, but its folder holds a
    *  video — read off disk by the backend, only when `has_file` is false.
    *  True is direct evidence of bytes on disk; false means "checked, no

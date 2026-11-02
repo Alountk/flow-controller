@@ -82,6 +82,15 @@ describe('T5 · «Analizar biblioteca» (S3/S4)', () => {
     expect(await screen.findByText('Ya hay un análisis de biblioteca en curso')).toBeInTheDocument()
   })
 
+  it('picks an in-flight sweep up on mount — reopening the menu is not a reset', async () => {
+    stubFetch({ status: [running] })
+
+    renderCard()
+
+    expect(await screen.findByText(/Analizando biblioteca/)).toBeInTheDocument()
+    expect(screen.getByText(/3 de 10 analizados/)).toBeInTheDocument()
+  })
+
   it('shows no failure note on a clean run', async () => {
     stubFetch({ status: [finished] })
 

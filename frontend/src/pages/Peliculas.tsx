@@ -414,6 +414,7 @@ function selectedRowFacts(
   queryClient: QueryClient,
   view: SubView,
   selected: MediaSelection | null,
+  pageMode = false,
 ): RowFacts {
   if (!selected) return { state: 'empty' }
   if (view === 'estrenos') {
@@ -437,8 +438,12 @@ function selectedRowFacts(
       seriesId: null,
     }
   }
-  const prefix =
-    view === 'faltantes'
+  // The V2 page keeps its page of the catalogue under its own key, so the panel
+  // has to look THERE first — searching the V1 listings reports "missing" for a
+  // row the page is showing.
+  const prefix = pageMode
+    ? 'v2-movies'
+    : view === 'faltantes'
       ? 'wanted-movies-infinite'
       : view === 'calidad'
         ? 'calidad-movies'
@@ -499,7 +504,7 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
   const queryClient = useQueryClient()
   const uid = useId()
   const active = SUB_VIEWS.find((s) => s.id === view) ?? SUB_VIEWS[0]
-  const facts = selectedRowFacts(queryClient, view, selected)
+  const facts = selectedRowFacts(queryClient, view, selected, pageMode)
   // T3: the Archivos tab aggregates the routing folders with the movie's own
   // folder, and the V2 list needs them for its destination chips.
   const foldersQuery = useQuery({
@@ -578,7 +583,6 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
           {pageMode ? (
             <PeliculasV2List
               selectedId={selected?.id ?? null}
-              paths={foldersQuery.data ?? { path4k: '', path3d: '' }}
               onSelect={selectRow}
               onOpen={openDetail}
             />
@@ -752,8 +756,11 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
                 <span>{errorMessage(foldersQuery.error)}</span>
               </div>
             ) : foldersQuery.data ? (
+              // The sweep belongs to the library, not to one movie: in the V2
+              // it lives in the list's Acciones rápidas, so the detail keeps
+              // only the files (S4). V1 has no such menu and keeps it here.
               <>
-                <ProbeLibraryCard />
+                {!pageMode && <ProbeLibraryCard />}
                 <PanelFiles facts={facts} folders={foldersQuery.data} />
               </>
             ) : (
