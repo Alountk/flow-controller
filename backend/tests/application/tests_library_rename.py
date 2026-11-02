@@ -10,6 +10,7 @@ with total confidence.
 """
 
 import os
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -518,3 +519,210 @@ class TestCandidates:
         assert item["named"] is True
         assert item["folder"] == "Alien (1979)"
         assert item["name"] == "Alien (1979) Bluray-1080p", "the quality it could place"
+
+
+class TestProbe:
+    """S1/S4: the pattern Radarr writes needs the file, and says what it lacked."""
+
+    PROBE = {
+        "video_tracks": [
+            {
+                "codec": "hevc",
+                "height": 2160,
+                "pix_fmt": "yuv420p10le",
+                "color_transfer": "smpte2084",
+            }
+        ],
+        "audio_tracks": [{"codec": "dts", "profile": "DTS-HD MA", "channels": 6, "language": "eng"}],
+        "subtitle_tracks": [],
+    }
+
+    NAMING = {
+        "standard_movie_format": (
+            "{Movie Title} ({Release Year}) {Quality Full} "
+            "{MediaInfo VideoDynamicRange} {MediaInfo AudioCodec} {Release Group}"
+        ),
+        "movie_folder_format": "{Movie Title} ({Release Year})",
+    }
+
+    MOVIE = {
+        "id": 7,
+        "title": "The Batman",
+        "year": 2022,
+        "quality": "Bluray-1080p",
+        "path": "/data/movies/The Batman (2022)",
+        "file_name": "The Batman (2022) Bluray-1080p HDR DTS-HD MA FraMeSToR.mkv",
+        "media_info": {
+            "video_codec": "x265",
+            "video_bit_depth": "10",
+            "video_dynamic_range": "HDR",
+            "audio_codec": "DTS-HD MA",
+            "audio_channels": "5.1",
+            "release_group": "FraMeSToR",
+        },
+    }
+
+    def _proposal(self, tmp_path, *, probe):
+        root = tmp_path / "4k"
+        root.mkdir()
+        video = root / "The.Batman.2022.2160p.REMUX-FraMeSToR.mkv"
+        video.write_bytes(b"x")
+        return library_rename.proposal(
+            video_path=str(video),
+            movies=[self.MOVIE],
+            naming_cfg=self.NAMING,
+            siblings=[],
+            roots=[str(root)],
+            probe=(lambda _p: self.PROBE) if probe else None,
+        )
+
+    def test_writes_the_name_the_file_earned(self, tmp_path):
+        got = self._proposal(tmp_path, probe=True)
+
+        assert got["named"] is True, got["warnings"]
+        # The copy is a 2160p remux: the disk decides the resolution, not the
+        # 1080p file Radarr stores.
+        assert got["name"] == "The Batman (2022) Remux-2160p HDR DTS-HD MA FraMeSToR"
+        assert got["folder"] == "The Batman (2022)"
+
+    def test_without_reading_the_file_it_says_which_tokens_it_lacks(self, tmp_path):
+        got = self._proposal(tmp_path, probe=False)
+
+        assert got["named"] is False
+        assert any("pide datos que este archivo no dio" in w for w in got["warnings"])
+        assert any("{MediaInfo AudioCodec}" in w for w in got["warnings"])
+
+    def test_an_unreadable_file_is_reported_not_guessed(self, tmp_path):
+        root = tmp_path / "4k"
+        root.mkdir()
+        video = root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"x")
+
+        def broken(_path):
+            raise RuntimeError("ffprobe failed")
+
+        got = library_rename.proposal(
+            video_path=str(video),
+            movies=[self.MOVIE],
+            naming_cfg=self.NAMING,
+            siblings=[],
+            roots=[str(root)],
+            probe=broken,
+        )
+
+        assert got["named"] is False
+        assert any("no se pudo leer el archivo" in w for w in got["warnings"])
+
+
+class TestBatchProbe:
+    """S2/S6: the list is read in one pass, once per copy, and only if needed."""
+
+    PLAIN = {"standard_movie_format": "{Movie Title} ({Release Year}) {Quality Full}"}
+    MEASURED = {
+        "standard_movie_format": (
+            "{Movie Title} ({Release Year}) {Quality Full} {MediaInfo AudioCodec}"
+        )
+    }
+    PROBE = {
+        "video_tracks": [{"codec": "hevc", "height": 2160, "pix_fmt": "yuv420p10le",
+                          "color_transfer": "smpte2084"}],
+        "audio_tracks": [{"codec": "dts", "profile": "DTS-HD MA", "channels": 6,
+                          "language": "eng"}],
+        "subtitle_tracks": [],
+    }
+
+    def _library(self, tmp_path, count=3, measured=False):
+        library_rename._PROBE_CACHE.clear()
+        root = tmp_path / "4k"
+        root.mkdir()
+        movies = []
+        for index in range(count):
+            title = f"Film {index}"
+            folder = root / f"{title} (2020)"
+            folder.mkdir()
+            (folder / f"{title}.2020.2160p.REMUX-GRP.mkv").write_bytes(b"x")
+            movies.append(
+                {
+                    "id": index,
+                    "title": title,
+                    "year": 2020,
+                    "quality": "Bluray-1080p",
+                    "path": str(folder),
+                    # What Radarr itself wrote for its own 1080p file: the gate
+                    # re-renders the pattern against this, so a measured pattern
+                    # is only reproducible if Radarr's facts travel with it.
+                    "file_name": (
+                        f"{title} (2020) Bluray-1080p DTS-HD MA.mkv"
+                        if measured
+                        else f"{title} (2020) Bluray-1080p.mkv"
+                    ),
+                    "media_info": {"audio_codec": "DTS-HD MA"} if measured else {},
+                }
+            )
+        return root, movies
+
+    def _candidates(self, root, movies, naming_cfg, probe):
+        return library_rename.candidates(
+            roots=[str(root)], movies=movies, naming_cfg=naming_cfg, probe=probe
+        )
+
+    def test_renders_a_measured_pattern_for_every_row_at_once(self, tmp_path):
+        root, movies = self._library(tmp_path, measured=True)
+        calls: list[str] = []
+
+        def probe(path):
+            calls.append(path)
+            return self.PROBE
+
+        got = self._candidates(root, movies, self.MEASURED, probe)
+
+        assert got["scanned"] == 3
+        assert [item["name"] for item in got["items"]] == [
+            "Film 0 (2020) Remux-2160p DTS-HD MA",
+            "Film 1 (2020) Remux-2160p DTS-HD MA",
+            "Film 2 (2020) Remux-2160p DTS-HD MA",
+        ]
+        assert len(calls) == 3, "one read per copy, not one per row and pass"
+
+    def test_a_pattern_the_name_answers_never_opens_a_file(self, tmp_path):
+        root, movies = self._library(tmp_path)
+
+        def probe(_path):
+            raise AssertionError("this pattern needs no probe")
+
+        got = self._candidates(root, movies, self.PLAIN, probe)
+
+        assert got["scanned"] == 3
+
+    def test_the_answer_is_reused_until_the_file_changes(self, tmp_path):
+        root, movies = self._library(tmp_path, count=1, measured=True)
+        calls: list[str] = []
+
+        def probe(path):
+            calls.append(path)
+            return self.PROBE
+
+        self._candidates(root, movies, self.MEASURED, probe)
+        self._candidates(root, movies, self.MEASURED, probe)
+        assert len(calls) == 1, "a refresh must not re-read an untouched file"
+
+        video = next(root.rglob("*.mkv"))
+        os.utime(video, (time.time() + 5, time.time() + 5))
+        self._candidates(root, movies, self.MEASURED, probe)
+        assert len(calls) == 2, "a touched file is read again"
+
+    def test_one_unreadable_copy_does_not_sink_the_rest(self, tmp_path):
+        root, movies = self._library(tmp_path, measured=True)
+
+        def probe(path):
+            if "Film 1" in path:
+                raise RuntimeError("ffprobe failed")
+            return self.PROBE
+
+        got = self._candidates(root, movies, self.MEASURED, probe)
+        by_src = {item["src"]: item for item in got["items"]}
+
+        assert len(by_src) == 3
+        broken = next(item for src, item in by_src.items() if "Film 1" in src)
+        assert broken["named"] is False
+        assert any("no se pudo leer el archivo" in w for w in broken["warnings"])

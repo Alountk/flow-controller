@@ -26,6 +26,7 @@ from import_service import post_move_import
 from models import ActionRequest
 from domain.naming import MEDIA_EXTENSIONS
 from interfaces.http.deps import verify_api_key
+from media_mixer import probe_file
 from state import file_queue, queue_lock, http_session
 import config
 
@@ -387,6 +388,8 @@ async def file_rename_preview(
         siblings=siblings,
         roots=roots,
         chosen_movie=chosen,
+        # One file, on demand: the dialog can afford the probe the list cannot.
+        probe=probe_file,
     )
 
 

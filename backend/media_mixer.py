@@ -184,6 +184,9 @@ def parse_probe_data(data: dict, path: str) -> dict:
                 "index": s.get("index", 0),
                 "track_index": track_index,
                 "codec": s.get("codec_name", "unknown"),
+                # ffprobe's profile is what tells DTS-HD MA from plain DTS; the
+                # rename pattern needs it and the muxer ignores it.
+                "profile": s.get("profile", ""),
                 "language": language,
                 "channels": s.get("channels", 0),
                 "bitrate": int(s.get("bit_rate", 0) or 0),

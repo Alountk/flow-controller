@@ -96,10 +96,14 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 3455 -> 3456 (amule-control T2 / S6): the `amule_actions_router` import line
 #: in `app.py` (+1; the tuple entry fit on the existing line). Router wiring,
 #: the stitch-actividad +1 precedent — disclosed as wiring debt in the PR.
+#: 3463 -> 3466 (renombrar-formato T5 / S1): ffprobe's `profile` on each audio
+#: track in `media_mixer.parse_probe_data` (+3: the field, a two-line why, and the
+#: comma). It is what tells DTS-HD MA from plain DTS, and the rename pattern has
+#: to write the same word Radarr writes. Disclosed as debt in the PR.
 #: 3462 -> 3463 (mixer-carpeta-destino T1 / S3): the `output_name` parameter of
 #: `start_mux` in `media_mixer.py` (+1). The folder mode needs to name the file
 #: it writes; everything else fit on existing lines. Disclosed as debt in the PR.
-MAX_LEGACY_LOC = 3463
+MAX_LEGACY_LOC = 3466
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

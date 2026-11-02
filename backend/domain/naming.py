@@ -24,6 +24,8 @@ import re
 import unicodedata
 from pathlib import PurePosixPath
 
+from domain.media_info import compose as _compose_media_facts
+
 #: Pattern body -> the key it reads out of a value dict. Everything else is a
 #: token we refuse to guess: see the module docstring.
 _TOKENS = {
@@ -36,12 +38,40 @@ _TOKENS = {
     "clean title": "clean_title",
     "release year": "year",
     "movie year": "year",
+    # Radarr spells the plain quality three ways and writes the same text for
+    # all of them: the real template uses `{Quality Title}`, so missing it did
+    # not shorten the name — it made `evaluate` refuse the whole pattern.
     "quality full": "quality",
+    "quality title": "quality",
+    "quality name": "quality",
     "quality": "quality",
     "quality-short": "quality_short",
     "quality short": "quality_short",
     "edition": "edition",
     "edition tags": "edition",
+    "release group": "release_group",
+    # The `{MediaInfo …}` family describes the file itself. Filling it in was
+    # invention until the caller started probing the copy; a caller that does
+    # not probe now gets an honest "no data" instead of a shortened name.
+    "mediainfo videocodec": "video_codec",
+    "mediainfo video codec": "video_codec",
+    "mediainfo videobitdepth": "video_bit_depth",
+    "mediainfo video bit depth": "video_bit_depth",
+    "mediainfo videodatarate": "video_bitrate",
+    "mediainfo video dynamic range": "video_dynamic_range",
+    "mediainfo videodynamicrange": "video_dynamic_range",
+    "mediainfo video dynamic range type": "video_dynamic_range_type",
+    "mediainfo videodynamicrangetype": "video_dynamic_range_type",
+    "mediainfo audio codec": "audio_codec",
+    "mediainfo audiocodec": "audio_codec",
+    "mediainfo audio channels": "audio_channels",
+    "mediainfo audiochannels": "audio_channels",
+    "mediainfo audio languages": "audio_languages",
+    "mediainfo audiolanguages": "audio_languages",
+    "mediainfo subtitle languages": "subtitle_languages",
+    "mediainfo subtitleLanguages".lower(): "subtitle_languages",
+    "mediainfo simple": "media_info_simple",
+    "mediainfo full": "media_info_full",
 }
 
 _GROUP_RE = re.compile(r"\{([^{}]*)\}")
@@ -93,6 +123,7 @@ def build_values(
     quality: str,
     original_title: str = "",
     edition: str = "",
+    media_info: dict | None = None,
 ) -> dict:
     """The only facts this module is allowed to use.
 
@@ -110,7 +141,54 @@ def build_values(
         "title_the": _the_form(title),
         "original_title": (original_title or "").strip() or title,
         "edition": (edition or "").strip(),
+        **_media_values(media_info or {}),
     }
+
+
+def _media_values(facts: dict) -> dict:
+    """The probed facts, keyed the way the tokens read them.
+
+    `Simple` and `Full` are composed here so a caller that hands over the parts
+    gets the same line Radarr would write, instead of a missing token.
+    """
+    facts = _compose_media_facts(dict(facts))
+    return {
+        "video_codec": facts.get("video_codec", ""),
+        "video_bit_depth": facts.get("video_bit_depth", ""),
+        "video_bitrate": facts.get("video_bitrate", ""),
+        "video_dynamic_range": facts.get("video_dynamic_range", ""),
+        "video_dynamic_range_type": facts.get("video_dynamic_range_type", ""),
+        "audio_codec": facts.get("audio_codec", ""),
+        "audio_channels": facts.get("audio_channels", ""),
+        "audio_languages": facts.get("audio_languages", ""),
+        "subtitle_languages": facts.get("subtitle_languages", ""),
+        "media_info_simple": facts.get("simple", ""),
+        "media_info_full": facts.get("full", ""),
+        "release_group": facts.get("release_group", ""),
+    }
+
+
+#: Tokens Radarr happily renders as nothing: an English-only file has no
+#: `[EN+ES]` segment, and its name simply ends one word earlier. Refusing here
+#: would make the real template unusable for half a library, so the self-check
+#: stays the guard instead: if our empty segment is not what Radarr wrote, the
+#: name is refused anyway.
+_EMPTY_OK = {
+    "edition",
+    "quality_short",
+    "release_group",
+    "video_codec",
+    "video_bit_depth",
+    "video_bitrate",
+    "video_dynamic_range",
+    "video_dynamic_range_type",
+    "audio_codec",
+    "audio_channels",
+    "audio_languages",
+    "subtitle_languages",
+    "media_info_simple",
+    "media_info_full",
+}
 
 
 def _token_value(body: str, values: dict) -> tuple[str | None, bool]:
@@ -151,7 +229,12 @@ def _resolve_group(body: str, values: dict) -> tuple[str, bool]:
             return f"[{value}]", True
         return f"-{value}", True
     value, known = _token_value(inner, values)
-    if not known or value is None:
+    if not known:
+        return "", False
+    if value is None:
+        key = _TOKENS.get(re.sub(r"\s+", " ", inner).strip().lower())
+        if key in _EMPTY_OK:
+            return "", True
         return "", False
     return value, True
 
@@ -177,6 +260,67 @@ def evaluate(pattern: str, values: dict) -> str | None:
     out.append(pattern[cursor:])
     result = "".join(out)
     return result if result.strip() else None
+
+
+#: Tokens whose value can only come from reading the file. `{Release Group}` is
+#: not here: it is written in the name, so a pattern that only asks for it needs
+#: no probe at all.
+_MEASURED_TOKENS = {
+    "video_codec",
+    "video_bit_depth",
+    "video_bitrate",
+    "video_dynamic_range",
+    "video_dynamic_range_type",
+    "audio_codec",
+    "audio_channels",
+    "audio_languages",
+    "subtitle_languages",
+    "media_info_simple",
+    "media_info_full",
+}
+
+
+def needs_file_facts(pattern: str) -> bool:
+    """Whether rendering `pattern` requires probing the file.
+
+    The whole list is probed only when the pattern asks for something the name
+    cannot answer; the usual `{Movie Title} ({Release Year}) {Quality Full}`
+    renders from Radarr alone and costs nothing.
+    """
+    if not pattern:
+        return False
+    for match in _GROUP_RE.finditer(pattern):
+        inner = match.group(1).strip()
+        if inner.startswith("[") and inner.endswith("]") and len(inner) > 2:
+            inner = inner[1:-1]
+        elif inner.startswith("-") and len(inner) > 1:
+            inner = inner[1:]
+        key = _TOKENS.get(re.sub(r"\s+", " ", inner).strip().lower())
+        if key in _MEASURED_TOKENS:
+            return True
+    return False
+
+
+def missing(pattern: str, values: dict) -> list[str]:
+    """The known tokens of `pattern` this value set cannot fill.
+
+    `evaluate` answers None, which says a name cannot be written but not why.
+    Naming the tokens is what turns "no se propone" into something a person can
+    act on — usually by opening the file, which is what probes it.
+    """
+    if not pattern:
+        return []
+    out: list[str] = []
+    for match in _GROUP_RE.finditer(pattern):
+        inner = match.group(1).strip()
+        if inner.startswith("[") and inner.endswith("]") and len(inner) > 2:
+            inner = inner[1:-1]
+        elif inner.startswith("-") and len(inner) > 1:
+            inner = inner[1:]
+        value, known = _token_value(inner, values)
+        if known and value is None:
+            out.append("{" + inner.strip() + "}")
+    return out
 
 
 def _basename(path: str) -> str:
