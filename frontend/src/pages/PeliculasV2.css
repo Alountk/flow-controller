@@ -238,27 +238,46 @@
   border-color: color-mix(in srgb, #d97706 35%, transparent);
 }
 
-.sec-v2 .sec-dest-chip {
-  margin-left: 4px;
-  padding: 1px 6px;
+/* Every resolution is always named; only the ones the file actually has are
+   lit, so a row says both what it is and what could be. */
+.sec-movie-res {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.sec-v2 .sec-res-chip {
+  padding: 1px 5px;
   font-size: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: var(--text-dim);
-  background: var(--bg-elev-2);
+  color: color-mix(in srgb, var(--text-dim) 55%, transparent);
+  background: transparent;
   border: 1px solid var(--border);
   border-radius: 3px;
 }
 
+.sec-v2 .sec-res-chip.is-on {
+  color: #3b82f6;
+  background: color-mix(in srgb, #3b82f6 16%, transparent);
+  border-color: color-mix(in srgb, #3b82f6 40%, transparent);
+}
+
 /* ── Footer: how much is shown, how to drive it, and the pager ─────────────── */
 
+/* The pager is the one control you need *while* reading the list, so it rides
+   the bottom of the viewport instead of waiting at the end of it. Opaque enough
+   that the rows scrolling underneath stay unreadable. */
 .sec-v2-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
   margin-top: 0.5rem;
-  padding-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
   border-top: 1px solid var(--border);
   font-size: 0.75rem;
   color: var(--text-dim);

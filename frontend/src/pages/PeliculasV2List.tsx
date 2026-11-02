@@ -39,11 +39,6 @@ const CLASS_LABELS: Record<string, string> = {
   otros: 'Otros',
 }
 
-/** The chip a class answers to; the badge reuses the same slug for its colour. */
-function classSlug(value: string): string {
-  return value === 'sin archivo' ? 'missing' : value.toLowerCase()
-}
-
 interface MoviesPage extends PaginatedResponse<AllMovie> {
   /** The chips' counts over the whole catalogue, `todos` first. */
   counts?: Record<string, number>
@@ -92,17 +87,38 @@ function movieRelease(movie: AllMovie): ReleaseSearchItem {
   }
 }
 
-/** Which routing folders hold the title, named the way the chips read. */
-function destinations(path: string, path4k: string, path3d: string): string[] {
-  const inside = (folder: string) => {
-    if (!path || !folder) return false
-    const root = folder.replace(/\/+$/, '')
-    return path === root || path.startsWith(`${root}/`)
-  }
-  const out: string[] = []
-  if (inside(path4k)) out.push('4K')
-  if (inside(path3d)) out.push('3D')
-  return out
+/** The resolutions the row always names, lit or not — the design's vocabulary,
+ *  not the five buckets the chips on top filter by. */
+const RESOLUTIONS = ['4K', '3D', '1080p', 'SD'] as const
+
+const CLASS_RESOLUTION: Record<string, string> = {
+  '4K': '4K',
+  '3D': '3D',
+  '1080': '1080p',
+  otros: 'SD',
+}
+
+function insideFolder(path: string, folder: string): boolean {
+  if (!path || !folder) return false
+  const root = folder.replace(/\/+$/, '')
+  return path === root || path.startsWith(`${root}/`)
+}
+
+/** What the row lights up: the resolution the backend classified, plus the
+ *  routing folders that actually hold the file — the two things the app knows
+ *  without guessing. */
+function availableResolutions(
+  movie: AllMovie & { class?: string },
+  path4k: string,
+  path3d: string,
+): string[] {
+  if (movie.has_file === false) return []
+  const have = new Set<string>()
+  const byClass = CLASS_RESOLUTION[movie.class ?? '']
+  if (byClass) have.add(byClass)
+  if (insideFolder(movie.path, path4k)) have.add('4K')
+  if (insideFolder(movie.path, path3d)) have.add('3D')
+  return RESOLUTIONS.filter((label) => have.has(label))
 }
 
 export function PeliculasV2List({
@@ -310,7 +326,7 @@ export function PeliculasV2List({
           onKeyDown={onListKeyDown}
         >
           {items.map((movie) => {
-            const dest = destinations(movie.path, paths.path4k, paths.path3d)
+            const have = availableResolutions(movie, paths.path4k, paths.path3d)
             const isSelected = movie.id === selectedId
             return (
               <div
@@ -353,17 +369,18 @@ export function PeliculasV2List({
                   </span>
                 </span>
                 <span className="sec-movie-side">
-                  <span className={`sec-class-badge is-${classSlug(movie.class ?? 'otros')}`}>
-                    {CLASS_LABELS[movie.class ?? ''] ?? (movie.class || '—')}
-                  </span>
-                  <span className="sec-movie-dest">
-                    {dest.length > 0
-                      ? dest.map((label) => (
-                          <span key={label} className="sec-dest-chip">
-                            {label}
-                          </span>
-                        ))
-                      : '—'}
+                  {movie.has_file === false && (
+                    <span className="sec-class-badge is-missing">Sin archivo</span>
+                  )}
+                  <span className="sec-movie-res">
+                    {RESOLUTIONS.map((label) => (
+                      <span
+                        key={label}
+                        className={`sec-res-chip${have.includes(label) ? ' is-on' : ''}`}
+                      >
+                        {label}
+                      </span>
+                    ))}
                   </span>
                   <button
                     type="button"

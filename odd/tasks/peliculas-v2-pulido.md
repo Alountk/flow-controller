@@ -104,3 +104,33 @@ Delivery: dos PRs encadenados — backend (T1) y frontend (T2–T7).
   el e2e de Faltantes siguen verdes. El endpoint pasa a pedir siempre el
   catálogo completo al adaptador, que ya lo pedía así y rebanaba en memoria:
   no hay petición extra, pero sí un recorrido de clasificación por request.
+- L11 — Ajustes de estilo pedidos después del merge (L1 verbo: «en el
+  .sec-master, .sec-detail no tiene sentido en este nuevo diseño porque lo
+  wrapean en una card»; «los chips del row donde dice la resolución en Todas
+  deberían salir todas las resoluciones y las que están disponibles en azul»;
+  «la paginación siempre se vea abajo [...] tiene que estar disponible siempre
+  en la vista principal»; vocabulario de resoluciones, textual: «4K,3D,1080P,SD»).
+  - S10: en modo página `.sec-master` y `.sec-detail-page` no dibujan card
+    (sin fondo, borde, radio ni recorte) y el detalle pierde el `top: 72px` de
+    la variante sticky, que lo pintaba 72 px por debajo de su sitio en el flujo
+    y lo hacía solaparse con lo que viniera después.
+  - S11: cada fila nombra siempre las cuatro resoluciones `4K · 3D · 1080p ·
+    SD`; se encienden en azul las que la película tiene, según su clase y las
+    carpetas de destino que contienen el archivo. Sin archivo: las cuatro
+    apagadas y la píldora ámbar «Sin archivo».
+  - S12: el pie (`Mostrando N de M`, leyenda y paginador) es `sticky` al borde
+    inferior del área de scroll, y el `.content` pierde su padding inferior
+    mientras la página V2 está montada, para que el pie quede pegado al borde
+    y no flotando 48 px por encima.
+  - S13: las «Notas de implementación» (checklist de PR 1–7) no se pintan en la
+    V2: son para quien construye la pantalla, no para quien la usa. La V1 las
+    conserva.
+- L12 — Verificación de los ajustes: vitest 956 (18 en `peliculasV2.test.tsx`,
+  el nuevo cubre S11), pytest 1858, tsc/eslint/build rc=0. Además, comprobación
+  visual real con un arnés desechable (dist estático + API stubbeada en
+  Playwright, fuera del repo): cabecera, filas, chips, pie pegado al borde tras
+  desplazar 1200 px y detalle a página completa sin card ni solapes.
+- L13 — Riesgo de L11: se toca `Sections.css` (compartido con Series y con la
+  V1). Las reglas nuevas están acotadas a `.sec-page`, `.sec-detail-page` y
+  `.content:has(.sec-page)`; la V1 no monta `.sec-page`, y sus 12 tests de
+  `calidadView` siguen verdes.
