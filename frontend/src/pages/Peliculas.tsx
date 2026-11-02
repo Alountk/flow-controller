@@ -214,6 +214,8 @@ function CalidadMovies({
   onSelect,
   onOpen,
   l2 = false,
+  search,
+  onSearchChange,
 }: {
   selectedId: number | null
   onSelect: (selection: MediaSelection) => void
@@ -223,9 +225,15 @@ function CalidadMovies({
   /** Draw the design's L2 header (title, search, refresh, quick actions). V1
    *  keeps its own chrome: only the V2 page asks for this. */
   l2?: boolean
+  /** Controlled search text. The V2 list unmounts while the detail is open,
+   *  so the page owns this to give S4 back the list exactly as it was. */
+  search?: string
+  onSearchChange?: (value: string) => void
 }) {
   const [classFilter, setClassFilter] = useState<QualityClass | 'todas'>('todas')
-  const [search, setSearch] = useState('')
+  const [ownSearch, setOwnSearch] = useState('')
+  const term = (search ?? ownSearch).trim()
+  const setSearch = onSearchChange ?? setOwnSearch
   const [quickOpen, setQuickOpen] = useState(false)
   const [releaseItem, setReleaseItem] = useState<ReleaseSearchItem | null>(null)
   const [scanItem, setScanItem] = useState<ScanItem | null>(null)
@@ -304,15 +312,15 @@ function CalidadMovies({
   const counts = { '4K': 0, '3D': 0, 'en biblioteca': 0, 'desconocida': 0 } as Record<QualityClass, number>
   for (const movie of items) counts[movieClass(movie, folders)] += 1
   const byClass = classFilter === 'todas' ? items : items.filter((m) => movieClass(m, folders) === classFilter)
-  const term = search.trim().toLowerCase()
-  const visible = term ? byClass.filter((m) => m.title.toLowerCase().includes(term)) : byClass
+  const needle = term.toLowerCase()
+  const visible = needle ? byClass.filter((m) => m.title.toLowerCase().includes(needle)) : byClass
   const selectedMovie = items.find((m) => m.id === selectedId) ?? null
   const busy = titles.isFetching || foldersQuery.isFetching
 
   function emptyMessage(): string {
     if (titles.isPending) return 'Cargando títulos...'
     if (items.length === 0) return 'No hay películas en el catálogo'
-    if (term && visible.length === 0) return `Ninguna película coincide con «${search.trim()}».`
+    if (needle && visible.length === 0) return `Ninguna película coincide con «${term}».`
     return `Ninguna película en la clase ${classFilter}.`
   }
 
@@ -354,7 +362,7 @@ function CalidadMovies({
                 className="sec-l2-search-input"
                 aria-label="Buscar película"
                 placeholder="Buscar película..."
-                value={search}
+                value={search ?? ownSearch}
                 onChange={(event) => setSearch(event.target.value)}
               />
               <kbd className="sec-l2-kbd" aria-hidden="true">
@@ -628,6 +636,9 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
   // row marks the selection — what the quick actions act on — and only the
   // arrow sets this flag, which is what replaces the list with the detail.
   const [detailOpen, setDetailOpen] = useState(false)
+  // S4: the list unmounts while the detail is open, so the search text lives
+  // here — coming back must find the list exactly as it was left.
+  const [search, setSearch] = useState('')
   // Which detail tab is on screen. Releases first: it is the tab the panel
   // has opened with since PR 5, and every other tab is live since PR 6.
   const [detailTab, setDetailTab] = useState<string>('Releases')
@@ -707,6 +718,8 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
               onSelect={selectRow}
               onOpen={openDetail}
               l2
+              search={search}
+              onSearchChange={setSearch}
             />
           ) : view === 'estrenos' ? (
             // The calendar IS the list of this sub-view — movie items only.

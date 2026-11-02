@@ -230,6 +230,21 @@ describe('V2 · la cabecera del diseño L2', () => {
     expect(wanted()).toBe(2)
   })
 
+  it('keeps the search text when the detail opens and the ✕ comes back (S4)', async () => {
+    stubFetch([movie, dune])
+    renderV2()
+    await rowOf('Dune: Parte Dos')
+    fireEvent.change(screen.getByLabelText('Buscar película'), { target: { value: 'dune' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir Dune: Parte Dos' }))
+    await screen.findByRole('region', { name: 'Panel de detalle' })
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar detalle' }))
+
+    // S4: back means the list EXACTLY as it was, search box included.
+    expect(await screen.findByLabelText('Buscar película')).toHaveValue('dune')
+    expect(document.querySelectorAll('.sec-movie-row')).toHaveLength(1)
+  })
+
   it('enables the quick actions only once a row is selected, and opens the detail', async () => {
     renderV2()
     const trigger = await screen.findByRole('button', { name: 'Acciones rápidas' })
