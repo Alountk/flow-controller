@@ -835,6 +835,62 @@
   margin-top: 0;
 }
 
+/* S3 («peliculas-v2-biblioteca»): each root is its own card — a file explorer
+   per copy, not four headings over one flat listing. */
+.sec-file-card {
+  margin: 12px 0;
+  padding: 10px 12px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sec-file-card:first-of-type {
+  margin-top: 4px;
+}
+
+.sec-file-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.sec-file-card-head h4 {
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sec-file-card-root {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.8;
+}
+
+.sec-file-card-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.sec-file-card .sec-analyze-row {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.sec-file-card .sec-files-table {
+  margin: 0;
+}
+
 /* The grab record: label/value pairs like the panel's own meta list. */
 .sec-history {
   display: grid;

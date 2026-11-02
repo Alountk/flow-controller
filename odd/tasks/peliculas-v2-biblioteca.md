@@ -102,3 +102,19 @@ configurada no se pintan: mentirían con «0 archivos».
   prefijo debe cerrar el nombre o abrir un marcador (` -_.[(`). El módulo
   `library_class` sigue puro (lo vigila su test): el `listdir` vive en la ruta,
   que es quien conoce el despliegue.
+- **L8** — T3/T4 cerradas (commit `6fb6360`): `ProbeLibraryCard` gana una
+  lectura de estado al montar — el menú se abre y se cierra, y un barrido en
+  marcha no puede leerse como «no pasa nada» al volver a abrirlo.
+- **L9** — T5 encontró un bug de la V2 que no era de este pedido:
+  `selectedRowFacts` buscaba la fila seleccionada en `all-movies-infinite`,
+  `calidad-movies` y `wanted-movies-infinite`, pero la lista V2 guarda su página
+  en `['v2-movies', …]`. Abrir un detalle y entrar en Archivos decía «No se pudo
+  leer la fila seleccionada» — y sin ruta no hay cards que pintar. Se corrigió
+  con la clave de la V2; el test de S3 es el que lo fija (antes pasaba por
+  casualidad, porque solo miraba que no estuviera el botón del barrido).
+- **L10** — T5: las cards son `section.sec-file-card` con la cabecera (etiqueta,
+  ruta cuando la hay, recuento y «Analizar» de la sección) y **la misma tabla**
+  dentro; «Otros» no enseña ruta porque sus archivos vienen de las tres raíces y
+  nombrar una sería mentir. Verificado con arnés desechable (`/tmp/biblio-visual.mjs`):
+  las tres raíces con 1 archivo cada una, Alien con `4K✓ 3D✓ 1080p✓ SD·`, menú con
+  «Analizar biblioteca» sin selección, y el detalle sin el barrido.

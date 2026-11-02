@@ -113,6 +113,25 @@ describe('PanelFiles sections (folders given)', () => {
     expect(screen.getByRole('heading', { level: 4, name: 'Otros' })).toBeInTheDocument()
   })
 
+  it('wraps each root in a card that names it and counts its files (S3)', async () => {
+    renderPanel(<PanelFiles facts={ready} folders={{ path4k: F4K, path3d: F3D }} />)
+
+    await screen.findByRole('heading', { level: 4, name: '1080' })
+
+    // The configured roots say where they are: that is what makes them cards
+    // and not just four headings over one list.
+    const card4k = sectionOf('4K')
+    expect(card4k).toHaveClass('sec-file-card')
+    expect(within(card4k).getByText(F4K, { selector: 'code' })).toBeInTheDocument()
+    expect(within(card4k).getByText('1 archivo')).toBeInTheDocument()
+
+    const card3d = sectionOf('3D')
+    expect(within(card3d).getByText(F3D, { selector: 'code' })).toBeInTheDocument()
+
+    // 1080's files come from the movie's own folder — that is its root.
+    expect(within(sectionOf('1080')).getByText(BASE, { selector: 'code' })).toBeInTheDocument()
+  })
+
   it('files the base folder under 1080 and the tokened ones where the tokens say', async () => {
     renderPanel(<PanelFiles facts={ready} folders={{ path4k: F4K, path3d: F3D }} />)
 

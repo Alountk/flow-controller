@@ -402,7 +402,7 @@ describe('V2 · la fila selecciona y el chevron abre', () => {
 })
 
 describe('V2 · el detalle delega lo que es de la biblioteca', () => {
-  it('no longer carries «Analizar biblioteca» in its Archivos tab (S4)', async () => {
+  it('shows the roots as cards in its Archivos tab, and no sweep (S3/S4)', async () => {
     renderV2()
     fireEvent.click(await screen.findByRole('button', { name: 'Abrir ParaNorman' }))
     const panel = await screen.findByRole('region', { name: 'Panel de detalle' })
@@ -411,10 +411,15 @@ describe('V2 · el detalle delega lo que es de la biblioteca', () => {
     fireEvent.click(tab)
     expect(tab).toHaveClass('is-active')
 
+    // The V2 list keeps its rows under its own query key: the panel has to find
+    // the selected row THERE, or it renders "row unreadable" with nothing to show.
+    expect(within(panel).queryByText('No se pudo leer la fila seleccionada.')).toBeNull()
+    const card = await within(panel).findByRole('region', { name: 'Archivos 1080' })
+    expect(card).toHaveClass('sec-file-card')
+    expect(within(card).getByText('/movies/ParaNorman', { selector: 'code' })).toBeInTheDocument()
+
     // The sweep is a library action: it lives in the list's menu, not here.
-    await waitFor(() =>
-      expect(within(panel).queryByRole('button', { name: 'Analizar biblioteca' })).toBeNull(),
-    )
+    expect(within(panel).queryByRole('button', { name: 'Analizar biblioteca' })).toBeNull()
   })
 })
 
