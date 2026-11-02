@@ -1602,14 +1602,24 @@ class TestQueueAddSeries:
 
 class TestPaginatedWantedEndpoints:
     @patch("interfaces.http.routes.wanted.fetch_all_movies_detailed", new_callable=AsyncMock)
-    def test_all_movies_pagination_params(self, mock_fetch):
-        mock_fetch.return_value = {"items": [{"id": 1, "title": "M1"}], "total": 100, "page": 2, "page_size": 10}
+    def test_all_movies_pagination_is_applied_by_the_route(self, mock_fetch):
+        """The route owns the page now: it asks for everything and slices.
+
+        It needs the whole catalogue on every request because the class counts
+        describe all of it; slicing the fetched page again would return an
+        empty page 2.
+        """
+        items = [{"id": i, "title": f"M{i}", "has_file": True, "quality": "WEBDL-1080p"} for i in range(1, 26)]
+        mock_fetch.return_value = {"items": items, "total": 25, "page": 1, "page_size": 0}
         resp = client.get("/api/wanted/all?page=2&page_size=10")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total"] == 100
+        assert [item["id"] for item in data["items"]] == list(range(11, 21))
+        assert data["total"] == 25
         assert data["page"] == 2
         assert data["page_size"] == 10
+        # (session, service, page, page_size) — the whole list, not the page.
+        assert mock_fetch.await_args.args[2:] == (1, 0)
 
     @patch("interfaces.http.routes.wanted.fetch_all_series_detailed", new_callable=AsyncMock)
     def test_all_series_pagination_params(self, mock_fetch):

@@ -5,7 +5,7 @@ import os
 import time
 import unicodedata
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from application import gateways
@@ -27,6 +27,7 @@ from application.gateways import (
     arr_movie_metadata,
     arr_series_metadata,
 )
+from domain import library_class
 from models import ActionRequest
 from interfaces.http.deps import verify_api_key
 from interfaces.http.route_helpers import attach_grabbed_at
@@ -191,22 +192,89 @@ def _filter_all_endpoint(result: dict, q: str, page: int, page_size: int) -> dic
     }
 
 
+def _classified_movies_page(
+    result: dict, q: str, class_filter: str, page: int, page_size: int
+) -> dict:
+    """The movies body with each item's class, the chips' counts and a page.
+
+    The class is decided here rather than in the browser because the counts and
+    the class filter both need the WHOLE catalogue: a client that only received
+    a page could neither count the other pages nor filter them. The catalogue is
+    already in memory — the adapter fetches every movie and slices afterwards —
+    so this costs a classification pass, never another request.
+
+    `counts` always describes the catalogue, not the current filter: choosing
+    `4K` narrows the list while the chips keep telling how much is in each
+    bucket, which is what a chip row is read for.
+    """
+    counts = library_class.class_counts(result.get("items") or [], path_3d=config.PATH_3D)
+    failure = _failure_fields(result)
+    if failure:
+        # A failed fetch must not be reported as "no matches for your filter".
+        return {**_empty_page(page, page_size), **failure, "filtered": True, "counts": counts}
+
+    items = [
+        {
+            **item,
+            "class": library_class.library_class(
+                has_file=bool(item.get("has_file")),
+                quality=str(item.get("quality") or ""),
+                path=str(item.get("path") or ""),
+                path_3d=config.PATH_3D,
+            ),
+        }
+        for item in result.get("items") or []
+    ]
+    needle = normalize_for_search(q)
+    matches = [
+        item
+        for item in items
+        if (not needle or _matches(item, needle))
+        and (not class_filter or item["class"] == class_filter)
+    ]
+    body = {
+        "items": _paginate(matches, page, page_size),
+        "total": len(matches),
+        "page": page,
+        "page_size": page_size,
+        "counts": counts,
+    }
+    if needle or class_filter:
+        body["filtered"] = True
+    return body
+
+
 @router.get("/api/wanted/all")
-async def get_all_movies(page: int = 1, page_size: int = 50, q: str = "", _key: str = Depends(verify_api_key)):
-    """Todas las películas de Radarr con estado de archivo y ruta (paginado)."""
+async def get_all_movies(
+    page: int = 1,
+    page_size: int = 50,
+    q: str = "",
+    class_filter: str | None = Query(None, alias="class"),
+    _key: str = Depends(verify_api_key),
+):
+    """Todas las películas de Radarr con estado de archivo, ruta y clase.
+
+    `class` filtra por la clase del diseño (4K/3D/1080/otros/sin archivo) y un
+    valor fuera de esa lista se rechaza: ignorarlo devolvería el catálogo
+    entero como respuesta a un filtro, que es peor que un error.
+    """
+    if class_filter not in (None, *library_class.CLASSES):
+        raise HTTPException(status_code=422, detail=f"clase desconocida: {class_filter}")
     service = find_service("radarr", "arr")
     if not service:
         # The same reason `/api/wanted` carries: an unconfigured arr and an
         # empty catalogue are different facts, and the Calidad view shows both.
         return {"items": [], "total": 0, "page": page, "page_size": page_size,
                 "error_kind": "unknown", "error": "radarr: servicio no configurado"}
-    # page_size=0 tells the client not to slice, so the filter sees everything.
-    fetch_size = 0 if normalize_for_search(q) else page_size
+    # The whole list, always: the class counts describe the catalogue, so a
+    # request that only asked for one page would still have to count the rest.
     async with http_session() as session:
-        result = await fetch_all_movies_detailed(session, service, page, fetch_size)
+        result = await fetch_all_movies_detailed(session, service, 1, 0)
     # Every /api/wanted/all item is a Radarr movie, so the key is explicit.
     return await attach_grabbed_at(
-        _filter_all_endpoint(result, q, page, page_size), source="radarr", kind="movie"
+        _classified_movies_page(result, q, class_filter or "", page, page_size),
+        source="radarr",
+        kind="movie",
     )
 
 
