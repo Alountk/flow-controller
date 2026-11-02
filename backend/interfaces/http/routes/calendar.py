@@ -225,8 +225,8 @@ def _release_row(row: dict) -> dict:
     """One direct-source row → the release shape the modal renders (S1).
 
     Only what the sources really said: title/name, guid (falling back to the
-    link so the grab always has a target), link, size, seeders when the source
-    stated one, and indexer/source. The arr's fields (indexerId, leechers,
+    link so the grab always has a target), link, size, seeders or sources when
+    the source stated one, and indexer/source. The arr's fields (indexerId, leechers,
     protocol, releaseGroup, indexerFlags) are NEVER invented. `quality` and
     `languages` are derived from the tokens the source's own title declares
     (`domain/release_tokens.py`) — the chips died moving off the arr
@@ -243,6 +243,10 @@ def _release_row(row: dict) -> dict:
     }
     if row.get("seeders") is not None:
         mapped["seeders"] = row.get("seeders")
+    # aMule's ED2K source count travels as `sources`, never as `seeders`: the
+    # magnitudes differ, and the table renders whichever one the row declared.
+    if row.get("sources") is not None:
+        mapped["sources"] = row.get("sources")
     quality = quality_from_title(mapped["title"])
     if quality:
         mapped["quality"] = quality
