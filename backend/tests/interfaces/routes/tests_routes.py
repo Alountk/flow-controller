@@ -13,6 +13,7 @@ body itself was never executed.
 """
 
 from interfaces.http.routes import settings as settings_route
+from interfaces.http.routes import wanted as wanted_routes
 import asyncio
 import copy
 from infrastructure import credentials
@@ -1268,6 +1269,61 @@ class TestAllListingsLibraryClass:
 
         assert body["counts"]["3D"] == 0
         assert [i["class"] for i in body["items"] if i["title"] == "Tres D"] == ["1080"]
+
+    # ── S1: the resolutions a row lights come from the configured roots ──────
+
+    def test_every_item_lights_the_resolutions_the_roots_prove(self, monkeypatch):
+        """A 1080 movie with a 4K copy lights BOTH: its own path can only ever
+        be in one root, so the copies are the only proof of the others."""
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/4k")
+        listed = {"/mnt/4k": ["Diez Ochenta (2022) [4K]"], "/mnt/3d": []}
+        monkeypatch.setattr(wanted_routes, "_root_children", lambda folder: listed.get(folder, []))
+
+        body = self._get().json()
+
+        by_title = {item["title"]: item["libraries"] for item in body["items"]}
+        assert by_title["Diez Ochenta"] == ["4K", "1080p"]
+        assert by_title["Cuatro K"] == ["4K"]
+        assert by_title["Tres D"] == ["3D"]
+        assert by_title["Setecientos Veinte"] == ["SD"]
+        assert by_title["Sin Archivo"] == []
+
+    def test_a_3d_copy_lights_3d_on_a_movie_that_is_none(self, monkeypatch):
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+        monkeypatch.setattr(config, "PATH_4K", "")
+        monkeypatch.setattr(
+            wanted_routes, "_root_children", lambda folder: ["Cuatro K (2024)"] if folder else []
+        )
+
+        body = self._get().json()
+
+        by_title = {item["title"]: item["libraries"] for item in body["items"]}
+        assert by_title["Cuatro K"] == ["4K", "3D"]
+
+    def test_the_roots_are_listed_once_per_request(self, monkeypatch):
+        """Two listings for the whole catalogue, never two per row."""
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/4k")
+        seen: list[str] = []
+        monkeypatch.setattr(
+            wanted_routes, "_root_children", lambda folder: (seen.append(folder), [])[1]
+        )
+
+        self._get()
+
+        assert seen == ["/mnt/4k", "/mnt/3d"]
+
+    def test_an_unreadable_root_never_turns_into_a_claim(self, monkeypatch):
+        """Neither an exception nor a missing chip: the class still shows."""
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/4k")
+        monkeypatch.setattr(wanted_routes, "_root_children", lambda folder: [])
+
+        body = self._get().json()
+
+        by_title = {item["title"]: item["libraries"] for item in body["items"]}
+        assert by_title["Diez Ochenta"] == ["1080p"]
 
 
 # ── Failures must not masquerade as "nothing missing" ────────────────────────

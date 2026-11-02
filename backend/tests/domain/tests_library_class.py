@@ -107,3 +107,85 @@ def test_the_module_is_pure():
     assert "import config" not in source
     assert "os." not in source
     assert "aiohttp" not in source
+
+
+# ── S1: the resolutions a row lights are what the DISK proves ────────────────
+
+
+def _res(
+    quality: str,
+    *,
+    has_file: bool = True,
+    path: str = "/mnt/movies/Alien (1979)",
+    path_4k: str = "/mnt/movies4k",
+    path_3d: str = "/mnt/movies3d",
+    copies_4k: tuple[str, ...] = (),
+    copies_3d: tuple[str, ...] = (),
+) -> list[str]:
+    return library_class.available_resolutions(
+        has_file=has_file,
+        quality=quality,
+        path=path,
+        path_4k=path_4k,
+        path_3d=path_3d,
+        copies_4k=copies_4k,
+        copies_3d=copies_3d,
+    )
+
+
+def test_a_1080p_file_with_a_4k_copy_lights_both():
+    """The bug: a movie lives in ONE folder, so its own path can never be inside
+    the 4K root and the 3D root at once. The copies are the only proof."""
+    assert _res("WEBDL-1080p", copies_4k=("Alien (1979) [4K]",)) == ["4K", "1080p"]
+
+
+def test_a_3d_copy_adds_the_third_resolution():
+    assert _res(
+        "WEBDL-1080p",
+        copies_4k=("Alien (1979) [4K]",),
+        copies_3d=("Alien (1979) [3D]",),
+    ) == ["4K", "3D", "1080p"]
+
+
+def test_the_own_file_living_in_the_4k_root_lights_4k():
+    assert _res("Bluray-2160p", path="/mnt/movies4k/Alien (1979)") == ["4K"]
+
+
+def test_a_2160p_file_lights_4k_without_any_copy():
+    assert _res("Bluray-2160p") == ["4K"]
+
+
+def test_an_sd_file_stays_sd_until_a_copy_proves_more():
+    assert _res("HDTV-720p") == ["SD"]
+    assert _res("HDTV-720p", copies_3d=("Alien (1979) [3D]",)) == ["3D", "SD"]
+
+
+def test_a_movie_without_a_file_lights_nothing_even_with_copies():
+    assert _res("", has_file=False, copies_4k=("Alien (1979) [4K]",)) == []
+
+
+def test_an_unconfigured_root_proves_nothing():
+    """Empty means "not configured", never "everything"."""
+    assert _res("WEBDL-1080p", path_4k="", path_3d="") == ["1080p"]
+
+
+def test_an_unreadable_root_proves_nothing():
+    """The route hands over an empty listing when the folder cannot be read."""
+    assert _res("WEBDL-1080p", copies_4k=(), copies_3d=()) == ["1080p"]
+
+
+def test_the_order_is_the_chip_order():
+    both = _res(
+        "WEBDL-1080p",
+        copies_4k=("Alien (1979)",),
+        copies_3d=("Alien (1979)",),
+    )
+    assert both == ["4K", "3D", "1080p"]
+    assert both == [r for r in library_class.RESOLUTIONS if r in both]
+
+
+def test_a_copy_folder_is_recognised_by_the_movie_folder_prefix():
+    """`Alien (1979) [4K]` is the movie's copy; `Aliens (1986)` is another movie."""
+    assert _res("WEBDL-1080p", copies_4k=("Aliens (1986)",)) == ["1080p"]
+    assert _res("WEBDL-1080p", copies_4k=("Alien (1979)",)) == ["4K", "1080p"]
+    assert _res("WEBDL-1080p", copies_4k=("Alien (1979) [IMAX]",)) == ["4K", "1080p"]
