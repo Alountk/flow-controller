@@ -26,6 +26,8 @@ test('shows the honest empty state and gates the arr-dependent pages', async ({ 
   // meaning again: the old /Faltantes/ link never exists in any install,
   // so its absence would prove nothing.)
   await expect(app.getByRole('link', { name: /Películas/ })).toHaveCount(0);
+  // «Estrenos» reads the same arr services: no arr, no calendar page.
+  await expect(app.locator('a[href="/estrenos"]')).toHaveCount(0);
   await expect(app.getByRole('link', { name: /Disco/ })).toBeVisible();
   await expect(app.getByRole('link', { name: /Configuración/ })).toBeVisible();
 
