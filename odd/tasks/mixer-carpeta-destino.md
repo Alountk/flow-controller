@@ -45,3 +45,9 @@ existe. Este trabajo la abre, con nombre editable y sin pisar nada.
 - **L1** (verbatim arriba) — petición original.
 - **L2** Decisiones del cuestionario: «Navegador de carpetas (reutilizado)»,
   «Editable, con rechazo si existe».
+
+## Slices
+
+Un solo commit (`12977fb`), 578 líneas authored, por encima de las ~400: el
+corte honesto dejaría la validación sin su prueba o la UI sin el backend que la
+respeta, y el modo carpeta no se puede observar a medias. Divulgado en el PR.
