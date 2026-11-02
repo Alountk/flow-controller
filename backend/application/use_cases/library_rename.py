@@ -238,6 +238,13 @@ def apply_rename(
     if os.path.lexists(parent) and not os.path.isdir(parent):
         return refusal(f"Ya existe un archivo con el nombre de la carpeta: {parent.name}")
 
+    # Two targets that differ only by case are one file on a case-insensitive
+    # volume (APFS, CIFS), and `os.rename` would replace the first with the
+    # second. The comparison is the only place that can be caught.
+    folded = [str(target).casefold() for _, target in plan]
+    if len(set(folded)) != len(folded):
+        return refusal("Dos archivos acabarían con el mismo nombre: no se renombra nada")
+
     for _, target in plan:
         if os.path.lexists(target):
             return refusal(f"Ya existe {target.name}: no se sobreescribe")

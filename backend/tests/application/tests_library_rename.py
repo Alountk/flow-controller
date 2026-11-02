@@ -332,6 +332,31 @@ class TestApply:
             assert got["ok"] is False, (folder, stem)
         assert video.exists()
 
+    def test_refuses_two_sidecars_that_would_land_on_the_same_name(self, tmp_path):
+        """On a case-insensitive volume `.es.srt` and `.ES.srt` are one file.
+
+        Both render to a distinct-looking target, so only the *comparison* can
+        catch it — and `os.rename` would replace one with the other silently.
+        """
+        root = tmp_path / "4k"
+        root.mkdir()
+        video = root / "Alien.1979.mkv"
+        video.write_bytes(b"video")
+        (root / "Alien.1979.es.srt").write_bytes(b"es")
+        (root / "Alien.1979.ES.srt").write_bytes(b"ES")
+
+        got = library_rename.apply_rename(
+            video_path=str(video),
+            folder="Alien (1979)",
+            stem="Alien (1979) 2160p",
+            siblings=["Alien.1979.mkv", "Alien.1979.es.srt", "Alien.1979.ES.srt"],
+            roots=[str(root)],
+            blocked=lambda path, verb: None,
+        )
+
+        assert got["ok"] is False
+        assert video.exists(), "a refused rename moves nothing"
+
     def test_reports_each_file_it_moved_so_the_rename_can_be_undone(self, tmp_path):
         root, video = self._setup(tmp_path)
 
