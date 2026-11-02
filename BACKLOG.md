@@ -870,6 +870,31 @@ información para el usuario» + el estudio *sin dependencias o con librería*.
 | Resultado | **Toasts** en éxito y error: `ToastViewport` único en App (`role=status`, aria-live polite), errores9 s / aciertos4 s, tope de4, clic para cerrar |
 | Superficies existentes | se quedan tal cual: el aviso en lista del panel y el paso *done* del diálogo — el toast es lo que llega a quien ya miraba a otro lado |
 
+### F-14 — Renombrar las copias 4K/3D con la plantilla de Radarr · **Mediana** · ✅ *Entregada*
+
+Pedida: «hay que añadir una opción de renombrar los archivos 4k y 3d… me gustaría hacerlo como
+lo hace radarr, ¿es posible?» y, al ver el estudio: «dentro de 4k y 3d los archivos no están en
+carpetas… seleccionar el archivo y cuando se vaya a renombrar dar la opción de crear la carpeta
+también y meterlo dentro».
+
+**No se delega en Radarr**, porque Radarr solo renombra lo que rastrea: sus copias 4K/3D viven
+fuera de su biblioteca y nunca tendrán un `movieFile` al que aplicar `RenameMovie`. Lo que sí se
+reutiliza es **su plantilla**, y solo después de comprobarla: `naming.reproduced_radarr`
+reproduce el nombre que Radarr ya eligió para el archivo de esa película, y sin esa coincidencia
+la plantilla no nombra nada — se propone el nombre actual y se avisa.
+
+| Decisión | Detalle |
+|---|---|
+| Carpeta | Solo se ofrece cuando el archivo está **suelto** en la raíz 4K/3D; dentro de una carpeta se renombra el archivo y la carpeta no se toca |
+| Edición | Carpeta y nombre **editables**: la identificación es una propuesta, y quien sabe es el usuario |
+| Sidecars | Siguen al vídeo los del **mismo nombre base + extensión de sidecar** (`.srt`, `.nfo`, `-thumb.jpg`); se conserva el sufijo (`-thumb`, `.es`) |
+| Nunca sobreescribe | `os.rename` reemplaza el destino en silencio; aquí las colisiones se comprueban **para todo el conjunto antes del primer rename** y un destino ocupado es un rechazo con su nombre |
+| Sin rastro no hay renombrado | Cada archivo movido se informa (`from` → `to`) en la respuesta y en el log, para poder deshacerlo a mano |
+
+Solo aplica a las raíces 4K/3D, la guarda de semillas se aplica al renombrado igual que al
+movimiento, y el destino no puede salirse de la raíz. Detalle completo y specs en
+`odd/tasks/renombrar-4k-3d.md`.
+
 ## 🔵 Recomendaciones y reglas del ciclo
 
 C-01…C-07 y C-09…C-11 son mías; **C-08 es tuya** («siempre hardlink») y ya está aplicada.

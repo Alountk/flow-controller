@@ -11,6 +11,7 @@ import {
 } from '../../shared/api/files.ts'
 import { filterByName, useBrowse } from '../../shared/hooks/useFilesNavigator.ts'
 import { FileNavigator, type FileNavigatorEntry } from '../../shared/ui/FileNavigator.tsx'
+import { LibraryRenameDialog } from './LibraryRenameDialog.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../shared/utils/selection.ts'
 import './FileManager.css'
 
@@ -61,6 +62,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [radarrRename, setRadarrRename] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -330,6 +332,15 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     )
   }
 
+  // A copy the explorer can rename the Radarr way: a video whose folder lives
+  // under a 4K/3D root. `isVideo` unknown (older payload) is not good enough to
+  // offer it — the action would be a guess.
+  const libraryRoot = roots.find(
+    (root) =>
+      (root.role === '4k' || root.role === '3d') &&
+      (path === root.path || path.startsWith(`${root.path}/`)),
+  )
+
   function renderRowActions(entry: FileNavigatorEntry) {
     return (
       <>
@@ -366,6 +377,19 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         >
           ✏
         </button>
+        {libraryRoot && !entry.isDir && entry.isVideo === true && (
+          <button
+            className="fm-sm-btn accent"
+            title="Renombrar como Radarr"
+            aria-label={`Renombrar como Radarr ${entry.name}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setRadarrRename(entry.path)
+            }}
+          >
+            🏷
+          </button>
+        )}
         <button
           className="fm-sm-btn danger"
           title="Eliminar"
@@ -525,6 +549,19 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
 
       {error && <div className="fm-error" onClick={() => setError(null)}>{error}</div>}
       {toast && <div className="fm-toast">{toast}</div>}
+
+      {radarrRename && (
+        <LibraryRenameDialog
+          path={radarrRename}
+          onClose={() => setRadarrRename(null)}
+          onRenamed={(detail) => {
+            setToast(detail)
+            clearTimeout(toastTimer.current)
+            toastTimer.current = setTimeout(() => setToast(null), 5000)
+            void queryClient.invalidateQueries({ queryKey: ['browse'] })
+          }}
+        />
+      )}
 
       {creating && (
         <div className="fm-input-row">

@@ -44,20 +44,20 @@ subtipos con el viejo sin decirlo.
 
 ## Tasks
 
-- **T1** Backend: `naming.folder_from_pattern` + identificación de la copia
-  suelta y calidad desde su propio nombre (S4). Inline.
-- **T2** Backend: `GET /api/files/rename-preview` — carpeta, nombre, sidecars y
-  avisos, sin escribir nada; plantilla no validada ⇒ `ok: false` con la razón
-  (S3, S4).
-- **T3** Backend: `POST /api/files/rename-apply` — mkdir + rename del conjunto,
-  colisiones rechazadas, guarda de semillas, contención en la raíz, rastro del
-  par (S5, S6, S7, S8).
-- **T4** Frontend: acción del explorador para un vídeo 4K/3D y diálogo con
-  carpeta + nombre editables y la lista de sidecars; la casilla de carpeta solo
-  cuando está suelto (S1, S2).
-- **T5** Tests: backend de preview/apply (colisión, sidecars, semillas, fuera de
-  raíz, plantilla no validada) y frontend del diálogo.
-- **T6** Ayuda y docs del explorador donde se describen las acciones.
+- **T1** ✅ `1cc1d23` — `domain/rename_plan.py` (sidecars, validación de nombres)
+  y `application/use_cases/library_rename.py` (`match_movie`, `proposal`): la
+  calidad sale del nombre de la copia y la carpeta de `movie.path` de Radarr (S3, S4).
+- **T2** ✅ `1cc1d23` — `GET /api/files/rename-preview`: no escribe nada; sin
+  plantilla reproducible devuelve el nombre actual y el aviso (S4).
+- **T3** ✅ `1cc1d23` — `POST /api/files/rename-apply`: mkdir + rename del
+  conjunto, colisiones rechazadas antes del primer rename, guarda de semillas,
+  contención en la raíz y `moved`/`failed` por archivo (S5–S8).
+- **T4** ✅ — acción `🏷 Renombrar como Radarr` solo para vídeos bajo una raíz
+  4K/3D (`isVideo === true`, nunca por ausencia) y `LibraryRenameDialog` con
+  carpeta + nombre editables y la lista de sidecars (S1, S2).
+- **T5** ✅ — 70 tests backend (36 dominio, 24 caso de uso, 10 rutas) y 5 de
+  interfaz para el diálogo.
+- **T6** ✅ — F-14 en `BACKLOG.md` y la tabla del `README.md`.
 
 ## Log
 
@@ -81,3 +81,12 @@ subtipos con el viejo sin decirlo.
   renombrado. La identidad se propone desde el nombre del propio archivo y la
   fila del catálogo, y el usuario la corrige; la plantilla se valida contra
   Radarr antes de ofrecerse.
+
+## Slices
+
+- **Slice 1 — el backend (T1–T3), commit `1cc1d23`**: 1228 líneas authored, casi
+  todas tests (36 del módulo puro, 24 del caso de uso, 10 de las rutas). Es una
+  sola unidad de comportamiento — proponer y aplicar no se pueden separar sin
+  dejar una de las dos sin su prueba — y va divulgada por encima del corte de
+  ~400 líneas.
+- **Slice 2 — el diálogo (T4–T6)**: cerrará la feature.
