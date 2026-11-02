@@ -91,12 +91,15 @@ def proposal(
     naming_cfg: dict,
     siblings: Iterable[str],
     roots: Iterable[str],
+    chosen_movie: dict | None = None,
 ) -> dict:
     """What the dialog should prefill: folder, name, sidecars and warnings.
 
     Everything is a suggestion the user can edit, so a doubt is a warning, not
     a failure. Only an unreadable file is a failure — there is nothing to
-    propose for it.
+    propose for it. `chosen_movie` is the movie the user picked by hand: naming
+    the film is exactly the proof the pattern gate otherwise has to find on its
+    own, so an identified movie is enough to fill a name in.
     """
     if not os.path.isfile(video_path):
         return refusal(f"No se pudo leer el archivo: {video_path}")
@@ -112,7 +115,9 @@ def proposal(
     quality = quality_from_title(name) or ""
 
     warnings: list[str] = []
-    movie, reason = match_movie(stem, movies)
+    movie, reason = (
+        (chosen_movie, "") if chosen_movie is not None else match_movie(stem, movies)
+    )
     proposed_stem = stem
     folder = ""
     # Whether the template proved it can write this movie's name. Without that
@@ -132,9 +137,17 @@ def proposal(
         reference = naming.build_values(
             title=movie.get("title", ""), year=movie.get("year"), quality=movie.get("quality", "")
         )
-        trusted = bool(pattern) and naming.reproduced_radarr(
+        reproduced = bool(pattern) and naming.reproduced_radarr(
             pattern, reference, movie.get("file_name", "")
         )
+        # A movie chosen by hand lifts the gate; the preview is still shown and
+        # still editable, so the person can see what the template wrote.
+        trusted = reproduced or chosen_movie is not None
+        if chosen_movie is not None and not reproduced:
+            warnings.append(
+                "elegiste la película a mano: se aplicó la plantilla sin comprobarla "
+                "contra el archivo que Radarr tiene de ella"
+            )
         if not pattern:
             warnings.append("Radarr no expone un patrón de nombrado; se propone el nombre actual")
         elif not trusted:
@@ -189,6 +202,50 @@ def proposal(
         ),
         "detail": "",
     }
+
+
+def search_movies(query: str, movies: list[dict], limit: int = 12) -> list[dict]:
+    """The catalog rows a person can pick from, best first.
+
+    Cleaned startswith before substring: someone typing `alien` means Alien, not
+    a film whose Spanish title happens to contain the word.
+    """
+    wanted = naming.clean_title(query or "")
+    if not wanted:
+        return []
+
+    starts: list[dict] = []
+    inside: list[dict] = []
+    for movie in movies:
+        title = (movie.get("title") or "").strip()
+        if not title:
+            continue
+        year = movie.get("year")
+        key = naming.clean_title(f"{title} {year}" if year else title)
+        if key.startswith(wanted):
+            starts.append(movie)
+        elif wanted in key:
+            inside.append(movie)
+
+    by_title = lambda m: (str(m.get("title") or "").lower(), m.get("year") or 0)  # noqa: E731
+    rows = sorted(starts, key=by_title) + sorted(inside, key=by_title)
+    return [
+        {
+            "id": m.get("id"),
+            "title": m.get("title"),
+            "year": m.get("year"),
+            "folder": _folder_of(m),
+            "quality": (m.get("quality") or "").strip(),
+        }
+        for m in rows[:limit]
+    ]
+
+
+def find_movie(movie_id: int, movies: list[dict]) -> dict | None:
+    for movie in movies:
+        if movie.get("id") == movie_id:
+            return movie
+    return None
 
 
 def _targets(

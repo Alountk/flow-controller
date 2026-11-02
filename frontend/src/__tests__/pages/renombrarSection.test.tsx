@@ -41,6 +41,7 @@ function candidate(over: Partial<RenameCandidate> = {}): RenameCandidate {
 
 interface Mock {
   applied: Record<string, unknown>[]
+  previews: string[]
 }
 
 function mockFetch(options: {
@@ -49,6 +50,7 @@ function mockFetch(options: {
   apply?: { ok: boolean; detail: string; moved?: { from: string; to: string }[] }
 } = {}): Mock {
   const applied: Record<string, unknown>[] = []
+  const previews: string[] = []
   const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.includes('/api/files/rename-candidates')) {
@@ -60,7 +62,30 @@ function mockFetch(options: {
       })
     }
     if (url.includes('/api/files/rename-preview')) {
+      previews.push(url)
+      // A movie picked by hand arrives with its id and gets the pattern applied.
+      if (url.includes('movie_id=9')) {
+        return ok({
+          ...candidate(),
+          ok: true,
+          detail: '',
+          folder: 'Batman Begins (2005)',
+          name: 'Batman Begins (2005) Bluray-2160p',
+          movie: { id: 9, title: 'Batman Begins', year: 2005 },
+          warnings: [],
+        })
+      }
       return ok({ ...candidate(), ok: true, detail: '' })
+    }
+    if (url.includes('/api/files/rename-movies')) {
+      return ok({
+        ok: true,
+        detail: '',
+        items: [
+          { id: 7, title: 'The Batman', year: 2022, folder: 'The Batman (2022)' },
+          { id: 9, title: 'Batman Begins', year: 2005, folder: 'Batman Begins (2005)' },
+        ],
+      })
     }
     if (url.includes('/api/files/rename-apply')) {
       applied.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
@@ -91,7 +116,7 @@ function mockFetch(options: {
     return ok({})
   })
   vi.stubGlobal('fetch', fn)
-  return { applied }
+  return { applied, previews }
 }
 
 function renderSection() {
@@ -279,6 +304,57 @@ describe('la sección Renombrar', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('no se sobreescribe')
     expect(screen.getByRole('dialog', { name: 'Renombrar como Radarr' })).toBeTruthy()
+  })
+})
+
+describe('elegir la película a mano', () => {
+  it('names a copy the filename alone could not identify', async () => {
+    // Reported from the instance: the row said «Película sin identificar» and
+    // there was nothing to apply. Naming the film is the missing proof.
+    const mock = mockFetch({
+      items: [
+        candidate({
+          named: false,
+          folder: '',
+          name: 'The.Batman.2022.2160p',
+          movie: null,
+          warnings: ['no coincide ninguna película del catálogo con el nombre del archivo'],
+        }),
+      ],
+    })
+    renderSection()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
+    expect(await screen.findByText('Película sin identificar')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Elegir película' }))
+    fireEvent.change(screen.getByLabelText('Buscar película'), { target: { value: 'batman' } })
+
+    // Two rows: The Batman (the copy's own film) and Batman Begins.
+    const picks = await screen.findAllByRole('button', { name: /Batman Begins/ })
+    fireEvent.click(picks[0])
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('Nombre del archivo') as HTMLInputElement).value).toBe(
+        'Batman Begins (2005) Bluray-2160p',
+      ),
+    )
+    expect((screen.getByLabelText('Carpeta') as HTMLInputElement).value).toBe(
+      'Batman Begins (2005)',
+    )
+    expect(mock.previews.at(-1)).toContain('movie_id=9')
+    expect(screen.getByText('Batman Begins (2005)')).toBeTruthy()
+  })
+
+  it('does not search the catalog until the person asks for it', async () => {
+    const mock = mockFetch()
+    renderSection()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
+    await screen.findByRole('dialog', { name: 'Renombrar como Radarr' })
+
+    expect(mock.previews.some((url) => url.includes('movie_id='))).toBe(false)
+    expect(screen.queryByLabelText('Buscar película')).toBeNull()
   })
 })
 

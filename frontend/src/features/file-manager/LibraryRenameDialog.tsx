@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { renameApply, renamePreview, type RenameProposal } from '../../shared/api/files.ts'
+import {
+  renameApply,
+  renameMovies,
+  renamePreview,
+  type RenameMovie,
+  type RenameProposal,
+} from '../../shared/api/files.ts'
 import './LibraryRenameDialog.css'
 
 interface Props {
@@ -23,6 +29,9 @@ export function LibraryRenameDialog({ path, onClose, onRenamed }: Props) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
+  const [query, setQuery] = useState('')
+  const [found, setFound] = useState<RenameMovie[]>([])
 
   useEffect(() => {
     let live = true
@@ -41,6 +50,46 @@ export function LibraryRenameDialog({ path, onClose, onRenamed }: Props) {
       live = false
     }
   }, [path])
+
+  // The catalog is searched only once the person opens the picker: most copies
+  // are identified, and a Radarr round trip on every dialog would be waste.
+  useEffect(() => {
+    if (!picking || query.trim().length < 2) {
+      setFound([])
+      return
+    }
+    let live = true
+    const timer = window.setTimeout(() => {
+      renameMovies(query)
+        .then((got) => {
+          if (live) setFound(got.items ?? [])
+        })
+        .catch(() => {
+          if (live) setFound([])
+        })
+    }, 250)
+    return () => {
+      live = false
+      window.clearTimeout(timer)
+    }
+  }, [picking, query])
+
+  async function pick(movie: RenameMovie) {
+    setPicking(false)
+    setQuery('')
+    setError(null)
+    try {
+      // Re-derive the plan for the film the person chose: the folder comes from
+      // Radarr's own path and the name from its template, not from the guess.
+      const got = await renamePreview(path, movie.id)
+      setProposal(got)
+      setFolder(got.folder ?? '')
+      setName(got.name ?? '')
+      if (!got.ok) setError(got.detail || 'No se pudo preparar el renombrado')
+    } catch {
+      setError('No se pudo preparar el renombrado')
+    }
+  }
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -84,9 +133,61 @@ export function LibraryRenameDialog({ path, onClose, onRenamed }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="fm-rename-title">Renombrar como Radarr</h3>
-        <p className="fm-rename-subject" title={path}>
-          {movie?.title ? `${movie.title}${movie.year ? ` (${movie.year})` : ''}` : 'Película sin identificar'}
-        </p>
+        <div className="fm-rename-movie">
+          <span className="fm-rename-subject" title={path}>
+            {movie?.title
+              ? `${movie.title}${movie.year ? ` (${movie.year})` : ''}`
+              : 'Película sin identificar'}
+          </span>
+          <button
+            type="button"
+            className="fm-btn"
+            onClick={() => {
+              setPicking((open) => !open)
+              setQuery('')
+            }}
+            disabled={busy}
+          >
+            {picking ? 'Cancelar búsqueda' : 'Elegir película'}
+          </button>
+        </div>
+
+        {picking && (
+          <div className="fm-rename-picker">
+            <label className="fm-rename-field">
+              <span>Buscar en Radarr</span>
+              <input
+                aria-label="Buscar película"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                disabled={busy}
+                placeholder="Título o título y año"
+                autoFocus
+              />
+            </label>
+            {query.trim().length >= 2 && found.length === 0 && (
+              <p className="fm-rename-hint">Ninguna película del catálogo coincide</p>
+            )}
+            {found.length > 0 && (
+              <ul className="fm-rename-results">
+                {found.map((option) => (
+                  <li key={option.id}>
+                    <button
+                      type="button"
+                      className="fm-rename-result"
+                      onClick={() => pick(option)}
+                      disabled={busy}
+                    >
+                      <span>{option.title}</span>
+                      <span className="fm-rename-result-year">{option.year ?? ''}</span>
+                      <span className="fm-rename-result-folder">{option.folder}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {loose && (
           <label className="fm-rename-field">
