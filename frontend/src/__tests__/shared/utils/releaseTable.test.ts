@@ -37,8 +37,13 @@ describe('S3 · ordenación de la tabla', () => {
 
   it('sorts by seeders and keeps rows without seeders at the bottom', () => {
     const rows = [row('unknown', { seeders: undefined }), row('low', { seeders: 2 }), row('high', { seeders: 300 })]
-    expect(titles(sortReleases(rows, { key: 'seeders', dir: 'desc' }))).toEqual(['high', 'low', 'unknown'])
-    expect(titles(sortReleases(rows, { key: 'seeders', dir: 'asc' }))).toEqual(['low', 'high', 'unknown'])
+    expect(titles(sortReleases(rows, { key: 'peers', dir: 'desc' }))).toEqual(['high', 'low', 'unknown'])
+    expect(titles(sortReleases(rows, { key: 'peers', dir: 'asc' }))).toEqual(['low', 'high', 'unknown'])
+  })
+
+  it('orders aMule rows by their ED2K sources, the same number the column shows (S4)', () => {
+    const rows = [row('ed2k', { seeders: undefined, sources: 40 }), row('torrent', { seeders: 12 })]
+    expect(titles(sortReleases(rows, { key: 'peers', dir: 'desc' }))).toEqual(['ed2k', 'torrent'])
   })
 
   it('sorts by language label and keeps rows without languages at the bottom', () => {
@@ -54,7 +59,7 @@ describe('S3 · ordenación de la tabla', () => {
 
   it('is stable: equal values keep a deterministic title order', () => {
     const rows = [row('zz', { seeders: 5 }), row('aa', { seeders: 5 })]
-    expect(titles(sortReleases(rows, { key: 'seeders', dir: 'desc' }))).toEqual(['aa', 'zz'])
+    expect(titles(sortReleases(rows, { key: 'peers', dir: 'desc' }))).toEqual(['aa', 'zz'])
   })
 
   it('never mutates the array it is given', () => {

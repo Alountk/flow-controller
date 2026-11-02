@@ -258,15 +258,15 @@ describe('ReleaseSearchModal filter bar', () => {
     expect(within(rows[0] as HTMLElement).getByText(/Todo a la vez/)).toBeInTheDocument()
   })
 
-  it('binds the seeders floor label to its input with htmlFor/id/name (S2)', async () => {
+  it('binds the peers floor label to its input with htmlFor/id/name (S2)', async () => {
     await openResults()
 
     const input = screen.getByPlaceholderText('0') as HTMLInputElement
     const label = input.closest('label') as HTMLLabelElement
     expect(label).not.toBeNull()
     expect(label.getAttribute('for')).toBe(input.id)
-    expect(input.id).toBe('release-filter-seeders')
-    expect(input.name).toBe('release-filter-seeders')
+    expect(input.id).toBe('release-filter-peers')
+    expect(input.name).toBe('release-filter-peers')
   })
 })
 

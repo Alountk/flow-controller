@@ -11,6 +11,8 @@ export interface ReleaseRow {
   size: number
   languages?: string[]
   seeders?: number
+  /** aMule's ED2K source count — the «Pares» number for an eD2K row. */
+  sources?: number
 }
 
 export interface ReleaseTableActions<T extends ReleaseRow> {
@@ -31,7 +33,7 @@ const COLUMNS: Array<{ key: SortKey | null; label: string; numeric?: boolean }> 
   { key: 'name', label: 'Nombre' },
   { key: 'size', label: 'Tamaño', numeric: true },
   { key: 'language', label: 'Idioma' },
-  { key: 'seeders', label: 'Seeders', numeric: true },
+  { key: 'peers', label: 'Pares', numeric: true },
   { key: null, label: 'Destino' },
 ]
 
@@ -104,13 +106,7 @@ export function ReleaseResultsTable<T extends ReleaseRow>({
                   <span className="release-unknown">—</span>
                 )}
               </td>
-              <td className="is-numeric">
-                {typeof r.seeders === 'number' ? (
-                  <span className={`release-seeders ${seederClass(r.seeders)}`}>⬆ {r.seeders}</span>
-                ) : (
-                  <span className="release-unknown">—</span>
-                )}
-              </td>
+              <td className="is-numeric">{peersCell(r)}</td>
               <td>
                 <div className="release-dest">
                   <button
@@ -172,6 +168,24 @@ export function ReleaseResultsTable<T extends ReleaseRow>({
 }
 
 /** Seeder colour scale: plenty, thin, dying — the operator triages by it. */
+/** «Pares» = how many others have the file, whatever the source called it.
+ *  A torrent's seeders keep their colour scale; aMule's ED2K sources do NOT —
+ *  17 sources and 17 seeders mean very different things, and painting them on
+ *  the same axis would be a claim the number cannot make. */
+function peersCell(r: ReleaseRow) {
+  if (typeof r.seeders === 'number') {
+    return <span className={`release-peers ${seederClass(r.seeders)}`}>⬆ {r.seeders}</span>
+  }
+  if (typeof r.sources === 'number') {
+    return (
+      <span className="release-peers" title="Fuentes ED2K (aMule)">
+        ⬆ {r.sources}
+      </span>
+    )
+  }
+  return <span className="release-unknown">—</span>
+}
+
 function seederClass(seeders: number): string {
   if (seeders >= 50) return 'is-good'
   if (seeders >= 10) return 'is-ok'

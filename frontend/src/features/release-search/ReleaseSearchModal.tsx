@@ -1157,19 +1157,19 @@ export function ReleaseSearchModal({
                   onChange={(e) => setFilters((f) => ({ ...f, text: e.target.value }))}
                 />
 
-                <label className="release-filter-seeders" htmlFor="release-filter-seeders">
-                  Seeders mín.
+                <label className="release-filter-peers" htmlFor="release-filter-peers">
+                  Pares mín.
                   <input
                     type="number"
-                    id="release-filter-seeders"
-                    name="release-filter-seeders"
+                    id="release-filter-peers"
+                    name="release-filter-peers"
                     min={0}
-                    value={filters.minSeeders || ''}
+                    value={filters.minPeers || ''}
                     placeholder="0"
                     onChange={(e) =>
                       setFilters((f) => ({
                         ...f,
-                        minSeeders: Math.max(0, Number(e.target.value) || 0),
+                        minPeers: Math.max(0, Number(e.target.value) || 0),
                       }))
                     }
                   />
