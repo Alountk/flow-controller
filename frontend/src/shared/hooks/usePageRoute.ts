@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect } from 'react'
 export type Page =
   | 'dashboard'
   | 'peliculas'
+  | 'peliculasV2'
   | 'series'
   | 'seguimiento'
   | 'disk'
@@ -15,6 +16,7 @@ export type Page =
 export const PAGE_PATHS: Record<Page, string> = {
   dashboard: '/dashboard',
   peliculas: '/peliculas',
+  peliculasV2: '/peliculas-v2',
   series: '/series',
   seguimiento: '/seguimiento',
   disk: '/disco',

@@ -347,6 +347,19 @@ function CalidadMovies({
                 <span className="sec-movie-side">
                   <span className="sec-class-badge">{cls}</span>
                   <span className="sec-movie-dest">{routed.join(' · ') || '—'}</span>
+                  <button
+                    type="button"
+                    className="sec-movie-open"
+                    aria-label={`Abrir ${movie.title}`}
+                    onClick={(event) => {
+                      // The arrow is the explicit way in (V2/S3); the row body
+                      // keeps working so keyboard users lose nothing.
+                      event.stopPropagation()
+                      choose()
+                    }}
+                  >
+                    ›
+                  </button>
                 </span>
               </div>
             )
@@ -462,7 +475,12 @@ function PanelHistory({ facts }: { facts: RowFacts }) {
   )
 }
 
-export function Peliculas() {
+export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
+  // S1/S3 («detalle-pantalla»): the same page in two shapes. `split` is the
+  // shipped V1 (side panel, sub-view tabs) and stays untouched; `page` is the
+  // V2 experiment reached from its own sidebar entry — no tabs, and the detail
+  // REPLACES the list instead of sitting beside it.
+  const pageMode = layout === 'page'
   const [view, setView] = useState<SubView>('biblioteca')
   const [selected, setSelected] = useState<MediaSelection | null>(null)
   // Which detail tab is on screen. Releases first: it is the tab the panel
@@ -492,7 +510,7 @@ export function Peliculas() {
 
   return (
     <section className="section-shell sec-peliculas">
-      <div className="sec-subtabs" role="tablist" aria-label="Sub-vistas de Películas">
+      {!pageMode && <div className="sec-subtabs" role="tablist" aria-label="Sub-vistas de Películas">
         {SUB_VIEWS.map((s) => (
           <button
             key={s.id}
@@ -507,9 +525,10 @@ export function Peliculas() {
             {s.label}
           </button>
         ))}
-      </div>
+      </div>}
 
-      <div className="sec-split">
+      <div className={pageMode ? 'sec-page' : 'sec-split'}>
+        {(!pageMode || !selected) && (
         <section
           className="sec-master"
           role="tabpanel"
@@ -521,7 +540,9 @@ export function Peliculas() {
             <span className="sec-master-sub">{active.label}</span>
           </div>
 
-          {view === 'estrenos' ? (
+          {pageMode ? (
+            <CalidadMovies selectedId={selected?.id ?? null} onSelect={setSelected} />
+          ) : view === 'estrenos' ? (
             // The calendar IS the list of this sub-view — movie items only.
             // It keeps its own date range and navigation; a card click
             // reports the selection instead of opening the release search
@@ -562,7 +583,23 @@ export function Peliculas() {
           )}
         </section>
 
-        <section className="sec-detail" aria-label="Panel de detalle">
+        )}
+
+        {(!pageMode || selected) && (
+        <section
+          className={pageMode ? 'sec-detail sec-detail-page' : 'sec-detail'}
+          aria-label="Panel de detalle"
+        >
+          {pageMode && (
+            <button
+              type="button"
+              className="sec-detail-close"
+              aria-label="Cerrar detalle"
+              onClick={() => setSelected(null)}
+            >
+              ✕
+            </button>
+          )}
           <div className="sec-detail-head">
             {selected?.detail.poster ? (
               <img
@@ -688,6 +725,7 @@ export function Peliculas() {
 
           <p className="sec-panel-note">{PANEL_NOTE}</p>
         </section>
+        )}
       </div>
 
       <section className="sec-notes">

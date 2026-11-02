@@ -26,7 +26,7 @@ test('the stub listing renders rows and the Biblioteca sub-view is reachable', a
   // The nav link only exists when an arr is configured (App.tsx hiddenPages);
   // its label comes from Sidebar.tsx NAV_ITEMS — "Películas", the
   // arr-dependent entry point that replaced the Faltantes page link.
-  await app.getByRole('link', { name: /Películas/ }).click();
+  await app.locator('a[href="/peliculas"]').click();
 
   // Section heading — Peliculas.tsx, <h2>Películas</h2>. The Topbar's page
   // title is a span, so this is the only heading that matches.
