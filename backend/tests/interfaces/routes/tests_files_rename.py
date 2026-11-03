@@ -56,9 +56,9 @@ def env(tmp_path, monkeypatch):
     async def fake_naming(session, service):
         return dict(answers.naming)
 
-    async def fake_probe(_path):
+    def fake_probe(_path):
         return {
-            "video_tracks": [{"codec": "hevc", "height": 2160, "pix_fmt": "yuv420p10le",
+            "video_tracks": [{"codec": "hevc", "width": 3840, "height": 1606, "pix_fmt": "yuv420p10le",
                               "color_transfer": "smpte2084"}],
             "audio_tracks": [{"codec": "dts", "profile": "DTS-HD MA", "channels": 6,
                               "language": "eng"}],
@@ -293,3 +293,31 @@ class TestSearch:
 
         assert body["ok"] is True
         assert body["items"] == []
+
+
+class TestCandidates:
+    def test_candidates_scans_roots_and_proposes_with_probed_resolution(self, env):
+        env.answers.naming = {
+            "standard_movie_format": "{Movie Title} ({Release Year}) {Quality Title} - {MediaInfo Simple}",
+            "movie_folder_format": "{Movie Title} ({Release Year})",
+        }
+        env.answers.movies = [
+            {
+                **MOVIE,
+                "file_name": "The Batman (2022) Bluray-1080p - h264 EAC3.mkv",
+                "media_info": {"video_codec": "h264", "audio_codec": "EAC3"},
+            }
+        ]
+        video = env.root / "The.Batman.2022.REMUX.mkv"
+        video.write_bytes(b"x")
+
+        resp = client.get("/api/files/rename-candidates")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert len(body["items"]) == 1
+        item = body["items"][0]
+        assert item["named"] is True
+        # Probed width (3840) proves 2160p despite cropped height (1606) and no resolution in filename
+        assert "Remux-2160p" in item["name"]
+

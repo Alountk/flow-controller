@@ -109,6 +109,34 @@ class TestValues:
         assert media_info.simple(empty) == ""
         assert media_info.resolution(empty) == ""
 
+    def test_resolution_detects_4k_with_cropped_black_bars(self):
+        # 3840x1606 is 2.39:1 cinemascope with black bars cropped away.
+        # Height alone was 1606 < 1700, which made it look like 1080p.
+        cropped_4k = {
+            "video_tracks": [
+                {"codec": "hevc", "width": 3840, "height": 1606, "pix_fmt": "yuv420p10le"}
+            ]
+        }
+        assert media_info.resolution(cropped_4k) == "2160"
+
+    def test_resolution_detects_4k_pillarbox(self):
+        # 4:3 Academy ratio in 4K (e.g. Snyder Cut): 2880x2160.
+        pillar_4k = {
+            "video_tracks": [
+                {"codec": "hevc", "width": 2880, "height": 2160, "pix_fmt": "yuv420p10le"}
+            ]
+        }
+        assert media_info.resolution(pillar_4k) == "2160"
+
+    def test_resolution_detects_1080p_with_cropped_black_bars(self):
+        # 1920x800 is 2.40:1 cinemascope with black bars cropped.
+        cropped_1080 = {
+            "video_tracks": [
+                {"codec": "h264", "width": 1920, "height": 800, "pix_fmt": "yuv420p"}
+            ]
+        }
+        assert media_info.resolution(cropped_1080) == "1080"
+
 
 class TestGroup:
     def test_reads_the_group_the_name_ends_with(self):
@@ -168,6 +196,29 @@ class TestTheCopyDecidesItsResolution:
         got = self._quality(
             "The.Batman.2022.2160p.UHD.BluRay.REMUX.HDR.HEVC-FraMeSToR.mkv", self.UHD
         )
+
+        assert got == "Remux-2160p"
+
+    def test_a_cropped_4k_remux_without_resolution_in_name_is_2160p(self):
+        # The user's exact case: a 4K copy where black bars were cropped (3840x1606)
+        # and the filename has no "2160p" token: the probe's width must prove 4K.
+        cropped = {
+            "video_tracks": [{"codec": "hevc", "width": 3840, "height": 1606}],
+            "audio_tracks": [],
+            "subtitle_tracks": [],
+        }
+        got = self._quality("The.Batman.2022.REMUX-FraMeSToR.mkv", cropped, fallback="Bluray-1080p")
+
+        assert got == "Remux-2160p"
+
+    def test_quality_resolves_from_facts_dict(self):
+        cropped = {
+            "video_tracks": [{"codec": "hevc", "width": 3840, "height": 1606}],
+            "audio_tracks": [],
+            "subtitle_tracks": [],
+        }
+        facts = media_info.from_probe(cropped, "The.Batman.2022.REMUX.mkv")
+        got = self._quality("The.Batman.2022.REMUX.mkv", facts, fallback="Bluray-1080p")
 
         assert got == "Remux-2160p"
 

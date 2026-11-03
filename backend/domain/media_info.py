@@ -199,12 +199,29 @@ def _codes(tracks: list[dict]) -> list[str]:
 
 
 def resolution(probe: dict) -> str:
-    """`2160` / `1080` / … from the picture itself, never from the name."""
-    height = int(_first(probe.get("video_tracks") or []).get("height") or 0)
-    for edge, label in ((1700, "2160"), (1000, "1080"), (700, "720"), (560, "576")):
-        if height >= edge:
-            return label
-    return "480" if height else ""
+    """`2160` / `1080` / … from width or height, matching Radarr's AugmentQualityFromMediaInfo.
+
+    Cropping black bars is standard practice (a 4K 2.39:1 cinemascope frame is
+    3840×1606). Looking only at height called every widescreen 4K film 1080p,
+    and looking only at width would miss pillarboxed transfers. Radarr checks
+    both: `width >= 3200 || height >= 2100` is 2160p.
+    """
+    if not probe:
+        return ""
+    if probe.get("resolution"):
+        return str(probe["resolution"])
+    track = _first(probe.get("video_tracks") or [])
+    width = int(track.get("width") or 0)
+    height = int(track.get("height") or 0)
+    if width >= 3200 or height >= 2100:
+        return "2160"
+    if width >= 1800 or height >= 1000:
+        return "1080"
+    if width >= 1200 or height >= 700:
+        return "720"
+    if width >= 1000 or height >= 560:
+        return "576"
+    return "480" if (width > 0 or height > 0) else ""
 
 
 def simple(probe: dict, name: str = "") -> str:
@@ -262,6 +279,7 @@ def from_probe(probe: dict, name: str) -> dict:
     """Everything the file itself can say about itself, keyed for the tokens."""
     return compose(
         {
+            "resolution": resolution(probe),
             "video_codec": video_codec(probe, name),
             "video_bit_depth": video_bit_depth(probe),
             "video_dynamic_range": video_dynamic_range(probe),
