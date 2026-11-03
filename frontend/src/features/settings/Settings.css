@@ -6,6 +6,21 @@
   align-items: stretch;
 }
 
+/* Below the width the design's two-column shell needs, the rail stops being a
+   column: kept at its 320px it squeezed the panel to 276px, so every row
+   overflowed (`S1: campos que se sobreponen`). Stacked, both fit. */
+@media (max-width: 1024px) {
+  .settings-page {
+    flex-direction: column;
+  }
+
+  .settings-rail {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
 /* ── Sub-raíl vertical de Configuración ────────────────────────── */
 .settings-rail {
   width: 320px;

@@ -2,6 +2,7 @@
 .settings-field {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 8px;
 }
@@ -32,6 +33,9 @@
 
 .settings-input {
   flex: 1;
+  /* Without this the field cannot shrink under the input's intrinsic width
+     (20 chars of monospace), so a 320px rail left the panel overflowing. */
+  min-width: 0;
   padding: 7px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
