@@ -4,6 +4,11 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* Una fila de píldoras no cabe en 380px y `inline-flex` no envuelve por su
+     cuenta: medía 478px dentro de una barra de 380 y la última se salía. */
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .service-chip {

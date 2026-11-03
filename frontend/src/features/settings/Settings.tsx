@@ -558,33 +558,35 @@ export function Settings() {
           </div>
         )}
 
-        <table className="connections-table">
-          <thead>
-            <tr>
-              <th scope="col">Servicio</th>
-              <th scope="col">Endpoint</th>
-              <th scope="col">Estado</th>
-              <th scope="col">Latencia</th>
-            </tr>
-          </thead>
-          <tbody>
-            {connectionRows(servicesQuery.data?.services, probes).map((row) => (
-              <tr key={row.service.key}>
-                <td className="connections-name">{row.name}</td>
-                <td className="connections-endpoint">{row.url || '—'}</td>
-                <td>
-                  <span className={`connections-pill ${row.state}`} title={row.hint || undefined}>
-                    {CONNECTION_LABEL[row.state]}
-                  </span>
-                  {row.reason && (
-                    <span className="connections-reason" role="alert">{row.reason}</span>
-                  )}
-                </td>
-                <td className="connections-latency">{row.latency}</td>
+        <div className="connections-table-wrap">
+          <table className="connections-table">
+            <thead>
+              <tr>
+                <th scope="col">Servicio</th>
+                <th scope="col">Endpoint</th>
+                <th scope="col">Estado</th>
+                <th scope="col">Latencia</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {connectionRows(servicesQuery.data?.services, probes).map((row) => (
+                <tr key={row.service.key}>
+                  <td className="connections-name">{row.name}</td>
+                  <td className="connections-endpoint">{row.url || '—'}</td>
+                  <td>
+                    <span className={`connections-pill ${row.state}`} title={row.hint || undefined}>
+                      {CONNECTION_LABEL[row.state]}
+                    </span>
+                    {row.reason && (
+                      <span className="connections-reason" role="alert">{row.reason}</span>
+                    )}
+                  </td>
+                  <td className="connections-latency">{row.latency}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section

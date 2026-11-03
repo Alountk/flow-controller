@@ -30,7 +30,7 @@ layout que hoy hace que los campos se pisen.
 | T3 | S2 | inline | `c03adc2` (#284) |
 | T4 | S2, S4 | inline | `0428146` (#285) |
 | T5 | S2, S4 | inline | `feat(config): General abre por la tabla de conexiones y cada tarjeta lleva cabecera del diseño` |
-| T6 | S2 | pendiente | — responsive por debajo de 640 |
+| T6 | S1, S2 | inline | `fix(ui): el armazón deja de reservar un sidebar que no está` |
 
 ### T1 — hecho
 
@@ -180,3 +180,38 @@ dice qué es.
 
 Test: `sectionHeaders.test.tsx` fija el orden exacto y exige icono + subtítulo
 en las **diez** tarjetas, incluidos los subtítulos literales del diseño.
+
+### T6 — hecho: el armazón en pantallas estrechas
+
+El plan decía «responsive por debajo de 640». Medido, el problema no era el
+diseño de General sino cuatro reglas del armazón que no hacían lo que decían:
+
+1. **El raíl de Configuración nunca se apiló.** El `@media (max-width: 1024px)`
+   de T1 estaba escrito *antes* de la regla base `.settings-rail { width:
+   320px }`: misma especificidad, gana la última del archivo. A 480px el raíl
+   seguía midiendo 320px y el panel quedaba en 176, con 28 inputs por debajo de
+   120px (el peor, 90px). Ahora el bloque va después de las reglas del raíl.
+2. **`.main` reservaba 240px para un sidebar que está oculto** por debajo de
+   768px (`margin-left: 240px` con el sidebar en `display: none`). El contenido
+   de *todas* las vistas arrancaba en x=240 sin nada a la izquierda. Ahora el
+   margen se repone en la misma media query.
+3. **La barra superior se pisaba a sí misma.** `.topbar-left` con `min-width: 0`
+   se encogía a 7px y su texto se pintaba encima de las píldoras de estado (a
+   900px). Ahora recorta con elipsis y la barra envuelve por debajo de 1100px.
+4. **Las píldoras de estado se salían del viewport.** `.service-chips` es
+   `inline-flex` sin `flex-wrap`: medía 478px dentro de una barra de 380 y la
+   última píldora caía fuera. Ahora envuelve.
+
+Extra encontrado midiendo: la tabla de conexiones (min-width 420) no cabe a
+380px; en vez de recortar la píldora «Sin comprobar» —justo el dato que la fila
+viene a mostrar— scrollea en horizontal dentro de su contenedor.
+
+Medido con el backend real sirviendo `dist`, en Configuración, Dashboard,
+Películas y Archivos: a 480 y 380 el contenido arranca en x=0, ocupa el ancho
+completo y nada se sale del viewport; los inputs estrechos pasan de 28 a 0.
+
+Contrato nuevo: `narrowShell.contract.test.ts` lee los dos CSS y exige que el
+margen se reponga, que el apilado del raíl gane **por orden** (compara
+posiciones, no presencia) y que las píldoras puedan envolver. jsdom no calcula
+layout: lo que se puede fijar es la estructura que hace que el CSS se aplique,
+porque las tres reglas existían y no surtían efecto.
