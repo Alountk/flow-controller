@@ -257,10 +257,27 @@
 
 .settings-group {
   margin-bottom: 16px;
-  padding: 12px;
+  padding: 16px;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: 8px;
+  /* stitch-12: `grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6` — two fields
+     side by side once there is room, one column below. */
+  display: grid;
+  grid-template-columns: 1fr;
+  column-gap: 32px;
+  align-items: end;
+}
+
+@media (min-width: 900px) {
+  .settings-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.settings-group h4,
+.settings-group-actions {
+  grid-column: 1 / -1;
 }
 
 .settings-group h4 {
@@ -582,8 +599,12 @@
 }
 
 /* Gaps 8 (row) / 12 (label) reproduce the retired .shared-dirs-add
-   composition; the (0,2,0) compound beats .settings-field's 12px in order. */
+   composition; the (0,2,0) compound beats .settings-field's 12px in order.
+   The row stays horizontal (S4): it is an input plus its buttons, not a field
+   with a label over it. */
 .settings-field.shared-dirs-entry-row {
+  flex-direction: row;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -1316,6 +1337,13 @@ tr.disabled .indexadores-row-name {
   flex: 1;
   min-width: 0;
   margin-bottom: 0;
+}
+
+/* The key field keeps the input's inline row (the toggle sits over it), so it
+   opts out of the stacked anatomy General now uses. */
+.indexadores-key-field > label.settings-field {
+  flex-direction: row;
+  align-items: center;
 }
 
 .indexadores-key-field .settings-input {

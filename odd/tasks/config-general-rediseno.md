@@ -25,11 +25,47 @@ layout que hoy hace que los campos se pisen.
 
 | ID | Spec | Route | Commit |
 |----|------|-------|--------|
-| T1 | S1 | inline | `fix(config): la fila del umbral de calidad deja de desbordar el panel` |
+| T1 | S1 | inline | `db6be2c` |
 | T2 | S3 | inline (read-only) | — (informe de deltas) |
-| T3 | S2, S4 | pendiente | — |
-| T4 | S2, S4 | pendiente | — |
-| T5 | S2, S4 | pendiente | — |
+| T3 | S2 | pendiente | — anatomía de campo: etiqueta encima + rejilla de dos columnas dentro de tarjeta |
+| T4 | S2, S4 | pendiente | — «Estado de las conexiones» como tabla del diseño |
+| T5 | S2, S4 | pendiente | — orden de tarjetas, cabeceras con icono y subtítulo |
+| T6 | S2 | pendiente | — responsive por debajo de 640 |
+
+### T1 — hecho
+
+Ninguna fila anida a otra; `.settings-input` puede encogerse (`min-width: 0`);
+la fila hace `flex-wrap`; el raíl se apila por debajo de 1024 px. Medido con
+backend real + `frontend/dist`: desbordamiento 0 del panel a 1600/1440/1280/
+1100/900/700 (antes desbordaba ya a 1440). 991 tests, `tsc`, `eslint` verdes.
+
+### T2 — informe de deltas (General vs `stitch-12-general.html`)
+
+**D1. Anatomía de campo (el de mayor impacto).** El diseño apila: `label`
+`display:block` encima y `input` `w-full` debajo, dentro de una rejilla
+`grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6`. La implementación usa una fila
+horizontal con etiqueta de 200 px fija y campo al lado. Eso es lo que produce
+los campos pisados y los inputs de 90 px a 700 px de ancho.
+
+**D2. «Estado de las conexiones» es una tabla** con columnas Servicio /
+Endpoint / Estado / Latencia y píldoras «Conectado»/«No configurado»/«Alerta»
+(`2ms`, `Timeout`). La implementación pinta una tarjeta por servicio con botón
+«Probar conexión». S4: el botón se conserva como acción de fila.
+
+**D3. Orden de tarjetas.** Diseño: Estado de las conexiones → Servicios →
+aMule (EC) → Seguridad → Rutas → Intervalos → Seguimiento → Servidor.
+Implementación: Servicios → Estado → Seguridad → Rutas → Intervalos →
+Calidad de biblioteca → Seguimiento → Servidor → Logs.
+
+**D4. Cabecera de tarjeta.** El diseño la compone con icono de material,
+título `headline-sm` y subtítulo explicativo, separada por borde inferior. La
+implementación usa solo `<h3>` de sección con borde inferior.
+
+**D5. Lo que el diseño no tiene** (posteriores, S4 los conserva): «Calidad de
+biblioteca» (umbral-calidad), «Logs del Sistema», «Carpetas compartidas», y
+la tarjeta aMule EC, que `amule-control` movió a pestaña propia. Ubicación
+propuesta: Calidad de biblioteca como tarjeta propia tras Intervalos (es un
+umbral, no un intervalo); Logs al final, sin tocar.
 
 ## Log
 
