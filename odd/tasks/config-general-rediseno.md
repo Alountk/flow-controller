@@ -151,7 +151,7 @@ fixture de `/tmp/fc-config`, nunca en el repo):
 
 - **R1** (#284, `9f0957b`): T1–T3 — desbordamiento, anatomía de campo, rejilla
   de dos columnas.
-- **R2** (PR de esta rama): T4 — tabla de conexiones con `elapsed_ms`. 531
+- **R2** (PR de esta rama): T4 — tabla de conexiones con `elapsed_ms`. 612
   líneas: sobre el presupuesto de ~400, porque el cambio atraviesa backend,
   frontend y dos archivos de test. Se entrega sola, sin T5, para que la tabla
   se revise sin el ruido del reordenado de tarjetas.
