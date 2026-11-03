@@ -39,6 +39,8 @@ export interface ServiceTestResult {
   version?: string
   detail: string
   error_kind?: string
+  /** Measured around the probe's HTTP call; the status table shows it. */
+  elapsed_ms?: number
 }
 
 export interface ServicesTestResponse {
