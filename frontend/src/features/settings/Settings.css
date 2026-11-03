@@ -244,15 +244,37 @@
   max-width: 72rem;
 }
 
+/* Cabecera de tarjeta del diseño: icono, título y subtítulo, con el borde
+   inferior del diseño. El borde vive aquí y no en el título, o saldría doble
+   cuando la tarjeta tiene subtítulo. */
+.settings-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section-icon {
+  font-size: 16px;
+  line-height: 1.4;
+}
+
 .settings-section-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin: 0 0 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
+  margin: 0;
+}
+
+.settings-section-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
 }
 
 .settings-group {

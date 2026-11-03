@@ -91,7 +91,16 @@ export function SharedDirsSection() {
 
   return (
     <div className="settings-section">
-      <h3 className="settings-section-title">Carpetas compartidas de aMule</h3>
+      <div className="settings-section-header">
+        <span className="settings-section-icon" aria-hidden="true">🤝</span>
+        <div>
+          <h3 className="settings-section-title">Carpetas compartidas de aMule</h3>
+          <p className="settings-section-subtitle">
+            Lo que aMule comparte por red. Se guarda en su propio botón, no con el resto de la
+            configuración.
+          </p>
+        </div>
+      </div>
       <p className="shared-dirs-hint">
         Guardar escribe la configuración de aMule y <strong>pide que recargue</strong>: el cambio
         no es efectivo hasta que aMule lo recoja. Solo se puede compartir dentro de{' '}

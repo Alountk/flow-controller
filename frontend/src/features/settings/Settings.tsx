@@ -153,7 +153,11 @@ function LogsSection() {
   }, [logs])
 
   return (
-    <Section title="Logs del Sistema">
+    <Section
+        icon="📜"
+        title="Logs del Sistema"
+        subtitle="Últimas líneas del registro del panel, para ver qué hizo el orquestador."
+      >
       <div className="settings-logs-controls">
         <button className="action-btn" onClick={fetchLogs} disabled={loading}>
           {loading ? 'Cargando...' : '🔄 Actualizar'}
@@ -202,10 +206,29 @@ async function saveSettings(data: Settings): Promise<SaveSettingsResponse> {
   return res.json() as Promise<SaveSettingsResponse>
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** Cabecera de tarjeta del diseño (S2): icono, título y el subtítulo que
+ *  explica para qué sirve el grupo. El icono es decorativo —el título ya lo
+ *  dice— así que se esconde al lector de pantalla. */
+function Section({
+  icon,
+  title,
+  subtitle,
+  children,
+}: {
+  icon: string
+  title: string
+  subtitle: string
+  children: React.ReactNode
+}) {
   return (
     <div className="settings-section">
-      <h3 className="settings-section-title">{title}</h3>
+      <div className="settings-section-header">
+        <span className="settings-section-icon" aria-hidden="true">{icon}</span>
+        <div>
+          <h3 className="settings-section-title">{title}</h3>
+          <p className="settings-section-subtitle">{subtitle}</p>
+        </div>
+      </div>
       {children}
     </div>
   )
@@ -513,7 +536,62 @@ export function Settings() {
           </button>
         </div>
       </div>
-      <Section title="Servicios">
+      <Section
+        icon="🔄"
+        title="Estado de las conexiones"
+        subtitle="Una fila por servicio con la URL intentada, el estado y la latencia medida. Distingue una clave rechazada de un servicio inalcanzable, antes y después de moverlos de sitio. La comprobación es a petición, no al abrir la página; aMule vive sobre EC (TCP) y no se sondea aquí."
+      >
+        <button
+          type="button"
+          className="action-btn search-all"
+          onClick={() => testMutation.mutate()}
+          disabled={testMutation.isPending}
+        >
+          {testMutation.isPending ? 'Probando…' : '🔌 Probar conexiones'}
+        </button>
+
+        {testMutation.isError && (
+          <div className="service-test fail" role="alert">
+            <div className="service-test-detail">
+              No se pudo completar la comprobación. Revisa la conexión con el backend.
+            </div>
+          </div>
+        )}
+
+        <table className="connections-table">
+          <thead>
+            <tr>
+              <th scope="col">Servicio</th>
+              <th scope="col">Endpoint</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Latencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            {connectionRows(servicesQuery.data?.services, probes).map((row) => (
+              <tr key={row.service.key}>
+                <td className="connections-name">{row.name}</td>
+                <td className="connections-endpoint">{row.url || '—'}</td>
+                <td>
+                  <span className={`connections-pill ${row.state}`} title={row.hint || undefined}>
+                    {CONNECTION_LABEL[row.state]}
+                  </span>
+                  {row.reason && (
+                    <span className="connections-reason" role="alert">{row.reason}</span>
+                  )}
+                </td>
+                <td className="connections-latency">{row.latency}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Section>
+
+      <Section
+        icon="🔌"
+        title="Servicios"
+        subtitle="Endpoints y tokens de autenticación para la orquestación arr."
+      >
         <div className="settings-group">
           <h4>Radarr</h4>
           <Field label="URL" value={form.services.radarr.url} onChange={(v) => update('services.radarr.url', v)} restart={isRestarting('services.radarr.url')} placeholder="http://localhost:7878" />
@@ -579,65 +657,21 @@ export function Settings() {
         </div>
       </Section>
 
-      <Section title="Estado de las conexiones">
-        <p className="settings-hint">
-          Una fila por servicio con la URL intentada, el estado y la latencia medida.
-          Útil antes y después de mover los servicios de sitio: distingue una clave
-          rechazada de un servicio inalcanzable. La comprobación es a petición, no al
-          abrir la página. aMule vive sobre EC (TCP) y no se sondea aquí.
-        </p>
-        <button
-          type="button"
-          className="action-btn search-all"
-          onClick={() => testMutation.mutate()}
-          disabled={testMutation.isPending}
-        >
-          {testMutation.isPending ? 'Probando…' : '🔌 Probar conexiones'}
-        </button>
 
-        {testMutation.isError && (
-          <div className="service-test fail" role="alert">
-            <div className="service-test-detail">
-              No se pudo completar la comprobación. Revisa la conexión con el backend.
-            </div>
-          </div>
-        )}
-
-        <table className="connections-table">
-          <thead>
-            <tr>
-              <th scope="col">Servicio</th>
-              <th scope="col">Endpoint</th>
-              <th scope="col">Estado</th>
-              <th scope="col">Latencia</th>
-            </tr>
-          </thead>
-          <tbody>
-            {connectionRows(servicesQuery.data?.services, probes).map((row) => (
-              <tr key={row.service.key}>
-                <td className="connections-name">{row.name}</td>
-                <td className="connections-endpoint">{row.url || '—'}</td>
-                <td>
-                  <span className={`connections-pill ${row.state}`} title={row.hint || undefined}>
-                    {CONNECTION_LABEL[row.state]}
-                  </span>
-                  {row.reason && (
-                    <span className="connections-reason" role="alert">{row.reason}</span>
-                  )}
-                </td>
-                <td className="connections-latency">{row.latency}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Section>
-
-      <Section title="Seguridad">
+      <Section
+        icon="🔒"
+        title="Seguridad"
+        subtitle="Autenticación del propio panel FlowController y políticas de integridad."
+      >
         <Field label="API Key propia" value={form.security.api_key} onChange={(v) => update('security.api_key', v)} restart={isRestarting('security.api_key')} placeholder="Clave para proteger la API" type="password" />
         <Field label="Modo seguro (bloquea acciones destructivas)" value={form.security.safe_mode} onChange={(v) => update('security.safe_mode', v)} type="toggle" />
       </Section>
 
-      <Section title="Rutas">
+      <Section
+        icon="📁"
+        title="Rutas"
+        subtitle="Mapeo de almacenamiento en disco, librerías y puntos de montaje ZFS/RAID."
+      >
         <Field label="Carpeta descargas aMuTorrent" value={form.paths.download_amule} onChange={(v) => update('paths.download_amule', v)} />
         <Field label="Carpeta descargas Torrent" value={form.paths.download_torrent} onChange={(v) => update('paths.download_torrent', v)} />
         <Field label="Raíces permitidas (separadas por coma)" value={(form.paths.allowed_roots ?? []).join(", ")} onChange={(v) => updateList('paths.allowed_roots', v)} />
@@ -660,7 +694,11 @@ export function Settings() {
           otherwise claim to have saved something it never saw. */}
       <SharedDirsSection />
 
-      <Section title="Intervalos">
+      <Section
+        icon="⏱️"
+        title="Intervalos"
+        subtitle="Temporizadores de sondeo, reintentos de red y límites de procesamiento."
+      >
         <Field label="Check interval (segundos)" value={form.intervals.check} onChange={(v) => update('intervals.check', v)} type="number" />
         <Field label="Max reintentos" value={form.intervals.max_retries} onChange={(v) => update('intervals.max_retries', v)} type="number" />
         <Field label="Delay entre reintentos (segundos)" value={form.intervals.retry_delay} onChange={(v) => update('intervals.retry_delay', v)} type="number" />
@@ -672,7 +710,11 @@ export function Settings() {
         <Field label="Días antes de poder borrar una descarga" value={form.retention.amule_days} onChange={(v) => update('retention.amule_days', v)} type="number" />
       </Section>
 
-      <Section title="Calidad de biblioteca">
+      <Section
+        icon="🎚️"
+        title="Calidad de biblioteca"
+        subtitle="El umbral por debajo del cual una película cuenta como baja calidad."
+      >
         {/* S2 («umbral-calidad»): what «baja calidad» means. The chip and the
             below-threshold list both read this, so it lives with the rest of
             the saved configuration — no separate save button. */}
@@ -686,11 +728,19 @@ export function Settings() {
         />
       </Section>
 
-      <Section title="Seguimiento">
+      <Section
+        icon="🧹"
+        title="Seguimiento"
+        subtitle="Políticas de retención y limpieza automatizada."
+      >
         <Field label="Límite de trazas" value={form.tracing.limit} onChange={(v) => update('tracing.limit', v)} type="number" />
       </Section>
 
-      <Section title="Servidor">
+      <Section
+        icon="🖥️"
+        title="Servidor"
+        subtitle="Control del daemon HTTP central de FlowController."
+      >
         <Field label="Puerto" value={form.server.port} onChange={(v) => update('server.port', v)} type="number" restart={isRestarting('server.port')} />
       </Section>
 
