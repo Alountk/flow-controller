@@ -118,6 +118,9 @@ describe('tabla de «Estado de las conexiones» (T4/S2, S4)', () => {
     // Sin latencia todavía, y sobre todo sin sondeo: S4 prohíbe tocar la red
     // al abrir la página.
     expect(await rowOf('Radarr')).toHaveTextContent('—')
+    // A 380px la tabla no cabe: el contenedor scrollea, porque recortar la
+    // píldora «Sin comprobar» esconde el estado que la fila viene a mostrar.
+    expect(table.parentElement).toHaveClass('connections-table-wrap')
     const probed = fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/services/test'))
     expect(probed).toHaveLength(0)
 

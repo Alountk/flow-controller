@@ -18,6 +18,16 @@
   justify-content: center;
   gap: 1px;
   min-width: 0;
+  /* Sin esto el título se sale de su caja y se pinta ENCIMA de las píldoras
+     de estado: un nombre de página de 7px de ancho no recorta, desborda. */
+  overflow: hidden;
+}
+
+.topbar-title,
+.topbar-subtitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar-title {
@@ -38,6 +48,33 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  /* Las píldoras no se aprietan —si no caben, la barra crece una línea, que es
+     preferible a que el título quede en «C…»— pero tampoco se salen del
+     viewport: `max-width` las obliga a envolver dentro de la barra. */
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  max-width: 100%;
+  row-gap: 6px;
+}
+
+/* Por debajo del ancho en que el título y las píldoras ya no conviven en una
+   línea, la barra envuelve: nada desaparece, nada se pisa. */
+@media (max-width: 1100px) {
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 56px;
+    padding: 8px 32px;
+    row-gap: 6px;
+  }
+
+  .topbar-left {
+    flex-shrink: 0;
+  }
+
+  .topbar-right {
+    flex-wrap: wrap;
+  }
 }
 
 .topbar-status {

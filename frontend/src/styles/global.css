@@ -165,6 +165,13 @@ body {
     display: none;
   }
 
+  /* `margin-left` reservaba el ancho del sidebar con `position: fixed`. Si el
+     sidebar no está, ese margen son 240px de nada a la izquierda de cada
+     vista: sin reponerlo, el contenido arranca en x=240 en cualquier ruta. */
+  .main {
+    margin-left: 0;
+  }
+
   .topbar {
     display: flex;
   }
