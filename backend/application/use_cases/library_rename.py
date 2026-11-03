@@ -119,15 +119,21 @@ def proposal(
     # The group is written in the name, so it survives without a probe; only the
     # `{MediaInfo …}` family needs the file itself.
     facts: dict = {"release_group": media_info.release_group(name)}
+    raw_probe: dict = {}
     probed = False
     warnings_probe = ""
     if probe is not None:
         try:
-            facts.update(media_info.from_probe(probe(video_path), name))
+            raw_probe = probe(video_path)
+            facts.update(media_info.from_probe(raw_probe, name))
             probed = True
         except Exception as exc:  # ffprobe is external: any failure means "not read"
             warnings_probe = f"no se pudo leer el archivo para rellenar el nombre: {exc}"
-    quality = media_info.quality(name, declared_quality, "", facts) if probed else declared_quality
+    quality = (
+        media_info.quality(name, declared_quality, "", raw_probe or facts)
+        if probed
+        else declared_quality
+    )
 
     warnings: list[str] = []
     if warnings_probe:

@@ -335,6 +335,7 @@ async def file_rename_candidates(_key: str = Depends(verify_api_key)):
         roots=roots,
         movies=movies,
         naming_cfg=naming_cfg or {},
+        probe=probe_file,
     )
 
 

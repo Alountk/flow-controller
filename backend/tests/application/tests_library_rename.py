@@ -585,6 +585,37 @@ class TestProbe:
         assert got["name"] == "The Batman (2022) Remux-2160p HDR DTS-HD MA FraMeSToR"
         assert got["folder"] == "The Batman (2022)"
 
+    def test_cropped_4k_copy_without_resolution_in_filename_resolves_as_2160p(self, tmp_path):
+        # When black bars are cropped, width (3840) proves 4K even without 2160p in the filename.
+        root = tmp_path / "4k"
+        root.mkdir()
+        video = root / "The.Batman.2022.REMUX-FraMeSToR.mkv"
+        video.write_bytes(b"x")
+        cropped_probe = {
+            "video_tracks": [
+                {
+                    "codec": "hevc",
+                    "width": 3840,
+                    "height": 1606,
+                    "pix_fmt": "yuv420p10le",
+                    "color_transfer": "smpte2084",
+                }
+            ],
+            "audio_tracks": [{"codec": "dts", "profile": "DTS-HD MA", "channels": 6, "language": "eng"}],
+            "subtitle_tracks": [],
+        }
+        got = library_rename.proposal(
+            video_path=str(video),
+            movies=[self.MOVIE],
+            naming_cfg=self.NAMING,
+            siblings=[],
+            roots=[str(root)],
+            probe=lambda _p: cropped_probe,
+        )
+
+        assert got["named"] is True, got["warnings"]
+        assert got["name"] == "The Batman (2022) Remux-2160p HDR DTS-HD MA FraMeSToR"
+
     def test_without_reading_the_file_it_says_which_tokens_it_lacks(self, tmp_path):
         got = self._proposal(tmp_path, probe=False)
 
