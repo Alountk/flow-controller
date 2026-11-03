@@ -130,3 +130,14 @@ filas con su píldora y su `—`.
   `.settings-field`.
 - **L3**: el buscador de duplicados del mismo mensaje se entrega como feature
   aparte (`odd/tasks/peliculas-duplicadas.md`): otro dominio, otra rama.
+
+### Fronteras de rebanada
+
+- **R1** (#284, `9f0957b`): T1–T3 — desbordamiento, anatomía de campo, rejilla
+  de dos columnas.
+- **R2** (PR de esta rama): T4 — tabla de conexiones con `elapsed_ms`. 531
+  líneas: sobre el presupuesto de ~400, porque el cambio atraviesa backend,
+  frontend y dos archivos de test. Se entrega sola, sin T5, para que la tabla
+  se revise sin el ruido del reordenado de tarjetas.
+- **R3**: T5–T6 — orden de tarjetas, cabeceras con icono y subtítulo, y el
+  responsive por debajo de 640 (donde el límite es el armazón de la app).
