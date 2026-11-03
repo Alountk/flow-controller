@@ -28,7 +28,7 @@ layout que hoy hace que los campos se pisen.
 | T1 | S1 | inline | `db6be2c` |
 | T2 | S3 | inline (read-only) | — (informe de deltas) |
 | T3 | S2 | pendiente | — anatomía de campo: etiqueta encima + rejilla de dos columnas dentro de tarjeta |
-| T4 | S2, S4 | pendiente | — «Estado de las conexiones» como tabla del diseño |
+| T4 | S2, S4 | inline | `feat(config): la tabla de conexiones muestra estado y latencia del diseño` |
 | T5 | S2, S4 | pendiente | — orden de tarjetas, cabeceras con icono y subtítulo |
 | T6 | S2 | pendiente | — responsive por debajo de 640 |
 
@@ -66,6 +66,50 @@ biblioteca» (umbral-calidad), «Logs del Sistema», «Carpetas compartidas», y
 la tarjeta aMule EC, que `amule-control` movió a pestaña propia. Ubicación
 propuesta: Calidad de biblioteca como tarjeta propia tras Intervalos (es un
 umbral, no un intervalo); Logs al final, sin tocar.
+
+### T4 — spec de la tabla de conexiones (D2)
+
+El diseño (`stitch-12-general.html`) dibuja esta sección como **tabla** de
+cuatro columnas — `Servicio`, `Endpoint`, `Estado`, `Latencia` — con el estado
+en píldora (`Conectado`, `No configurado`, `Alerta`) y la latencia en
+milisegundos (`2ms`) o `Timeout`. Hoy la implementación pinta una lista de
+tarjetas `.service-test` después de pulsar «Probar conexiones».
+
+Lo que hay y lo que falta:
+
+- `GET /api/services` devuelve `services[]` con `key`, `kind`, `url`,
+  `configured`; **no sondea** (contrato documentado: «sin salir a la red»).
+- `GET /api/services/test` devuelve `results[]` con `key`, `kind`, `url`, `ok`,
+  `version`, `detail`, `error_kind`. **No mide latencia**: hay que añadir
+  `elapsed_ms` midiendo alrededor de la llamada HTTP del sondeo.
+
+Reglas:
+
+- S2: tabla con las cuatro columnas del diseño y su jerarquía (píldora en
+  Estado, monoespaciada en Endpoint y Latencia).
+- S4: antes de sondear, una fila por servicio de `/api/services` con
+  «Sin comprobar» (configurado) o «No configurado»; el sondeo sigue siendo
+  explícito (botón de la sección y botón por servicio en su tarjeta), nunca al
+  montar la página: cinco salidas HTTP en la carga de Configuración la harían
+  lenta y chocarían con el límite de peticiones.
+- S4: los botones «Probar conexión» de las tarjetas de Servicios se conservan y
+  rellenan la misma fila de la tabla.
+- Estados ⇒ píldora: `Conectado` (ok), `Alerta` (fallo), `No configurado`,
+  `Sin comprobar`.
+- Latencia: `Nms` desde `elapsed_ms`; `Timeout` cuando el fallo es de tiempo
+  agotado (`error_kind`), `—` cuando no hay medida.
+
+Implementado (evidencia): `elapsed_ms` se mide una sola vez, envolviendo la
+sonda entera en `arr_client.test_service_connection` —los clientes no miden
+por su cuenta, o los números se separarían— y se devuelve también en los
+fallos. La tabla se siembra con `GET /api/services` (query key `['services']`,
+la misma de Indexadores: no hay una segunda petición) y el sondeo sólo rellena
+sus filas. El motivo del fallo se conserva bajo la píldora «Alerta»: una
+píldora sola no distingue «API key rechazada» de «no responde», que es
+exactamente lo que el usuario viene a leer. Verificado con el backend real:
+sección 752 px sin desbordamiento a 1600/1440/1280/1100/900/700 y las seis
+filas con su píldora y su `—`.
+
 
 ## Log
 

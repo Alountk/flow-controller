@@ -533,13 +533,6 @@
   max-width: 70ch;
 }
 
-.settings-service-tests {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 14px;
-}
-
 .service-test {
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -553,6 +546,98 @@
 
 .service-test.fail {
   border-color: var(--bad);
+}
+
+/* stitch-12: la sección es una tabla de cuatro columnas, no tarjetas. Las
+   filas se separan con línea, sin caja por servicio. */
+.connections-table {
+  width: 100%;
+  margin-top: 14px;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+.connections-table th {
+  padding: 0 12px 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-dim);
+}
+
+.connections-table td {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.connections-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Ancho fijo por columna: el endpoint es el único que puede crecer, así que
+   `word-break` lo parte en vez de estirar la tabla fuera del panel. */
+.connections-table th:first-child,
+.connections-table td.connections-name {
+  width: 22%;
+  font-weight: 600;
+}
+
+.connections-table th:nth-child(3),
+.connections-table td:nth-child(3) {
+  width: 24%;
+}
+
+.connections-table th:last-child,
+.connections-table td.connections-latency {
+  width: 15%;
+}
+
+.connections-endpoint,
+.connections-latency {
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+
+.connections-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.connections-pill.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.connections-pill.fail {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.connections-pill.unconfigured,
+.connections-pill.unprobed {
+  color: var(--text-dim);
+}
+
+/* El motivo del fallo se conserva: «API key rechazada» es lo que el usuario
+   viene a leer, y una píldora «Alerta» sola no lo dice. */
+.connections-reason {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--bad);
 }
 
 .service-test-head {

@@ -3,9 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Settings, SaveSettingsResponse } from '../../shared/types.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import {
+  fetchServices,
   probeService,
   testServiceConnections,
   type ServiceCandidate,
+  type ServiceListing,
   type ServiceTestResult,
 } from '../../shared/api/services.ts'
 import { toast } from '../../shared/utils/toast.ts'
@@ -21,6 +23,74 @@ interface LogEntry {
   time: string
   level: string
   message: string
+}
+
+/** Fila de «Estado de las conexiones»: lo configurado antes de sondear, el
+ *  resultado medido después. `unprobed` no es un fallo: es que nadie pulsó
+ *  «Probar conexiones», y la sección nunca sondea al montar. */
+type ConnectionState = 'ok' | 'fail' | 'unconfigured' | 'unprobed'
+
+const CONNECTION_LABEL: Record<ConnectionState, string> = {
+  ok: 'Conectado',
+  fail: 'Alerta',
+  unconfigured: 'No configurado',
+  unprobed: 'Sin comprobar',
+}
+
+/** El nombre que ve el usuario, no la clave del backend: la tabla del diseño
+ *  escribe «Radarr» y «aMuTorrent», y `services[].key` es lo que es.
+ *  Una clave desconocida cae al propio key, nunca a vacío. */
+const SERVICE_NAME: Record<string, string> = {
+  radarr: 'Radarr',
+  sonarr: 'Sonarr',
+  prowlarr: 'Prowlarr',
+  amutorrent: 'aMuTorrent',
+  qbit: 'qBittorrent',
+  amule: 'aMule',
+  opensubtitles: 'OpenSubtitles',
+}
+
+interface ConnectionRow {
+  service: ServiceListing
+  name: string
+  state: ConnectionState
+  latency: string
+  url: string
+  reason: string
+}
+
+function connectionRows(
+  services: ServiceListing[] | undefined,
+  probes: Map<string, ServiceTestResult>,
+): ConnectionRow[] {
+  return (services ?? []).map((service) => {
+    const probe = probes.get(service.key)
+    const state: ConnectionState = !service.configured
+      ? 'unconfigured'
+      : probe
+        ? (probe.ok ? 'ok' : 'fail')
+        : 'unprobed'
+    // Un timeout gana a la medida: los milisegundos que tardó en rendirse no
+    // son una latencia que nadie quiera leer.
+    const latency = !probe
+      ? '—'
+      : probe.error_kind === 'timeout'
+        ? 'Timeout'
+        : probe.elapsed_ms != null
+          ? `${probe.elapsed_ms}ms`
+          : '—'
+    // La URL del sondeo manda sobre la guardada: durante una migración a proxy
+    // la pregunta es a qué host se llamó de verdad. Y el motivo del fallo se
+    // conserva —«API key rechazada» es justo lo que el usuario viene a leer—.
+    return {
+      service,
+      name: SERVICE_NAME[service.key] ?? service.key,
+      state,
+      latency,
+      url: probe?.url || service.url,
+      reason: state === 'fail' ? (probe?.detail ?? '') : '',
+    }
+  })
 }
 
 function LogsSection() {
@@ -231,6 +301,13 @@ export function Settings() {
   const testMutation = useMutation({
     mutationFn: testServiceConnections,
   })
+
+  // Misma query key que Indexadores: reutiliza la lista que ya está en caché
+  // en vez de pedir /api/services otra vez.
+  const servicesQuery = useQuery({ queryKey: ['services'], queryFn: () => fetchServices() })
+  const probes = new Map(
+    (testMutation.data?.results ?? []).map((result) => [result.key, result] as const),
+  )
 
   const saveMutation = useMutation({
     mutationFn: (payload: SettingsForm) => saveSettings(payload),
@@ -489,10 +566,10 @@ export function Settings() {
 
       <Section title="Estado de las conexiones">
         <p className="settings-hint">
-          Comprueba que Radarr, Sonarr, aMuTorrent y qBittorrent responden con la configuración
-          actual. Útil antes y después de mover los servicios de sitio: muestra la
-          URL con la que se intenta conectar y distingue una clave rechazada de
-          un servicio inalcanzable.
+          Una fila por servicio con la URL intentada, el estado y la latencia medida.
+          Útil antes y después de mover los servicios de sitio: distingue una clave
+          rechazada de un servicio inalcanzable. La comprobación es a petición, no al
+          abrir la página. aMule vive sobre EC (TCP) y no se sondea aquí.
         </p>
         <button
           type="button"
@@ -503,35 +580,39 @@ export function Settings() {
           {testMutation.isPending ? 'Probando…' : '🔌 Probar conexiones'}
         </button>
 
-        {testMutation.data && (
-          <div className="settings-service-tests">
-            {testMutation.data.results.map((result: ServiceTestResult) => (
-              <div
-                key={result.key}
-                className={`service-test ${result.ok ? 'ok' : 'fail'}`}
-                role={result.ok ? undefined : 'alert'}
-              >
-                <div className="service-test-head">
-                  <span className="service-test-name">
-                    {result.ok ? '✅' : '❌'} {result.key}
-                  </span>
-                  <span className="service-test-url">{result.url}</span>
-                </div>
-                <div className="service-test-detail">{result.detail}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
         {testMutation.isError && (
-          <div className="settings-service-tests">
-            <div className="service-test fail" role="alert">
-              <div className="service-test-detail">
-                No se pudo completar la comprobación. Revisa la conexión con el backend.
-              </div>
+          <div className="service-test fail" role="alert">
+            <div className="service-test-detail">
+              No se pudo completar la comprobación. Revisa la conexión con el backend.
             </div>
           </div>
         )}
+
+        <table className="connections-table">
+          <thead>
+            <tr>
+              <th scope="col">Servicio</th>
+              <th scope="col">Endpoint</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Latencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            {connectionRows(servicesQuery.data?.services, probes).map((row) => (
+              <tr key={row.service.key}>
+                <td className="connections-name">{row.name}</td>
+                <td className="connections-endpoint">{row.url || '—'}</td>
+                <td>
+                  <span className={`connections-pill ${row.state}`}>{CONNECTION_LABEL[row.state]}</span>
+                  {row.reason && (
+                    <span className="connections-reason" role="alert">{row.reason}</span>
+                  )}
+                </td>
+                <td className="connections-latency">{row.latency}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </Section>
 
       <Section title="Seguridad">

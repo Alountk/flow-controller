@@ -59,6 +59,21 @@ function mockFetch(results: ServiceTestResult[] | 'error') {
         json: async () => ({ results, ok: results.every((r) => r.ok) }),
       } as Response)
     }
+    if (url.includes('/api/services')) {
+      // T4/S4: la tabla se siembra desde /api/services (que no sondea) y el
+      // sondeo sólo rellena sus filas. Derivar la lista del fixture mantiene
+      // el escenario —«estos servicios existen»— sin inventar otros.
+      const services = (results === 'error' ? [] : results).map((r) => ({
+        key: r.key,
+        kind: r.kind,
+        url: r.url,
+        configured: true,
+      }))
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ services, configured: services.map((s) => s.key) }),
+      } as Response)
+    }
     if (url.includes('/api/settings')) {
       return Promise.resolve({ ok: true, json: async () => settings } as Response)
     }
@@ -111,9 +126,14 @@ describe('service connection tester', () => {
     renderSettings()
     await clickTest()
 
-    await waitFor(() => expect(screen.getByText(/radarr/)).toBeInTheDocument())
-    expect(screen.getByText(/sonarr/)).toBeInTheDocument()
-    expect(screen.getByText(/amutorrent/)).toBeInTheDocument()
+    // ADAPTADO (T4/S2, sin aflojar): la sección es ahora la tabla del diseño, y
+    // las filas se siembran con /api/services; los tres servicios siguen
+    // apareciendo, cada uno con su estado.
+    const table = await screen.findByRole('table')
+    await waitFor(() => expect(within(table).getByText('Radarr')).toBeInTheDocument())
+    expect(within(table).getByText('Sonarr')).toBeInTheDocument()
+    expect(within(table).getByText('aMuTorrent')).toBeInTheDocument()
+    expect(within(table).getAllByText('Conectado')).toHaveLength(3)
   })
 
   it('shows the qbit row when the backend returns it', async () => {
@@ -130,17 +150,20 @@ describe('service connection tester', () => {
     renderSettings()
     await clickTest()
 
-    await waitFor(() => expect(screen.getByText(/qbit/)).toBeInTheDocument())
-    expect(screen.getByText('http://111.111.111.111:8080')).toBeInTheDocument()
+    const table = await screen.findByRole('table')
+    await waitFor(() => expect(within(table).getByText('qBittorrent')).toBeInTheDocument())
+    expect(within(table).getByText('http://111.111.111.111:8080')).toBeInTheDocument()
   })
 
   it('shows the URL that was attempted', async () => {
     // The whole point during a proxy migration: which host did we actually hit?
+    // La fila muestra la URL del SONDEO, no la guardada, justo por esto.
     mockFetch([result({ url: 'http://192.168.1.50:7878' })])
     renderSettings()
     await clickTest()
 
-    await waitFor(() => expect(screen.getByText('http://192.168.1.50:7878')).toBeInTheDocument())
+    const table = await screen.findByRole('table')
+    await waitFor(() => expect(within(table).getByText('http://192.168.1.50:7878')).toBeInTheDocument())
   })
 
   it('surfaces a rejected key as a failure, not a success', async () => {
@@ -156,6 +179,8 @@ describe('service connection tester', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('API key rechazada')
+    const table = await screen.findByRole('table')
+    expect(within(table).getByText('Alerta')).toBeInTheDocument()
   })
 
   it('surfaces an unreachable service with its reason', async () => {
@@ -192,11 +217,14 @@ describe('service connection tester', () => {
     renderSettings()
     await clickTest()
 
-    await waitFor(() => expect(document.querySelectorAll('.service-test')).toHaveLength(2))
-    const rows = [...document.querySelectorAll('.service-test')]
-    expect(rows.filter((r) => r.classList.contains('ok'))).toHaveLength(1)
-    expect(rows.filter((r) => r.classList.contains('fail'))).toHaveLength(1)
-    expect(within(rows[1] as HTMLElement).getByText(/no respondió a tiempo/)).toBeInTheDocument()
+    // ADAPTADO (T4/S2, sin aflojar): las marcas viven ahora en la píldora de
+    // estado de cada fila (antes, una tarjeta `.service-test` por servicio).
+    await waitFor(() => expect(document.querySelectorAll('.connections-pill')).toHaveLength(2))
+    const pills = [...document.querySelectorAll('.connections-pill')]
+    expect(pills.filter((p) => p.classList.contains('ok'))).toHaveLength(1)
+    expect(pills.filter((p) => p.classList.contains('fail'))).toHaveLength(1)
+    expect(pills[1] as HTMLElement).toHaveTextContent('Alerta')
+    expect(screen.getByText(/no respondió a tiempo/)).toBeInTheDocument()
   })
 })
 

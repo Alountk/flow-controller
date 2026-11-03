@@ -169,7 +169,18 @@ async def test_service_connection(session: aiohttp.ClientSession, service: dict)
 
     Always echoes the URL, because the same logical setting resolves to
     localhost or to a host IP depending on where the app runs.
+
+    `elapsed_ms` is measured here, once, around whatever the probe does: the
+    status table shows it next to each row, and timing every client separately
+    would let the numbers drift apart.
     """
+    started = time.monotonic()
+    result = await _probe_service_connection(session, service)
+    result["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+    return result
+
+
+async def _probe_service_connection(session: aiohttp.ClientSession, service: dict) -> dict:
     service_key = service.get("key", "?")
     result = {
         "key": service_key,

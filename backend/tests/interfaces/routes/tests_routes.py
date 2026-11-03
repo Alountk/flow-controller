@@ -2402,6 +2402,21 @@ class TestServiceConnectionTester:
         assert result["ok"] is False
         assert result["error_kind"] == "timeout"
 
+    def test_the_time_spent_is_reported_so_the_status_table_can_show_it(self):
+        """T4/S2: la tabla de conexiones muestra la latencia de cada fila.
+
+        Se mide alrededor de la sonda entera y se devuelve siempre —también en
+        los fallos—, porque una fila sin medida no se distingue de una medida
+        de cero.
+        """
+        healthy = self._test({"/api/v3/system/status": (200, {"version": "6.4.4"})})
+        broken = self._test({"/api/v3/system/status": (401, {})})
+
+        assert isinstance(healthy["elapsed_ms"], int)
+        assert healthy["elapsed_ms"] >= 0
+        assert isinstance(broken["elapsed_ms"], int)
+        assert broken["elapsed_ms"] >= 0
+
     def test_an_unreachable_host_is_reported(self):
         from infrastructure.arr_client import test_service_connection
 
