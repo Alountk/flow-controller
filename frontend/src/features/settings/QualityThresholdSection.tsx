@@ -26,29 +26,33 @@ export function QualityThresholdSection({
   const index = Math.max(0, RESOLUTION_CLASSES.indexOf(minClass as never))
 
   return (
-    <div className="settings-field">
-      <label className="settings-label" htmlFor="quality-threshold-slider">
-        Umbral de calidad
-      </label>
-      <input
-        className="settings-input settings-slider"
-        type="range"
-        id="quality-threshold-slider"
-        name="quality-threshold-slider"
-        aria-label="Umbral de calidad"
-        aria-valuetext={RESOLUTION_CLASSES[index]}
-        min={0}
-        max={RESOLUTION_CLASSES.length - 1}
-        step={1}
-        value={index}
-        onChange={(event) => onClass(RESOLUTION_CLASSES[Number(event.target.value)])}
-      />
-      <div className="settings-slider-marks" aria-hidden="true">
-        {RESOLUTION_CLASSES.map((name) => (
-          <span key={name} className={name === minClass ? 'is-current' : ''}>
-            {RESOLUTION_LABELS[name]}
-          </span>
-        ))}
+    <>
+      {/* One row per control (S1): nesting the width row inside the slider row
+          gave the panel a 913px floor it could not shrink below. */}
+      <div className="settings-field">
+        <label className="settings-label" htmlFor="quality-threshold-slider">
+          Umbral de calidad
+        </label>
+        <input
+          className="settings-input settings-slider"
+          type="range"
+          id="quality-threshold-slider"
+          name="quality-threshold-slider"
+          aria-label="Umbral de calidad"
+          aria-valuetext={RESOLUTION_CLASSES[index]}
+          min={0}
+          max={RESOLUTION_CLASSES.length - 1}
+          step={1}
+          value={index}
+          onChange={(event) => onClass(RESOLUTION_CLASSES[Number(event.target.value)])}
+        />
+        <div className="settings-slider-marks" aria-hidden="true">
+          {RESOLUTION_CLASSES.map((name) => (
+            <span key={name} className={name === minClass ? 'is-current' : ''}>
+              {RESOLUTION_LABELS[name]}
+            </span>
+          ))}
+        </div>
       </div>
       <Field
         label="Ancho manual (px)"
@@ -63,6 +67,6 @@ export function QualityThresholdSection({
           Con un ancho manual, ese valor manda sobre la clase elegida.
         </p>
       )}
-    </div>
+    </>
   )
 }
