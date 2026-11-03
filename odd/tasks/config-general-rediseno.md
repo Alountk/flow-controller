@@ -27,9 +27,9 @@ layout que hoy hace que los campos se pisen.
 |----|------|-------|--------|
 | T1 | S1 | inline | `db6be2c` |
 | T2 | S3 | inline (read-only) | — (informe de deltas) |
-| T3 | S2 | pendiente | — anatomía de campo: etiqueta encima + rejilla de dos columnas dentro de tarjeta |
-| T4 | S2, S4 | inline | `feat(config): la tabla de conexiones muestra estado y latencia del diseño` |
-| T5 | S2, S4 | pendiente | — orden de tarjetas, cabeceras con icono y subtítulo |
+| T3 | S2 | inline | `c03adc2` (#284) |
+| T4 | S2, S4 | inline | `0428146` (#285) |
+| T5 | S2, S4 | inline | `feat(config): General abre por la tabla de conexiones y cada tarjeta lleva cabecera del diseño` |
 | T6 | S2 | pendiente | — responsive por debajo de 640 |
 
 ### T1 — hecho
@@ -157,3 +157,26 @@ fixture de `/tmp/fc-config`, nunca en el repo):
   se revise sin el ruido del reordenado de tarjetas.
 - **R3**: T5–T6 — orden de tarjetas, cabeceras con icono y subtítulo, y el
   responsive por debajo de 640 (donde el límite es el armazón de la app).
+
+### T5 — hecho
+
+Orden del diseño, con lo que el diseño no trae en la posición acordada:
+**Estado de las conexiones** primero (es lo que se mira cuando algo no responde,
+y estaba detrás de cinco tarjetas de credenciales), y después Servicios,
+Seguridad, Rutas, Carpetas compartidas de aMule, Intervalos, Calidad de
+biblioteca, Seguimiento, Servidor, Logs.
+
+Cada tarjeta lleva la cabecera del diseño: icono, título y subtítulo, con el
+borde inferior. Los subtítulos de Servicios, Seguridad, Rutas, Intervalos,
+Seguimiento y Servidor son **copia literal** del diseño; el de Estado de las
+conexiones es el párrafo que ya explicaba la tabla, subido a la cabecera en vez
+de dejarlo suelto encima; los de Calidad de biblioteca, Carpetas compartidas y
+Logs son nuevos porque el diseño no los tiene (S4 los conserva).
+
+El icono es un emoji, como el resto de la app (el sidebar usa emojis): el
+diseño trae Material Symbols, pero meter esa fuente web en un panel que corre
+en Docker sin red es un coste que no compra nada. Va `aria-hidden`: el título ya
+dice qué es.
+
+Test: `sectionHeaders.test.tsx` fija el orden exacto y exige icono + subtítulo
+en las **diez** tarjetas, incluidos los subtítulos literales del diseño.
