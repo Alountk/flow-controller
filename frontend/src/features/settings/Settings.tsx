@@ -27,14 +27,17 @@ interface LogEntry {
 
 /** Fila de «Estado de las conexiones»: lo configurado antes de sondear, el
  *  resultado medido después. `unprobed` no es un fallo: es que nadie pulsó
- *  «Probar conexiones», y la sección nunca sondea al montar. */
-type ConnectionState = 'ok' | 'fail' | 'unconfigured' | 'unprobed'
+ *  «Probar conexiones», y la sección nunca sondea al montar. `external` es
+ *  aMule: su sonda es EC sobre TCP, no HTTP, así que este botón nunca lo
+ *  comprobará y la fila no puede decir «Sin comprobar» para siempre. */
+type ConnectionState = 'ok' | 'fail' | 'unconfigured' | 'unprobed' | 'external'
 
 const CONNECTION_LABEL: Record<ConnectionState, string> = {
   ok: 'Conectado',
   fail: 'Alerta',
   unconfigured: 'No configurado',
   unprobed: 'Sin comprobar',
+  external: 'Sin sonda',
 }
 
 /** El nombre que ve el usuario, no la clave del backend: la tabla del diseño
@@ -57,7 +60,13 @@ interface ConnectionRow {
   latency: string
   url: string
   reason: string
+  hint: string
 }
+
+/** Los servicios cuyo sondeo no es HTTP: aMule responde por EC (TCP), así que
+ *  el botón de la sección no lo toca y la fila lo dice en vez de quedarse
+ *  eternamente en «Sin comprobar». */
+const NOT_PROBED_KIND = new Set(['amule'])
 
 function connectionRows(
   services: ServiceListing[] | undefined,
@@ -65,14 +74,19 @@ function connectionRows(
 ): ConnectionRow[] {
   return (services ?? []).map((service) => {
     const probe = probes.get(service.key)
+    const external = NOT_PROBED_KIND.has(service.kind)
     const state: ConnectionState = !service.configured
       ? 'unconfigured'
-      : probe
-        ? (probe.ok ? 'ok' : 'fail')
-        : 'unprobed'
+      : external
+        ? 'external'
+        : probe
+          ? (probe.ok ? 'ok' : 'fail')
+          : 'unprobed'
     // Un timeout gana a la medida: los milisegundos que tardó en rendirse no
-    // son una latencia que nadie quiera leer.
-    const latency = !probe
+    // son una latencia que nadie quiera leer. Y sin sondeo real no hay medida:
+    // un «0ms» en una fila «No configurado» sería inventado.
+    const measured = state === 'ok' || state === 'fail'
+    const latency = !probe || !measured
       ? '—'
       : probe.error_kind === 'timeout'
         ? 'Timeout'
@@ -89,6 +103,7 @@ function connectionRows(
       latency,
       url: probe?.url || service.url,
       reason: state === 'fail' ? (probe?.detail ?? '') : '',
+      hint: external ? 'aMule responde por EC (TCP): este botón no lo sondea' : '',
     }
   })
 }
@@ -603,7 +618,9 @@ export function Settings() {
                 <td className="connections-name">{row.name}</td>
                 <td className="connections-endpoint">{row.url || '—'}</td>
                 <td>
-                  <span className={`connections-pill ${row.state}`}>{CONNECTION_LABEL[row.state]}</span>
+                  <span className={`connections-pill ${row.state}`} title={row.hint || undefined}>
+                    {CONNECTION_LABEL[row.state]}
+                  </span>
                   {row.reason && (
                     <span className="connections-reason" role="alert">{row.reason}</span>
                   )}

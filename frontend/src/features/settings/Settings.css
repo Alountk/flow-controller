@@ -630,6 +630,13 @@
   color: var(--text-dim);
 }
 
+/* Sin sonda: ni verde ni rojo — nada se midió. Se distingue de «Sin comprobar»
+   con el borde discontinuo, porque esta fila no va a cambiar al pulsar. */
+.connections-pill.external {
+  color: var(--text-dim);
+  border-style: dashed;
+}
+
 /* El motivo del fallo se conserva: «API key rechazada» es lo que el usuario
    viene a leer, y una píldora «Alerta» sola no lo dice. */
 .connections-reason {

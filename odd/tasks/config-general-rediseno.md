@@ -110,6 +110,22 @@ exactamente lo que el usuario viene a leer. Verificado con el backend real:
 sección 752 px sin desbordamiento a 1600/1440/1280/1100/900/700 y las seis
 filas con su píldora y su `—`.
 
+Correcciones tras medir con las URLs reales de `.env.local` (sembradas en el
+fixture de `/tmp/fc-config`, nunca en el repo):
+
+- **aMule no se quedaba en «Sin comprobar» para siempre**: su sonda es EC sobre
+  TCP, así que el botón no lo toca nunca. Estado propio `external` → píldora
+  «Sin sonda» con borde discontinuo y `title` que lo explica. Antes de esto la
+  fila prometía una comprobación que jamás iba a llegar.
+- **Nada de latencia inventada**: el backend devuelve un resultado también para
+  lo no configurado, con `elapsed_ms: 0`; pintar «0ms» ahí era una medida que
+  no ocurrió. La columna solo mide en filas `ok`/`fail`.
+- **Medido de verdad** (servicios del usuario, todos al mismo host): Radarr
+  10ms, Sonarr 8ms, Prowlarr 8ms, aMuTorrent 898ms, aMule «Sin sonda»,
+  qBittorrent «No configurado». El sondeo completo tardó **976 ms**, no
+  minutos: la espera de 30 s que vi antes era el host inalcanzable del fixture
+  heredado, no el comportamiento normal.
+
 
 ## Log
 

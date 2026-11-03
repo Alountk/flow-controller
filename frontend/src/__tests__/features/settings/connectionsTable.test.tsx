@@ -120,6 +120,12 @@ describe('tabla de «Estado de las conexiones» (T4/S2, S4)', () => {
     expect(await rowOf('Radarr')).toHaveTextContent('—')
     const probed = fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/services/test'))
     expect(probed).toHaveLength(0)
+
+    // aMule responde por EC (TCP), no por HTTP: el botón no lo sondeará nunca,
+    // así que la fila no puede quedarse en «Sin comprobar» para siempre.
+    const amule = await rowOf('aMule')
+    expect(amule).toHaveTextContent('Sin sonda')
+    expect(within(amule).getByTitle(/EC \(TCP\)/)).toBeInTheDocument()
   })
 
   it('fills the same row with the status and the measured latency after probing', async () => {
@@ -145,7 +151,8 @@ describe('tabla de «Estado de las conexiones» (T4/S2, S4)', () => {
     expect(await rowOf('Sonarr')).toHaveTextContent('Alerta')
     expect(await rowOf('Sonarr')).toHaveTextContent('Timeout')
     // Los que no se sondearon conservan su estado previo, no uno inventado.
-    expect(await rowOf('aMule')).toHaveTextContent('Sin comprobar')
+    // aMule sigue en «Sin sonda»: es EC sobre TCP, no lo toca este botón.
+    expect(await rowOf('aMule')).toHaveTextContent('Sin sonda')
   })
 
   it('reports a rejected API key as a failed alert, not as a connection', async () => {
@@ -165,5 +172,28 @@ describe('tabla de «Estado de las conexiones» (T4/S2, S4)', () => {
 
     await waitFor(async () => expect(await rowOf('Radarr')).toHaveTextContent('Alerta'))
     expect(await rowOf('Radarr')).toHaveTextContent('7ms')
+  })
+
+  it('does not invent a latency for a row that was never measured', async () => {
+    // El backend devuelve un resultado también para lo no configurado (con
+    // `elapsed_ms: 0`). Pintar «0ms» ahí sería una medida que no ocurrió.
+    mockFetch({
+      ...baseRoutes,
+      'GET /api/services/test': () => ({
+        ok: false,
+        results: [
+          { key: 'prowlarr', kind: 'prowlarr', url: '', ok: false, detail: 'prowlarr: no está configurado', error_kind: 'auth', elapsed_ms: 0 },
+        ],
+      }),
+    })
+    renderSettings()
+    await connectionsTable()
+
+    fireEvent.click(screen.getByRole('button', { name: /Probar conexiones/ }))
+
+    const prowlarr = await rowOf('Prowlarr')
+    await waitFor(() => expect(prowlarr).toHaveTextContent('No configurado'))
+    expect(prowlarr).toHaveTextContent('—')
+    expect(prowlarr).not.toHaveTextContent('0ms')
   })
 })
