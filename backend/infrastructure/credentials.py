@@ -55,6 +55,9 @@ ENCRYPTED_SECRET_FIELDS = (
     # cifrado en reposo como sus hermanos. En memoria queda el texto plano que
     # `config.AMULE_EC_PASSWORD` reparte; el ciphertext jamás sale a una API.
     ("services", "amule", "ec_password"),
+    # El token de ntfy publica en un topic privado: quien lo lea puede escribir
+    # como este panel. Cifrado en reposo, como las claves de servicio.
+    ("notifications", "ntfy", "token"),
 )
 
 #: Marks a value as ciphertext, so legacy plaintext can still be read.
