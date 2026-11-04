@@ -1,5 +1,5 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import casesJson from '../../../../contracts/resolution-cases.json'
 import {
   best,
   fromDimensions,
@@ -11,14 +11,20 @@ import {
  * La misma tabla que lee `backend/tests/domain/tests_resolution.py` (S6). Si un
  * lado se mueve y el otro no, es aquí donde se ve.
  */
-const CASES = casesJson.cases as Array<{
+interface Case {
   why: string
   name: string
   width: number
   height: number
   resolved: string
   bucket: string
-}>
+}
+
+// Se lee en tiempo de ejecución y no con `import`: la imagen Docker construye
+// solo `frontend/`, así que un import a `contracts/` rompe `npm run build`.
+const CASES = (
+  JSON.parse(readFileSync('../contracts/resolution-cases.json', 'utf8')) as { cases: Case[] }
+).cases
 
 /** El bucket de la lista de V2: lo que no se puede demostrar es `otros`. */
 function bucketOf(resolved: string): string {
