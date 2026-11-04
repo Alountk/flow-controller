@@ -58,6 +58,8 @@ export interface RenameResult {
   detail: string
   moved?: { from: string; to: string }[]
   failed?: { name: string; detail: string }[]
+  /** Present when the file belonged to a catalog movie and Radarr was told. */
+  rescan?: { ok: boolean; detail: string }
 }
 
 export interface RenameCandidate extends RenameProposal {
@@ -110,6 +112,10 @@ export async function renameApply(body: {
   remote_path: string
   folder: string
   name: string
+  /** `a mano` is a file picked in the explorer, not a batch from Renombrar. */
+  origin?: 'lote' | 'a mano'
+  /** The movie the operator confirmed, which also asks Radarr to rescan it. */
+  movie_id?: number
 }): Promise<RenameResult> {
   const res = await apiFetch('/api/files/rename-apply', {
     method: 'POST',
@@ -117,6 +123,28 @@ export async function renameApply(body: {
     body: JSON.stringify(body),
   })
   return (await res.json()) as RenameResult
+}
+
+/** What one applied rename turned a file into. */
+export interface RenameLogRow {
+  src: string
+  dst: string
+  movie_id: number | null
+  origin: 'lote' | 'a mano'
+  renamed_at: number
+  /** False when the destination is no longer on disk. */
+  exists: boolean
+}
+
+export interface RenamesResponse {
+  ok: boolean
+  items: RenameLogRow[]
+}
+
+/** The durable record of renames: the candidate list only holds what is left to do. */
+export async function renames(limit = 200): Promise<RenamesResponse> {
+  const res = await apiFetch(`/api/files/renames?limit=${limit}`, {})
+  return (await res.json()) as RenamesResponse
 }
 
 export async function fetchRoots(): Promise<RootsResponse> {

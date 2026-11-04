@@ -151,3 +151,149 @@
   font-family: var(--mono, monospace);
   font-size: 11px;
 }
+
+/* ── Rediseño (S1/S3): chips de vista, tarjeta de resumen y tabla ──────────── */
+
+.renombrar-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.renombrar-refresh {
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.renombrar-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.renombrar-tab {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.renombrar-tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.renombrar-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  font-size: 13px;
+}
+
+.renombrar-card p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.renombrar-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.renombrar-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+
+.renombrar-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.renombrar-table tr.is-blocked {
+  background: color-mix(in srgb, var(--warn, #d97706) 8%, transparent);
+}
+
+.renombrar-cell-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.renombrar-blocked {
+  display: block;
+  font-size: 11px;
+  color: var(--warn, #d97706);
+}
+
+.renombrar-folder {
+  font-family: var(--mono, monospace);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.renombrar-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.renombrar-badge.is-review {
+  border-color: var(--warn, #d97706);
+  color: var(--warn, #d97706);
+}
+
+.renombrar-badge.is-hand {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.renombrar-when {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.renombrar-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
