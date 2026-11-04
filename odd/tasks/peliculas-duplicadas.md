@@ -49,12 +49,12 @@ coincidencia. Lo mismo con una entrada sin ruta.
 
 | ID | Specs | Ruta | Commit |
 | --- | --- | --- | --- |
-| T1 | S1, S3, S7 | inline | `feat(duplicados): el grupo se decide por tmdbId y clase` |
-| T2 | S1 | inline | `feat(duplicados): tmdbId y los títulos en el ítem de película` |
-| T3 | S1, S3, S6 | inline | `feat(duplicados): API de grupos duplicados` |
-| T4 | S4 | inline | `feat(duplicados): la pantalla lista los pares` |
-| T5 | S4, S5 | inline | `feat(duplicados): borrar con confirmación y raíz permitida` |
-| T6 | S5 | inline | verificación con un fichero de prueba real y su borrado |
+| T1 | S1, S2, S3, S7 | inline | `b8ea74f` (#293) |
+| T2 | S1 | inline | `b8ea74f` (#293) |
+| T3 | S1, S3, S6 | inline | `b8ea74f` (#293) |
+| T4 | S4, S6 | inline | `551b7c3` (#295) |
+| T5 | S4, S5 | inline | `04294af` (#294) |
+| T6 | S5, S6 | inline | verificado: `/etc/hosts` rechazado con motivo; 1 petición al montar |
 
 ## Log
 
