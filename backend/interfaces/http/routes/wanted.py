@@ -28,6 +28,7 @@ from application.gateways import (
     arr_series_metadata,
 )
 from domain import library_class
+from domain.duplicates import duplicate_groups
 from models import ActionRequest
 from interfaces.http.deps import verify_api_key
 from interfaces.http.route_helpers import attach_grabbed_at
@@ -307,6 +308,28 @@ async def get_all_movies(
         source="radarr",
         kind="movie",
     )
+
+
+@router.get("/api/movies/duplicates")
+async def get_duplicate_movies(_key: str = Depends(verify_api_key)):
+    """Los ficheros que repiten película y clase («duplicados», S1/S2/S3/S6).
+
+    No recorre la biblioteca: la lista sale de lo que Radarr ya dijo de cada
+    película (`tmdbId`, `path`, `sizeOnDisk`), y el disco sólo se toca al
+    borrar. Entrar en la pantalla no puede costar una lectura por título.
+    """
+    service = find_service("radarr", "arr")
+    if not service:
+        # Un arr sin configurar y un catálogo sin duplicados son hechos distintos.
+        return {"groups": [], "total": 0,
+                "error_kind": "unknown", "error": "radarr: servicio no configurado"}
+    async with http_session() as session:
+        result = await fetch_all_movies_detailed(session, service, 1, 0)
+    failure = _failure_fields(result)
+    if failure:
+        return {"groups": [], "total": 0, **failure}
+    groups = duplicate_groups(result.get("items") or [], path_3d=config.PATH_3D)
+    return {"groups": groups, "total": len(groups)}
 
 
 @router.get("/api/wanted/series/all")
