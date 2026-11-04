@@ -1,6 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Duplicados from '../../pages/Duplicados'
+import { setApiKey } from '../../shared/api/auth'
 
 /** jsdom no calcula layout ni habla HTTP: se finge el transporte, no la pantalla. */
 const GROUP = {
@@ -13,12 +14,16 @@ const GROUP = {
   ],
 }
 
-let calls: Array<{ url: string; body?: unknown }> = []
+let calls: Array<{ url: string; body?: unknown; init?: RequestInit }> = []
 
 function mockFetch(handler?: (url: string, init?: RequestInit) => unknown) {
   calls = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+    calls.push({
+      url,
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      init,
+    })
     if (handler) {
       const result = handler(url, init)
       if (result) return result as Response
@@ -107,5 +112,22 @@ describe('Duplicados con un backend que no es el esperado', () => {
     render(<Duplicados />)
 
     expect(await screen.findByText(/Ningún duplicado/)).toBeTruthy()
+  })
+})
+
+describe('Duplicados y la API key', () => {
+  it('sends the stored key on both requests, like every other section', async () => {
+    // El 401 en producción: esta pantalla usaba `fetch` a mano y no pasaba por
+    // `apiFetch`, así que la clave no viajaba. Las demás secciones sí.
+    setApiKey('clave-de-prueba')
+    render(<Duplicados />)
+
+    await screen.findByText('Dune')
+    fireEvent.click(screen.getAllByText('Borrar')[0])
+    fireEvent.click(screen.getByText('Sí, borrar'))
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/delete'))).toBe(true))
+
+    const headers = calls.map((c) => (c.init?.headers ?? {}) as Record<string, string>)
+    expect(headers.every((h) => h['X-Api-Key'] === 'clave-de-prueba')).toBe(true)
   })
 })
