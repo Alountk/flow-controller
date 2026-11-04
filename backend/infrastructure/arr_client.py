@@ -1590,6 +1590,31 @@ def _folder_has_video(path: str) -> bool:
     return False
 
 
+def _movie_identity(m: dict) -> dict:
+    """`tmdb_id` y la lista de títulos, que es lo que agrupa el buscador de duplicados.
+
+    `tmdb_id` se omite cuando Radarr no lo manda o manda 0: un 0 en la clave
+    agruparía películas distintas como si fueran la misma (S7).
+    """
+    out: dict = {}
+    tmdb_id = m.get("tmdbId")
+    if isinstance(tmdb_id, int) and not isinstance(tmdb_id, bool) and tmdb_id > 0:
+        out["tmdb_id"] = tmdb_id
+    titles: list[str] = []
+    main = m.get("title")
+    if isinstance(main, str) and main.strip():
+        titles.append(main)
+    for entry in m.get("alternateTitles") or []:
+        if not isinstance(entry, dict):
+            continue
+        title = entry.get("title")
+        if isinstance(title, str) and title.strip() and title not in titles:
+            titles.append(title)
+    if titles:
+        out["titles"] = titles
+    return out
+
+
 def _movie_enrichment(m: dict) -> dict:
     """Design-03 extras: IMDb id, runtime, on-disk size and directors.
 
@@ -1689,6 +1714,7 @@ async def fetch_all_movies_detailed(
                     # Design-03 extras: present only when Radarr sent a real
                     # value for them (see _movie_enrichment).
                     **_movie_enrichment(m),
+                    **_movie_identity(m),
                 })
             return {"items": items, "total": total, "page": page, "page_size": page_size}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
