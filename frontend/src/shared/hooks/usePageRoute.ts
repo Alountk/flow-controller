@@ -10,6 +10,7 @@ export type Page =
   | 'disk'
   | 'files'
   | 'renombrar'
+  | 'duplicados'
   | 'mixer'
   | 'config'
   | 'prototypes'
@@ -25,6 +26,7 @@ export const PAGE_PATHS: Record<Page, string> = {
   disk: '/disco',
   files: '/archivos',
   renombrar: '/renombrar',
+  duplicados: '/duplicados',
   mixer: '/mixer',
   config: '/configuracion',
   prototypes: '/prototipos',

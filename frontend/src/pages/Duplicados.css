@@ -1,0 +1,164 @@
+.duplicados {
+  padding: 24px 32px 48px;
+  max-width: 1200px;
+}
+
+.duplicados-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.duplicados-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.duplicados-subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 13px;
+}
+
+.duplicados-refresh {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--surface, #fff);
+  cursor: pointer;
+}
+
+.duplicados-alert,
+.duplicados-notice {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.duplicados-alert {
+  color: var(--danger, #dc2626);
+  background: color-mix(in srgb, var(--danger, #dc2626) 8%, transparent);
+}
+
+.duplicados-notice {
+  color: var(--success, #15803d);
+  background: color-mix(in srgb, var(--success, #15803d) 8%, transparent);
+}
+
+.duplicados-empty {
+  color: var(--text-muted, #6b7280);
+  padding: 16px 0;
+}
+
+.duplicados-group {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--surface, #fff);
+}
+
+.duplicados-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.duplicados-group-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.duplicados-chip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-alt, #f3f4f6);
+}
+
+.duplicados-count {
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+  margin-left: auto;
+}
+
+.duplicados-titles {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+}
+
+.duplicados-files {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* La ruta se recorta, no ensancha la fila: es el dato largo y el que menos se lee entero. */
+.duplicados-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.duplicados-path {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.duplicados-size {
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+}
+
+.duplicados-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.duplicados-question {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.duplicados-delete,
+.duplicados-danger {
+  padding: 5px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--surface, #fff);
+}
+
+.duplicados-danger {
+  border-color: var(--danger, #dc2626);
+  color: var(--danger, #dc2626);
+  font-weight: 600;
+}
+
+.duplicados-danger:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
