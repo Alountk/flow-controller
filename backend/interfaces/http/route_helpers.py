@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from application.gateways import history
+from application import gateways
 
 # How far back a grab is still worth showing as "Pedida el ...".
 #
@@ -87,8 +87,10 @@ async def attach_grabbed_at(response: dict, *, source: str = "", kind: str = "")
     # unindexed full scan — and it runs on every response of four routes.
     # `own_grabs_latest_map` stays inline: with `rows` given it is a pure dict
     # projection and does no I/O at all.
-    rows = await asyncio.to_thread(history.own_grabs_latest_rows, since)
-    marks = history.own_grabs_latest_map(since, rows=rows)
+    # Read through the module, never captured by a `from` import: the registry
+    # is bound at the composition root, and a copy taken before that stays None.
+    rows = await asyncio.to_thread(gateways.history.own_grabs_latest_rows, since)
+    marks = gateways.history.own_grabs_latest_map(since, rows=rows)
 
     wanted = response.get("wanted")
     if wanted:
