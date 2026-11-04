@@ -12,6 +12,7 @@ from application.gateways import credentials as credentials
 from config import BASE_DIR
 from application.gateways import get_settings, save_settings
 from application.gateways import test_service_connection
+from application.use_cases import notifier
 from config import SERVICES, configured_services
 from interfaces.http.deps import verify_api_key
 from state import http_session
@@ -110,6 +111,14 @@ def _restore_masked_secrets(incoming: dict, current: dict) -> dict:
     # conservar la guardada». Vacía, ausente del bloque, o con la máscara que el
     # form devuelve intacto → se conserva la guardada; sólo un valor nuevo la
     # sustituye. El «vacío borra» del resto de secretos se mantiene tal cual.
+    # El token de ntfy: máscara devuelta por el form = conservar; vacío = borrar,
+    # igual que las claves de servicio (un canal que se apaga debe poder
+    # quedarse sin token).
+    ntfy = merged.get("notifications", {}).get("ntfy")
+    if isinstance(ntfy, dict) and _is_mask(ntfy.get("token")):
+        stored_token = current.get("notifications", {}).get("ntfy", {}).get("token", "")
+        merged["notifications"]["ntfy"]["token"] = stored_token
+
     amule = merged.get("services", {}).get("amule")
     if isinstance(amule, dict):
         incoming_ec = amule.get("ec_password", "")
@@ -166,7 +175,31 @@ def _mask_secrets(data: dict) -> dict:
             masked["services"]["amule"]["ec_password"] = "****"
         else:
             masked["services"]["amule"]["ec_password"] = "****" + ec_pw[-4:] if len(ec_pw) > 4 else "****"
+    # El token de ntfy sigue el mismo patrón: ni el claro ni el ciphertext salen
+    # de aquí, sólo la cola que sirve para reconocer cuál está puesto.
+    token = masked.get("notifications", {}).get("ntfy", {}).get("token", "")
+    if token:
+        if credentials.is_encrypted(token):
+            masked["notifications"]["ntfy"]["token"] = "****"
+        else:
+            masked["notifications"]["ntfy"]["token"] = "****" + token[-4:] if len(token) > 4 else "****"
     return masked
+
+
+TEST_TITLE = "Flow Controller"
+TEST_MESSAGE = "Aviso de prueba: si lees esto, el canal funciona."
+
+
+@router.post("/api/notifications/test")
+async def test_notification(_key: str = Depends(verify_api_key)):
+    """Envía un aviso real por el canal configurado (S2).
+
+    La ruta no decide nada: pide el aviso y devuelve el veredicto del
+    notificador. Un canal sin configurar o caído responde 200 con `ok: false`
+    y el motivo, como `/api/services/test` — la UI pinta una píldora a partir
+    de `ok`, y un 500 no le diría nada al usuario.
+    """
+    return await notifier.send(TEST_TITLE, TEST_MESSAGE, tags=["white_check_mark"])
 
 
 @router.get("/api/settings")

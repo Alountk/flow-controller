@@ -50,6 +50,11 @@ DEFAULTS: dict[str, Any] = {
         "request_timeout": 5,
         "import_timeout": 40,
     },
+    # Avisos al móvil (C-01). Todo vacío a propósito: sin URL o sin topic el
+    # canal queda «No configurado» y no se envía nada — el criterio de
+    # `services.qbit`. `enabled` arranca en False para que actualizar la app no
+    # empiece a mandar avisos al móvil de nadie sin que lo haya pedido.
+    "notifications": {"ntfy": {"url": "", "topic": "", "token": "", "enabled": False}},
     "tracing": {"limit": 25},
     # How long a downloaded file stays before the UI may offer deleting it.
     # Deletion itself is always manual — see the retention feature.
