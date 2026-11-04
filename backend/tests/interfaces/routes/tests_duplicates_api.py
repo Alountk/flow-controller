@@ -1,9 +1,10 @@
-"""`GET /api/movies/duplicates` («películas duplicadas» T3/S1/S2/S3/S6).
+"""`GET /api/movies/duplicates` («películas duplicadas» T3/S1).
 
-La ruta no decide la regla — eso es `domain/duplicates.py` — sino que la sirve:
-el catálogo de Radarr entra, los grupos salen. Lo que aquí se fija es lo que
-puede salir mal en la frontera: un arr sin configurar que parece «sin
-duplicados», y una respuesta que se pueda pintar sin pedir nada más.
+La ruta no decide la regla — eso es `domain/duplicates_folders.py` — sino que la
+sirve: recorre las raíces permitidas en un hilo y le pasa lo que Radarr conoce
+para marcar cuál es el fichero que no se debe borrar. Lo que aquí se fija es la
+frontera: un disco real de verdad, un arr que no responde y no rompe nada, y una
+respuesta que se pueda pintar sin pedir nada más.
 """
 
 from unittest.mock import AsyncMock, patch
@@ -11,21 +12,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+import config
 from app import app
 from interfaces.http.routes import wanted
 
-
-def _movie(ident, tmdb_id, path, quality="Bluray-1080p"):
-    return {
-        "id": ident,
-        "title": f"Pelicula {ident}",
-        "titles": [f"Pelicula {ident}"],
-        "tmdb_id": tmdb_id,
-        "path": path,
-        "quality": quality,
-        "has_file": True,
-        "size_on_disk": 1_000,
-    }
+FOLDER = "Now You See Me (2013)"
+WEBRIP = "Now You See Me (2013) WEBRip-1080p - h265 DTS - [ES+EN].mkv"
+WEBDL = "Now You See Me (2013) WEBDL-1080p - h265 TrueHD Atmos - [EN+ES].mkv"
 
 
 @pytest.fixture
@@ -33,36 +26,84 @@ def client():
     return TestClient(app)
 
 
-def _call(client, result):
+@pytest.fixture
+def library(tmp_path, monkeypatch):
+    """Una biblioteca de verdad en `tmp_path`, con el caso literal del usuario."""
+    folder = tmp_path / "movies" / "es" / FOLDER
+    folder.mkdir(parents=True)
+    (folder / WEBRIP).write_bytes(b"x" * 100)
+    (folder / WEBDL).write_bytes(b"x" * 250)
+    monkeypatch.setattr(config, "ALLOWED_ROOTS", [str(tmp_path)], raising=False)
+    return folder
+
+
+def _movie(path):
+    return {
+        "id": 1,
+        "title": "Now You See Me",
+        "titles": ["Now You See Me"],
+        "tmdb_id": 75656,
+        "path": path,
+        "file_name": WEBRIP,
+        "quality": "WEBRip-1080p",
+        "has_file": True,
+        "size_on_disk": 100,
+    }
+
+
+def _call(client, *, movies):
     with patch.object(wanted, "find_service", return_value={"key": "radarr", "url": "http://x", "api_key": "k"}), \
-         patch.object(wanted, "fetch_all_movies_detailed", new_callable=AsyncMock, return_value=result):
+         patch.object(wanted, "fetch_all_movies_detailed", new_callable=AsyncMock,
+                      return_value={"items": movies, "total": len(movies)}):
         return client.get("/api/movies/duplicates").json()
 
 
-def test_two_copies_of_one_movie_come_back_as_a_group(client):
-    body = _call(client, {"items": [
-        _movie(1, 438631, "/media/a/Dune.mkv"),
-        _movie(2, 438631, "/media/b/Dune.mkv"),
-        _movie(3, 999, "/media/c/Otra.mkv"),
-    ]})
+def test_two_files_of_the_same_class_come_back_as_one_group(client, library):
+    body = _call(client, movies=[_movie(str(library))])
 
     assert body["total"] == 1
-    assert len(body["groups"][0]["files"]) == 2
+    group = body["groups"][0]
+    assert group["title"] == "Now You See Me"
+    assert group["class"] == "1080"
+    assert len(group["files"]) == 2
 
 
-def test_an_unconfigured_radarr_is_not_an_empty_library(client):
+def test_the_file_radarr_knows_is_flagged(client, library):
+    body = _call(client, movies=[_movie(str(library))])
+
+    files = body["groups"][0]["files"]
+    known = [f for f in files if f["known"]]
+    assert [f["name"] for f in known] == [WEBRIP]
+    # Lo que Radarr no conoce es lo único reclamable.
+    assert body["groups"][0]["reclaimable"] == 250
+
+
+def test_without_radarr_the_walk_still_finds_the_files(client, library):
+    """Un arr caído no puede esconder dos ficheros que están en la misma carpeta."""
     with patch.object(wanted, "find_service", return_value=None):
         body = client.get("/api/movies/duplicates").json()
 
-    assert body["error_kind"] == "unknown"
-    assert "no configurado" in body["error"]
+    assert body["total"] == 1
+    assert body["radarr"] is False
+    # Sin el arr no se puede decir cuál sobra: se marcan como desconocidos.
+    assert all(f["known"] is None for f in body["groups"][0]["files"])
 
 
-def test_a_failed_fetch_is_reported_not_swallowed(client):
-    body = _call(client, {"items": [], "error": "radarr caído", "error_kind": "unreachable"})
+def test_a_radarr_that_raises_does_not_break_the_scan(client, library):
+    with patch.object(wanted, "find_service", return_value={"key": "radarr", "url": "http://x"}), \
+         patch.object(wanted, "fetch_all_movies_detailed", new_callable=AsyncMock,
+                      side_effect=RuntimeError("radarr caído")):
+        body = client.get("/api/movies/duplicates").json()
 
-    assert body["groups"] == []
-    assert body["error_kind"] == "unreachable"
+    assert body["total"] == 1
+
+
+def test_an_empty_root_is_not_an_error(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ALLOWED_ROOTS", [str(tmp_path / "vacio")], raising=False)
+
+    body = _call(client, movies=[])
+
+    assert body == {"groups": [], "total": 0, "roots": [str(tmp_path / "vacio")], "radarr": False}
 
 
 def test_deleting_refuses_a_path_outside_the_library_with_its_reason(client, tmp_path):

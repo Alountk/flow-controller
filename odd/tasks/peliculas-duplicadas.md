@@ -58,6 +58,30 @@ coincidencia. Lo mismo con una entrada sin ruta.
 
 ## Log
 
+**L4** (corrección, literal): «no encuentra ningun duplicado, es raro porque yo en
+jellyfin puedo verlos por ejemplo: movies/es/Now You See Me (2013)/... WEBRip-1080p
+- h265 DTS - [ES+EN].mkv / ... WEBDL-1080p - h265 TrueHD Atmos - [EN+ES].mkv»
+
+**L5** (decisión, literal): «Todo el árbol de la biblioteca».
+
+**Diagnóstico de L4**: la regla de S1 agrupaba **películas de Radarr** por
+`tmdbId`. Radarr guarda un solo `movieFile` por película, así que el segundo
+fichero de una carpeta no existe para su API: con 1067 películas en la biblioteca,
+**cero** `tmdbId` repetidos. La lista estaba vacía por construcción.
+
+**S1 (reescrito tras L4/L5)**: un duplicado es una **carpeta** con dos o más
+ficheros de vídeo de la **misma clase**. La clase sale de la resolución en el
+nombre (`2160p`/`4k` → 4K, `3d` → 3D, `1080` → 1080, resto → otros); calidades
+distintas siguen sin ser duplicado (L2). El recorrido camina
+`paths.allowed_roots` completo y se dispara **a botón**, nunca al montar.
+
+**S8 (nueva)**: el fichero que Radarr conoce se marca como suyo y el otro como
+sobrante, y **el sobrante va primero**. Si Radarr no responde, no se marca nada
+como sobrante y no se promete ninguna cifra reclamable: con el arr caído todos
+los ficheros parecían borrables, incluido el suyo.
+
+
+
 **L1** (petición original, literal): «buscador de películas duplicadas».
 
 **L2** (2026-11-04, decisiones del usuario):
