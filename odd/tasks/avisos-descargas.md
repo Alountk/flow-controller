@@ -64,12 +64,12 @@ corto, y su fallo se registra, no se propaga.
 
 | ID | Specs | Ruta | Commit |
 | --- | --- | --- | --- |
-| T1 | S1, S7 | inline | `feat(notifications): el canal ntfy y su grupo de configuración` |
-| T2 | S2 | inline | `feat(notifications): «Probar aviso» envía un aviso de verdad` |
-| T3 | S3, S6 | inline | `feat(notifications): aviso al terminar la descarga en el cliente` |
-| T4 | S4, S5 | inline | `feat(notifications): aviso cuando el archivo quedó importado` |
-| T5 | S6 | inline | `feat(notifications): la memoria de lo ya avisado sobrevive al reinicio` |
-| T6 | S3, S4 | inline | verificación con reinicio real y capturas |
+| T1 | S1, S7 | inline | `00c420e` (#288) |
+| T2 | S2 | inline | `6147078` (#290) |
+| T3 | S3, S6 | inline | `5297e2a` + `f3619dd` (#291) |
+| T4 | S4, S5 | inline | `5297e2a` (#291) |
+| T5 | S6 | inline | `24d71f0` (#291) |
+| T6 | S3, S4 | inline | verificado: 2 procesos, A → reinicio → B sin repetir (#291) |
 
 ## Log
 
