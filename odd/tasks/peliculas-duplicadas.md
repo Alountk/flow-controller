@@ -49,12 +49,16 @@ coincidencia. Lo mismo con una entrada sin ruta.
 
 | ID | Specs | Ruta | Commit |
 | --- | --- | --- | --- |
-| T1 | S1, S2, S3, S7 | inline | `b8ea74f` (#293) |
-| T2 | S1 | inline | `b8ea74f` (#293) |
+| T1 | S1, S2, S3, S7 | inline | `b8ea74f` (#293) — **sustituido por T7** |
+| T2 | S1 | inline | `b8ea74f` (#293) — **sustituido por T7** |
 | T3 | S1, S3, S6 | inline | `b8ea74f` (#293) |
 | T4 | S4, S6 | inline | `22557da` (#295) |
 | T5 | S4, S5 | inline | `7f9c328` (#294) |
-| T6 | S5, S6 | inline | verificado: `/etc/hosts` rechazado con motivo; 1 petición al montar |
+| T6 | S5, S6 | inline | verificado: `/etc/hosts` rechazado con motivo |
+| T7 | S1, S8 | inline | `b882b2c` (#299) — regla por carpeta, S1 reescrito |
+| T8 | S8 | inline | `b882b2c` (#299) — lo que el arr conoce, y callarse sin datos |
+| T9 | S6 | inline | `b882b2c` (#299) — a botón: 0 peticiones al montar, 1 al pulsar |
+| T10 | S1–S8 | — | **pendiente**: con la biblioteca real, tras desplegar |
 
 ## Log
 
