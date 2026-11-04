@@ -561,6 +561,18 @@
   max-width: 70ch;
 }
 
+/* El veredicto de «Probar aviso» sale en la misma fila que el botón: es su
+   respuesta, no un párrafo aparte que hay que ir a buscar. */
+.settings-hint {
+  min-width: 0;
+  flex: 1 1 240px;
+  margin: 0;
+}
+
+.settings-hint-error {
+  color: var(--danger, #dc2626);
+}
+
 .service-test {
   padding: 10px 12px;
   border: 1px solid var(--border);

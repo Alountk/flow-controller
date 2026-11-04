@@ -238,3 +238,27 @@ export function connectAmuleServer(address: string): Promise<AmuleActionResult> 
 export function addAmuleLink(link: string): Promise<AmuleActionResult> {
   return amuleAction('/api/amule/links', { link })
 }
+
+/** What `POST /api/notifications/test` answers (C-01, S2). */
+export interface NotificationTestResult {
+  ok: boolean
+  /** HTTP status of the ntfy publish, or null when the request never left. */
+  status: number | null
+  elapsed_ms: number
+  /** `not-configured`, `HTTP 403`, or the transport error. Empty on success. */
+  error: string
+}
+
+/**
+ * Send a real aviso through the configured channel.
+ *
+ * No body: the channel being tested is the one stored, and the point of the
+ * button is to prove that the *saved* configuration works.
+ */
+export async function testNotification(): Promise<NotificationTestResult> {
+  const res = await apiFetch('/api/notifications/test', { method: 'POST' })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  return (await res.json()) as NotificationTestResult
+}

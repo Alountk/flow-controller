@@ -99,6 +99,8 @@ describe('cabeceras y orden de las tarjetas de General (T5/S2, S4)', () => {
       'Intervalos',
       'Calidad de biblioteca',
       'Seguimiento',
+      // C-01: lo que se sigue y, justo después, cómo te enteras.
+      'Avisos',
       'Servidor',
       'Logs del Sistema',
     ])
@@ -140,6 +142,7 @@ describe('cabeceras y orden de las tarjetas de General (T5/S2, S4)', () => {
     expect(subtitleOf('Rutas')).toBe('Mapeo de almacenamiento en disco, librerías y puntos de montaje ZFS/RAID.')
     expect(subtitleOf('Intervalos')).toBe('Temporizadores de sondeo, reintentos de red y límites de procesamiento.')
     expect(subtitleOf('Seguimiento')).toBe('Políticas de retención y limpieza automatizada.')
+    expect(subtitleOf('Avisos')).toBe('Cuándo avisar y por dónde: el canal ntfy que recibe los mensajes.')
     expect(subtitleOf('Servidor')).toBe('Control del daemon HTTP central de FlowController.')
   })
 })
