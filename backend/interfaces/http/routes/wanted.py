@@ -243,6 +243,7 @@ def _classified_movies_page(
                 quality=str(item.get("quality") or ""),
                 path=str(item.get("path") or ""),
                 path_3d=config.PATH_3D,
+                resolution=str(item.get("resolution") or ""),
             ),
             # What the row lights up (S1): resolved here for the same reason the
             # class is — the browser has no disk to look at.
@@ -254,6 +255,7 @@ def _classified_movies_page(
                 path_3d=config.PATH_3D,
                 copies_4k=copies_4k,
                 copies_3d=copies_3d,
+                resolution=str(item.get("resolution") or ""),
             ),
         }
         for item in result.get("items") or []

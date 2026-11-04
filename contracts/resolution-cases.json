@@ -1,0 +1,77 @@
+{
+  "_": "One table, two readers: backend/tests/domain/tests_resolution.py and frontend/src/__tests__/shared/resolution.test.ts. A case added here is a case both sides must answer the same way; drift fails CI on the side that moved. `width`/`height` are what a probe measured (0 when the file was never probed). `resolved` is the class after the precedence (measured > name) and `bucket` is what the V2 list counts.",
+  "cases": [
+    {
+      "why": "El caso reportado: el nombre dice 720p y el frame mide 1920x800 (bandas recortadas). La medida manda.",
+      "name": "John Wick - Chapter 3 - Parabellum (2019) Bluray-720p - h265 AC3 - [ES+EN].mkv",
+      "width": 1920,
+      "height": 800,
+      "resolved": "1080",
+      "bucket": "1080"
+    },
+    {
+      "why": "4K cinematográfico (2.39:1): el alto es 1606 y aun así es 4K. Sin el ancho, todo el 4K panorámico sería 1080.",
+      "name": "Dune (2021) Bluray-2160p.mkv",
+      "width": 3840,
+      "height": 1606,
+      "resolved": "2160",
+      "bucket": "4K"
+    },
+    {
+      "why": "Pillarbox: el ancho no llega a 4K y el alto sí. Sin el alto, este transfer sería 1080.",
+      "name": "Casablanca (1942) Bluray-2160p.mkv",
+      "width": 2880,
+      "height": 2160,
+      "resolved": "2160",
+      "bucket": "4K"
+    },
+    {
+      "why": "DVD real: la medida y el nombre coinciden, y es SD.",
+      "name": "Airbag (1997) DVD.mkv",
+      "width": 720,
+      "height": 480,
+      "resolved": "480",
+      "bucket": "SD"
+    },
+    {
+      "why": "La mentira al revés: el nombre promete 1080 y el frame es 720. La medida gana también aquí.",
+      "name": "Airbag (1997) WEBDL-1080p.mkv",
+      "width": 1280,
+      "height": 720,
+      "resolved": "720",
+      "bucket": "SD"
+    },
+    {
+      "why": "Nunca se midió y el nombre no declara nada: no se puede demostrar clase, y eso no es SD.",
+      "name": "Pelicula sin datos.mkv",
+      "width": 0,
+      "height": 0,
+      "resolved": "",
+      "bucket": "otros"
+    },
+    {
+      "why": "Sin medida, el nombre es la única prueba: 720p declarado es SD.",
+      "name": "Godzilla Minus One (2023) HDTV-720p.mkv",
+      "width": 0,
+      "height": 0,
+      "resolved": "720",
+      "bucket": "SD"
+    },
+    {
+      "why": "Sin medida, 1080p declarado es 1080.",
+      "name": "Alien (1979) WEBDL-1080p.mkv",
+      "width": 0,
+      "height": 0,
+      "resolved": "1080",
+      "bucket": "1080"
+    },
+    {
+      "why": "El nombre no declara resolución y el frame es 1080: la medida llena el hueco.",
+      "name": "Alien (1979).mkv",
+      "width": 1920,
+      "height": 1080,
+      "resolved": "1080",
+      "bucket": "1080"
+    }
+  ]
+}
