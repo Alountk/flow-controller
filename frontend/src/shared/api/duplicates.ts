@@ -4,25 +4,40 @@ const BASE = '/api'
 
 export interface DuplicateFile {
   path: string
+  name: string
   size: number
-  quality: string
-  title: string
+  /**
+   * True when Radarr tracks this exact file, false when it tracks another one,
+   * null when Radarr did not answer and nothing can be claimed.
+   */
+  known: boolean | null
 }
 
 export interface DuplicateGroup {
-  tmdb_id: number
+  folder: string
   class: string
-  titles: string[]
+  title: string
   files: DuplicateFile[]
+  /** Bytes you get back by deleting only the files Radarr does not know. */
+  reclaimable: number
 }
 
 export interface DuplicatesResponse {
   groups: DuplicateGroup[]
   total: number
+  roots?: string[]
+  /** False when the arr did not answer: then `known` is null everywhere. */
+  radarr?: boolean
   error?: string
   error_kind?: string
 }
 
+/**
+ * Recorre la biblioteca y devuelve las carpetas que repiten un fichero.
+ *
+ * Es lento a propósito y sin progreso: el backend camina el disco en un hilo. Se
+ * llama cuando el usuario pulsa el botón, nunca al montar la pantalla.
+ */
 export async function fetchDuplicates(signal?: AbortSignal): Promise<DuplicatesResponse> {
   const response = await apiFetch(`${BASE}/movies/duplicates`, { signal })
   if (!response.ok) throw new Error(`No se pudo buscar duplicados (HTTP ${response.status})`)

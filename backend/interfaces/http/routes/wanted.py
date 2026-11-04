@@ -29,7 +29,7 @@ from application.gateways import (
 )
 from domain import library_class
 from application.use_cases.duplicate_delete import DuplicateDeleteError, delete_duplicate
-from domain.duplicates import duplicate_groups
+from application.use_cases.duplicate_scan import scan_duplicates
 from models import ActionRequest
 from interfaces.http.deps import verify_api_key
 from interfaces.http.route_helpers import attach_grabbed_at
@@ -313,24 +313,62 @@ async def get_all_movies(
 
 @router.get("/api/movies/duplicates")
 async def get_duplicate_movies(_key: str = Depends(verify_api_key)):
-    """Los ficheros que repiten película y clase («duplicados», S1/S2/S3/S6).
+    """Carpetas con dos ficheros de vídeo de la misma clase («duplicados», S1).
 
-    No recorre la biblioteca: la lista sale de lo que Radarr ya dijo de cada
-    película (`tmdbId`, `path`, `sizeOnDisk`), y el disco sólo se toca al
-    borrar. Entrar en la pantalla no puede costar una lectura por título.
+    Mira el disco, no el catálogo del arr: Radarr guarda un `movieFile` por
+    película, así que el segundo fichero de una carpeta no existe para su API y
+    agrupar películas devolvía siempre vacío. El recorrido va en un hilo porque
+    son miles de carpetas y el bucle de eventos no se reparte.
+    """
+    roots = [host_path(r) for r in config.ALLOWED_ROOTS]
+    movies = await _radarr_movies()
+    known, titles = _radarr_folders(movies)
+    groups = await asyncio.to_thread(
+        scan_duplicates, roots, walk=gateways.scan, known=known, titles=titles,
+        radarr_available=bool(movies),
+    )
+    return {"groups": groups, "total": len(groups), "roots": roots,
+            "radarr": bool(movies)}
+
+
+async def _radarr_movies() -> list[dict]:
+    """Las películas de Radarr, o vacío: sin arr el recorrido sigue valiendo.
+
+    Un arr caído no puede impedir encontrar dos ficheros en la misma carpeta.
     """
     service = find_service("radarr", "arr")
     if not service:
-        # Un arr sin configurar y un catálogo sin duplicados son hechos distintos.
-        return {"groups": [], "total": 0,
-                "error_kind": "unknown", "error": "radarr: servicio no configurado"}
-    async with http_session() as session:
-        result = await fetch_all_movies_detailed(session, service, 1, 0)
-    failure = _failure_fields(result)
-    if failure:
-        return {"groups": [], "total": 0, **failure}
-    groups = duplicate_groups(result.get("items") or [], path_3d=config.PATH_3D)
-    return {"groups": groups, "total": len(groups)}
+        return []
+    try:
+        async with http_session() as session:
+            result = await fetch_all_movies_detailed(session, service, 1, 0)
+    except Exception:  # noqa: BLE001 — el disco es la fuente; el arr sólo aporta nombres
+        return []
+    return result.get("items") or []
+
+
+def _radarr_folders(movies: list[dict]) -> tuple[dict[str, str], dict[str, str]]:
+    """`{carpeta: fichero que Radarr conoce}` y `{carpeta: título}`.
+
+    La carpeta se normaliza a la ruta de este host: Radarr puede estar en otro
+    contenedor y nombrar la misma carpeta de otra forma.
+    """
+    known: dict[str, str] = {}
+    titles: dict[str, str] = {}
+    for movie in movies:
+        raw = movie.get("path") or ""
+        if not raw:
+            continue
+        folder = host_path(raw).rstrip("/")
+        file_name = movie.get("file_name") or ""
+        if file_name:
+            known[folder] = os.path.basename(file_name)
+        title = (movie.get("title") or "").strip()
+        if title:
+            titles[folder] = title
+    return known, titles
+
+
 
 
 @router.post("/api/movies/duplicates/delete")
