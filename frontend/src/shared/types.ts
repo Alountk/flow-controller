@@ -297,6 +297,9 @@ export interface Settings {
   /** Mirrors `DEFAULTS["quality"]` («umbral-calidad» S2): the minimum
    *  acceptable class and an optional manual width (0 = use the class). */
   quality: { min_class: string; min_width: number }
+  /** Avisos por ntfy (C-01, S1). `token` llega enmascarado del backend
+   *  (`****` + cola) y se devuelve tal cual si no se toca. */
+  notifications: { ntfy: { url: string; topic: string; token: string; enabled: boolean } }
   server: { port: number }
 }
 
