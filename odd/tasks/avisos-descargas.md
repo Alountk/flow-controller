@@ -66,10 +66,14 @@ corto, y su fallo se registra, no se propaga.
 | --- | --- | --- | --- |
 | T1 | S1, S7 | inline | `00c420e` (#288) |
 | T2 | S2 | inline | `6147078` (#290) |
-| T3 | S3, S6 | inline | `5297e2a` + `f3619dd` (#291) |
-| T4 | S4, S5 | inline | `5297e2a` (#291) |
-| T5 | S6 | inline | `24d71f0` (#291) |
-| T6 | S3, S4 | inline | verificado: 2 procesos, A → reinicio → B sin repetir (#291) |
+| T3 | S3, S6 | inline | `dfba1e2` (#291) |
+| T4 | S4, S5 | inline | `dfba1e2` (#291) |
+| T5 | S6 | inline | `dfba1e2` (#291) |
+
+El squash de #291 fundió T3–T5 en un solo commit: los hashes de rama
+(`5297e2a`, `24d71f0`, `f3619dd`) quedaron inalcanzables desde `main`, y un hash
+que no se puede hacer `git show` no sirve como evidencia.
+| T6 | S3, S4 | inline | verificado: 2 procesos, A → reinicio → B sin repetir; ntfy real el 2026-11-04 (#291) |
 
 ## Log
 

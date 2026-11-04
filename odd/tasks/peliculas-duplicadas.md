@@ -52,8 +52,8 @@ coincidencia. Lo mismo con una entrada sin ruta.
 | T1 | S1, S2, S3, S7 | inline | `b8ea74f` (#293) |
 | T2 | S1 | inline | `b8ea74f` (#293) |
 | T3 | S1, S3, S6 | inline | `b8ea74f` (#293) |
-| T4 | S4, S6 | inline | `551b7c3` (#295) |
-| T5 | S4, S5 | inline | `04294af` (#294) |
+| T4 | S4, S6 | inline | `22557da` (#295) |
+| T5 | S4, S5 | inline | `7f9c328` (#294) |
 | T6 | S5, S6 | inline | verificado: `/etc/hosts` rechazado con motivo; 1 petición al montar |
 
 ## Log
