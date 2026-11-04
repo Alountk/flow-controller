@@ -28,6 +28,7 @@ from application.gateways import (
     arr_series_metadata,
 )
 from domain import library_class
+from application.use_cases.duplicate_delete import DuplicateDeleteError, delete_duplicate
 from domain.duplicates import duplicate_groups
 from models import ActionRequest
 from interfaces.http.deps import verify_api_key
@@ -330,6 +331,20 @@ async def get_duplicate_movies(_key: str = Depends(verify_api_key)):
         return {"groups": [], "total": 0, **failure}
     groups = duplicate_groups(result.get("items") or [], path_3d=config.PATH_3D)
     return {"groups": groups, "total": len(groups)}
+
+
+@router.post("/api/movies/duplicates/delete")
+async def delete_duplicate_movie(payload: dict, _key: str = Depends(verify_api_key)):
+    """Borra el fichero duplicado que el usuario eligió («duplicados», S5).
+
+    Rechaza con el motivo, no con un éxito optimista: si la ruta está fuera de
+    las raíces permitidas o el fichero ya no está, el usuario tiene que saberlo.
+    """
+    try:
+        return delete_duplicate((payload or {}).get("path") or "")
+    except DuplicateDeleteError as exc:
+        status = 500 if exc.kind == "io" else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 @router.get("/api/wanted/series/all")

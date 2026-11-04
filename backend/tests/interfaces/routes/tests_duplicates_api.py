@@ -63,3 +63,18 @@ def test_a_failed_fetch_is_reported_not_swallowed(client):
 
     assert body["groups"] == []
     assert body["error_kind"] == "unreachable"
+
+
+def test_deleting_refuses_a_path_outside_the_library_with_its_reason(client, tmp_path):
+    outside = tmp_path / "fuera.mkv"
+    outside.write_bytes(b"x")
+
+    response = client.post("/api/movies/duplicates/delete", json={"path": str(outside)})
+
+    assert response.status_code == 400
+    assert "permitid" in response.json()["detail"].lower()
+    assert outside.exists()
+
+
+def test_deleting_without_a_path_is_a_400_not_a_500(client):
+    assert client.post("/api/movies/duplicates/delete", json={}).status_code == 400
