@@ -27,7 +27,7 @@ from infrastructure import credentials
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -221,6 +221,21 @@ CREATE INDEX IF NOT EXISTS idx_auto_copy_log_newest ON auto_copy_log (at DESC, i
 -- script `init_db` runs on every start, so an older file simply gains the table
 -- and the version bump only records it.
 CREATE TABLE IF NOT EXISTS probe_results (path TEXT PRIMARY KEY, mtime REAL NOT NULL, size INTEGER NOT NULL, probe_json TEXT NOT NULL, analyzed_at REAL NOT NULL);
+-- v13: what was already announced («avisos-descargas» S6). One row per
+-- (download key, notice): `a` = the client finished, `b` = it landed in the
+-- library. `attempts` is what makes a broken channel bounded — three tries and
+-- it is given up on — and the row stays as the trace of the attempt.
+-- Same migration discipline as v2-v12: `CREATE TABLE IF NOT EXISTS` inside the
+-- script `init_db` runs on every start, so an older file simply gains the table
+-- and the version bump only records it.
+CREATE TABLE IF NOT EXISTS download_notices (
+    key         TEXT NOT NULL,
+    notice      TEXT NOT NULL,
+    ok          INTEGER NOT NULL DEFAULT 0,
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    updated_at  REAL NOT NULL,
+    PRIMARY KEY (key, notice)
+);
 """
 
 # Columns mirrored from the in-memory op. Kept explicit so an unexpected key
@@ -1310,6 +1325,55 @@ def mark_interrupted() -> int:
         except sqlite3.Error as exc:
             log.warning("Could not mark interrupted operations: %s", exc)
             return 0
+
+
+def notice_states(keys: list[tuple[str, str]]) -> dict[tuple[str, str], tuple[int, int]]:
+    """`{(key, notice): (ok, attempts)}` for the ones this process has tried.
+
+    `{}` when the store is unavailable, and that is the safe direction: an
+    unknown notice is planned again. The worst case is one extra aviso; the
+    opposite — treating "I don't know" as "already sent" — would swallow the
+    aviso silently.
+    """
+    if not keys:
+        return {}
+    with _lock:
+        if _conn is None:
+            return {}
+        try:
+            out: dict[tuple[str, str], tuple[int, int]] = {}
+            for chunk_start in range(0, len(keys), 200):
+                chunk = keys[chunk_start:chunk_start + 200]
+                rows = _conn.execute(
+                    "SELECT key, notice, ok, attempts FROM download_notices WHERE "
+                    + " OR ".join("(key = ? AND notice = ?)" for _ in chunk),
+                    [value for pair in chunk for value in pair],
+                ).fetchall()
+                out.update({(r[0], r[1]): (int(r[2]), int(r[3])) for r in rows})
+            return out
+        except sqlite3.Error as exc:
+            log.warning("Could not read download notices: %s", exc)
+            return {}
+
+
+def record_notice_attempt(key: str, notice: str, *, ok: bool) -> None:
+    """Add one attempt. A success sticks; attempts keep counting either way."""
+    with _lock:
+        if _conn is None:
+            return
+        try:
+            _conn.execute(
+                "INSERT INTO download_notices (key, notice, ok, attempts, updated_at) "
+                "VALUES (?, ?, ?, 1, ?) "
+                "ON CONFLICT(key, notice) DO UPDATE SET "
+                "  ok = MAX(ok, excluded.ok), "
+                "  attempts = attempts + 1, "
+                "  updated_at = excluded.updated_at",
+                (key, notice, 1 if ok else 0, time.time()),
+            )
+            _conn.commit()
+        except sqlite3.Error as exc:
+            log.warning("Could not record download notice: %s", exc)
 
 
 def close() -> None:
