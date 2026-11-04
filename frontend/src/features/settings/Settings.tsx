@@ -6,6 +6,7 @@ import {
   fetchServices,
   probeService,
   testServiceConnections,
+  testNotification,
   type ServiceCandidate,
   type ServiceListing,
   type ServiceTestResult,
@@ -248,6 +249,18 @@ function withAmuleEc(data: Settings): SettingsForm {
     ec_port: amule?.ec_port ?? '',
     ec_password: amule?.ec_password ?? '',
   }
+  // El grupo de avisos se siembra igual: un `settings.json` anterior a C-01 no
+  // lo tiene, y una tarjeta que lee `notifications.ntfy.url` sin guardas es
+  // exactamente la regresión de producción del qbit-nativo (Log L8).
+  const ntfy = next.notifications?.ntfy
+  next.notifications = {
+    ntfy: {
+      url: ntfy?.url ?? '',
+      topic: ntfy?.topic ?? '',
+      token: ntfy?.token ?? '',
+      enabled: ntfy?.enabled ?? false,
+    },
+  }
   return next
 }
 
@@ -306,6 +319,51 @@ function ServiceProbeButton({
     >
       {pending ? 'Probando…' : 'Probar conexión'}
     </button>
+  )
+}
+
+/** «Probar aviso» (S2): un envío real, con su veredicto a la vista.
+ *
+ *  No guarda nada: probar el canal y guardar la configuración son dos actos
+ *  distintos, y el botón prueba lo guardado — que es lo que va a usarse.
+ */
+function NotificationTestButton() {
+  const [pending, setPending] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function run() {
+    setPending(true)
+    try {
+      const answer = await testNotification()
+      if (answer.ok) {
+        setResult({ ok: true, text: `Aviso enviado en ${answer.elapsed_ms} ms.` })
+      } else if (answer.error === 'not-configured') {
+        setResult({ ok: false, text: 'Canal sin configurar: hacen falta la URL y el topic.' })
+      } else {
+        setResult({ ok: false, text: `No se pudo enviar: ${answer.error}` })
+      }
+    } catch {
+      setResult({ ok: false, text: 'No se pudo enviar: el backend no respondió.' })
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="settings-btn settings-btn-secondary"
+        onClick={pending ? undefined : run}
+      >
+        {pending ? 'Enviando…' : 'Probar aviso'}
+      </button>
+      {result && (
+        <span className={result.ok ? 'settings-hint' : 'settings-hint settings-hint-error'} role={result.ok ? 'status' : 'alert'}>
+          {result.text}
+        </span>
+      )}
+    </>
   )
 }
 
@@ -736,6 +794,44 @@ export function Settings() {
         subtitle="Políticas de retención y limpieza automatizada."
       >
         <Field label="Límite de trazas" value={form.tracing.limit} onChange={(v) => update('tracing.limit', v)} type="number" />
+      </Section>
+
+      <Section
+        icon="🔔"
+        title="Avisos"
+        subtitle="Cuándo avisar y por dónde: el canal ntfy que recibe los mensajes."
+      >
+        <div className="settings-group">
+          <h4>ntfy</h4>
+          <Field
+            label="URL del servidor"
+            value={form.notifications.ntfy.url}
+            onChange={(v) => update('notifications.ntfy.url', v)}
+            placeholder="http://ntfy.local:8080"
+          />
+          <Field
+            label="Topic"
+            value={form.notifications.ntfy.topic}
+            onChange={(v) => update('notifications.ntfy.topic', v)}
+            placeholder="flowcontroller"
+          />
+          <Field
+            label="Token (sólo si el topic está protegido)"
+            value={form.notifications.ntfy.token}
+            onChange={(v) => update('notifications.ntfy.token', v)}
+            placeholder="tk_…"
+            type="password"
+          />
+          <Field
+            label="Enviar avisos"
+            value={form.notifications.ntfy.enabled}
+            onChange={(v) => update('notifications.ntfy.enabled', v)}
+            type="toggle"
+          />
+          <div className="settings-group-actions">
+            <NotificationTestButton />
+          </div>
+        </div>
       </Section>
 
       <Section
