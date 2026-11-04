@@ -8,6 +8,9 @@ import type { ReleaseSearchItem } from '../features/release-search/ReleaseSearch
 import type { ScanItem } from '../features/media-pane/components/ScanModal.tsx'
 import { QuickActionsMenu } from './QuickActionsMenu.tsx'
 import type { MediaDetail, MediaSelection } from '../features/media-pane/types.ts'
+// Una sola traducción película → ítem de release: `rowData` ya lleva la calidad,
+// la resolución medida y el nombre del fichero que los chips necesitan.
+import { catalogMovieRelease } from '../features/media-pane/rowData.ts'
 import { formatGrabMark } from '../shared/utils/grabMark.ts'
 import type { AllMovie, PaginatedResponse } from '../shared/types.ts'
 import './PeliculasV2.css'
@@ -77,19 +80,6 @@ function movieDetail(movie: AllMovie & { class?: string }): MediaDetail {
   }
 }
 
-function movieRelease(movie: AllMovie): ReleaseSearchItem {
-  return {
-    type: 'movie',
-    id: movie.id,
-    title: movie.title,
-    year: movie.year,
-    source: 'radarr',
-    remotePoster: movie.remotePoster,
-    has_file: movie.has_file,
-    idKind: 'movie',
-  }
-}
-
 /** The resolutions the row always names, lit or not — the design's vocabulary,
  *  not the five buckets the chips on top filter by. */
 const RESOLUTIONS = ['4K', '3D', '1080p', 'SD'] as const
@@ -153,7 +143,7 @@ export function PeliculasV2List({
   }, [])
 
   function pick(movie: AllMovie & { class?: string }): MediaSelection {
-    return { id: movie.id, detail: movieDetail(movie), release: movieRelease(movie) }
+    return { id: movie.id, detail: movieDetail(movie), release: catalogMovieRelease(movie) }
   }
 
   /** `↑↓` walk the list, `Espacio` selects and `Enter` opens, per the design's
@@ -174,7 +164,7 @@ export function PeliculasV2List({
   function runQuick(action: 'open' | 'releases' | 'scan') {
     if (!selected) return
     if (action === 'open') onOpen(pick(selected))
-    if (action === 'releases') onReleases(movieRelease(selected))
+    if (action === 'releases') onReleases(catalogMovieRelease(selected))
     if (action === 'scan') {
       onScan({ type: 'movie', id: selected.id, title: selected.title, source: 'radarr' })
     }
