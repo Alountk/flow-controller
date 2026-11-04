@@ -163,3 +163,28 @@ class TestThePollerIsOneLongLivedLoop:
             "a failed refresh must still reach the sleep — otherwise the loop died"
         )
         assert downloads_cache._downloads_cache is None, "nothing was cached, nothing faked"
+
+    def test_a_dead_notification_channel_cannot_freeze_the_snapshot(self):
+        """S7: avisar es un extra. Si el canal revienta, el snapshot se sigue sirviendo
+        y el poller sigue vivo — lo contrario dejaría la pantalla congelada por un ntfy
+        mal configurado."""
+        _cold()
+        sleeps: list[float] = []
+
+        async def stop_after_one_tick(seconds: float) -> None:
+            sleeps.append(seconds)
+            raise asyncio.CancelledError
+
+        with patch.object(
+            downloads_cache, "collect_downloads", new_callable=AsyncMock
+        ) as collect, patch.object(
+            downloads_cache.download_notices,
+            "announce_downloads",
+            side_effect=RuntimeError("canal roto"),
+        ), patch("asyncio.sleep", stop_after_one_tick):
+            collect.return_value = dict(_SNAPSHOT)
+            with pytest.raises(asyncio.CancelledError):
+                asyncio.run(downloads_cache.downloads_poller())
+
+        assert sleeps == [downloads_cache.DOWNLOADS_TTL], "the loop must reach its sleep"
+        assert downloads_cache._downloads_cache is not None, "the snapshot was still cached"

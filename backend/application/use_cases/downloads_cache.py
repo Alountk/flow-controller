@@ -32,6 +32,7 @@ that needs option (a) or (b), and (b) waits on the GPL question (study §5).
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 
 import event_bus
@@ -41,9 +42,12 @@ from application.gateways import (
     fetch_amu_torrents_by_category,
     fetch_arr_queue,
 )
-from config import configured_services
+from application.use_cases import download_notices
+from config import configured_services, get_setting
 from traces import normalize_hash
 from state import http_session
+
+log = logging.getLogger(__name__)
 
 #: Seconds a snapshot stays good for. The study proposes ~3 s
 #: (`f06-amule-local.md:103`, repeated by flecos T7): below the 4 s an active
@@ -201,9 +205,29 @@ async def downloads_poller() -> None:
     """
     while True:
         try:
-            await get_downloads()
+            snapshot = await get_downloads()
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — a failed tick must not kill the loop
             pass  # the last snapshot (if any) keeps serving; next tick retries
+        else:
+            await _announce(snapshot)
         await asyncio.sleep(DOWNLOADS_TTL)
+
+
+async def _announce(snapshot: dict) -> None:
+    """C-01: avisa desde el tick, que es el único sitio donde «dos snapshots» existe.
+
+    Todo va envuelto: un canal caído no puede congelar el snapshot (S7).
+    """
+    try:
+        await download_notices.announce_downloads(snapshot)
+        await download_notices.announce_folder(
+            download_notices.scan_folder(
+                get_setting("paths", "download_amule", default="") or ""
+            )
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # noqa: BLE001 — avisar es un extra, nunca el trabajo
+        log.warning("Download notices skipped this tick", exc_info=True)
