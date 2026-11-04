@@ -33,11 +33,15 @@ suites**. Si un lado deriva del otro, ese lado falla en CI.
 
 | ID | Specs | Ruta | Commit |
 |----|-------|------|--------|
-| T1 | S1, S2 | inline | — |
-| T2 | S3 | inline | — |
-| T3 | S4 | inline | — |
-| T4 | S5 | inline | — |
-| T5 | S6 | inline | — |
+| T1 | S1, S2 | inline | `360685f` (squash de #300, «una sola regla») |
+| T2 | S3 | inline | `360685f` (`library_class` gana `SD`) |
+| T3 | S4 | inline | `360685f` (sección SD en `PanelFiles`) |
+| T4 | S5 | inline | `360685f` (chip SD en V2 y en la fila) |
+| T5 | S6 | inline | `360685f` + `fix(tests)` (`contracts/resolution-cases.json`) |
+
+Squash: los hashes de rama dejan de ser alcanzables; la evidencia apunta al
+commit de `main`. El bug de paso en `route_helpers` (gateway congelado en
+`None`) va en su propio commit dentro del mismo PR.
 
 ## Log
 
