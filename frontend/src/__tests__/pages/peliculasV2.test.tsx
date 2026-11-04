@@ -26,6 +26,7 @@ type Movie = {
   libraries: string[]
   grabbed_at: number | null
   grabbed_destination: string | null
+  file_name?: string
 }
 
 function makeMovie(over: Partial<Movie> & { id: number; title: string }): Movie {
@@ -39,6 +40,7 @@ function makeMovie(over: Partial<Movie> & { id: number; title: string }): Movie 
     quality: 'Bluray-1080p',
     class: '1080',
     libraries: ['1080p'],
+    file_name: `${over.title}.mkv`,
     grabbed_at: null,
     grabbed_destination: null,
     ...over,
@@ -430,6 +432,26 @@ describe('V2 · el detalle tiene sus propias acciones (S1)', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Buscar releases' }))
 
     expect(within(panel).getByRole('button', { name: 'Releases' })).toHaveClass('is-active')
+  })
+
+  it("the Releases tab carries the file's own facts, so its tags light up", async () => {
+    // El panel de V2 construía su propio ítem de release sin `quality`,
+    // `resolution` ni `file_name`: los cuatro chips salían apagados sobre una
+    // película que sí está descargada, y el nombre del fichero, ausente.
+    stubFetch([paraNorman])
+    renderV2()
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir ParaNorman' }))
+    const panel = await screen.findByRole('region', { name: 'Panel de detalle' })
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Acciones rápidas' }))
+    const menu = await within(panel).findByRole('menu', { name: 'Acciones rápidas' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Buscar releases' }))
+
+    const block = await within(panel).findByText('Fichero descargado')
+    const tags = document.querySelectorAll('.has-file-tag')
+    const lit = [...tags].filter((tag) => tag.classList.contains('is-on')).map((t) => t.textContent)
+    expect(lit).toEqual(['1080'])
+    expect(block.parentElement?.textContent).toContain('ParaNorman.mkv')
   })
 })
 

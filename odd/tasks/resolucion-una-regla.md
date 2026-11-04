@@ -61,3 +61,13 @@ basta; la regla se abstrae.
 
 **L3** (decisión): encabezado de V2 con chip `SD` propio y `otros` para lo
 desconocido.
+
+### L4 — el detalle de V2 apagaba los chips de release
+
+Reporte del usuario: «ahora dentro de los chips de release no se "iluminan" los que hay descargados».
+
+No era la regla: eran **dos traducciones** película → ítem de release. `rowData.catalogMovieRelease` llevaba calidad, resolución medida, nombre y ruta; `PeliculasV2List.movieRelease` —la que usa el panel de detalle— no llevaba **ninguna**, así que los cuatro chips salían apagados y el nombre del fichero decía «no disponible» sobre una película descargada. Se borra la segunda; queda una sola.
+
+| ID | Specs | Ruta | Commit |
+|----|-------|------|--------|
+| T6 | S5 | inline | una sola traducción película → release en el detalle de V2 |
