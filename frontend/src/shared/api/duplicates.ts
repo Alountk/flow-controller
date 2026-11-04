@@ -1,3 +1,5 @@
+import { apiFetch } from './auth.ts'
+
 const BASE = '/api'
 
 export interface DuplicateFile {
@@ -22,16 +24,15 @@ export interface DuplicatesResponse {
 }
 
 export async function fetchDuplicates(signal?: AbortSignal): Promise<DuplicatesResponse> {
-  const response = await fetch(`${BASE}/movies/duplicates`, { signal })
+  const response = await apiFetch(`${BASE}/movies/duplicates`, { signal })
   if (!response.ok) throw new Error(`No se pudo buscar duplicados (HTTP ${response.status})`)
   return response.json()
 }
 
 /** Borra un fichero concreto. El backend rechaza con motivo si no procede. */
 export async function deleteDuplicate(path: string): Promise<{ deleted: string }> {
-  const response = await fetch(`${BASE}/movies/duplicates/delete`, {
+  const response = await apiFetch(`${BASE}/movies/duplicates/delete`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   })
   const body = await response.json().catch(() => ({}))
