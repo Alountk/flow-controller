@@ -353,6 +353,11 @@ export interface AllMovie {
    *  "Bluray-2160p"), or "" when unknown — no file, or an odd payload shape.
    *  "" must read as unknown on screen, never as a guessed class. */
   quality: string
+  /** The class Radarr's own probe of that file yields (`"2160"`, `"1080"`,
+   *  `"720"`…), or "" when Radarr never probed it. The measurement outranks
+   *  `quality`: a file named `720p` whose frame is 1920×800 is a 1080 file, and
+   *  only the probe can say so. */
+  resolution?: string
   /** The file Radarr owns, by its own `movieFile.relativePath`. Optional: a
    *  settings/response written before this field existed has none, and "" (or
    *  a missing key) means "no name available here" — never a title-derived

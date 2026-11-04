@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import re
 
+from domain.resolution import from_dimensions
+
 #: `FormatVideoCodec`: mpeg/av1 are fixed words, h264/hevc defer to the scene
 #: name and fall back to `x264`/`h265`. The fallback is why a name can say
 #: `h265` where another says `x265` — it is the release name, not the codec.
@@ -199,29 +201,16 @@ def _codes(tracks: list[dict]) -> list[str]:
 
 
 def resolution(probe: dict) -> str:
-    """`2160` / `1080` / … from width or height, matching Radarr's AugmentQualityFromMediaInfo.
+    """The probed resolution of one file, or `""` when it was never probed.
 
-    Cropping black bars is standard practice (a 4K 2.39:1 cinemascope frame is
-    3840×1606). Looking only at height called every widescreen 4K film 1080p,
-    and looking only at width would miss pillarboxed transfers. Radarr checks
-    both: `width >= 3200 || height >= 2100` is 2160p.
+    The thresholds live in `domain.resolution`: one rule for the whole backend.
     """
     if not probe:
         return ""
     if probe.get("resolution"):
         return str(probe["resolution"])
     track = _first(probe.get("video_tracks") or [])
-    width = int(track.get("width") or 0)
-    height = int(track.get("height") or 0)
-    if width >= 3200 or height >= 2100:
-        return "2160"
-    if width >= 1800 or height >= 1000:
-        return "1080"
-    if width >= 1200 or height >= 700:
-        return "720"
-    if width >= 1000 or height >= 560:
-        return "576"
-    return "480" if (width > 0 or height > 0) else ""
+    return from_dimensions(int(track.get("width") or 0), int(track.get("height") or 0))
 
 
 def simple(probe: dict, name: str = "") -> str:

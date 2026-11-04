@@ -12,6 +12,7 @@ from xml.etree import ElementTree
 import aiohttp
 
 from domain.media_info import compose, language_token
+from domain.resolution import from_dimensions, parse_dimensions
 
 from config import (
     AMUTORRENT_API_KEY,
@@ -1501,6 +1502,23 @@ def _movie_file_name(movie: dict) -> str:
     return relative_path if isinstance(relative_path, str) else ""
 
 
+def _movie_resolution(movie: dict) -> str:
+    """``movieFile.mediaInfo.resolution`` read as a class: ``"1080"``, ``"2160"``…
+
+    Radarr probed the file it owns, so this is the only source that can contradict
+    the release name. It matters: a file named ``720p`` whose frame is 1920×800
+    is 1080p, and reading the name instead put it in the SD bucket.
+    """
+    movie_file = movie.get("movieFile")
+    if not isinstance(movie_file, dict):
+        return ""
+    info = movie_file.get("mediaInfo")
+    if not isinstance(info, dict):
+        return ""
+    width, height = parse_dimensions(info.get("resolution") or "")
+    return from_dimensions(width, height)
+
+
 def _movie_media_info(movie: dict) -> dict:
     """Radarr's own `movieFile.mediaInfo`, keyed like `domain.media_info`.
 
@@ -1708,6 +1726,7 @@ async def fetch_all_movies_detailed(
                     # available", never a title-derived name or a placeholder.
                     "file_name": _movie_file_name(m),
                     "media_info": _movie_media_info(m),
+                    "resolution": _movie_resolution(m),
                     "languages": _movie_languages(m),
                     "path_exists": path_exists,
                     "monitored": m.get("monitored", False),

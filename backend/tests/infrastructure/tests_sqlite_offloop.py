@@ -48,7 +48,7 @@ class TestTheGrabMarkReadIsOffTheEventLoop:
         seen: dict = {}
         with patch("interfaces.http.routes.wanted.fetch_wanted_movies", new_callable=AsyncMock,
                    return_value=dict(_EMPTY_PAGE)), \
-             patch("interfaces.http.route_helpers.history", new=self._spy_history(seen)):
+             patch("application.gateways.history", new=self._spy_history(seen)):
             resp = client.get("/api/wanted?source=radarr")
 
         assert resp.status_code == 200, resp.text
@@ -59,7 +59,7 @@ class TestTheGrabMarkReadIsOffTheEventLoop:
         seen: dict = {}
         with patch("interfaces.http.routes.wanted.fetch_all_movies_detailed", new_callable=AsyncMock,
                    return_value=dict(_EMPTY_PAGE)), \
-             patch("interfaces.http.route_helpers.history", new=self._spy_history(seen)):
+             patch("application.gateways.history", new=self._spy_history(seen)):
             resp = client.get("/api/wanted/all")
 
         assert resp.status_code == 200, resp.text

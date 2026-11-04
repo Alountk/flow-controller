@@ -233,7 +233,9 @@ const fourK = async (fn: FetchMock) => {
   // The stub answers with resolved promises: one macrotask drains the whole
   // fetch → setData → re-render chain, so what follows is the settled tag.
   await new Promise((resolve) => setTimeout(resolve, 10))
-  await waitFor(() => expect(tags()).toHaveLength(3))
+  // 1080 / 4K / 3D / SD — SD is a tag of its own since a below-1080 release
+  // used to light nothing and look absent.
+  await waitFor(() => expect(tags()).toHaveLength(4))
   return tags().find((tag) => tag.label === '4K')?.on
 }
 

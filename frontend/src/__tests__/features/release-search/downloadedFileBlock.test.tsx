@@ -149,6 +149,7 @@ describe('the downloaded-file block', () => {
       { label: '1080', on: true },
       { label: '4K', on: false },
       { label: '3D', on: false },
+        { label: 'SD', on: false },
     ])
   })
 
@@ -165,6 +166,7 @@ describe('the downloaded-file block', () => {
         { label: '1080', on: true },
         { label: '4K', on: false },
         { label: '3D', on: true },
+        { label: 'SD', on: false },
       ]),
     )
   })
@@ -237,6 +239,7 @@ describe('the block without file data (overlay)', () => {
       { label: '1080', on: false },
       { label: '4K', on: false },
       { label: '3D', on: false },
+        { label: 'SD', on: false },
     ])
   })
 

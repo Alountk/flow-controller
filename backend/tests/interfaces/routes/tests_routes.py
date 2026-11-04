@@ -1206,7 +1206,7 @@ class TestAllListingsLibraryClass:
             "Cuatro K": "4K",
             "Tres D": "3D",
             "Diez Ochenta": "1080",
-            "Setecientos Veinte": "otros",
+            "Setecientos Veinte": "SD",
             "Sin Archivo": "sin archivo",
         }
 
@@ -1222,7 +1222,8 @@ class TestAllListingsLibraryClass:
             "4K": 1,
             "3D": 1,
             "1080": 1,
-            "otros": 1,
+            "SD": 1,
+            "otros": 0,
         }
 
     def test_the_class_filter_selects_only_that_class(self, monkeypatch):

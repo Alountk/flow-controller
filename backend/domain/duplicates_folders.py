@@ -18,6 +18,8 @@ from __future__ import annotations
 import os
 from typing import Iterable, Mapping
 
+from domain.resolution import from_name
+
 #: One list for the whole project: what counts as a video file. Kept here
 #: because the duplicate rule is the first thing that needs it in `domain`.
 VIDEO_EXTS = frozenset({
@@ -32,18 +34,13 @@ _CLASSES = ("4K", "3D", "1080", "otros")
 def resolution_class(name: str) -> str:
     """Class of a file from its name: `4K`, `3D`, `1080` or `otros`.
 
-    The name is all we have for a file Radarr never imported, so the resolution
-    token is read from it. `2160p` before `3d` before `1080`: a release name can
-    carry several tokens and the widest one decides.
+    The name is all we have for a file Radarr never imported, so the token comes
+    from `domain.resolution` — the same rule the list and the rename plan use.
+    `3D` outranks the resolution: a 3D rip is 3D whatever it was encoded at.
     """
-    lowered = name.lower()
-    if "2160p" in lowered or "4k" in lowered:
-        return "4K"
-    if "3d" in lowered:
+    if "3d" in name.lower():
         return "3D"
-    if "1080" in lowered:
-        return "1080"
-    return "otros"
+    return {"2160": "4K", "1080": "1080"}.get(from_name(name), "otros")
 
 
 def _known_name(known: Mapping[str, str], folder: str) -> str:

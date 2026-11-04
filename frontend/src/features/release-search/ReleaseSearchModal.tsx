@@ -55,6 +55,10 @@ export interface ReleaseSearchItem {
   /** Quality of the file Radarr owns, when the surface carries it. Absent or
    *  "" is unknown: every quality tag stays grey, never a guessed class. */
   quality?: string
+  /** The class Radarr's own probe of that file yields (`"2160"`, `"1080"`,
+   *  `"720"`…), when the surface carries it. It outranks `quality`: a file named
+   *  `720p` that measures 1920×800 is 1080, and only the probe knows that. */
+  resolution?: string
   /** The title's folder, the one signal the 3D tag reads (path_3d membership). */
   path?: string
   /** What `id` IS, when the surface knows better than `type` can say. A
@@ -75,6 +79,9 @@ const SEARCH_TIMEOUT = 240 // seconds — must match backend REQUEST_TIMEOUT * 4
  *  `error` the reason. Anything else keeps the query refetching — the same
  *  terminal-set idea TraceActions applies to copy tasks. */
 const TERMINAL_STATUSES = ['done', 'error']
+
+/** Radarr's spellings of a below-1080 quality, for when nothing was measured. */
+const SD_QUALITY = /\b(720p|576p|480p|360p)\b|\bsdtv\b|\bdvd/i
 
 
 /** The label a row groups AND filters under (S5): its indexer's own label;
@@ -820,17 +827,24 @@ export function ReleaseSearchModal({
       (entry) => entry.name.startsWith(copyPrefix) && (entry.is_dir || entry.is_video !== false),
     )
 
+  // What the library file measures, when the surface carries it: the name can
+  // say 720p over a 1920×800 frame, and the backend already probed it.
+  const measuredClass = item.resolution ?? ''
+  const libraryIs1080 = measuredClass ? measuredClass === '1080' : libraryQuality.includes('1080p')
+  const libraryIs4k = measuredClass ? measuredClass === '2160' : libraryQuality.includes('2160p')
+  const libraryIsSd = measuredClass
+    ? ['720', '576', '480'].includes(measuredClass)
+    : SD_QUALITY.test(libraryQuality)
+
   const hasFileTags = [
     {
       label: '1080',
-      on:
-        libraryQuality.includes('1080p') ||
-        grabQualities.some((quality) => quality.includes('1080p')),
+      on: libraryIs1080 || grabQualities.some((quality) => quality.includes('1080p')),
     },
     {
       label: '4K',
       on:
-        libraryQuality.includes('2160p') ||
+        libraryIs4k ||
         grabQualities.some((quality) => quality.includes('2160p')) ||
         holdsCopy(listing4kQuery.data),
     },
@@ -840,6 +854,12 @@ export function ReleaseSearchModal({
         inFolder(item.path ?? '', path3d) ||
         grabs.some((grab) => inFolder(grab.destination ?? '', path3d)) ||
         holdsCopy(listing3dQuery.data),
+    },
+    {
+      // SD used to be the absence of a chip: a 720p release lit nothing, so the
+      // one class the user was about to grab looked like it was not there.
+      label: 'SD',
+      on: libraryIsSd || grabQualities.some((quality) => SD_QUALITY.test(quality)),
     },
   ]
 

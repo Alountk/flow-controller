@@ -5,7 +5,7 @@ import { apiFetch } from '../api/auth.ts'
 import { errorMessage } from '../utils/text.ts'
 import { classifyFile, type FileSectionId, type RoutingFolders } from '../utils/fileSections.ts'
 import { probeFile, probeCached, probeWidth, type ProbeFile, type ProbeFileResult } from '../api/probe.ts'
-import { isBelowThreshold } from '../utils/resolution.ts'
+import { fromDimensions, isBelowThreshold } from '../utils/resolution.ts'
 import { useQualityThreshold } from '../hooks/useQualityThreshold.ts'
 import { probeSpec } from '../utils/probePreview.ts'
 import type { BrowseResponse, FileItem } from '../types.ts'
@@ -102,6 +102,9 @@ const SECTIONS: Array<{ id: FileSectionId; label: string; specClass: string }> =
   { id: '1080', label: '1080', specClass: '1080p' },
   { id: '4k', label: '4K', specClass: '4K' },
   { id: '3d', label: '3D', specClass: '3D' },
+  // SD has its own section: a 720p file proved small, which is an answer, and
+  // Otros is for files that prove nothing at all.
+  { id: 'sd', label: 'SD', specClass: 'SD' },
   { id: 'otros', label: 'Otros', specClass: 'Otros' },
 ]
 
@@ -112,6 +115,7 @@ function rootOf(section: FileSectionId, basePath: string, folders: RoutingFolder
   if (section === '1080') return basePath
   if (section === '4k') return folders.path4k
   if (section === '3d') return folders.path3d
+  // SD and Otros gather files from every location: naming one would be a lie.
   return ''
 }
 
@@ -148,6 +152,9 @@ async function fetchRoutingCopies(folder: string, prefix: string): Promise<FileI
 
 /** T3 (S1/S4): the three locations as ONE list, split into four sections. */
 function FilesSections({ basePath, folders }: { basePath: string; folders: RoutingFolders }) {
+  // One probe store for the whole panel: a measurement has to be able to MOVE a
+  // file to its true section, so it cannot live inside the section it was made in.
+  const [probes, setProbes] = useState<Record<string, ProbeFileResult>>({})
   const base = useBrowse(basePath, true)
   const prefix = copyPrefixOf(basePath)
   const staleTime = 0 // A listing must mirror the disk — see useBrowse.
@@ -163,6 +170,33 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
     enabled: !!folders.path3d,
     staleTime,
   })
+
+  // T4 (S2): chips read the PERSISTED probes, so rendering never runs ffprobe —
+  // one cache read for the whole panel, and only for files nobody analyzed here.
+  // It sits above the early returns because hooks cannot be conditional.
+  const probeable = base.isSuccess && base.data?.ok
+    ? [...(base.data.items ?? []), ...(r4k.data ?? []), ...(r3d.data ?? [])]
+    : []
+  const sectionPaths = probeable.map((entry) => entry.path).join('|')
+  useEffect(() => {
+    const paths = probeable.filter(isAnalyzable).map((entry) => entry.path).filter(Boolean)
+    if (paths.length === 0) return
+    let live = true
+    probeCached(paths).then((cached) => {
+      if (!live) return
+      setProbes((prev) => {
+        const next = { ...prev }
+        for (const [path, probe] of Object.entries(cached)) {
+          if (probe && !next[path]) next[path] = { ok: true, probe }
+        }
+        return next
+      })
+    })
+    return () => {
+      live = false
+    }
+    // `sectionPaths` is the identity that matters: the array is fresh each render.
+  }, [sectionPaths])
 
   if (base.isLoading || r4k.isLoading || r3d.isLoading) {
     return <p className="sec-tab-note">Cargando ruta…</p>
@@ -185,10 +219,9 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
     )
   }
 
-  // A FAILED routing read may never show as an empty section: the alert says
-  // which source could not answer, and no note claims "there are no copies".
   const routingFailed = r4k.isError || r3d.isError
   const entries = [...data.items, ...(r4k.data ?? []), ...(r3d.data ?? [])]
+
 
   return (
     <>
@@ -209,7 +242,11 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
         </div>
       )}
       {SECTIONS.map((section) => {
-        const items = entries.filter((entry) => classifyFile(entry, folders, basePath) === section.id)
+        const items = entries.filter(
+          (entry) =>
+            classifyFile(entry, folders, basePath, measuredClassOf(probes[entry.path])) ===
+            section.id,
+        )
         return (
           <FilesSection
             key={section.id}
@@ -217,6 +254,8 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
             root={rootOf(section.id, basePath, folders)}
             items={items}
             routingFailed={routingFailed}
+            probes={probes}
+            setProbes={setProbes}
           />
         )
       })}
@@ -226,6 +265,15 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
 
 /** ffprobe can only read actual videos — dirs and sidecars prove nothing (T4). */
 const isAnalyzable = (item: FileItem) => !item.is_dir && item.is_video !== false
+
+/** What a probe measured, in `resolution.ts`'s vocabulary. A file nobody probed
+ *  answers `undefined`, which keeps the name as the only proof it has. */
+function measuredClassOf(result: ProbeFileResult | undefined) {
+  if (!result?.ok) return undefined
+  const track = result.probe.video_tracks?.[0]
+  if (!track) return undefined
+  return fromDimensions(track.width, track.height) || undefined
+}
 
 /** S2: the honest low-quality marker, shown only after a real measurement. */
 const QUALITY_CHIP = 'Baja calidad'
@@ -237,13 +285,18 @@ function FilesSection({
   root,
   items,
   routingFailed,
+  probes,
+  setProbes,
 }: {
   section: { id: FileSectionId; label: string; specClass: string }
   root: string
   items: FileItem[]
   routingFailed: boolean
+  /// The panel's shared probe store: a measurement moves a file between
+  /// sections, so it cannot stay private to the one that produced it.
+  probes: Record<string, ProbeFileResult>
+  setProbes: React.Dispatch<React.SetStateAction<Record<string, ProbeFileResult>>>
 }) {
-  const [probes, setProbes] = useState<Record<string, ProbeFileResult>>({})
   const [runningFiles, setRunningFiles] = useState<Set<string>>(() => new Set())
   const [sectionRunning, setSectionRunning] = useState(false)
   const threshold = useQualityThreshold()
@@ -275,29 +328,6 @@ function FilesSection({
   }
 
   const analyzable = items.filter(isAnalyzable)
-
-  // T4 (S2): chips read the PERSISTED probes, so rendering never runs ffprobe
-  // — one cache read per section, and only for files nobody analyzed here.
-  const sectionPaths = items.map((item) => item.path).join('|')
-  useEffect(() => {
-    const paths = items.filter(isAnalyzable).map((item) => item.path).filter(Boolean)
-    if (paths.length === 0) return
-    let live = true
-    probeCached(paths).then((cached) => {
-      if (!live) return
-      setProbes((prev) => {
-        const next = { ...prev }
-        for (const [path, probe] of Object.entries(cached)) {
-          if (probe && !next[path]) next[path] = { ok: true, probe }
-        }
-        return next
-      })
-    })
-    return () => {
-      live = false
-    }
-    // `sectionPaths` is the identity that matters: `items` is a fresh array.
-  }, [sectionPaths])
 
   /** S1/S3: only a MEASURED class below the configured threshold earns the
    *  chip — never a guess, and a cropped 1080p file is not a downgrade. */

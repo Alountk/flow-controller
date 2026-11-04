@@ -210,6 +210,7 @@ describe('the tags · three sources, one class each', () => {
         { label: '1080', on: true },
         { label: '4K', on: true },
         { label: '3D', on: false },
+        { label: 'SD', on: false },
       ]),
     )
     // Everything was consulted and nothing needs explaining.
@@ -234,6 +235,7 @@ describe('the tags · three sources, one class each', () => {
         { label: '1080', on: false },
         { label: '4K', on: true },
         { label: '3D', on: true },
+        { label: 'SD', on: false },
       ]),
     )
   })
@@ -272,6 +274,7 @@ describe('the tags · three sources, one class each', () => {
         { label: '1080', on: true },
         { label: '4K', on: true },
         { label: '3D', on: true },
+        { label: 'SD', on: false },
       ]),
     )
   })
@@ -338,6 +341,7 @@ describe('the tags · unknown is not absent', () => {
       { label: '1080', on: true },
       { label: '4K', on: false },
       { label: '3D', on: false },
+        { label: 'SD', on: false },
     ])
   })
 
@@ -354,6 +358,7 @@ describe('the tags · unknown is not absent', () => {
       { label: '1080', on: true },
       { label: '4K', on: false },
       { label: '3D', on: false },
+        { label: 'SD', on: false },
     ])
   })
 
@@ -374,6 +379,7 @@ describe('the tags · unknown is not absent', () => {
       { label: '1080', on: true },
       { label: '4K', on: false },
       { label: '3D', on: false },
+        { label: 'SD', on: false },
     ])
   })
 
@@ -389,6 +395,7 @@ describe('the tags · unknown is not absent', () => {
       { label: '1080', on: true },
       { label: '4K', on: false },
       { label: '3D', on: false },
+        { label: 'SD', on: false },
     ])
   })
 })
@@ -529,6 +536,7 @@ describe('the tags · the ids the grabs history is asked under', () => {
         { label: '1080', on: false },
         { label: '4K', on: true },
         { label: '3D', on: false },
+        { label: 'SD', on: false },
       ]),
     )
     const url = String(callsWith(fn, '/api/grabs')[0][0])

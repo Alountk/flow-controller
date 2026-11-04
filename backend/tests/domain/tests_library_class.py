@@ -36,8 +36,14 @@ def test_a_1080p_file_is_the_1080_class():
 
 
 def test_a_720p_file_is_not_1080_it_is_otros():
-    """The design's own mock: Godzilla Minus One (HDTV-720p) wears `Otros`."""
-    assert _class("HDTV-720p") == "otros"
+    """A name that states 720p is SD, not `otros`: the name IS a claim.
+
+    `otros` is reserved for files that prove nothing at all (below), because
+    "we do not know" and "we know it is small" are different answers.
+    """
+    assert _class("HDTV-720p") == "SD"
+    assert _class("Bluray-1080p") == "1080"
+    assert _class("DVD") == "SD"
 
 
 def test_a_missing_quality_is_otros():
@@ -77,17 +83,19 @@ def test_counts_are_exclusive_and_add_up_to_the_catalogue():
         {"has_file": True, "quality": "Bluray-2160p", "path": "/m/b"},
         {"has_file": True, "quality": "WEBDL-1080p", "path": "/3d/c"},
         {"has_file": True, "quality": "HDTV-720p", "path": "/m/d"},
+        {"has_file": True, "quality": "", "path": "/m/f"},
         {"has_file": False, "quality": "", "path": "/m/e"},
     ]
 
     counts = library_class.class_counts(items, path_3d="/3d")
 
     assert counts == {
-        "todos": 5,
+        "todos": 6,
         "sin archivo": 1,
         "4K": 2,
         "3D": 1,
         "1080": 0,
+        "SD": 1,
         "otros": 1,
     }
     assert sum(counts[c] for c in library_class.CLASSES) == counts["todos"]
@@ -189,3 +197,47 @@ def test_a_copy_folder_is_recognised_by_the_movie_folder_prefix():
     assert _res("WEBDL-1080p", copies_4k=("Aliens (1986)",)) == ["1080p"]
     assert _res("WEBDL-1080p", copies_4k=("Alien (1979)",)) == ["4K", "1080p"]
     assert _res("WEBDL-1080p", copies_4k=("Alien (1979) [IMAX]",)) == ["4K", "1080p"]
+
+
+class TestTheProbeBeatsTheName:
+    """El caso que reportó el usuario, literal.
+
+    `/mnt/storage/movies/es/John Wick - Chapter 3 - Parabellum (2019)/… Bluray-720p
+    - h265 AC3 - [ES+EN].mkv` — el nombre dice 720p y el frame es 1920×800 (bandas
+    recortadas). Sale como SD porque se leía el nombre. Un probe midió el frame:
+    esa medida manda.
+    """
+
+    def test_a_720p_name_over_a_1920_frame_is_1080(self):
+        assert library_class.library_class(
+            has_file=True,
+            quality="Bluray-720p",
+            resolution="1080",
+            path="/mnt/storage/movies/es/John Wick 3 (2019)",
+        ) == "1080"
+
+    def test_without_a_probe_the_name_still_decides(self):
+        # "Never probed" is not a measurement: the old behaviour stands.
+        assert library_class.library_class(has_file=True, quality="Bluray-720p") == "SD"
+
+    def test_a_1080p_name_over_a_720_frame_is_not_1080(self):
+        # The lie goes both ways, and the probe wins both times.
+        assert library_class.library_class(has_file=True, quality="Bluray-1080p", resolution="720") == "SD"
+
+    def test_a_probed_2160_lights_4K_over_a_1080p_name(self):
+        assert library_class.library_class(has_file=True, quality="Bluray-1080p", resolution="2160") == "4K"
+
+    def test_the_row_lights_1080p_for_the_probed_file(self):
+        libraries = library_class.available_resolutions(
+            has_file=True, quality="Bluray-720p", resolution="1080"
+        )
+        assert libraries == ["1080p"]
+
+    def test_the_counts_follow_the_probe(self):
+        counts = library_class.class_counts([
+            {"has_file": True, "quality": "Bluray-720p", "resolution": "1080"},
+            {"has_file": True, "quality": "Bluray-720p", "resolution": "720"},
+        ])
+        assert counts["1080"] == 1
+        assert counts["SD"] == 1
+        assert counts["otros"] == 0

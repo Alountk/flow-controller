@@ -31,13 +31,14 @@ import './PeliculasV2.css'
 
 const PAGE_SIZE = 50
 
-const CLASS_CHIPS = ['sin archivo', '4K', '3D', '1080', 'otros'] as const
+const CLASS_CHIPS = ['sin archivo', '4K', '3D', '1080', 'SD', 'otros'] as const
 
 const CLASS_LABELS: Record<string, string> = {
   'sin archivo': 'Sin archivo',
   '4K': '4K',
   '3D': '3D',
   '1080': '1080',
+  SD: 'SD',
   otros: 'Otros',
 }
 

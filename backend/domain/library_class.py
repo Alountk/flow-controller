@@ -14,15 +14,22 @@ from __future__ import annotations
 
 from typing import Iterable, Mapping
 
+from domain.resolution import best
+
 #: Order of the chips' counts; `todos` is the total, not a class.
-CLASSES = ("sin archivo", "4K", "3D", "1080", "otros")
+CLASSES = ("sin archivo", "4K", "3D", "1080", "SD", "otros")
 
 #: Order of one row's resolution chips — the design's, verbatim.
 RESOLUTIONS = ("4K", "3D", "1080p", "SD")
 
 #: The class each label maps to. `sin archivo` maps to nothing on purpose: a
 #: movie with no file lights no resolution, not even the one it used to have.
-_CLASS_RESOLUTION = {"4K": "4K", "3D": "3D", "1080": "1080p", "otros": "SD"}
+_CLASS_RESOLUTION = {"4K": "4K", "3D": "3D", "1080": "1080p", "SD": "SD"}
+
+
+#: Measured class -> bucket. `SD` is what a measurement or a name places BELOW
+#: 1080; `otros` is what proves nothing at all, which is not the same claim.
+_PROBED_CLASS = {"2160": "4K", "1080": "1080", "720": "SD", "576": "SD", "480": "SD"}
 
 
 def _in_folder(path: str, folder: str) -> bool:
@@ -40,23 +47,23 @@ def library_class(
     quality: str,
     path: str = "",
     path_3d: str = "",
+    resolution: str = "",
 ) -> str:
     """The class of one movie: one of `CLASSES`.
 
     `3D` outranks the resolution, exactly as it does when routing a release: a
     3D rip is 3D whatever it was encoded at, and the folder a human picked for
     it is a decision while the resolution is only a property.
+
+    `resolution` is the MEASURED class (`"2160"`, `"1080"`, `"720"`…). The
+    measurement wins and the name is the fallback — `domain.resolution.best`
+    holds that precedence, and this function only maps it to the list's buckets.
     """
     if not has_file:
         return "sin archivo"
     if _in_folder(path, path_3d):
         return "3D"
-    name = (quality or "").strip().lower()
-    if "2160p" in name:
-        return "4K"
-    if "1080p" in name:
-        return "1080"
-    return "otros"
+    return _PROBED_CLASS.get(best(resolution, quality), "otros")
 
 
 def _copy_matches(folder: str, child: str) -> bool:
@@ -85,6 +92,7 @@ def available_resolutions(
     path_3d: str = "",
     copies_4k: Iterable[str] = (),
     copies_3d: Iterable[str] = (),
+    resolution: str = "",
 ) -> list[str]:
     """The resolutions a row lights: what the disk proves, in chip order.
 
@@ -103,7 +111,11 @@ def available_resolutions(
     have: set[str] = set()
     own = _CLASS_RESOLUTION.get(
         library_class(
-            has_file=has_file, quality=quality, path=path, path_3d=path_3d
+            has_file=has_file,
+            quality=quality,
+            path=path,
+            path_3d=path_3d,
+            resolution=resolution,
         )
     )
     if own:
@@ -128,6 +140,7 @@ def class_counts(
                 quality=str(item.get("quality") or ""),
                 path=str(item.get("path") or ""),
                 path_3d=path_3d,
+                resolution=str(item.get("resolution") or ""),
             )
         ] += 1
     return counts
