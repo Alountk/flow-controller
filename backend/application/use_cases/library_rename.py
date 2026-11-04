@@ -305,19 +305,25 @@ def apply_rename(
     siblings: Iterable[str],
     roots: Iterable[str],
     blocked: Blocked,
+    require_root: bool = True,
 ) -> dict:
     """Rename the video and its sidecars into `folder`, or move nothing.
 
     Collisions are checked for the whole set before the first `os.rename`, and
     every rename is reported: `os.rename` replaces the target silently, so an
     unguarded name is not a rename, it is a deletion.
+
+    `require_root=False` is for one case only: a file the operator picked by
+    hand AND identified as a movie. The catalog owns that path, so the caller
+    owes Radarr a rescan afterwards; the file itself has no other reason to
+    leave the 4K/3D roots.
     """
     src = Path(video_path)
     if not src.is_file():
         return refusal(f"No es un archivo: {video_path}")
 
     real_src = _real(str(src))
-    if not in_root(real_src, roots):
+    if require_root and not in_root(real_src, roots):
         return refusal(f"El archivo no está dentro de una raíz 4K/3D: {video_path}")
 
     clean_folder = ""
@@ -335,7 +341,7 @@ def apply_rename(
         return refusal(guard)
 
     parent, plan = _targets(src, clean_folder, clean_stem, siblings)
-    if not in_root(str(parent), roots):
+    if require_root and not in_root(str(parent), roots):
         return refusal(f"El destino se sale de la raíz: {parent}")
     if os.path.lexists(parent) and not os.path.isdir(parent):
         return refusal(f"Ya existe un archivo con el nombre de la carpeta: {parent.name}")

@@ -14,16 +14,19 @@ interface Props {
   onClose: () => void
   /** Called with the backend's own words after a rename that moved something. */
   onRenamed: (detail: string) => void
+  /** Who asked: the batch page, or one file the operator picked by hand. */
+  origin?: 'lote' | 'a mano'
 }
 
 /**
- * The dialog for renaming a 4K/3D copy the way Radarr would.
+ * The dialog for renaming a copy the way Radarr would — a 4K/3D one, or any file
+ * the operator picked in the explorer whose movie the backend can identify.
  *
  * Everything it shows is a suggestion from the backend, and both fields are
  * editable because the proposal is only as good as the movie it identified: a
  * pattern that could not be reproduced arrives as a warning, not as a name.
  */
-export function LibraryRenameDialog({ path, onClose, onRenamed }: Props) {
+export function LibraryRenameDialog({ path, onClose, onRenamed, origin = 'lote' }: Props) {
   const [proposal, setProposal] = useState<RenameProposal | null>(null)
   const [folder, setFolder] = useState('')
   const [name, setName] = useState('')
@@ -103,9 +106,22 @@ export function LibraryRenameDialog({ path, onClose, onRenamed }: Props) {
     setBusy(true)
     setError(null)
     try {
-      const got = await renameApply({ remote_path: path, folder, name })
+      const got = await renameApply({
+        remote_path: path,
+        folder,
+        name,
+        origin,
+        movie_id: proposal?.movie?.id ?? 0,
+      })
       if (got.ok) {
-        onRenamed(got.detail)
+        // Radarr knows the file by its path: a rename it never heard about
+        // leaves the movie "missing" and the file orphaned, so the failure
+        // travels WITH the success instead of being swallowed.
+        const late =
+          got.rescan && !got.rescan.ok
+            ? `Renombrado, pero Radarr no confirmó el rescan: ${got.rescan.detail}`
+            : ''
+        onRenamed(late || got.detail || 'Renombrado')
         onClose()
         return
       }

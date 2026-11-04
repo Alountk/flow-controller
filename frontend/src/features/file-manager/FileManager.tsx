@@ -11,6 +11,7 @@ import {
 } from '../../shared/api/files.ts'
 import { filterByName, useBrowse } from '../../shared/hooks/useFilesNavigator.ts'
 import { FileNavigator, type FileNavigatorEntry } from '../../shared/ui/FileNavigator.tsx'
+import { LibraryRenameDialog } from './LibraryRenameDialog.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../shared/utils/selection.ts'
 import './FileManager.css'
 import '../../shared/ui/atoms.css'
@@ -62,6 +63,8 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
+  // The Radarr-shaped rename for one picked file, next to the plain one below.
+  const [renameTarget, setRenameTarget] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -367,6 +370,21 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         >
           ✏
         </button>
+        {/* Videos only: the template writes a movie's name, so a folder or a
+            subtitle would only get a form that cannot propose anything. */}
+        {!entry.isDir && entry.isVideo !== false && (
+          <button
+            className="fm-sm-btn"
+            title="Renombrar con la plantilla de Radarr"
+            aria-label={`Renombrar ${entry.name} con la plantilla de Radarr`}
+            onClick={(e) => {
+              e.stopPropagation()
+              setRenameTarget(entry.path)
+            }}
+          >
+            🏷
+          </button>
+        )}
         <button
           className="fm-sm-btn danger"
           title="Eliminar"
@@ -654,6 +672,17 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
             renderRowActions={renderRowActions}
           />
         </>
+      )}
+      {renameTarget && (
+        <LibraryRenameDialog
+          path={renameTarget}
+          origin="a mano"
+          onClose={() => setRenameTarget(null)}
+          onRenamed={(detail) => {
+            setToast(detail)
+            queryClient.invalidateQueries({ queryKey: ['files-browse', path] })
+          }}
+        />
       )}
     </div>
   )

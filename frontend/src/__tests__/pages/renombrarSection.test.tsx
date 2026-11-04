@@ -137,9 +137,9 @@ describe('la sección Renombrar', () => {
     mockFetch()
     renderSection()
 
-    expect(await screen.findByText(`${FOUR_K}/The.Batman.2022.2160p.mkv`)).toBeTruthy()
+    expect(await screen.findByText('The.Batman.2022.2160p.mkv')).toBeTruthy()
     expect(
-      screen.getByText(`${FOUR_K}/The Batman (2022)/The Batman (2022) Remux-2160p.mkv`),
+      screen.getByText('The Batman (2022) Remux-2160p.mkv'),
     ).toBeTruthy()
     expect(screen.getByText(/También: The\.Batman\.2022\.2160p\.srt/)).toBeTruthy()
   })
@@ -160,20 +160,24 @@ describe('la sección Renombrar', () => {
     })
     renderSection()
 
-    await screen.findByText(`${FOUR_K}/The.Batman.2022.2160p.mkv`)
-    fireEvent.click(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(2\)/ }))
+    await screen.findByText('The.Batman.2022.2160p.mkv')
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar 2 cambio/ }))
 
     await waitFor(() => expect(mock.applied).toHaveLength(2))
     expect(mock.applied[0]).toEqual({
       remote_path: `${FOUR_K}/The.Batman.2022.2160p.mkv`,
       folder: 'The Batman (2022)',
       name: 'The Batman (2022) Remux-2160p',
+      origin: 'lote',
+      movie_id: 7,
     })
     // Inside a folder the folder field travels empty: it is not renamed.
     expect(mock.applied[1]).toEqual({
       remote_path: `${FOUR_K}/Dune (2021)/Dune.Part.Two.2024.mkv`,
       folder: '',
       name: 'Dune: Parte dos (2024) 2160p',
+      origin: 'lote',
+      movie_id: 9,
     })
   })
 
@@ -198,7 +202,7 @@ describe('la sección Renombrar', () => {
     expect(checkbox.checked).toBe(false)
     expect(screen.getByText(/no coincide ninguna película/)).toBeTruthy()
     // Nothing selected ⇒ the batch button cannot move anything.
-    expect(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(0\)/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Aplicar 0 cambio/ })).toBeDisabled()
     expect(mock.applied).toHaveLength(0)
   })
 
@@ -220,16 +224,18 @@ describe('la sección Renombrar', () => {
     })
     renderSection()
 
-    await screen.findByText(`${FOUR_K}/The.Batman.2022.2160p.mkv`)
-    expect(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(1\)/ })).toBeTruthy()
+    await screen.findByText('The.Batman.2022.2160p.mkv')
+    expect(screen.getByRole('button', { name: /Aplicar 1 cambio/ })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(1\)/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar 1 cambio/ }))
 
     await waitFor(() => expect(mock.applied).toHaveLength(1))
     expect(mock.applied[0]).toEqual({
       remote_path: `${FOUR_K}/The.Batman.2022.2160p.mkv`,
       folder: 'The Batman (2022)',
       name: 'The Batman (2022) Remux-2160p',
+      origin: 'lote',
+      movie_id: 7,
     })
   })
 
@@ -243,8 +249,8 @@ describe('la sección Renombrar', () => {
     })
     renderSection()
 
-    await screen.findByText(`${FOUR_K}/The.Batman.2022.2160p.mkv`)
-    fireEvent.click(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(1\)/ }))
+    await screen.findByText('The.Batman.2022.2160p.mkv')
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar 1 cambio/ }))
 
     expect(await screen.findByText(/solo se movió a su carpeta/)).toBeTruthy()
   })
@@ -275,8 +281,8 @@ describe('la sección Renombrar', () => {
     })
     renderSection()
 
-    await screen.findByText(`${FOUR_K}/The.Batman.2022.2160p.mkv`)
-    fireEvent.click(screen.getByRole('button', { name: /Aplicar a las seleccionadas \(1\)/ }))
+    await screen.findByText('The.Batman.2022.2160p.mkv')
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar 1 cambio/ }))
 
     expect(await screen.findByText(/The Batman \(2022\) Remux-2160p\.mkv/)).toBeTruthy()
   })
@@ -299,6 +305,8 @@ describe('la sección Renombrar', () => {
       remote_path: `${FOUR_K}/The.Batman.2022.2160p.mkv`,
       folder: 'The Batman (2022)',
       name: 'The Batman (2022) 2160p',
+      origin: 'lote',
+      movie_id: 7,
     })
 
     const alert = await screen.findByRole('alert')
@@ -358,9 +366,15 @@ describe('elegir la película a mano', () => {
   })
 })
 
-describe('el explorador ya no renombra', () => {
-  it('keeps rendering its rows but offers no Radarr action', async () => {
-    mockFetch()
+describe('el explorador renombra un fichero elegido a mano', () => {
+  /**
+   * S4 de `odd/tasks/renombrar-registro-y-manual.md` SUSTITUYE la regla de
+   * `renombrar-seccion.md` que quitó esta acción del explorador. Sigue sin haber
+   * dos puertas con reglas distintas: es el MISMO diálogo y el mismo endpoint;
+   * lo que cambia es que ahora se puede empezar por el fichero que ves.
+   */
+  it('offers the Radarr action on a video row and opens the same dialog', async () => {
+    const mock = mockFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
@@ -368,8 +382,33 @@ describe('el explorador ya no renombra', () => {
       </QueryClientProvider>,
     )
 
-    // Presence first: an absence assertion alone passes on a broken screen.
     expect(await screen.findAllByText('The.Batman.2022.2160p.mkv')).not.toHaveLength(0)
-    expect(screen.queryByRole('button', { name: /Renombrar como Radarr/ })).toBeNull()
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Renombrar The.Batman.2022.2160p.mkv con la plantilla/ })[0],
+    )
+
+    await screen.findByRole('dialog', { name: 'Renombrar como Radarr' })
+    expect(mock.previews.at(-1)).toContain('The.Batman.2022.2160p.mkv')
+  })
+
+  it('sends the rename as a hand-made one, with the movie it identified', async () => {
+    // Sin `origin` la fila diría «lote»: un acto distinto contado igual.
+    const mock = mockFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <FileManager />
+      </QueryClientProvider>,
+    )
+
+    await screen.findAllByText('The.Batman.2022.2160p.mkv')
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Renombrar The.Batman.2022.2160p.mkv con la plantilla/ })[0],
+    )
+    await screen.findByRole('dialog', { name: 'Renombrar como Radarr' })
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }))
+
+    await waitFor(() => expect(mock.applied).toHaveLength(1))
+    expect(mock.applied[0]).toMatchObject({ origin: 'a mano', movie_id: 7 })
   })
 })

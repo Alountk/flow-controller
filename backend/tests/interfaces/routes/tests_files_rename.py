@@ -115,7 +115,23 @@ class TestPreview:
 
         assert [s["from"] for s in body["sidecars"]] == ["The.Batman.2022.2160p.srt"]
 
-    def test_refuses_a_file_outside_the_quality_roots(self, env, monkeypatch):
+    def test_refuses_an_outside_file_whose_movie_cannot_be_identified(self, env, monkeypatch):
+        # Renombrar fuera de las raíces 4K/3D se puede, pero sólo sabiendo de
+        # qué película es: sin eso no hay nombre que proponer ni a quién avisar.
+        other = env.tmp / "storage"
+        other.mkdir()
+        monkeypatch.setattr(config, "ALLOWED_ROOTS", [str(other)])
+        loose = other / "Documental.Raro.2019.mkv"
+        loose.write_bytes(b"x")
+
+        body = _preview(str(loose))
+
+        assert body["ok"] is False
+        assert "película" in body["detail"]
+
+    def test_proposes_a_name_for_a_catalog_file_outside_the_roots(self, env, monkeypatch):
+        # El fichero de una película vive en la carpeta de su película, no en
+        # las raíces 4K/3D: es el caso de renombrar a mano desde Archivos.
         other = env.tmp / "storage"
         other.mkdir()
         monkeypatch.setattr(config, "ALLOWED_ROOTS", [str(other)])
@@ -124,8 +140,10 @@ class TestPreview:
 
         body = _preview(str(loose))
 
-        assert body["ok"] is False
-        assert "4K/3D" in body["detail"]
+        assert body["ok"] is True, body
+        assert body["outside_roots"] is True
+        assert body["movie"]["id"] == 7
+        assert "The Batman (2022)" in body["name"]
 
     def test_degrades_to_the_current_name_when_radarr_is_absent(self, env, monkeypatch):
         monkeypatch.setattr(config, "SERVICES", [])
@@ -170,6 +188,106 @@ class TestPreview:
             "/api/files/rename-preview", params={"remote_path": "/etc/passwd"}
         )
         assert resp.status_code == 403
+
+
+class TestRenameLog:
+    """Lo aplicado queda anotado (S2): sin fila, un fichero renombrado y un
+    fichero que nunca estuvo son la misma cosa en la pantalla."""
+
+    @pytest.fixture(autouse=True)
+    def _fresh_db(self, tmp_path):
+        from infrastructure import sqlite_history as history
+
+        history.close()
+        history.init_db(tmp_path / "history.db")
+        yield
+        history.close()
+
+    def _log(self) -> list[dict]:
+        resp = client.get("/api/files/renames")
+        assert resp.status_code == 200, resp.text
+        return resp.json()["items"]
+
+    def test_an_applied_rename_is_remembered_from_and_to(self, env):
+        video = env.root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"video")
+
+        _apply(remote_path=str(video), folder="The Batman (2022)", name="The Batman (2022) 2160p")
+
+        (row,) = self._log()
+        assert row["src"].endswith("The.Batman.2022.2160p.mkv")
+        assert row["dst"].endswith("The Batman (2022) 2160p.mkv")
+        assert row["origin"] == "lote"
+        assert row["exists"] is True
+
+    def test_a_refused_rename_writes_no_row(self, env):
+        video = env.root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"video")
+        (env.root / "Taken.mkv").write_bytes(b"keep me")
+
+        _apply(remote_path=str(video), folder="", name="Taken")
+
+        assert self._log() == []
+
+    def test_a_hand_rename_asks_radarr_to_rescan_the_movie(self, env, monkeypatch):
+        asked: list[dict] = []
+
+        async def fake_command(_session, _service, body):
+            asked.append(body)
+            return {"ok": True, "detail": ""}
+
+        monkeypatch.setattr(files_route, "arr_command", fake_command)
+        video = env.root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"video")
+
+        body = _apply(
+            remote_path=str(video),
+            folder="The Batman (2022)",
+            name="The Batman (2022) 2160p",
+            origin="a mano",
+            movie_id=7,
+        )
+
+        assert body["ok"] is True, body
+        assert body["rescan"] == {"ok": True, "detail": ""}
+        assert asked == [{"name": "RescanMovie", "movieIds": [7]}]
+
+    def test_a_rescan_that_fails_is_reported_next_to_a_rename_that_happened(
+        self, env, monkeypatch
+    ):
+        async def fake_command(_session, _service, _body):
+            return {"ok": False, "detail": "Radarr no responde"}
+
+        monkeypatch.setattr(files_route, "arr_command", fake_command)
+        video = env.root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"video")
+
+        body = _apply(
+            remote_path=str(video),
+            folder="The Batman (2022)",
+            name="The Batman (2022) 2160p",
+            origin="a mano",
+            movie_id=7,
+        )
+
+        assert body["ok"] is True
+        assert body["rescan"]["ok"] is False
+        assert "no responde" in body["rescan"]["detail"]
+
+    def test_the_row_carries_who_asked_and_for_which_movie(self, env):
+        video = env.root / "The.Batman.2022.2160p.mkv"
+        video.write_bytes(b"video")
+
+        _apply(
+            remote_path=str(video),
+            folder="The Batman (2022)",
+            name="The Batman (2022) 2160p",
+            origin="a mano",
+            movie_id=7,
+        )
+
+        (row,) = self._log()
+        assert (row["origin"], row["movie_id"]) == ("a mano", 7)
 
 
 class TestApply:

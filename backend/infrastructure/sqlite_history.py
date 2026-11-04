@@ -27,7 +27,7 @@ from infrastructure import credentials
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -236,6 +236,20 @@ CREATE TABLE IF NOT EXISTS download_notices (
     updated_at  REAL NOT NULL,
     PRIMARY KEY (key, notice)
 );
+-- v14: what a rename turned a file INTO. The candidate list only shows files
+-- that are out of template, so a renamed file leaves the screen entirely; no
+-- row here would mean "it is gone" and "it was never there" look the same.
+-- `src` is kept because the old name is the only way to recognise the change,
+-- and `origin` because a hand rename and a batch rename are different acts.
+CREATE TABLE IF NOT EXISTS rename_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    src        TEXT NOT NULL,
+    dst        TEXT NOT NULL,
+    movie_id   INTEGER,
+    origin     TEXT NOT NULL,
+    renamed_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rename_log_at ON rename_log (renamed_at DESC);
 """
 
 # Columns mirrored from the in-memory op. Kept explicit so an unexpected key
@@ -1374,6 +1388,60 @@ def record_notice_attempt(key: str, notice: str, *, ok: bool) -> None:
             _conn.commit()
         except sqlite3.Error as exc:
             log.warning("Could not record download notice: %s", exc)
+
+
+def record_rename(
+    src: str, dst: str, *, movie_id: int | None = None, origin: str = "lote"
+) -> None:
+    """Guarda que `src` pasó a ser `dst` (S2). Nunca lanza.
+
+    Un registro que poder perder es un registro que no se consulta: si la base
+    no está, se avisa en el log y la operación sigue; el renombrado del disco ya
+    ocurrió y no se deshace por no poder anotarlo.
+    """
+    with _lock:
+        if _conn is None:
+            return
+        try:
+            _conn.execute(
+                "INSERT INTO rename_log (src, dst, movie_id, origin, renamed_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (src, dst, movie_id, origin, time.time()),
+            )
+            _conn.commit()
+        except sqlite3.Error as exc:
+            log.warning("Could not record rename (%s -> %s): %s", src, dst, exc)
+
+
+def recent_renames(limit: int = 200) -> list[dict]:
+    """Los últimos renombrados, el más reciente primero. Sin base, `[]`.
+
+    `exists` se mira aquí y no en la ruta: la vista tiene que decir que el
+    destino ya no está en vez de ofrecer abrir una carpeta que no existe (S7).
+    """
+    with _lock:
+        if _conn is None:
+            return []
+        try:
+            rows = _conn.execute(
+                "SELECT src, dst, movie_id, origin, renamed_at FROM rename_log "
+                "ORDER BY renamed_at DESC, id DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        except sqlite3.Error as exc:
+            log.warning("Could not read rename log: %s", exc)
+            return []
+    return [
+        {
+            "src": row[0],
+            "dst": row[1],
+            "movie_id": row[2],
+            "origin": row[3],
+            "renamed_at": float(row[4]),
+            "exists": os.path.isfile(row[1]),
+        }
+        for row in rows
+    ]
 
 
 def close() -> None:

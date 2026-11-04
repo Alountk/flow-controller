@@ -19,7 +19,12 @@ import state
 from config import find_service
 from traces import host_path
 from application import gateways
-from application.gateways import arr_naming_config, arr_root_folders, fetch_all_movies_detailed, history
+from application.gateways import (
+    arr_command,
+    arr_naming_config,
+    arr_root_folders,
+    fetch_all_movies_detailed,
+)
 from application.use_cases import library_rename, place_file
 from application.use_cases.file_provenance import file_provenance
 from import_service import post_move_import
@@ -206,8 +211,8 @@ async def file_retention(path: str = "/", _key: str = Depends(verify_api_key)):
         key=lambda p: p.name.lower(),
     )
     full = [str(e) for e in entries]
-    seen = await asyncio.to_thread(history.remember_downloads, full)
-    await asyncio.to_thread(history.prune_downloads, target, set(full))
+    seen = await asyncio.to_thread(gateways.history.remember_downloads, full)
+    await asyncio.to_thread(gateways.history.prune_downloads, target, set(full))
 
     # One provenance answer per name, from the three sources behind the one
     # seam. Empty directory → the service short-circuits without a single
@@ -282,12 +287,16 @@ class RenameRequest(BaseModel):
     """A rename the dialog confirmed: where the file goes, and what it is called.
 
     The sidecars are absent on purpose: the route re-reads the folder, so the
-    client cannot name the files that travel with the video.
+    client cannot name the files that travel with the video. `origin` says who
+    asked — the batch page or a hand-picked file — and `movie_id` is the movie
+    the operator chose when the filename alone could not identify it.
     """
 
     remote_path: str = ""
     folder: str = ""
     name: str = ""
+    origin: str = "lote"
+    movie_id: int = 0
 
 
 def _quality_roots() -> list[str]:
@@ -370,8 +379,12 @@ async def file_rename_preview(
     """
     src = _validate_path(remote_path)
     roots = _quality_roots()
-    if not src or not library_rename.in_root(src, roots):
-        return {"ok": False, "detail": "Solo se renombran las copias de las raíces 4K/3D"}
+    if not src:
+        return {"ok": False, "detail": "Ruta no válida"}
+    # Un fichero del catálogo vive dentro de la carpeta de su película, no de las
+    # raíces 4K/3D. Se puede renombrar a mano, pero sólo sabiendo QUÉ película
+    # es: sin eso no hay nombre que proponer ni a quién avisar después.
+    outside = bool(roots) and not library_rename.in_root(src, roots)
 
     movies, naming_cfg = await _radarr_catalog()
     chosen = None
@@ -381,7 +394,7 @@ async def file_rename_preview(
             return {"ok": False, "detail": "Esa película no está en el catálogo de Radarr"}
 
     siblings = await asyncio.to_thread(_folder_names, os.path.dirname(src))
-    return await asyncio.to_thread(
+    body = await asyncio.to_thread(
         library_rename.proposal,
         video_path=src,
         movies=movies,
@@ -392,6 +405,17 @@ async def file_rename_preview(
         # One file, on demand: the dialog can afford the probe the list cannot.
         probe=probe_file,
     )
+    if outside and body.get("ok") and body.get("movie") is None:
+        return {
+            "ok": False,
+            "detail": (
+                "Este fichero está fuera de las raíces 4K/3D y no se pudo identificar su "
+                "película: elige la película para poder proponer un nombre"
+            ),
+        }
+    if body.get("ok"):
+        body["outside_roots"] = outside
+    return body
 
 
 @router.post("/api/files/rename-apply")
@@ -403,12 +427,18 @@ async def file_rename_apply(req: RenameRequest, _key: str = Depends(verify_api_k
     """
     src = _validate_path(req.remote_path or "")
     roots = _quality_roots()
-    if not src or not library_rename.in_root(src, roots):
+    if not src:
+        return {"ok": False, "detail": "Ruta no válida"}
+    # Fuera de las raíces 4K/3D hace falta la película: es la prueba de que
+    # sabemos de quién es el fichero y a quién hay que avisar del nombre nuevo.
+    require_root = not req.movie_id
+    if require_root and not library_rename.in_root(src, roots):
         return {"ok": False, "detail": "Solo se renombran las copias de las raíces 4K/3D"}
 
     siblings = await asyncio.to_thread(_folder_names, os.path.dirname(src))
     result = await asyncio.to_thread(
         library_rename.apply_rename,
+        require_root=require_root,
         video_path=src,
         folder=req.folder or "",
         stem=req.name or "",
@@ -420,7 +450,51 @@ async def file_rename_apply(req: RenameRequest, _key: str = Depends(verify_api_k
     )
     for moved in result.get("moved") or []:
         log.info("rename-apply %s -> %s", moved["from"], moved["to"])
+        # The log records the VIDEO, not each sidecar: the row answers "what did
+        # this copy become", and a subtitle is not a copy.
+        if os.path.basename(moved["from"]) == os.path.basename(src):
+            await asyncio.to_thread(
+                gateways.history.record_rename,
+                moved["from"],
+                moved["to"],
+                movie_id=req.movie_id or None,
+                origin=req.origin or "lote",
+            )
+    if result.get("ok") and req.movie_id:
+        # Radarr conoce el fichero por su ruta: renombrarlo sin esto lo deja
+        # huérfano y la película «sin archivo» hasta el próximo escaneo (S5).
+        result["rescan"] = await _rescan_movie(req.movie_id)
     return result
+
+
+async def _rescan_movie(movie_id: int) -> dict:
+    """Pide a Radarr que vuelva a mirar esa película. Nunca lanza."""
+    service = find_service("radarr", "arr")
+    if not service:
+        return {
+            "ok": False,
+            "detail": "Radarr no está configurado: el fichero se renombró, pero no se le avisó",
+        }
+    async with http_session() as session:
+        answer = await arr_command(
+            session, service, {"name": "RescanMovie", "movieIds": [int(movie_id)]}
+        )
+    return {
+        "ok": bool(answer.get("ok")),
+        "detail": str(answer.get("detail") or ""),
+    }
+
+
+@router.get("/api/files/renames")
+async def file_renames(limit: int = 200, _key: str = Depends(verify_api_key)):
+    """Lo que cada renombrado convirtió el fichero, el más reciente primero.
+
+    Sin filas, la lista de candidatos no distingue "se renombró" de "nunca
+    estuvo": el candidato desaparece de esa pantalla en cuanto cumple la
+    plantilla.
+    """
+    items = await asyncio.to_thread(gateways.history.recent_renames, max(1, min(limit, 1000)))
+    return {"ok": True, "items": items}
 
 
 @router.post("/api/files/delete")
@@ -485,7 +559,7 @@ async def _consume_queue():
             op["files_done"] = 0
             op["files_total"] = 0
 
-        await asyncio.to_thread(history.record_operation, op)
+        await asyncio.to_thread(gateways.history.record_operation, op)
 
         try:
             src = op["src"]
@@ -503,7 +577,7 @@ async def _consume_queue():
                     op["progress"] = 100
                     op["detail"] = f"Completado: {Path(src).name}"
 
-            await asyncio.to_thread(history.record_operation, op)
+            await asyncio.to_thread(gateways.history.record_operation, op)
 
             # Post-move import: tell Radarr/Sonarr to import the moved file
             if not op.get("cancelled") and op.get("arr_source"):
@@ -531,7 +605,7 @@ async def _consume_queue():
                                     if imported
                                     else f"{verb} (import pendiente): {Path(src).name}"
                                 )
-                            await asyncio.to_thread(history.record_operation, op)
+                            await asyncio.to_thread(gateways.history.record_operation, op)
                     except Exception as exc:
                         log.error("Import failed: %s", exc)
                         async with queue_lock:
@@ -544,7 +618,7 @@ async def _consume_queue():
             async with queue_lock:
                 op["status"] = "failed"
                 op["detail"] = f"{type(exc).__name__}: {exc}"
-            await asyncio.to_thread(history.record_operation, op)
+            await asyncio.to_thread(gateways.history.record_operation, op)
 
 
 @router.post("/api/files/queue/add")
@@ -587,7 +661,7 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
         place_file.trim_queue(file_queue)
 
     # Durable from the moment it is accepted, so a restart still shows it.
-    await asyncio.to_thread(history.record_operation, op)
+    await asyncio.to_thread(gateways.history.record_operation, op)
 
     await _ensure_consumer()
 
@@ -633,7 +707,7 @@ async def queue_status(_key: str = Depends(verify_api_key)):
 
     # Prefer the durable record so history survives a restart; fall back to the
     # in-memory list if the database is unavailable.
-    durable = await asyncio.to_thread(history.recent_operations, 10)
+    durable = await asyncio.to_thread(gateways.history.recent_operations, 10)
     if durable:
         completed = [
             {
@@ -660,7 +734,7 @@ async def queue_cancel(op_id: str, _key: str = Depends(verify_api_key)):
                 if op["status"] == "pending":
                     op["status"] = "cancelled"
                     op["detail"] = "Cancelado por el usuario"
-                    await asyncio.to_thread(history.record_operation, op)
+                    await asyncio.to_thread(gateways.history.record_operation, op)
                     return {"ok": True, "detail": "Operación cancelada"}
                 elif op["status"] == "running":
                     op["cancelled"] = True
@@ -689,17 +763,17 @@ async def queue_complete(op_id: str, _key: str = Depends(verify_api_key)):
                 op["status"] = "done"
                 op["detail"] = "Completada manualmente"
                 op["progress"] = 100
-                await asyncio.to_thread(history.record_operation, op)
+                await asyncio.to_thread(gateways.history.record_operation, op)
                 return {"ok": True, "detail": "Operación marcada como completada"}
 
     # Not in memory: a restart wipes the queue but the SQLite row survives,
     # and /status keeps surfacing it through recent_operations (no filter).
-    row = await asyncio.to_thread(history.get_operation, op_id)
+    row = await asyncio.to_thread(gateways.history.get_operation, op_id)
     if row is None:
         return {"ok": False, "detail": "Operación no encontrada"}
     if row["status"] not in ("pending", "running"):
         return {"ok": False, "detail": f"Operación en estado: {row['status']}"}
     row["status"] = "done"
     row["detail"] = "Completada manualmente"
-    await asyncio.to_thread(history.record_operation, row)
+    await asyncio.to_thread(gateways.history.record_operation, row)
     return {"ok": True, "detail": "Operación marcada como completada"}
