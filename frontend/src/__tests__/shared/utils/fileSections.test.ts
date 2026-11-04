@@ -33,9 +33,22 @@ describe('classifyFile', () => {
     expect(classifyFile(entry('Film.4K.BluRay.mkv'), folders, base)).toBe('4k')
   })
 
-  it('files any other stated resolution under Otros — it proves neither 1080 nor 4K', () => {
-    expect(classifyFile(entry('Film.2012.720p.BluRay.mkv'), folders, base)).toBe('otros')
-    expect(classifyFile(entry('Film.DVDRip.mkv'), folders, base)).toBe('otros')
+  it('files any other stated resolution under SD — it proves small, which is an answer', () => {
+    expect(classifyFile(entry('Film.2012.720p.BluRay.mkv'), folders, base)).toBe('sd')
+    expect(classifyFile(entry('Film.DVDRip.mkv'), folders, base)).toBe('sd')
+  })
+
+  it('a measurement beats the name, both ways', () => {
+    // El caso reportado: el nombre dice 720p y el frame mide 1920×800.
+    expect(classifyFile(entry('Film.2012.720p.BluRay.mkv'), folders, base, '1080')).toBe('1080')
+    // Y al revés: un nombre 1080p sobre un frame de 720 no es un fichero 1080.
+    expect(classifyFile(entry('Film.2012.1080p.BluRay.mkv'), folders, base, '720')).toBe('sd')
+  })
+
+  it('without a measurement the name is all the proof a file has', () => {
+    expect(classifyFile(entry('Film.2012.2160p.mkv'), folders, base, '')).toBe('4k')
+    // Tokenless in the movie's own folder is the library default, not `otros`.
+    expect(classifyFile(entry('Sin resolucion.mkv'), folders, base, '')).toBe('1080')
   })
 
   it('a 3D name token outranks everything else (S1 precedence 3D > 4K)', () => {

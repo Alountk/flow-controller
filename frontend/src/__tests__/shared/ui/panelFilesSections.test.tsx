@@ -8,7 +8,7 @@ import type { PanelFilesFacts } from '../../../shared/ui/PanelFiles.tsx'
 /**
  * T3 (S1/S4): the Archivos tab, when given the routing folders, aggregates
  * the movie's three locations (base folder + path_4k + path_3d copies) and
- * renders FOUR sections — 1080, 4K, 3D, Otros — each file under exactly one
+ * renders FIVE sections — 1080, 4K, 3D, SD, Otros — each file under exactly one
  * (S1 precedence), foreign copies never rendered, unclassifiable entries
  * visible under Otros (S4 honesty). WITHOUT folders (Series' tab) the flat
  * table stays byte-identical.
@@ -104,12 +104,13 @@ afterEach(() => {
 })
 
 describe('PanelFiles sections (folders given)', () => {
-  it('renders the four section headings from the three aggregated locations', async () => {
+  it('renders the five section headings from the three aggregated locations', async () => {
     renderPanel(<PanelFiles facts={ready} folders={{ path4k: F4K, path3d: F3D }} />)
 
     await screen.findByRole('heading', { level: 4, name: '1080' })
     expect(screen.getByRole('heading', { level: 4, name: '4K' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 4, name: '3D' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 4, name: 'SD' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 4, name: 'Otros' })).toBeInTheDocument()
   })
 
@@ -140,8 +141,10 @@ describe('PanelFiles sections (folders given)', () => {
     await within(s1080).findByText('Film.2012.1080p.BluRay.mkv')
     expect(within(s1080).getByText('ParaNorman.mkv')).toBeInTheDocument()
 
+    // A 720p name is SD, a section of its own: it proves small, which is an
+    // answer, while Otros is for files that prove nothing.
+    expect(within(sectionOf('SD')).getByText('Film.720p.mkv')).toBeInTheDocument()
     const sOtros = sectionOf('Otros')
-    expect(within(sOtros).getByText('Film.720p.mkv')).toBeInTheDocument()
     expect(within(sOtros).getByText('subs')).toBeInTheDocument()
   })
 

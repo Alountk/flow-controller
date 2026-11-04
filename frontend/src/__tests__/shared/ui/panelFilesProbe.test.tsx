@@ -309,7 +309,9 @@ describe('T4 · fallos y alcance de los botones', () => {
     const sOtros = sectionOf('Otros')
     expect(within(sOtros).queryByRole('button', { name: 'Analizar subs' })).toBeNull()
     expect(within(sOtros).queryByRole('button', { name: 'Analizar Film.srt' })).toBeNull()
-    expect(within(sOtros).getByRole('button', { name: 'Analizar Film.720p.mkv' })).toBeInTheDocument()
+    // The video's own section follows what is known about it (SD by its name,
+    // 1080 once a probe says so), so the button is looked up wherever it landed.
+    expect(screen.getByRole('button', { name: 'Analizar Film.720p.mkv' })).toBeInTheDocument()
   })
 
   it('the flat view (Series) stays button-free', async () => {
