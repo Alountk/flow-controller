@@ -106,8 +106,59 @@ def duplicate_folders(
                 "folder": folder,
                 "class": label,
                 "title": titles.get(folder) or os.path.basename(folder),
+                # A folder Radarr never named is titled after itself; grouping
+                # must not merge two unrelated folders that happen to share a
+                # name, so the caller can tell the two cases apart.
+                "known_title": bool(titles.get(folder)),
                 "files": members,
                 "reclaimable": sum(m["size"] for m in members if m["known"] is False),
             })
     groups.sort(key=lambda g: (-g["reclaimable"], g["folder"]))
     return groups
+
+
+def group_by_title(folders: Iterable[Mapping[str, object]]) -> list[dict]:
+    """Una entrada por PELÍCULA, con sus carpetas y sus copias dentro.
+
+    La detección sigue siendo por carpeta y clase (`duplicate_folders`): dos
+    ficheros de la misma clase en el mismo sitio. Pero la pantalla pregunta
+    «qué película tiene copias de más», y una película puede tener dos carpetas
+    (la del catálogo y una suelta) o dos clases repetidas. Se agrupa aquí, en
+    puro, para que la regla y la presentación no se mezclen.
+
+    Las carpetas que Radarr no nombró se agrupan por su propia ruta: unirlas por
+    título juntaría dos carpetas distintas que se llaman igual.
+    """
+    by_title: dict[str, list[dict]] = {}
+    for group in folders:
+        key = str(group.get("title") or "") if group.get("known_title") else str(group.get("folder"))
+        by_title.setdefault(key, []).append(dict(group))
+
+    out: list[dict] = []
+    for _key, groups in by_title.items():
+        files: list[dict] = []
+        for group in groups:
+            for member in group.get("files") or []:
+                files.append({**dict(member), "class": group.get("class")})
+        # El que sobra primero también aquí: dentro del grupo, el orden es el
+        # mismo que dentro de la carpeta.
+        files.sort(
+            key=lambda m: (
+                _CLASSES.index(str(m.get("class")))
+                if str(m.get("class")) in _CLASSES
+                else len(_CLASSES),
+                0 if m.get("known") is False else 1 if m.get("known") is None else 2,
+                str(m.get("name") or ""),
+            )
+        )
+        first = groups[0]
+        out.append({
+            "title": first.get("title") or first.get("folder"),
+            "folder": first.get("folder"),
+            "folders": [g.get("folder") for g in groups],
+            "classes": [g.get("class") for g in groups],
+            "files": files,
+            "reclaimable": sum(int(g.get("reclaimable") or 0) for g in groups),
+        })
+    out.sort(key=lambda g: (-int(g["reclaimable"]), str(g["title"])))
+    return out

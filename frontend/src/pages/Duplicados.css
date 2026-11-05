@@ -211,3 +211,99 @@
   border-radius: 999px;
   white-space: nowrap;
 }
+
+/* ── Rediseño: alcance, grupos por película y tabla de copias ──────────────── */
+
+.duplicados-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.duplicados-scope {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  font-size: 12px;
+}
+
+.duplicados-scope-label {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.duplicados-scope-select {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.duplicados-breadcrumb {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-dim);
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.duplicados-scope-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.duplicados-scope-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.duplicados-scope-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.duplicados-group-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.duplicados-chip.is-reclaim {
+  border-color: var(--bad, #dc2626);
+  color: var(--bad, #dc2626);
+}
+
+.duplicados-group-warn {
+  margin: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warn, #d97706) 10%, transparent);
+  color: var(--warn, #d97706);
+  font-size: 11.5px;
+}
+
+.duplicados-class {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+}

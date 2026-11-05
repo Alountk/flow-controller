@@ -30,6 +30,7 @@ from application.gateways import (
 from domain import library_class
 from application.use_cases.duplicate_delete import DuplicateDeleteError, delete_duplicate
 from application.use_cases.duplicate_scan import scan_duplicates
+from domain.duplicates_folders import group_by_title
 from models import ActionRequest
 from interfaces.http.deps import verify_api_key
 from interfaces.http.route_helpers import attach_grabbed_at
@@ -314,23 +315,32 @@ async def get_all_movies(
 
 
 @router.get("/api/movies/duplicates")
-async def get_duplicate_movies(_key: str = Depends(verify_api_key)):
-    """Carpetas con dos ficheros de vídeo de la misma clase («duplicados», S1).
+async def get_duplicate_movies(path: str = "", _key: str = Depends(verify_api_key)):
+    """Carpetas con dos ficheros de vídeo de la misma clase, agrupadas por película.
 
     Mira el disco, no el catálogo del arr: Radarr guarda un `movieFile` por
     película, así que el segundo fichero de una carpeta no existe para su API y
     agrupar películas devolvía siempre vacío. El recorrido va en un hilo porque
     son miles de carpetas y el bucle de eventos no se reparte.
+
+    `path` acota el recorrido a una carpeta (tiene que estar dentro de las raíces
+    permitidas): la biblioteca entera tarda minutos, y el usuario tiene derecho a
+    mirar sólo donde sospecha.
     """
     roots = [host_path(r) for r in config.ALLOWED_ROOTS]
+    scope = host_path(path).rstrip("/") if path else ""
+    if scope and not config.path_is_allowed(scope):
+        raise HTTPException(status_code=403, detail=f"Ruta no permitida: {path}")
+    walk_roots = [scope] if scope else roots
     movies = await _radarr_movies()
     known, titles = _radarr_folders(movies)
-    groups = await asyncio.to_thread(
-        scan_duplicates, roots, walk=gateways.scan, known=known, titles=titles,
+    folders = await asyncio.to_thread(
+        scan_duplicates, walk_roots, walk=gateways.scan, known=known, titles=titles,
         radarr_available=bool(movies),
     )
-    return {"groups": groups, "total": len(groups), "roots": roots,
-            "radarr": bool(movies)}
+    groups = group_by_title(folders)
+    return {"groups": groups, "total": len(groups), "folders": len(folders),
+            "roots": roots, "scope": scope, "radarr": bool(movies)}
 
 
 async def _radarr_movies() -> list[dict]:

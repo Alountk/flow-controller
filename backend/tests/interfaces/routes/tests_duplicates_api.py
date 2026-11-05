@@ -64,7 +64,8 @@ def test_two_files_of_the_same_class_come_back_as_one_group(client, library):
     assert body["total"] == 1
     group = body["groups"][0]
     assert group["title"] == "Now You See Me"
-    assert group["class"] == "1080"
+    assert group["classes"] == ["1080"]
+    assert [f["class"] for f in group["files"]] == ["1080", "1080"]
     assert len(group["files"]) == 2
 
 
@@ -103,7 +104,52 @@ def test_an_empty_root_is_not_an_error(client, tmp_path, monkeypatch):
 
     body = _call(client, movies=[])
 
-    assert body == {"groups": [], "total": 0, "roots": [str(tmp_path / "vacio")], "radarr": False}
+    assert body == {
+        "groups": [],
+        "total": 0,
+        "folders": 0,
+        "roots": [str(tmp_path / "vacio")],
+        "scope": "",
+        "radarr": False,
+    }
+
+
+def test_one_movie_with_two_repeated_classes_is_one_group(client, library):
+    # La pantalla pregunta «qué película tiene copias de más». Dos clases
+    # repetidas en la misma carpeta son una película, no dos.
+    (library / "Now You See Me (2013) 2160p WEBDL.mkv").write_bytes(b"x" * 10)
+    (library / "Now You See Me (2013) 2160p WEBRip.mkv").write_bytes(b"x" * 20)
+
+    body = _call(client, movies=[_movie(str(library))])
+
+    assert body["total"] == 1
+    group = body["groups"][0]
+    assert sorted(group["classes"]) == ["1080", "4K"]
+    assert len(group["files"]) == 4
+    # El que sobra primero, también dentro del grupo (4K antes que 1080).
+    assert [f["class"] for f in group["files"]] == ["4K", "4K", "1080", "1080"]
+
+
+def test_the_scope_walks_only_the_folder_it_names(client, library, tmp_path):
+    fuera = tmp_path / "movies" / "fuera"
+    fuera.mkdir(parents=True)
+    (fuera / "Otra (2020) a.mkv").write_bytes(b"x")
+    (fuera / "Otra (2020) b.mkv").write_bytes(b"x")
+
+    with patch.object(wanted, "find_service", return_value={"key": "radarr", "url": "http://x", "api_key": "k"}), \
+         patch.object(wanted, "fetch_all_movies_detailed", new_callable=AsyncMock,
+                      return_value={"items": [_movie(str(library))], "total": 1}):
+        body = client.get("/api/movies/duplicates", params={"path": str(library)}).json()
+
+    assert body["scope"] == str(library)
+    assert [g["title"] for g in body["groups"]] == ["Now You See Me"]
+
+
+def test_a_scope_outside_the_allowed_roots_is_refused(client, library, tmp_path):
+    response = client.get("/api/movies/duplicates", params={"path": str(tmp_path / ".." / "etc")})
+
+    assert response.status_code == 403
+    assert "no permitida" in response.json()["detail"]
 
 
 def test_deleting_refuses_a_path_outside_the_library_with_its_reason(client, tmp_path):
