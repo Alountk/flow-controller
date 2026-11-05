@@ -1,0 +1,360 @@
+/* El explorador de archivos: una sola hoja para las cinco zonas y los dos
+   marcos. Estilos del chrome, nunca del contenido que inyectan los slots. */
+
+.explorer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border, #e4e4e7);
+  border-radius: 10px;
+  background: var(--surface, #ffffff);
+  overflow: hidden;
+}
+
+/* ── Zona 1: ruta ─────────────────────────────────────────────────────────── */
+
+.explorer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #e4e4e7);
+  background: var(--surface-2, #fafafa);
+  min-width: 0;
+}
+
+.explorer-bar-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-dim, #71717a);
+  white-space: nowrap;
+}
+
+.explorer-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border, #e4e4e7);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font-size: 11.5px;
+  max-width: 190px;
+}
+
+.explorer-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.explorer-crumb {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim, #71717a);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.explorer-crumb:hover {
+  color: var(--accent, #4f46e5);
+  text-decoration: underline;
+}
+
+.explorer-crumb.is-muted {
+  cursor: default;
+  color: var(--text-dim, #71717a);
+}
+
+.explorer-crumb-sep {
+  color: var(--border-strong, #c7c4d8);
+}
+
+.explorer-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border, #e4e4e7);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.explorer-btn:hover:not(:disabled) {
+  border-color: var(--accent, #4f46e5);
+  color: var(--accent, #4f46e5);
+}
+
+.explorer-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.explorer-btn.is-primary {
+  background: var(--accent, #4f46e5);
+  border-color: var(--accent, #4f46e5);
+  color: #fff;
+  font-weight: 500;
+}
+
+.explorer-btn.is-primary:disabled {
+  background: var(--border, #e4e4e7);
+  border-color: var(--border, #e4e4e7);
+  color: var(--text-dim, #71717a);
+}
+
+/* ── Zona 2: herramientas ─────────────────────────────────────────────────── */
+
+.explorer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #e4e4e7);
+}
+
+.explorer-filter {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border, #e4e4e7);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font-size: 12px;
+}
+
+.explorer-count {
+  font-size: 11.5px;
+  color: var(--text-dim, #71717a);
+  white-space: nowrap;
+}
+
+/* ── Zonas 3 y 4: cabecera y filas ────────────────────────────────────────── */
+
+.explorer-head,
+.explorer-row {
+  display: grid;
+  grid-template-columns: 24px 20px minmax(160px, 1fr) 72px 76px 96px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.explorer-head {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border, #e4e4e7);
+  background: var(--surface-2, #fafafa);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim, #71717a);
+}
+
+.explorer-col-name {
+  grid-column: 2 / 4;
+}
+
+.explorer-col-type {
+  grid-column: 4;
+}
+
+.explorer-col-size,
+.explorer-col-date {
+  text-align: right;
+}
+
+.explorer-rows {
+  max-height: 46vh;
+  overflow: auto;
+}
+
+.explorer-row {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--surface-3, #f4f4f5);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.explorer-row:hover {
+  background: var(--surface-2, #fafafa);
+}
+
+.explorer-row.is-selected {
+  background: color-mix(in srgb, var(--accent, #4f46e5) 8%, transparent);
+}
+
+.explorer-icon {
+  text-align: center;
+  font-size: 13px;
+}
+
+.explorer-name {
+  min-width: 0;
+}
+
+.explorer-name > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-dim, #71717a);
+}
+
+.explorer-type,
+.explorer-size,
+.explorer-date {
+  font-size: 11.5px;
+  color: var(--text-dim, #71717a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.explorer-size,
+.explorer-date {
+  text-align: right;
+}
+
+.explorer-actions {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+
+.explorer-empty {
+  padding: 18px 12px;
+  color: var(--text-dim, #71717a);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ── Zona 5: pie ──────────────────────────────────────────────────────────── */
+
+.explorer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border, #e4e4e7);
+  background: var(--surface-2, #fafafa);
+  font-size: 11.5px;
+  color: var(--text-dim, #71717a);
+}
+
+.explorer-foot-path {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.explorer-foot-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Marco `dialog`: el mismo chrome, otro envoltorio ─────────────────────── */
+
+.explorer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 24, 27, 0.4);
+  z-index: 40;
+}
+
+.explorer-dialog {
+  position: fixed;
+  z-index: 41;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(780px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e4e4e7);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.explorer-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+}
+
+.explorer-dialog-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.explorer-dialog-subtitle {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-dim, #71717a);
+}
+
+.explorer-dialog-close {
+  border: 0;
+  background: none;
+  color: var(--text-dim, #71717a);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.explorer-toolbar-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* The name is a button only when no slot replaces it: plain text that happens
+   to be focusable, never a second visual language. */
+.explorer-open {
+  display: block;
+  /* A button is fit-content by default: without this the name shrinks to «a…». */
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.explorer-check {
+  display: flex;
+  justify-content: center;
+}

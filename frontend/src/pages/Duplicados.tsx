@@ -7,6 +7,7 @@ import {
   type DuplicateTitleGroup,
 } from '../shared/api/duplicates'
 import { fetchRoots } from '../shared/api/files.ts'
+import { PathBar } from '../shared/ui/FileExplorer.tsx'
 import './Duplicados.css'
 
 /**
@@ -41,11 +42,6 @@ function rememberScope(path: string) {
   }
 }
 
-/** The root `path` lives under, or '' when it lives under none of them. */
-function rootOf(path: string, roots: string[]): string {
-  return roots.find((root) => path === root || path.startsWith(`${root.replace(/\/+$/, '')}/`)) ?? ''
-}
-
 /** After a delete, a movie stops being a duplicate of itself. */
 function withoutFile(group: DuplicateTitleGroup, path: string): DuplicateTitleGroup | null {
   const files = group.files.filter((file) => file.path !== path)
@@ -78,12 +74,7 @@ export default function Duplicados() {
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   })
-  const rootPaths = useMemo(
-    () => (rootsQuery.data?.roots ?? []).map((root) => root.path),
-    [rootsQuery.data],
-  )
-  const base = rootOf(scope, rootPaths)
-  const segments = base ? scope.slice(base.replace(/\/+$/, '').length).split('/').filter(Boolean) : []
+  const roots = useMemo(() => rootsQuery.data?.roots ?? [], [rootsQuery.data])
 
   useEffect(() => {
     rememberScope(scope)
@@ -152,36 +143,15 @@ export default function Duplicados() {
       </header>
 
       <div className="duplicados-scope">
-        <label className="duplicados-scope-label" htmlFor="duplicados-root">
-          Buscar en
-        </label>
-        <select
-          id="duplicados-root"
-          className="duplicados-scope-select"
-          value={base}
-          onChange={(event) => setScope(event.target.value)}
-        >
-          <option value="">Todas las raíces</option>
-          {rootPaths.map((path) => (
-            <option key={path} value={path}>
-              {path}
-            </option>
-          ))}
-        </select>
-        <span className="duplicados-breadcrumb" title={scope || 'Todas las raíces'}>
-          {segments.length === 0 ? base || 'Todas las raíces' : `${base} › ${segments.join(' › ')}`}
-        </span>
-        <button
-          type="button"
-          className="duplicados-scope-btn"
-          disabled={!scope}
-          onClick={() => setScope(base)}
-        >
-          Subir
-        </button>
-        <button type="button" className="duplicados-scope-btn" onClick={() => setScope('')}>
-          Raíz
-        </button>
+        {/* La misma barra de ruta que el explorador: aquí el alcance es la
+            carpeta que se recorre, no la que se está mirando. */}
+        <PathBar
+          roots={roots}
+          path={scope}
+          onNavigate={setScope}
+          rootLabel="Buscar en"
+          allRootsLabel="Todas las raíces"
+        />
         <span className="duplicados-scope-note">Se recuerda para la próxima búsqueda</span>
       </div>
 

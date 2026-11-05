@@ -216,22 +216,27 @@ describe('Duplicados · dónde busca', () => {
     window.localStorage.setItem('duplicados.scope', '/mnt/storage/movies')
     renderPage()
 
-    // El pan de migas sitúa la carpeta dentro de su raíz.
-    const crumbs = await screen.findByText(/\/mnt\/storage › movies/)
-    expect(crumbs).toBeTruthy()
+    // La barra de ruta es la misma del explorador: raíz y carpeta, cada una
+    // un botón.
+    const crumbs = await screen.findByRole('navigation', { name: 'Ruta' })
+    await waitFor(() => expect(crumbs.textContent).toContain('/mnt/storage'))
+    expect(crumbs.textContent).toContain('movies')
 
-    fireEvent.click(screen.getByText('Subir'))
+    fireEvent.click(screen.getByRole('button', { name: /Subir/ }))
     await waitFor(() =>
       expect(window.localStorage.getItem('duplicados.scope')).toBe('/mnt/storage'),
     )
-    expect(screen.queryByText(/› movies/)).toBeNull()
+    await waitFor(() =>
+      expect(screen.getByRole('navigation', { name: 'Ruta' }).textContent).not.toContain('movies'),
+    )
   })
 
   it('walks the whole library again when the scope is cleared', async () => {
     window.localStorage.setItem('duplicados.scope', '/mnt/storage/movies')
     renderPage()
 
-    fireEvent.click(await screen.findByText('Raíz'))
+    // «Todas las raíces» vuelve a recorrer la biblioteca entera.
+    fireEvent.change(await screen.findByLabelText('Buscar en'), { target: { value: '' } })
     fireEvent.click(screen.getByText('Buscar duplicados'))
 
     await screen.findByText('Now You See Me')

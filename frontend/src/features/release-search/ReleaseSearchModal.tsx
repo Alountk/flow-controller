@@ -13,7 +13,7 @@ import { apiFetch } from '../../shared/api/auth.ts'
 import { slug } from '../../shared/utils/slug.ts'
 import { fetchIndexers } from '../../shared/api/indexers.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
-import { FileNavigator } from '../../shared/ui/FileNavigator.tsx'
+import { FileExplorer } from '../../shared/ui/FileExplorer.tsx'
 import { ReleaseResultsTable } from './ReleaseResultsTable.tsx'
 import { looksThreeD } from '../../shared/utils/threeD.ts'
 import { toast } from '../../shared/utils/toast.ts'
@@ -274,7 +274,7 @@ export function ReleaseSearchModal({
   // grab is in flight (and after every settle).
   const [grabJob, setGrabJob] = useState<{ task_id: string; status: string } | null>(null)
   // The «→ Carpeta» navigator: open flag and the row it would grab into.
-  // Where it stands lives inside FileNavigator, seeded per open below.
+  // Where it stands lives inside the explorer, seeded per open below.
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerGuid, setPickerGuid] = useState('')
   // Session memory: reopening lands where the operator last was, not back at
@@ -1299,10 +1299,13 @@ export function ReleaseSearchModal({
           {/* Folder navigator — inside `body`, so both presentations get it.
               Folder mode: only directories render, only directories confirm. */}
           {pickerOpen && (
-            <FileNavigator
+            <FileExplorer
               open={pickerOpen}
+              presentation="dialog"
+              accept="folders"
+              title="Elegir carpeta de destino"
+              subtitle="Dónde se coloca la release elegida"
               initialPath={lastPickerPath.current}
-              mode="folder"
               onNavigate={(p) => {
                 if (p) lastPickerPath.current = p
               }}

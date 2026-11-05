@@ -65,7 +65,7 @@ describe('mixer — el picker recuerda la última carpeta al reabrir', () => {
     expect(await screen.findByText('/mnt/Pelis')).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByPlaceholderText('Buscar carpeta o archivo…')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Filtrar por nombre…')).not.toBeInTheDocument()
 
     // Two slots render one «Examinar…» each; reopen the first.
     fireEvent.click(screen.getAllByRole('button', { name: 'Examinar…' })[0])

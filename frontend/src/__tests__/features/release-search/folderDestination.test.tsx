@@ -154,7 +154,7 @@ describe('Carpeta destination (folder navigator)', () => {
     expect(await screen.findByRole('button', { name: 'peliculas' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'series' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'nota.txt' })).toBeNull()
-    expect(screen.getByText('/mnt/storage-6tb')).toBeEnabled()
+    expect(document.querySelector('.explorer-foot-path')?.textContent).toBe('/mnt/storage-6tb')
     expect(screen.getByRole('button', { name: 'Elegir esta carpeta' })).toBeEnabled()
   })
 
@@ -172,7 +172,7 @@ describe('Carpeta destination (folder navigator)', () => {
     expect(body).not.toHaveProperty('library')
     expect(body.guid).toBe('g-1')
     await waitFor(() =>
-      expect(document.querySelector('.folder-picker')).toBeNull(),
+      expect(document.querySelector('.explorer-dialog')).toBeNull(),
     )
   })
 
@@ -183,7 +183,7 @@ describe('Carpeta destination (folder navigator)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^→ Carpeta$/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'storage' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }))
-    expect(document.querySelector('.folder-picker')).toBeNull()
+    expect(document.querySelector('.explorer-dialog')).toBeNull()
     expect(grabBodies(fn)).toHaveLength(0)
   })
 
@@ -207,7 +207,7 @@ describe('Carpeta destination (folder navigator)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^→ Carpeta$/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'storage' }))
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(document.querySelector('.folder-picker')).toBeNull()
+    expect(document.querySelector('.explorer-dialog')).toBeNull()
     expect(document.querySelector('.release-table-wrap')).not.toBeNull()
     expect(onClose).not.toHaveBeenCalled()
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -224,7 +224,7 @@ describe('Carpeta destination (folder navigator)', () => {
     const up = screen.getByRole('button', { name: /Subir/ })
     expect(up).toBeEnabled()
     fireEvent.click(up)
-    expect(await screen.findByText('/mnt/storage-6tb')).toBeEnabled()
+    await waitFor(() => expect(document.querySelector('.explorer-foot-path')?.textContent).toBe('/mnt/storage-6tb'))
     expect(screen.getByRole('button', { name: 'peliculas' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Elegir esta carpeta' })).toBeEnabled()
   })
@@ -249,12 +249,12 @@ describe('Carpeta destination (folder navigator)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^→ Carpeta$/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'storage' }))
     fireEvent.click(await screen.findByRole('button', { name: 'peliculas' }))
-    const crumb = document.querySelector('.folder-picker-crumb')
+    const crumb = document.querySelector('.explorer-crumbs')
     expect(crumb).not.toBeNull()
     expect(crumb?.textContent).toContain('storage-6tb')
     expect(crumb?.textContent).toContain('peliculas')
     // The exact full path stays a single untouched node for callers and tests.
-    expect(screen.getByText('/mnt/storage-6tb/peliculas')).toBeEnabled()
+    expect(document.querySelector('.explorer-foot-path')?.textContent).toBe('/mnt/storage-6tb/peliculas')
   })
 
   it('surfaces the backend refusal for a destination outside the allowed roots', async () => {

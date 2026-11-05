@@ -128,7 +128,7 @@ async function selectFile(pickerIndex: number) {
   const browseButtons = await screen.findAllByRole('button', { name: 'Examinar…' })
   fireEvent.click(browseButtons[pickerIndex])
   const fileName = await screen.findByText(FILE_A)
-  const row = fileName.closest('.scan-file-item')
+  const row = fileName.closest('.explorer-row')
   if (!row) throw new Error('file row not rendered')
   fireEvent.doubleClick(row)
 }

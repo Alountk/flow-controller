@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FileItem, RetentionFile } from '../../shared/types.ts'
 import {
@@ -10,7 +10,7 @@ import {
   queueAdd,
 } from '../../shared/api/files.ts'
 import { filterByName, useBrowse } from '../../shared/hooks/useFilesNavigator.ts'
-import { FileNavigator, type FileNavigatorEntry } from '../../shared/ui/FileNavigator.tsx'
+import { FileExplorer, type FileExplorerEntry } from '../../shared/ui/FileExplorer.tsx'
 import { LibraryRenameDialog } from './LibraryRenameDialog.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../shared/utils/selection.ts'
 import './FileManager.css'
@@ -57,7 +57,6 @@ interface PaneProps {
 function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const queryClient = useQueryClient()
   const initialRoot = roots[index]?.path || roots[0]?.path || '/'
-  const [selectedRoot, setSelectedRoot] = useState(initialRoot)
   const [path, setPath] = useState(initialRoot)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [creating, setCreating] = useState(false)
@@ -72,7 +71,6 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   const [batchBusy, setBatchBusy] = useState(false)
   const [nameFilter, setNameFilter] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const filterRef = useRef<HTMLInputElement>(null)
   const paneRef = useRef<HTMLDivElement>(null)
   const onPathChangeRef = useRef<((index: number, path: string) => void) | null>(null)
   onPathChangeRef.current = onPathChange
@@ -111,7 +109,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
       if (active instanceof HTMLElement && active.closest('input, textarea, select, [contenteditable]')) return
       if (active !== document.body && !paneRef.current?.contains(active)) return
       e.preventDefault()
-      filterRef.current?.focus()
+      paneRef.current?.querySelector<HTMLInputElement>('.explorer-filter')?.focus()
     }
     document.addEventListener('keydown', onShortcut)
     return () => document.removeEventListener('keydown', onShortcut)
@@ -189,20 +187,11 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     setPath(p)
   }
 
-  function handleVolumeChange(newRoot: string) {
-    setSelectedRoot(newRoot)
+  function handleFilterChange(value: string) {
+    setNameFilter(value)
+    // The selection describes rows on screen: a row the filter hides can no
+    // longer be acted on, so it leaves the selection — same rule as navigation.
     setSelected(new Set())
-    setPath(newRoot)
-  }
-
-  function parentDir() {
-    if (path === selectedRoot) return selectedRoot
-    const parts = path.split('/')
-    const parent = parts.slice(0, -1).join('/') || '/'
-    if (parent.length < selectedRoot.length || !parent.startsWith(selectedRoot)) {
-      return selectedRoot
-    }
-    return parent
   }
 
   function handleCreate() {
@@ -210,7 +199,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     createDir.mutate(`${path}/${newName.trim()}`)
   }
 
-  function handleRename(item: FileNavigatorEntry) {
+  function handleRename(item: FileExplorerEntry) {
     if (!renameValue.trim() || renameValue === item.name) {
       setRenaming(null)
       return
@@ -219,12 +208,12 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     rename.mutate({ oldPath: item.path, newPath: `${dir}/${renameValue.trim()}` })
   }
 
-  function handleDelete(item: FileNavigatorEntry) {
+  function handleDelete(item: FileExplorerEntry) {
     if (!confirm(`¿Eliminar ${item.name}?`)) return
     del.mutate(item.path)
   }
 
-  function handleQueue(type: 'copy' | 'move', item: FileNavigatorEntry) {
+  function handleQueue(type: 'copy' | 'move', item: FileExplorerEntry) {
     const dst = `${otherPath}/${item.name}`
     queue.mutate({ type, src: item.path, dst })
   }
@@ -251,7 +240,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
   /** The row's retention chip. Unknown age (`null`: store unreadable) and
    *  files the endpoint did not report render NOTHING — a fabricated age
    *  could justify deleting a file that was never recorded. */
-  function ageChip(item: FileNavigatorEntry) {
+  function ageChip(item: FileExplorerEntry) {
     const info = retentionByPath.get(item.path)
     if (!info) return null
     // Caducado is a STATE, not an error: `--warn`, never `--bad`.
@@ -267,7 +256,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
    *  explains, it never gates. A file no source claims (`null`, both fields
    *  together) renders NOTHING — same honesty rule as the age chip, because
    *  a guessed provenance would be a claim nobody made. */
-  function provenanceChip(item: FileNavigatorEntry) {
+  function provenanceChip(item: FileExplorerEntry) {
     const label = retentionByPath.get(item.path)?.provenance_label
     if (!label) return null
     return <span className="fm-prov">{label}</span>
@@ -288,10 +277,10 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     setSelected((prev) => toggleVisibleSelection(prev, visibleItems, itemKey))
   }
 
-  // The rows below are FileNavigator's; these four slots keep the pane's own
+  // The rows below are FileExplorer's; these four slots keep the pane's own
   // row content (selection, inline rename, path cell, chips, buttons) in JSX.
 
-  function renderRowStart(entry: FileNavigatorEntry) {
+  function renderRowStart(entry: FileExplorerEntry) {
     return (
       <input
         type="checkbox"
@@ -304,7 +293,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     )
   }
 
-  function renderRowName(entry: FileNavigatorEntry) {
+  function renderRowName(entry: FileExplorerEntry) {
     if (renaming !== entry.path) return <span className="fm-name">{entry.name}</span>
     return (
       <input
@@ -322,7 +311,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     )
   }
 
-  function renderFileMeta(entry: FileNavigatorEntry) {
+  function renderFileMeta(entry: FileExplorerEntry) {
     return (
       <>
         {/* Derived from the row's data, never invented — a row with no path
@@ -334,7 +323,7 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     )
   }
 
-  function renderRowActions(entry: FileNavigatorEntry) {
+  function renderRowActions(entry: FileExplorerEntry) {
     return (
       <>
         <button
@@ -456,92 +445,8 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
     void runBatch('delete')
   }
 
-  // Plain options first, then the configured destinations in their own group —
-  // the mounts are what the panes navigate, the labelled roots are places you
-  // jump to. The group only renders when there is something to group.
-  const plainRoots = roots.filter((r) => !r.role || r.role === 'navigation')
-  const destinationRoots = roots.filter((r) => r.role && r.role !== 'navigation')
-
   return (
-    <div className="fm-pane">
-      <div className="fm-toolbar">
-        <select
-          className="fm-volume-select"
-          value={selectedRoot}
-          onChange={(e) => handleVolumeChange(e.target.value)}
-        >
-          {plainRoots.map((r) => (
-            <option key={r.path} value={r.path}>{r.label ?? r.name}</option>
-          ))}
-          {destinationRoots.length > 0 && (
-            <optgroup label="Destinos">
-              {destinationRoots.map((r) => (
-                <option key={r.path} value={r.path}>{r.label ?? r.name}</option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-        <button
-          className="fm-nav-btn"
-          onClick={() => navigateTo(parentDir())}
-          title="Subir"
-          disabled={path === selectedRoot}
-        >
-          ⬆
-        </button>
-        {/* Clickable breadcrumb (S11a): each segment navigates to that
-            ancestor, clamped to the selected volume — never above it. */}
-        <div className="fm-path" title={path}>
-          {path.split('/').filter(Boolean).map((seg, i, segs) => {
-            const target = `/${segs.slice(0, i + 1).join('/')}`
-            const inside =
-              target === selectedRoot || target.startsWith(`${selectedRoot.replace(/\/$/, '')}/`)
-            return (
-              <Fragment key={`${i}-${seg}`}>
-                <span className="fm-crumb-sep">/</span>
-                {inside ? (
-                  <button type="button" className="fm-crumb-btn" onClick={() => navigateTo(target)}>
-                    {seg}
-                  </button>
-                ) : (
-                  <span className="fm-crumb-seg">{seg}</span>
-                )}
-              </Fragment>
-            )
-          })}
-        </div>
-        <input
-          type="search"
-          className="fm-filter"
-          ref={filterRef}
-          placeholder="Buscar carpeta o archivo... [ / ]"
-          aria-label="Filtrar archivos"
-          value={nameFilter}
-          onChange={(e) => {
-            setNameFilter(e.target.value)
-            // The selection describes rows on screen: a row the filter hides
-            // can no longer be acted on, so it leaves the selection — the
-            // same rule navigation already applies.
-            setSelected(new Set())
-          }}
-        />
-        <button className="fm-action-btn" onClick={() => setCreating(true)}>
-          + Carpeta
-        </button>
-        <button className="fm-action-btn" onClick={invalidateBrowse}>
-          ↻
-        </button>
-        {expiredPaths.length > 0 && (
-          <button
-            className="fm-action-btn"
-            onClick={() => setSelected(new Set(expiredPaths))}
-            title="Selecciona solo los que ya han pasado la ventana de retención"
-          >
-            Marcar caducados
-          </button>
-        )}
-      </div>
-
+    <div className="fm-pane" ref={paneRef}>
       {error && <div className="fm-error" onClick={() => setError(null)}>{error}</div>}
       {toast && <div className="fm-toast">{toast}</div>}
 
@@ -560,52 +465,21 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         </div>
       )}
 
-      {visibleItems.length > 0 && (
-        <div className="fm-select-bar">
-          <label className="fm-select-all" htmlFor="fm-select-all">
-            <input
-              type="checkbox"
-              id="fm-select-all"
-              name="fm-select-all"
-              checked={allVisibleSelected}
-              onChange={toggleAllSelection}
-            />
-            <span>Seleccionar todo</span>
-          </label>
-        </div>
-      )}
-
       {selected.size > 0 && (
         <div className="fm-batch-bar">
           <span className="fm-batch-count">
             {selected.size} seleccionado{selected.size === 1 ? '' : 's'}
           </span>
-          <button
-            className="fm-action-btn"
-            onClick={() => runBatch('copy')}
-            disabled={batchBusy}
-          >
+          <button className="fm-action-btn" onClick={() => runBatch('copy')} disabled={batchBusy}>
             Copiar
           </button>
-          <button
-            className="fm-action-btn"
-            onClick={() => runBatch('move')}
-            disabled={batchBusy}
-          >
+          <button className="fm-action-btn" onClick={() => runBatch('move')} disabled={batchBusy}>
             Mover
           </button>
-          <button
-            className="fm-action-btn"
-            onClick={handleBatchDelete}
-            disabled={batchBusy}
-          >
+          <button className="fm-action-btn" onClick={handleBatchDelete} disabled={batchBusy}>
             Eliminar
           </button>
-          <button
-            className="fm-cancel-btn"
-            onClick={() => setSelected(new Set())}
-            disabled={batchBusy}
-          >
+          <button className="fm-cancel-btn" onClick={() => setSelected(new Set())} disabled={batchBusy}>
             Limpiar
           </button>
         </div>
@@ -636,43 +510,53 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="fm-loading">Cargando...</div>
-      ) : items.length === 0 ? (
-        <div className="fm-empty">Directorio vacío</div>
-      ) : visibleItems.length === 0 ? (
-        // Same dim line as an empty directory — a filter that matches
-        // nothing still has to say so instead of leaving a blank pane.
-        <div className="fm-empty">Sin resultados</div>
-      ) : (
-        <>
-          {/* Only the cells that are still COLUMNS: provenance, retention and
-              the date moved under the name, where the name block's width is
-              the row's leftover width instead of a fixed share. */}
-          <div className="fm-head-row">
-            <span>Nombre</span>
-            <span>Tamaño</span>
-            <span>Acciones</span>
-          </div>
-          <FileNavigator
-            variant="region"
-            mode="both"
-            layout="rows"
-            path={path}
-            filter={nameFilter}
-            showIcons
-            showSizes
-            showDates
-            onNavigate={navigateTo}
-            isRowSelected={(entry) => selected.has(entry.path)}
-            onRowClick={(entry) => setSelected(new Set([entry.path]))}
-            renderRowStart={renderRowStart}
-            renderRowName={renderRowName}
-            renderFileMeta={renderFileMeta}
-            renderRowActions={renderRowActions}
-          />
-        </>
-      )}
+      <FileExplorer
+        accept="both"
+        path={path}
+        filter={nameFilter}
+        onFilterChange={handleFilterChange}
+        rootLabel="Raíz"
+        emptyLabel={isLoading ? 'Cargando…' : 'Directorio vacío'}
+        toolbarActions={
+          <>
+            {visibleItems.length > 0 && (
+              <label className="fm-select-all" htmlFor={`fm-select-all-${index}`}>
+                <input
+                  type="checkbox"
+                  id={`fm-select-all-${index}`}
+                  name={`fm-select-all-${index}`}
+                  checked={allVisibleSelected}
+                  onChange={toggleAllSelection}
+                />
+                <span>Seleccionar todo</span>
+              </label>
+            )}
+            <button className="fm-action-btn" onClick={() => setCreating(true)}>
+              + Carpeta
+            </button>
+            <button className="fm-action-btn" onClick={invalidateBrowse} title="Refrescar">
+              ↻
+            </button>
+            {expiredPaths.length > 0 && (
+              <button
+                className="fm-action-btn"
+                onClick={() => setSelected(new Set(expiredPaths))}
+                title="Selecciona solo los que ya han pasado la ventana de retención"
+              >
+                Marcar caducados
+              </button>
+            )}
+          </>
+        }
+        onNavigate={navigateTo}
+        isRowSelected={(entry) => selected.has(entry.path)}
+        onRowClick={(entry) => setSelected(new Set([entry.path]))}
+        renderRowStart={renderRowStart}
+        renderRowName={renderRowName}
+        renderFileMeta={renderFileMeta}
+        renderRowActions={renderRowActions}
+      />
+
       {renameTarget && (
         <LibraryRenameDialog
           path={renameTarget}

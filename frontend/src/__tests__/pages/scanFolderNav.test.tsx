@@ -153,9 +153,9 @@ async function openScanModal() {
   // The volume options come from /api/files/roots; selecting a root that is not
   // in the list yet would be a no-op, leaving the modal with no current path.
   await screen.findByRole('option', { name: 'storage' })
-  const select = document.querySelector('.fm-volume-select') as HTMLSelectElement
+  const select = document.querySelector('.explorer-select') as HTMLSelectElement
   fireEvent.change(select, { target: { value: '/mnt/storage' } })
-  await screen.findByText('/mnt/storage')
+  await screen.findAllByText('/mnt/storage')
 }
 
 /** Opens the modal from the Series · Faltantes episode row (a specific episode). */
@@ -164,9 +164,9 @@ async function openScanModalForSeries() {
   await screen.findByText('Of Ice Men')
   fireEvent.click(screen.getByTitle('Buscar en carpeta'))
   await screen.findByRole('option', { name: 'storage' })
-  const select = document.querySelector('.fm-volume-select') as HTMLSelectElement
+  const select = document.querySelector('.explorer-select') as HTMLSelectElement
   fireEvent.change(select, { target: { value: '/mnt/storage' } })
-  await screen.findByText('/mnt/storage')
+  await screen.findAllByText('/mnt/storage')
 }
 
 /** How many browse listings the backend has been asked for. */
