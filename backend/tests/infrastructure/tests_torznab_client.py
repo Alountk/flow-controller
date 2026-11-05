@@ -18,8 +18,6 @@ The contract encoded below comes from `odd/tasks/indexadores-directos.md` S1:
   `None` for whatever is missing.
 - NO fixed category ids ever (NoNaMe uses 100xxx): `cat=` travels ONLY when
   the caller explicitly passes `cats`.
-- Query shaping mirrors `arr_client._search_query` byte-for-byte (the
-  `arr_client.py:1028-1046` precedent) as a private helper.
 
 Only the HTTP transport is faked (`_StubSession`), so the real function body
 runs — same style as its transport twin `tests_prowlarr_client.py`. Never a
@@ -33,7 +31,7 @@ import pytest
 
 import config
 from infrastructure import torznab_client
-from infrastructure.torznab_client import _search_query, torznab_caps, torznab_search
+from infrastructure.torznab_client import torznab_caps, torznab_search
 from tests._stubs import _StubSession
 
 TORZNAB_URL = "http://indexer.test/torznab/api"
@@ -339,33 +337,3 @@ class TestFailures:
         session = _session("this is not XML at all")
         with pytest.raises(aiohttp.ClientError, match="invalid XML"):
             asyncio.run(torznab_caps(TORZNAB_URL, API_KEY, session=session))
-
-
-# ── query shaping ─────────────────────────────────────────────────────────────
-
-
-class TestSearchQueryShaping:
-    """Mirror of `arr_client._search_query` (`arr_client.py:1028-1046`)."""
-
-    def test_the_query_is_short_enough_for_the_network_to_answer(self):
-        assert _search_query(
-            "Spider-Man.Brand.New.Day.(2026).(Spanish.English.Subs).Micro4K.2160p."
-            "HDR10.DV.x265.10Bits-AC3.by.lagartish.(hispashare.org).mkv"
-        ) == "Spider-Man Brand New Day 2026"
-
-    def test_the_query_cuts_the_quality_tail_and_keeps_the_year(self):
-        assert _search_query("Movie.2021.1080p.BluRay.x264-GRP.mkv") == "Movie 2021"
-        assert _search_query("Some Indie Film Sequel") == "Some Indie Film Sequel"
-
-    def test_the_token_cap_keeps_eight_tokens_including_the_year(self):
-        assert _search_query("One Two Three Four Five Six Seven (2020)") == (
-            "One Two Three Four Five Six Seven 2020"
-        )
-        assert _search_query("One Two Three Four Five Six Seven Eight Nine") == (
-            "One Two Three Four Five Six Seven Eight"
-        )
-        # Mirror quirk kept byte-for-byte: the appended year sits AFTER the
-        # head tokens, so a head that already fills the cap slices it away.
-        assert _search_query("One Two Three Four Five Six Seven Eight (2020)") == (
-            "One Two Three Four Five Six Seven Eight"
-        )

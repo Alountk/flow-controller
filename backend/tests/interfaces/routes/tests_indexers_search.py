@@ -1,7 +1,8 @@
 """`POST /api/indexers/search` — the unified parallel search («indexadores-directos» T4/S4).
 
 One query fans out over the three sources AT ONCE — the enabled Torznab rows
-of the `indexers` table, `prowlarr_search` and `gateways.amule_search` — and
+of the `indexers` table, `prowlarr_search` and the aMule seam (T4b/S2: the
+`amuleapi` REST search when configured, the EC seam as its fallback) — and
 merges them into one normalized shape. What these pin down:
 
 * `{"query", "sources?"}`: empty/whitespace query is 400 like the
@@ -11,8 +12,9 @@ merges them into one normalized shape. What these pin down:
 * one source's failure or absence NEVER discards another's results: the answer
   is `{"ok", "results", "skipped"}` and the failing source is named in
   `skipped` with an honest Spanish reason — «sin indexadores habilitados»,
-  the shared `service_unavailable_reason`, or the exception's short
-  `Tipo: mensaje` text. Never a raw traceback, never an api_key (the probe's
+  the shared `service_unavailable_reason`, the exception's short
+  `Tipo: mensaje` text, or a typed seam error's own Spanish `detail`
+  verbatim (T4b). Never a raw traceback, never an api_key (the probe's
   `_redact` rule reaches the search too);
 * every selected source failing is `ok:false` + a `detail` summary — HTTP 200
   like every other honest refusal in this repo (S3: «200 con ok:false en
@@ -40,11 +42,14 @@ import aiohttp
 import pytest
 from fastapi.testclient import TestClient
 
+import config
 from app import app
 from application import gateways
 from infrastructure import sqlite_history as history
 from infrastructure.amule_ec_client import SearchResult
+from infrastructure.amuleapi_client import AmuleAPIError
 from interfaces.http.routes import indexers as indexers_routes
+from tests._stubs import _StubSession
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -62,6 +67,12 @@ _PROWLARR_SERVICE = {
 #: The shared «no está configurado» reasons the seams raise as `RuntimeError`.
 PROWLARR_REASON = "prowlarr no está configurado (faltan la URL o la API key)"
 AMULE_REASON = "amule no está configurado (faltan la URL o la API key)"
+
+#: The amuleapi seam (T4b): a configured url AND password switch `_search_amule`
+#: to the REST path. Obviously-fake sentinels, like `FAKE_KEY`.
+AMULEAPI_URL = "http://amuleapi.test:4713"
+AMULEAPI_PASSWORD = "AMULEAPI-PASS-SECRETO-9999"
+AMULEAPI_TOKEN = "AMULEAPI-TOKEN-SECRETO-8888"
 
 TITLE = "Артур и минипуты (2006) BDRip"
 HASH32 = "0123456789abcdef0123456789abcdef"
@@ -136,7 +147,11 @@ def _prowlarr(answer=None, error=None, configured=True):
 
 @contextmanager
 def _amule(answer=None, error=None):
-    """The `gateways.amule_search` seam — sync, the route must thread it."""
+    """The EC FALLBACK seam — sync, the route must thread it.
+
+    Also pins amuleapi UNCONFIGURED (empty url AND password): these tests must
+    prove the fallback branch answers, whatever a settings.json may hold.
+    """
     calls = []
 
     def search(query):
@@ -144,6 +159,95 @@ def _amule(answer=None, error=None):
         if error is not None:
             raise error
         return list(answer or [])
+
+    with (
+        patch.object(config, "AMULEAPI_URL", ""),
+        patch.object(config, "AMULEAPI_PASSWORD", ""),
+        patch.object(gateways, "amule_search", search),
+    ):
+        yield calls
+
+
+class _RestSession(_StubSession):
+    """`_StubResponse` carries no `.headers` and the JWT client reads them."""
+
+    def _resolve(self, url):
+        resp = super()._resolve(url)
+        resp.headers = {}
+        return resp
+
+
+def _amuleapi_raw(name=TITLE, **extra):
+    row = {
+        "hash": HASH32,
+        "name": name,
+        "size_bytes": 2_000_000_000,
+        "sources": {"total": 7, "complete": 2},
+    }
+    row.update(extra)
+    return row
+
+
+def _session_opening(session):
+    @asynccontextmanager
+    async def _open(*args, **kwargs):
+        yield session
+
+    return _open
+
+
+@contextmanager
+def _amuleapi_rest():
+    """The configured amuleapi path against REST stubs (T4b): login + one
+    finished search page, and the session records every URL (the :4000
+    tripwire of S2). Enter LAST — it shares the `http_session` name with
+    `_prowlarr`, whose stub ignores the session it is handed.
+    """
+    session = _RestSession({
+        "auth/login": (200, {"token": AMULEAPI_TOKEN}),
+        "/results?limit=": (
+            200,
+            {"results": [_amuleapi_raw()], "progress": {"state": "finished"}},
+        ),
+        "/api/v1/search": (202, {"search_id": 42}),
+    })
+    with (
+        patch.object(config, "AMULEAPI_URL", AMULEAPI_URL),
+        patch.object(config, "AMULEAPI_PASSWORD", AMULEAPI_PASSWORD),
+        patch.object(indexers_routes, "http_session", _session_opening(session)),
+    ):
+        yield session
+
+
+@contextmanager
+def _amuleapi_seam(rows=None, error=None):
+    """The configured amuleapi path with `gateways.amuleapi_search` stubbed —
+    for the typed-error mapping (its Spanish `detail` travels verbatim)."""
+    calls = []
+
+    async def search(session, query):
+        calls.append(query)
+        if error is not None:
+            raise error
+        return list(rows or [])
+
+    with (
+        patch.object(config, "AMULEAPI_URL", AMULEAPI_URL),
+        patch.object(config, "AMULEAPI_PASSWORD", AMULEAPI_PASSWORD),
+        patch.object(gateways, "amuleapi_search", search),
+        patch.object(indexers_routes, "http_session", _fake_http_session),
+    ):
+        yield calls
+
+
+@contextmanager
+def _amule_unused():
+    """The EC seam as a TRIPWIRE: the configured path must never reach it."""
+    calls = []
+
+    def search(query):
+        calls.append(query)
+        return []
 
     with patch.object(gateways, "amule_search", search):
         yield calls
@@ -567,6 +671,131 @@ class TestSkippedReasons:
             }
         ]
         assert [call["url"] for call in stub.calls] == [URL_B]
+
+
+# ── T4b/S2: the amule source moves onto amuleapi (EC stays the fallback) ─────
+
+
+class TestTheAmuleapiSeam:
+    """`_search_amule` prefers the `amuleapi` REST when url AND password are
+    configured, and the fan-out's observable contract does not change."""
+
+    def test_configured_amuleapi_answers_the_amule_rows_in_the_pinned_shape(self, store):
+        """The merged happy path with the amule source coming from the REST
+        stubs — the rows match the pre-existing contract assertions unchanged."""
+        _seed("Indexador A", URL_A)
+        stub = _TorznabStub(
+            answers={
+                URL_A: [
+                    _torznab_raw(
+                        guid="abc123",
+                        link="http://indexer-a.test/get/1.torrent",
+                        size=2_000_000_000,
+                        seeders=42,
+                        infohash="ffff",
+                        published="Mon, 01 Jan 2026",
+                    )
+                ]
+            }
+        )
+        with (
+            _torznab(stub),
+            _prowlarr(answer=[_prowlarr_raw(magnet_url="magnet:?xt=urn:btih:abc123")]),
+            _amule_unused() as ec_calls,
+            _amuleapi_rest() as session,
+        ):
+            resp = _search({"query": "Артур и минимоны"})
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["skipped"] == []
+        assert body["results"] == [
+            {
+                "source": "torznab",
+                "indexer": "Indexador A",
+                "name": TITLE,
+                "size": 2_000_000_000,
+                "seeders": 42,
+                "infohash": "ffff",
+                "link": "http://indexer-a.test/get/1.torrent",
+                "guid": "abc123",
+            },
+            {
+                "source": "amule",
+                "name": TITLE,
+                "size": 2_000_000_000,
+                "sources": 7,
+                "guid": HASH32,
+                "link": f"ed2k://|file|{TITLE}|2000000000|{HASH32}|/",
+            },
+            {
+                "source": "prowlarr",
+                "indexer": "NoNaMe Club",
+                "name": TITLE,
+                "size": 2_000_000_000,
+                "seeders": 42,
+                "guid": "pr-1",
+                "link": "magnet:?xt=urn:btih:abc123",
+            },
+        ]
+        assert ec_calls == [], "la fila amule viene de la REST, no del EC"
+        assert session.calls
+        assert FAKE_KEY not in resp.text
+
+    def test_unconfigured_amuleapi_still_answers_from_the_ec_seam(self, store):
+        """The fallback is ASSERTED, not implied: with empty url/password the
+        EC seam receives the query and its rows answer byte-identically."""
+        with _amule(answer=[_amule_raw()]) as amule_calls:
+            resp = _search({"query": "Артур", "sources": ["amule"]})
+
+        assert resp.status_code == 200, resp.text
+        assert amule_calls == ["Артур"]
+        assert resp.json()["results"] == [
+            {
+                "source": "amule",
+                "name": TITLE,
+                "size": 2_000_000_000,
+                "sources": 7,
+                "guid": HASH32,
+                "link": f"ed2k://|file|{TITLE}|2000000000|{HASH32}|/",
+            }
+        ]
+
+    def test_a_failing_amuleapi_skips_amule_with_the_typed_detail_and_keeps_the_others(
+        self, store
+    ):
+        _seed("Indexador A", URL_A)
+        stub = _TorznabStub(
+            answers={URL_A: [_torznab_raw(guid="t-1", size=1, title="Arthur 2006")]}
+        )
+        detail = "amuleapi (http://amuleapi.test:4713): la búsqueda 42 no terminó en 60 s"
+        with (
+            _torznab(stub),
+            _prowlarr(answer=[_prowlarr_raw(title="Arthur 2006")]),
+            _amule_unused(),
+            _amuleapi_seam(error=AmuleAPIError(None, "timeout", detail)),
+        ):
+            resp = _search({"query": "Arthur"})
+
+        body = resp.json()
+        assert body["ok"] is True
+        assert [row["source"] for row in body["results"]] == ["torznab", "prowlarr"]
+        # The typed error's own Spanish detail travels VERBATIM — one source's
+        # failure never discards the others.
+        assert body["skipped"] == [{"source": "amule", "reason": detail}]
+
+    def test_the_configured_search_never_touches_the_amutorrent_port(self, store):
+        """S2: «Ninguna llamada activa pasa por aMuTorrent (:4000)» — every
+        URL the search reaches is amuleapi's, and the EC seam is never asked."""
+        with _amule_unused() as ec_calls, _amuleapi_rest() as session:
+            resp = _search({"query": "Артур", "sources": ["amule"]})
+
+        assert resp.json()["results"], "la REST responde"
+        urls = [url for url, _ in session.calls]
+        assert urls and all(AMULEAPI_URL in url for url in urls)
+        assert [url for url in urls if ":4000" in url] == []
+        assert ec_calls == []
 
 
 # ── every source failing ─────────────────────────────────────────────────────
