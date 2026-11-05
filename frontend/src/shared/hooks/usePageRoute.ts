@@ -41,6 +41,16 @@ function resolvePage(): Page {
   return PATH_PAGES[path] || 'dashboard'
 }
 
+/**
+ * A page opening ANOTHER page with a parameter. `setPage` lives in App and
+ * pushState fires no event by itself, so this emits the popstate the route
+ * hook listens to — the URL and the rendered page stay in agreement.
+ */
+export function navigateTo(page: Page, hash?: string): void {
+  history.pushState(null, '', PAGE_PATHS[page] + (hash ?? ''))
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
 export function usePageRoute(): [Page, (page: Page) => void] {
   const [page, setPageState] = useState<Page>(resolvePage)
 

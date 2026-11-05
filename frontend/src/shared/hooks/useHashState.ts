@@ -18,6 +18,12 @@ function buildHash(base: string, params: Record<string, string>): string {
   return qs ? `#/${base}?${qs}` : `#/${base}`
 }
 
+/** One value out of the current hash, without subscribing to it: for a seed
+ *  that is read once at mount (Archivos' `path`), not for live state. */
+export function readHashParam(key: string): string {
+  return parseHash()[key] ?? ''
+}
+
 export function useHashState<T extends string>(
   section: string,
   key: string,

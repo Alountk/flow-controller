@@ -251,7 +251,17 @@
   color: var(--warn, #d97706);
 }
 
-.renombrar-folder {
+/* Only the BUTTON gets the control resets: the Candidatos row keeps the same
+   class on a plain span, and a pointer over non-clickable text is a lie. */
+button.renombrar-folder {
+  /* Same look as the span it was: a route-shaped control that reads as text. */
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
   font-family: var(--mono, monospace);
   font-size: 10.5px;
   color: var(--text-dim);
