@@ -681,6 +681,7 @@ export function Settings() {
         </div>
         <div className="settings-group">
           <h4>aMuTorrent</h4>
+          <p className="settings-hint">Ruta de rollback (AMULE_EC_DIRECT=0): el camino activo va por EC directo y búsqueda vía aMule API.</p>
           <Field label="URL" value={form.services.amutorrent.url} onChange={(v) => update('services.amutorrent.url', v)} restart={isRestarting('services.amutorrent.url')} placeholder="http://localhost:4000" />
           <Field label="API Key" value={form.services.amutorrent.api_key} onChange={(v) => update('services.amutorrent.api_key', v)} restart={isRestarting('services.amutorrent.api_key')} placeholder="Tu API key" type="password" />
           <Field label="Usuario" value={form.services.amutorrent.user} onChange={(v) => update('services.amutorrent.user', v)} restart={isRestarting('services.amutorrent.user')} />

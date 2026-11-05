@@ -237,6 +237,23 @@ describe('service connection tester', () => {
     })
   })
 
+  it('the aMuTorrent card carries the rollback hint and the aMule API card is unaffected', async () => {
+    // amule-32 T5/S2: la tarjeta aMuTorrent es sólo el rollback — la pista lo
+    // dice bajo el <h4>, y la tarjeta aMule API (T2) sigue intacta.
+    mockFetch([])
+    renderSettings()
+
+    const card = (await screen.findByRole('heading', { name: 'aMuTorrent' })).closest(
+      '.settings-group',
+    ) as HTMLElement
+    expect(within(card).getByText(/Ruta de rollback/)).toHaveTextContent('AMULE_EC_DIRECT=0')
+
+    const apiCard = screen.getByRole('heading', { name: 'aMule API' }).closest(
+      '.settings-group',
+    ) as HTMLElement
+    expect(within(apiCard).getByRole('button', { name: 'Probar conexión' })).toBeInTheDocument()
+  })
+
   it('marks each healthy service so a mixed result is readable', async () => {
     mockFetch([
       result({ key: 'radarr', ok: true }),

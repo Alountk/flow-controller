@@ -1,6 +1,6 @@
 # Flow Controller
 
-Panel de control para el flujo de descargas **Radarr → aMule → Sonarr**: desde esta feature las descargas hablan **directo con aMule por EC** (`AMULE_URL`/`AMULE_EC_PORT`/`AMULE_EC_PASSWORD`), el tramo magnet/http va **directo a qBittorrent** con un cliente nativo propio (servicio `qbit` en Configuración → Servicios, login+SID, sin intermediario) y el puente aMuTorrent queda como rollback (`AMULE_EC_DIRECT=0`) y para el tramo ed2k hacia aMule.
+Panel de control para el flujo de descargas **Radarr → aMule → Sonarr**: desde esta feature las descargas hablan **directo con aMule por EC** (`AMULE_URL`/`AMULE_EC_PORT`/`AMULE_EC_PASSWORD`), el tramo ed2k va por **EC directo** con la búsqueda a través de **aMule API** (con el EC como fallback), el tramo magnet/http va **directo a qBittorrent** con un cliente nativo propio (servicio `qbit` en Configuración → Servicios, login+SID, sin intermediario) y el puente aMuTorrent queda **sólo** como rollback (`AMULE_EC_DIRECT=0`).
 Detecta dónde se rompe el pipeline y ofrece acciones de remediación directas
 desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 
@@ -14,11 +14,19 @@ desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 - **Cliente qBittorrent nativo**: propio y sin dependencias nuevas (sólo aiohttp) — login+SID contra `POST /api/v2/auth/login`, éxito honesto (`200` y cuerpo `Ok.`), servicio `qbit` en Configuración → Servicios
 - **Control aMuTorrent**: WebSocket nativo (`ws://host:4000/ws`) — ruta de rollback (`AMULE_EC_DIRECT=0`)
 
+### aMule API (amuleapi)
+
+REST oficial de aMule 3.x en `:4713`, configurado en Configuración → Servicios (URL
+y contraseña de admin). «Probar conexiones» lo sondea con `GET /api/v1/version` (200
+sin credencial) y, cuando está configurado, la búsqueda ed2k pasa por él, con el EC
+como fallback. El runbook de subida a aMule 3.2.0 + `amuleapi` está en
+`odd/tasks/amule-32-control.md`.
+
 ## Requisitos
 
 - Python 3.10+
 - Node.js 18+
-- Radarr, Sonarr y aMuTorrent corriendo y accesibles
+- Radarr, Sonarr y aMuTorrent corriendo y accesibles (aMuTorrent sólo para el rollback `AMULE_EC_DIRECT=0`)
 - qBittorrent accesible para el tramo magnet/http nativo (opcional: sin configurar, esas filas responden un rechazo honesto)
 
 ## Instalación
@@ -507,7 +515,7 @@ Detalles:
 
 ### 🔌 #24 — Probar las conexiones desde Configuración
 
-**Hecho ✅** — botón en Configuración que prueba Radarr, Sonarr, aMuTorrent y **qBittorrent**
+**Hecho ✅** — botón en Configuración que prueba Radarr, Sonarr, Prowlarr, aMuTorrent, **aMule API** y **qBittorrent**
 (servicio nativo `qbit`, sonda de login — Bearer no vale en el build real) y dice **qué**
 falla en cada uno.
 
