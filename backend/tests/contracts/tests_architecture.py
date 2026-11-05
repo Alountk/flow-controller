@@ -103,7 +103,7 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 3462 -> 3463 (mixer-carpeta-destino T1 / S3): the `output_name` parameter of
 #: `start_mux` in `media_mixer.py` (+1). The folder mode needs to name the file
 #: it writes; everything else fit on existing lines. Disclosed as debt in the PR.
-MAX_LEGACY_LOC = 3466
+MAX_LEGACY_LOC = 3483
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

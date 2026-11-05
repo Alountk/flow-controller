@@ -22,6 +22,7 @@ const settings = {
     radarr: { url: 'http://localhost:7878', api_key: 'k' },
     sonarr: { url: 'http://localhost:8989', api_key: 'k' },
     amutorrent: { url: 'http://localhost:4000', api_key: 'k', user: 'admin', password: 'p' },
+    amuleapi: { url: 'http://localhost:4713', password: 's' },
     qbit: { url: 'http://localhost:8080', user: 'admin', password: 'p' },
     opensubtitles: { api_key: '' },
     amule: { url: 'http://192.168.1.10', ec_port: '4712', ec_password: '****abcd' },
@@ -62,8 +63,9 @@ const services = {
     { key: 'sonarr', kind: 'arr', url: 'http://localhost:8989', configured: true },
     { key: 'prowlarr', kind: 'prowlarr', url: '', configured: false },
     { key: 'amule', kind: 'amule', url: 'http://192.168.1.10', configured: true },
+    { key: 'amuleapi', kind: 'amuleapi', url: 'http://localhost:4713', configured: true },
   ],
-  configured: ['radarr', 'sonarr', 'amule'],
+  configured: ['radarr', 'sonarr', 'amule', 'amuleapi'],
 }
 
 const baseRoutes: Record<string, RouteHandler> = {
@@ -129,6 +131,17 @@ describe('tabla de «Estado de las conexiones» (T4/S2, S4)', () => {
     const amule = await rowOf('aMule')
     expect(amule).toHaveTextContent('Sin sonda')
     expect(within(amule).getByTitle(/EC \(TCP\)/)).toBeInTheDocument()
+  })
+
+  it('renders the aMule API row through the same HTTP-probed machinery', async () => {
+    mockFetch(baseRoutes)
+    renderSettings()
+
+    // amuleapi is HTTP-probed: it must show the generic states, never «Sin sonda».
+    const row = await rowOf('aMule API')
+    expect(row).toHaveTextContent('Sin comprobar')
+    expect(row).not.toHaveTextContent('Sin sonda')
+    expect(row).toHaveTextContent('http://localhost:4713')
   })
 
   it('fills the same row with the status and the measured latency after probing', async () => {

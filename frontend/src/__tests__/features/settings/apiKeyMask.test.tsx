@@ -101,7 +101,8 @@ describe('settings API key masking', () => {
     // una cuarta «URL» (3 → 4); misma aserción por campo, conteo actualizado.
     const general = await screen.findByRole('tabpanel', { name: 'General' })
     const urls = await within(general).findAllByLabelText('URL')
-    expect(urls).toHaveLength(4)
+    // amule-32 T2 adds the aMule API card: one more URL field (4 → 5).
+    expect(urls).toHaveLength(5)
     for (const url of urls) {
       expect(url).toHaveAttribute('type', 'text')
     }

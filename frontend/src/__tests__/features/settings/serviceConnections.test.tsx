@@ -15,6 +15,7 @@ const settings = {
     radarr: { url: 'http://localhost:7878', api_key: 'k' },
     sonarr: { url: 'http://localhost:8989', api_key: 'k' },
     amutorrent: { url: 'http://localhost:4000', api_key: 'k', user: 'admin', password: 'p' },
+    amuleapi: { url: 'http://localhost:4713', password: 'clave-amule' },
     qbit: { url: 'http://localhost:8080', user: 'admin', password: 'p' },
     opensubtitles: { api_key: '' },
   },
@@ -207,6 +208,33 @@ describe('service connection tester', () => {
     await waitFor(() =>
       expect(screen.getByText(/No se pudo completar la comprobación/)).toBeInTheDocument(),
     )
+  })
+
+  it('probes amuleapi with its url and password', async () => {
+    // amule-32 T2: the aMule API card probes the official REST daemon of
+    // aMule 3.x, anonymous version check — password travels with the URL.
+    const fn = mockFetch([
+      result({ key: 'amuleapi', kind: 'amuleapi', url: 'http://localhost:4713', detail: 'Conectado (3.2.0)' }),
+    ])
+    renderSettings()
+
+    const card = (await screen.findByRole('heading', { name: 'aMule API' })).closest(
+      '.settings-group',
+    ) as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: 'Probar conexión' }))
+
+    await waitFor(() => {
+      const post = fn.mock.calls.find(
+        ([input, init]) =>
+          String(input).includes('/api/services/test') && init?.method === 'POST',
+      )
+      expect(post).toBeTruthy()
+      expect(JSON.parse(String(post![1]?.body))).toEqual({
+        service: 'amuleapi',
+        url: 'http://localhost:4713',
+        password: 'clave-amule',
+      })
+    })
   })
 
   it('marks each healthy service so a mixed result is readable', async () => {

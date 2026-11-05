@@ -197,7 +197,14 @@ async def _probe_service_connection(session: aiohttp.ClientSession, service: dic
         )
         return {**result, "version": "", **probed}
 
-    if service["kind"] == "qbit":
+    if service["kind"] == "amuleapi":
+        # GET /api/v1/version: identidad pública por contrato (auth opcional,
+        # 200 sin credencial y fuera del rate limit de 401), así la sonda
+        # NUNCA manda la contraseña; `daemon_version` es el amuled que amuleapi
+        # ve por EC — vacío significa «REST viva, núcleo no cuadrado».
+        endpoint = f"{service['url']}/api/v1/version"
+        headers = {}
+    elif service["kind"] == "qbit":
         endpoint = f"{service['url']}/api/v2/app/version"
         headers = qbit_headers(service["api_key"])
     elif service["kind"] == "prowlarr":
@@ -218,6 +225,10 @@ async def _probe_service_connection(session: aiohttp.ClientSession, service: dic
 
             if service["kind"] == "qbit":
                 version = (await resp.text()).strip()
+            elif service["kind"] == "amuleapi":
+                # Prioridad al amuled conectado; amuleapi_version es el respaldo.
+                data = await resp.json(content_type=None)
+                version = data.get("daemon_version") or data.get("amuleapi_version", "")
             else:
                 data = await resp.json(content_type=None)
                 # Prowlarr answers {"current": "v1"} on /api; arrs answer "version".

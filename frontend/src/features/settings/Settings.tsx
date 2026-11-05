@@ -49,6 +49,7 @@ const SERVICE_NAME: Record<string, string> = {
   sonarr: 'Sonarr',
   prowlarr: 'Prowlarr',
   amutorrent: 'aMuTorrent',
+  amuleapi: 'aMule API',
   qbit: 'qBittorrent',
   amule: 'aMule',
   opensubtitles: 'OpenSubtitles',
@@ -261,6 +262,10 @@ function withAmuleEc(data: Settings): SettingsForm {
       enabled: ntfy?.enabled ?? false,
     },
   }
+  // Same tolerance for amuleapi: payloads written before amule-32 lack the
+  // group, and the card reads `services.amuleapi.url` without guards.
+  const amuleapi = next.services.amuleapi
+  next.services.amuleapi = { url: amuleapi?.url ?? '', password: amuleapi?.password ?? '' }
   return next
 }
 
@@ -688,6 +693,20 @@ export function Settings() {
                 api_key: form.services.amutorrent.api_key,
                 user: form.services.amutorrent.user,
                 password: form.services.amutorrent.password,
+              }}
+            />
+          </div>
+        </div>
+        <div className="settings-group">
+          <h4>aMule API</h4>
+          <Field label="URL" value={form.services.amuleapi.url} onChange={(v) => update('services.amuleapi.url', v)} restart={isRestarting('services.amuleapi.url')} placeholder="http://localhost:4713" />
+          <Field label="Contraseña" value={form.services.amuleapi.password} onChange={(v) => update('services.amuleapi.password', v)} restart={isRestarting('services.amuleapi.password')} type="password" />
+          <div className="settings-group-actions">
+            <ServiceProbeButton
+              service="amuleapi"
+              values={{
+                url: form.services.amuleapi.url,
+                password: form.services.amuleapi.password,
               }}
             />
           </div>
