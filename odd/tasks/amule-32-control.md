@@ -40,9 +40,9 @@ tocar lo que queramos». Decisión (L2): «Plan completo (recomendado)».
 
 | ID  | S#       | Ruta / superficie                                                  | Commit |
 |-----|----------|--------------------------------------------------------------------|--------|
-| T1  | S1/S5    | Runbook de subida a 3.2.0 + amuleapi (este doc; README en T5)       |        |
-| T2  | S1       | Servicio `amuleapi` en settings + salud/versión (Conexiones/pestaña aMule) |      |
-| T3  | S2       | `infrastructure/amuleapi_client.py`: login JWT, 401-terminal, errores tipados |   |
+| T1  | S1/S5    | Runbook de subida a 3.2.0 + amuleapi (este doc; README en T5)       | 8244826 |
+| T2  | S1       | Servicio `amuleapi` en settings + salud/versión (Conexiones/pestaña aMule) | 1a00a41 |
+| T3  | S2       | `infrastructure/amuleapi_client.py`: login JWT, 401-terminal, errores tipados | d1c33e0 |
 | T4  | S2       | Búsqueda ed2k vía amuleapi (sustituye `amutorrent_search_link`) + categorías |   |
 | T5  | S2/S5    | aMuTorrent fuera del camino activo: flags/Settings/README + frontend |        |
 | T6  | S3       | Gracia sólo para descargas que el arr conoce (`domain/policy`) + `tests_amule_mover_loop` en verde |  |
@@ -117,3 +117,11 @@ Pasos de subida (ejecución asistida: requiere el host/Portainer del usuario):
   `backend/tests/legacy/tests_amule_mover_loop.py`, sin commitear: entra en T6).
 - **L4 (límite)**: P1 se ejecuta en el host del usuario; este repo aporta
   runbook (T1), servicio+salud (T2) y el resto del código.
+- **L5 (frontera de rebanada)**: rebanada 1 = T1+T2, 423 líneas en 2 commits
+  (`8244826` doc, `1a00a41` código) — pasado el presupuesto de ~400: entrega
+  por **PR único con disclosure** (estrategia establecida del usuario para
+  features); la frontera queda anotada aquí antes de la siguiente rebanada.
+- **L6 (frontera)**: rebanada 2 = T3 (cliente JWT amuleapi, 513 líneas: módulo
+  222 + tests 291, RED por test observado, contratos/pyflakes/vulture limpios,
+  backend completo 2164). Misma estrategia: PR único con disclosure; el
+  contador de rama queda en ~936 líneas.
