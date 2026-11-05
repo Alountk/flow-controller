@@ -133,3 +133,9 @@ Pasos de subida (ejecución asistida: requiere el host/Portainer del usuario):
   el shaping medido «Nombre Año» (30 s vs >40 s) queda en el docstring del
   módulo. Rebanada 3 = T4a+T4b (~1400 líneas de rama a la altura de
   `c1380f8`); estrategia invariable: PR único con disclosure.
+- **L8 (límite interpretado de S3)**: «el primer barrido disponible las mueve»
+  se cumplió **salvo la guarda D2**: si el destino es la biblioteca del arr y
+  la sonda  no puede responder, se sigue esperando (nunca copiar
+  a ciegas a la biblioteca — eso CREATE duplicados, el dolor del usuario). El
+  destino4K/3D fuera de raíz no sondea y se mueve siempre. Frontera pinneada
+  por `test_a_direct_download_still_refuses_an_unknown_library_duplicate`.
