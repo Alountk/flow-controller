@@ -36,6 +36,7 @@ def _grace_gate(
     grace_seconds: float,
     arr_has_file: bool | None,
     has_destination: bool = False,
+    arr_untracked: bool = False,
 ) -> dict:
     """Decide inside the grace window.
 
@@ -61,7 +62,30 @@ def _grace_gate(
     already had says nothing about that. Reporting `None` as "could not check"
     would keep a download hostage to a probe failure that no longer threatens a
     duplicate.
+
+    `arr_untracked` (S3) is a download added straight to the client: the arr
+    never saw it, so "it may import it alone" is impossible and no window may
+    be waited out or mentioned. Only the duplicate question survives, answered
+    exactly as after an elapsed window.
     """
+    if arr_untracked:
+        if has_destination:
+            return {
+                "decision": COPY,
+                "reason": (
+                    "descarga directa que el arr nunca vio: el destino queda "
+                    "fuera de la biblioteca, no se duplica nada"
+                ),
+            }
+        if arr_has_file is None:
+            return {
+                "decision": WAIT,
+                "reason": "no se pudo comprobar si el arr ya tiene el fichero",
+            }
+        return {
+            "decision": COPY,
+            "reason": "descarga directa que el arr nunca vio: se mueve sin esperar",
+        }
     if since is None:
         return {
             "decision": WAIT,
@@ -109,6 +133,7 @@ def decide_copy(
     is_own_grab: bool = True,
     arr_has_file: bool | None = None,
     has_destination: bool = False,
+    arr_untracked: bool = False,
 ) -> dict:
     """Return {"decision": COPY|WAIT|SKIP, "reason": str}.
 
@@ -120,6 +145,10 @@ def decide_copy(
     which must never duplicate a file the arr already holds — and a copy
     **beside** it. The caller only passes `True` when that folder is provably
     outside every arr root; see `auto_copy_driver._foreign_destinations`.
+
+    `arr_untracked` marks a B-10 direct add: the arr never saw the download, so
+    the grace window is unreachable for it (S3) — the gate degrades to the
+    duplicate question alone.
     """
     if is_own_grab is False:
         return {"decision": SKIP, "reason": "no es un grab lanzado desde la app"}
@@ -146,9 +175,13 @@ def decide_copy(
         # No warning: `importPending` is ALSO the healthy transient state right
         # before the arr imports. It is not proof the arr is stuck, so wait the
         # window out rather than racing it (D2).
-        return _grace_gate(now, since, grace_seconds, arr_has_file, has_destination)
+        return _grace_gate(
+            now, since, grace_seconds, arr_has_file, has_destination, arr_untracked
+        )
     if stage == "downloaded":
-        return _grace_gate(now, since, grace_seconds, arr_has_file, has_destination)
+        return _grace_gate(
+            now, since, grace_seconds, arr_has_file, has_destination, arr_untracked
+        )
     return {"decision": SKIP, "reason": "estado desconocido: no se actúa"}
 
 
