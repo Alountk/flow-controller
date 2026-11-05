@@ -44,7 +44,7 @@ tocar lo que queramos». Decisión (L2): «Plan completo (recomendado)».
 | T2  | S1       | Servicio `amuleapi` en settings + salud/versión (Conexiones/pestaña aMule) | 1a00a41 |
 | T3  | S2       | `infrastructure/amuleapi_client.py`: login JWT, 401-terminal, errores tipados | 41c8053 |
 | T4  | S2       | Búsqueda ed2k vía amuleapi (sustituye `amutorrent_search_link`) + categorías | 651b8ec + c1380f8 |
-| T5  | S2/S5    | aMuTorrent fuera del camino activo: flags/Settings/README + frontend |        |
+| T5  | S2/S5    | aMuTorrent fuera del camino activo: flags/Settings/README + frontend | e44e3e1 |
 | T6  | S3       | Gracia sólo para descargas que el arr conoce (`domain/policy`) + `tests_amule_mover_loop` en verde |  |
 | T7  | S4       | Barrido automático: scheduler + setting + respeta modo seguro       |        |
 | T8  | S1-S5    | Suites completas, evidencia en este doc y cierre                    |        |
