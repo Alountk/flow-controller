@@ -108,7 +108,7 @@ Radarr falso que anota los comandos.
 - Pantalla: chips `Candidatos 1` / `Renombrados 2`, la fila imposible con
   `Revisar` y su motivo, y el registro con `ANTES`, `CUÁNDO` e insignias.
 
-### L5 — la limitación de L4 se pagó (2026-11-05)
+### L5 — la limitación de L4 se pagó (2026-11-05, `8428ede`)
 
 `Abrir carpeta` (S3) navega de verdad. La carpeta viaja en la URL
 (`#/archivos?path=…`), `navigateTo` empuja la ruta, el explorador abre **en esa

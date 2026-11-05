@@ -141,7 +141,7 @@ Backend contra `/private/tmp` (una raíz), `npm run build` y navegador:
 - Duplicados: **1** barra de ruta compartida (`.explorer-bar`) y ninguna barra
   propia.
 
-### L5 — el explorador acepta carpeta de arranque (2026-11-05)
+### L5 — el explorador acepta carpeta de arranque (2026-11-05, `8428ede`)
 
 La deuda que L2/L3 dejaron escrita («`Abrir carpeta` en Renombrados exige que
 Archivos acepte carpeta de arranque por URL») está pagada, y el mecanismo es
