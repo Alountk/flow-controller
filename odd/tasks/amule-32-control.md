@@ -43,7 +43,7 @@ tocar lo que queramos». Decisión (L2): «Plan completo (recomendado)».
 | T1  | S1/S5    | Runbook de subida a 3.2.0 + amuleapi (este doc; README en T5)       | 8244826 |
 | T2  | S1       | Servicio `amuleapi` en settings + salud/versión (Conexiones/pestaña aMule) | 1a00a41 |
 | T3  | S2       | `infrastructure/amuleapi_client.py`: login JWT, 401-terminal, errores tipados | 41c8053 |
-| T4  | S2       | Búsqueda ed2k vía amuleapi (sustituye `amutorrent_search_link`) + categorías |   |
+| T4  | S2       | Búsqueda ed2k vía amuleapi (sustituye `amutorrent_search_link`) + categorías | 651b8ec + c1380f8 |
 | T5  | S2/S5    | aMuTorrent fuera del camino activo: flags/Settings/README + frontend |        |
 | T6  | S3       | Gracia sólo para descargas que el arr conoce (`domain/policy`) + `tests_amule_mover_loop` en verde |  |
 | T7  | S4       | Barrido automático: scheduler + setting + respeta modo seguro       |        |
@@ -125,3 +125,11 @@ Pasos de subida (ejecución asistida: requiere el host/Portainer del usuario):
   222 + tests 291, RED por test observado, contratos/pyflakes/vulture limpios,
   backend completo 2164). Misma estrategia: PR único con disclosure; el
   contador de rama queda en ~936 líneas.
+- **L7 (decisión + frontera)**: el swap de T4b **mantiene EC como fallback**
+  cuando `services.amuleapi` no está configurado (búsqueda sigue funcionando
+  antes de P1; la REST manda en cuanto haya url+contraseña) — así lo exige el
+  orden P1-después-del-código. Borrado también el `torznab_client._search_query`
+  dormiente (nunca cableado; vulture lo enmascaraba por referencia homónima):
+  el shaping medido «Nombre Año» (30 s vs >40 s) queda en el docstring del
+  módulo. Rebanada 3 = T4a+T4b (~1400 líneas de rama a la altura de
+  `c1380f8`); estrategia invariable: PR único con disclosure.
