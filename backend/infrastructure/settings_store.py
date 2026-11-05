@@ -53,6 +53,8 @@ DEFAULTS: dict[str, Any] = {
         "retry_delay": 2,
         "request_timeout": 5,
         "import_timeout": 40,
+        # Barrido automático (S4/T7): segundos entre barridos; 0 = interruptor off.
+        "sweep": 600,
     },
     # Avisos al móvil (C-01). Todo vacío a propósito: sin URL o sin topic el
     # canal queda «No configurado» y no se envía nada — el criterio de

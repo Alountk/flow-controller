@@ -184,7 +184,7 @@ def rebuild() -> None:
     global RADARR_API_KEY, SONARR_API_KEY, PROWLARR_API_KEY, AMUTORRENT_API_KEY
     global AMUTORRENT_USER, AMUTORRENT_PASSWORD, QBIT_URL, QBIT_USER, QBIT_PASSWORD
     global CHECK_INTERVAL, MAX_RETRIES, RETRY_DELAY, REQUEST_TIMEOUT
-    global IMPORT_POLL_TIMEOUT, TRACE_LIMIT
+    global IMPORT_POLL_TIMEOUT, SWEEP_INTERVAL, TRACE_LIMIT
     global SAFE_MODE, DEVELOPER
     global FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT
     global RETENTION_AMULE_DAYS
@@ -225,6 +225,8 @@ def rebuild() -> None:
     RETRY_DELAY = float(get_setting("intervals", "retry_delay", default=2))
     REQUEST_TIMEOUT = float(get_setting("intervals", "request_timeout", default=5))
     IMPORT_POLL_TIMEOUT = int(get_setting("intervals", "import_timeout", default=40))
+    # 0 = el interruptor del barrido automático apagado; el bucle lo lee en cada tick.
+    SWEEP_INTERVAL = int(get_setting("intervals", "sweep", default=600))
 
     TRACE_LIMIT = int(get_setting("tracing", "limit", default=25))
     RETENTION_AMULE_DAYS = int(get_setting("retention", "amule_days", default=7))

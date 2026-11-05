@@ -12,15 +12,21 @@ monkeypatches ``list_own_grabs``, ``arr_has_file``, ``do_action`` and friends on
 THIS module, and a reference captured at import would hand the sweep the
 unpatched originals while the tests went on passing against a copy.
 
-The trigger is deliberate too: an explicit ``POST /api/auto-copy/sweep`` (see
-``routes/auto_copy.py``), never a background loop and never a side effect of the
-``GET /api/trace`` the UI polls every 15 s. Copying into the library is a
-mutation, so it must be an explicit action: hooking the polled GET would turn a
-read into a write and make two open tabs two sweeps. Unattended operation is the
-user's external timer (cron/systemd) calling that endpoint.
+The trigger is deliberate too: an explicit ``sweep()`` — from the manual
+``POST /api/auto-copy/sweep`` (see ``routes/auto_copy.py``) or from
+``sweep_loop`` — never a side effect of the ``GET /api/trace`` the UI polls
+every 15 s. Copying into the library is a mutation, so it must be an explicit
+action: hooking the polled GET would turn a read into a write and make two open
+tabs two sweeps. ``sweep_loop`` is the unattended path S4 asked for (T7a):
+``intervals.sweep`` seconds between ticks — 0 is the off switch — and
+``safe_mode`` read at every tick, so a save applies without a restart.
 """
 
+import asyncio
 import logging
+import time
+
+import config
 
 from domain.policy import (
     COPY,
@@ -52,6 +58,7 @@ from infrastructure.sqlite_history import (
     mark_auto_copy,
     note_auto_copy_seen,
 )
+from state import http_session
 from traces import build_traces
 
 __all__ = [
@@ -67,8 +74,12 @@ __all__ = [
     "auto_copy_key",
     "decide_copy",
     "find_own_grab",
+    "last_sweep",
     "matches_own_grab",
+    "record_sweep",
     "sweep",
+    "sweep_loop",
+    "sweep_tick",
 ]
 
 log = logging.getLogger("flow-controller")
@@ -191,3 +202,74 @@ async def sweep(
     return await _build().run(
         session, now=now, safe_mode=safe_mode, grace_seconds=grace_seconds
     )
+
+
+# ── Last result (T7a / S4): «su resultado aparece en Seguimiento» ─────────────
+
+#: En memoria a propósito: el resumen del POST manual nunca sobrevivió a un
+#: reinicio y este tampoco — paridad con la vista manual, no durabilidad nueva.
+_last_sweep: dict | None = None
+
+
+def record_sweep(summary: dict) -> None:
+    """Remember what a sweep trigger returned, timestamped for Seguimiento.
+
+    Both triggers record — the manual POST and ``sweep_tick`` — so the GET
+    answers «the last sweep's result» whichever fired it. A ``running=True``
+    refusal is not a sweep's result: storing it would replace the last real one
+    with «en curso» the moment two triggers overlap.
+    """
+    global _last_sweep
+    if summary.get("running"):
+        return
+    _last_sweep = {"swept_at": time.time(), **summary}
+
+
+def last_sweep() -> dict:
+    """The ``GET /api/auto-copy/last`` body: the stored result, or «aún no».
+
+    Before any sweep the answer carries no counts at all — zeroes would claim a
+    sweep ran and found nothing.
+    """
+    if _last_sweep is None:
+        return {"swept_at": None, "detail": "aún no se ha ejecutado ningún barrido"}
+    return _last_sweep
+
+
+# ── The scheduler (T7a / S4): «el barrido se dispara solo» ────────────────────
+
+#: How often the off loop (0) re-reads the knob: idle, but often enough that
+#: turning the sweep back on applies without a restart.
+_OFF_POLL_SECONDS = 30.0
+
+
+async def sweep_tick() -> dict | None:
+    """One scheduler cycle: at most one sweep, never one on top of a running one.
+
+    Reads ``SWEEP_INTERVAL`` and ``SAFE_MODE`` at call time (the ``config.X``
+    rule), so a save reaches the running loop. An in-flight sweep is skipped and
+    logged — no queue, no error. Answers the recorded summary, or None when the
+    switch is off or the tick was skipped.
+    """
+    if config.SWEEP_INTERVAL <= 0:
+        return None
+    async with http_session() as session:
+        summary = await sweep(session, safe_mode=config.SAFE_MODE)
+    if summary.get("running"):
+        log.info("barrido automático: ya hay un barrido en curso — se salta este tick")
+        return None
+    record_sweep(summary)
+    return summary
+
+
+async def sweep_loop() -> None:
+    """The periodic task — ``amule_watchdog.watchdog_loop``'s resilience shape."""
+    while True:
+        try:
+            await sweep_tick()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — un tick malo no mata el bucle
+            log.warning("barrido automático: el tick falló: %s", exc)
+        interval = config.SWEEP_INTERVAL
+        await asyncio.sleep(interval if interval > 0 else _OFF_POLL_SECONDS)

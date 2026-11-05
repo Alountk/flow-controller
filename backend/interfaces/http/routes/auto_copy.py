@@ -1,10 +1,11 @@
-"""Auto-copy sweep endpoint.
+"""Auto-copy sweep endpoints.
 
-The sweep is an explicit POST on purpose: ``GET /api/trace`` is polled by the UI
-every 15 seconds, and hooking the copy there would turn a read into a write on
-the media library and make two open tabs two sweeps. Unattended operation is the
-user's external timer (cron/systemd) calling this endpoint; there is deliberately
-no background loop (design D1 rejected it).
+The sweep is an explicit action on purpose: ``GET /api/trace`` is polled by the
+UI every 15 seconds, and hooking the copy there would turn a read into a write
+on the media library and make two open tabs two sweeps. This POST is the manual
+trigger; unattended operation runs through ``auto_copy_driver.sweep_loop``
+(S4): ``intervals.sweep`` seconds between ticks — 0 is the off switch — with
+safe mode read at every tick.
 """
 
 import asyncio
@@ -12,7 +13,7 @@ import logging
 
 from fastapi import APIRouter, Depends
 
-from auto_copy_driver import sweep
+from auto_copy_driver import last_sweep, record_sweep, sweep
 from application.gateways import recent_auto_copy_log, store_available
 from interfaces.http.deps import verify_api_key
 from state import http_session
@@ -57,10 +58,10 @@ async def run_auto_copy_sweep(_key: str = Depends(verify_api_key)):
         # A per-sweep session, like GET /api/trace: sweeps are infrequent and
         # this avoids depending on the lifespan having run.
         async with http_session() as session:
-            return await sweep(session, safe_mode=config.SAFE_MODE)
+            result = await sweep(session, safe_mode=config.SAFE_MODE)
     except Exception as exc:  # noqa: BLE001 — the route contract is JSON, not 500
         log.exception("auto-copy sweep: error inesperado: %s", exc)
-        return {
+        result = {
             "ok": False,
             "running": False,
             "safe_mode": config.SAFE_MODE,
@@ -69,3 +70,17 @@ async def run_auto_copy_sweep(_key: str = Depends(verify_api_key)):
             "entries": [],
             "errors": [f"{type(exc).__name__}: {exc}"],
         }
+    # Whatever this POST answers IS the last result (S4: igual que el manual);
+    # record_sweep drops refusals so a double click cannot erase the real one.
+    record_sweep(result)
+    return result
+
+
+@router.get("/api/auto-copy/last")
+async def get_auto_copy_last(_key: str = Depends(verify_api_key)):
+    """El último barrido (manual o automático) con su instante.
+
+    Antes del primer barrido responde el estado honesto «aún no»: sin conteos
+    falsos de un barrido que nunca corrió. En memoria, como el resumen del POST.
+    """
+    return last_sweep()

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
+import auto_copy_driver as driver_module
 from infrastructure import sqlite_history as history
 from app import app
 from tests._stubs import _StubSession
@@ -145,4 +146,81 @@ def test_an_unavailable_store_is_not_a_500():
     body = resp.json()
     assert body["items"] == []
     assert body["error"], "the UI must be able to tell 'no history' from 'unreadable'"
+
+
+# ── The last-result endpoint (T7a / S4) ───────────────────────────────────
+
+
+def _summary(**overrides):
+    body = {
+        "ok": True,
+        "running": False,
+        "safe_mode": True,
+        "detail": "",
+        "counts": {"traces": 1},
+        "entries": [],
+        "errors": [],
+    }
+    body.update(overrides)
+    return body
+
+
+def test_the_sweep_endpoint_records_the_last_result(monkeypatch):
+    monkeypatch.setattr(driver_module, "_last_sweep", None)
+    with patch.object(route_module, "sweep", new=AsyncMock(return_value=_summary())):
+        client.post("/api/auto-copy/sweep")
+
+    resp = client.get("/api/auto-copy/last")
+    body = resp.json()
+
+    assert resp.status_code == 200
+    assert body["swept_at"] > 0
+    assert body["counts"] == {"traces": 1}, "el resultado del POST, tal cual en Seguimiento"
+
+
+def test_the_last_endpoint_answers_the_most_recent_result(monkeypatch):
+    monkeypatch.setattr(driver_module, "_last_sweep", None)
+    driver_module.record_sweep(_summary(detail="primero"))
+    driver_module.record_sweep(_summary(detail="segundo"))
+
+    body = client.get("/api/auto-copy/last").json()
+
+    assert body["detail"] == "segundo"
+    assert body["swept_at"] > 0
+
+
+def test_the_last_endpoint_is_honest_before_any_sweep(monkeypatch):
+    monkeypatch.setattr(driver_module, "_last_sweep", None)
+
+    resp = client.get("/api/auto-copy/last")
+    body = resp.json()
+
+    assert resp.status_code == 200
+    assert body["swept_at"] is None
+    assert "counts" not in body, "nunca conteos falsos de un barrido que no corrió"
+    assert body["detail"], "el estado vacío dice «aún no»: distinto de un fallo"
+
+
+def test_a_refused_sweep_does_not_replace_the_last_result(monkeypatch):
+    monkeypatch.setattr(driver_module, "_last_sweep", None)
+    driver_module.record_sweep(_summary(detail="el barrido bueno"))
+    refusal = _summary(ok=False, running=True, detail="ya hay un barrido en curso")
+
+    with patch.object(route_module, "sweep", new=AsyncMock(return_value=refusal)):
+        client.post("/api/auto-copy/sweep")
+
+    body = client.get("/api/auto-copy/last").json()
+    assert body["detail"] == "el barrido bueno", "un rechazo no es el último barrido"
+
+
+def test_the_last_endpoint_requires_auth():
+
+    with patch("infrastructure.settings_store.auth_required", return_value=True), patch.object(
+        deps_module, "credentials"
+    ) as creds:
+        creds.verify_api_key.return_value = False
+        unauth = TestClient(app, raise_server_exceptions=False)
+        resp = unauth.get("/api/auto-copy/last")
+
+    assert resp.status_code == 401
 

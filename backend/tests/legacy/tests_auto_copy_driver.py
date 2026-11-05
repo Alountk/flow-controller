@@ -11,11 +11,13 @@ proposal/action distinction end to end.
 
 import asyncio
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import pytest
 
 import auto_copy_driver as driver
+import config
 from infrastructure import sqlite_history as history
 from domain.policy import COPY, DEFAULT_GRACE_SECONDS, SKIP, WAIT, auto_copy_key
 
@@ -881,3 +883,171 @@ def test_two_identical_sweeps_leave_one_log_row(monkeypatch, db):
     _sweep(safe_mode=False)
 
     assert [r["decision"] for r in history.recent_auto_copy_log()] == ["wait"]
+
+
+# ── The automatic scheduler (T7a / S4) ───────────────────────────────────
+#
+# `intervals.sweep` seconds between ticks, 0 = interruptor off; safe_mode is
+# read at every tick so a save applies without a restart. The stubs land on
+# THIS module's names because the driver resolves them per call.
+
+
+@asynccontextmanager
+async def _fake_session():
+    yield None
+
+
+def _tick_installed(monkeypatch, interval=600, safe_mode=True):
+    """Common seams for the scheduler: a store, a session and the knob values."""
+    monkeypatch.setattr(driver, "_last_sweep", None)
+    monkeypatch.setattr(driver, "http_session", _fake_session)
+    monkeypatch.setattr(config, "SWEEP_INTERVAL", interval)
+    monkeypatch.setattr(config, "SAFE_MODE", safe_mode)
+
+
+def _summary(**overrides):
+    body = {
+        "ok": True,
+        "running": False,
+        "safe_mode": True,
+        "detail": "",
+        "counts": {},
+        "entries": [],
+        "errors": [],
+    }
+    body.update(overrides)
+    return body
+
+
+def test_one_tick_is_one_sweep_with_safe_mode_read_at_tick_time(monkeypatch):
+    _tick_installed(monkeypatch, safe_mode=False)
+    seen: list[bool] = []
+
+    async def fake_sweep(session, *, safe_mode, **kwargs):
+        seen.append(safe_mode)
+        return _summary(safe_mode=safe_mode)
+
+    monkeypatch.setattr(driver, "sweep", fake_sweep)
+    asyncio.run(driver.sweep_tick())
+    monkeypatch.setattr(config, "SAFE_MODE", True)
+    asyncio.run(driver.sweep_tick())
+
+    assert seen == [False, True], "un barrido por tick, con el modo seguro del momento"
+
+
+def test_the_loop_sleeps_the_configured_interval(monkeypatch):
+    _tick_installed(monkeypatch, interval=600)
+
+    async def fake_sweep(session, *, safe_mode, **kwargs):
+        return _summary()
+
+    monkeypatch.setattr(driver, "sweep", fake_sweep)
+    sleeps: list[float] = []
+
+    async def stop_after_sleep(seconds):
+        sleeps.append(seconds)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(driver.asyncio, "sleep", stop_after_sleep)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(driver.sweep_loop())
+
+    assert sleeps == [600], "el intervalo configurado separa los ticks"
+
+
+def test_the_switch_off_never_sweeps(monkeypatch):
+    _tick_installed(monkeypatch, interval=0)
+    calls: list[int] = []
+
+    async def fake_sweep(session, *, safe_mode, **kwargs):
+        calls.append(1)
+        return _summary()
+
+    monkeypatch.setattr(driver, "sweep", fake_sweep)
+
+    assert asyncio.run(driver.sweep_tick()) is None
+    assert calls == [], "intervals.sweep = 0 es el interruptor apagado"
+
+
+def test_the_off_loop_idles_on_the_coarse_poll(monkeypatch):
+    """The cheapest honest shape for «off»: no sweep, but the loop keeps
+    re-reading the knob on a coarse sleep so turning it on applies live."""
+    _tick_installed(monkeypatch, interval=0)
+    calls: list[int] = []
+
+    async def fake_sweep(session, *, safe_mode, **kwargs):
+        calls.append(1)
+        return _summary()
+
+    monkeypatch.setattr(driver, "sweep", fake_sweep)
+    sleeps: list[float] = []
+
+    async def stop_after_sleep(seconds):
+        sleeps.append(seconds)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(driver.asyncio, "sleep", stop_after_sleep)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(driver.sweep_loop())
+
+    assert calls == []
+    assert sleeps == [driver._OFF_POLL_SECONDS], "apagado no gira en vacío ni barre"
+
+
+def test_an_in_flight_sweep_is_skipped_without_killing_the_loop(monkeypatch):
+    _tick_installed(monkeypatch)
+
+    async def fake_sweep(session, *, safe_mode, **kwargs):
+        return _summary(ok=False, running=True, detail="ya hay un barrido en curso")
+
+    monkeypatch.setattr(driver, "sweep", fake_sweep)
+    sleeps: list[float] = []
+
+    async def stop_after_sleep(seconds):
+        sleeps.append(seconds)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(driver.asyncio, "sleep", stop_after_sleep)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(driver.sweep_loop())
+
+    assert sleeps, "el bucle sigue girando tras saltarse un tick"
+    assert driver.last_sweep()["swept_at"] is None, "un rechazo no es resultado: no se guarda"
+
+
+def test_a_tick_error_is_survivable_into_the_next_tick(monkeypatch):
+    _tick_installed(monkeypatch)
+    calls: list[int] = []
+
+    async def fake_sweep(session, *, safe_mode, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+        return _summary(safe_mode=safe_mode)
+
+    monkeypatch.setattr(driver, "sweep", fake_sweep)
+    sleeps: list[float] = []
+
+    async def stop_after_two_sleeps(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(driver.asyncio, "sleep", stop_after_two_sleeps)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(driver.sweep_loop())
+
+    assert len(calls) == 2, "un tick que falló no mata el bucle: el siguiente corre"
+    assert driver.last_sweep()["swept_at"] is not None, "el segundo tick sí guarda su resultado"
+
+
+def test_the_auto_sweep_under_safe_mode_only_proposes(monkeypatch):
+    _tick_installed(monkeypatch, safe_mode=True)
+    calls = _install(monkeypatch, traces=[_trace()], own_grabs=[_own_grab()])
+
+    summary = asyncio.run(driver.sweep_tick())
+
+    assert calls.dispatch == [], "el modo seguro del tick: sólo propone, nunca mueve"
+    assert summary["safe_mode"] is True
+    assert summary["entries"][0]["action"] == "proposed"
+    assert driver.last_sweep()["counts"]["proposed"] == 1
