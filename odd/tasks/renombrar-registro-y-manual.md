@@ -51,8 +51,9 @@ concreto elegido a mano.
 | T5 | S4 | frontend: entrada `Renombrar` en Archivos sobre el fichero seleccionado | «la pantalla como el diseño» |
 | T6 | todas | verificación real (disco + Radarr falso), suites, docs | «verificado con ficheros de verdad» |
 
-Nota: los commits se nombran por su asunto porque el squash deja inalcanzables
-los hashes de rama; la tabla se complementa con el commit de `main` al mergear.
+Squash `23e1016` en `main` (PR #302), CI verde **antes** de mergear. Los commits de
+rama quedaron inalcanzables al mergear, así que la tabla nombra el asunto y aquí
+queda el hash que sí se puede citar.
 
 ## Log
 

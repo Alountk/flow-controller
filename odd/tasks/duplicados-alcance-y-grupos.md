@@ -37,6 +37,14 @@ carpeta, y el resultado se agrupa por **película**, no por carpeta y clase.
 | T1 | S2, S3 | backend: `group_by_title` puro, `?path=` validado, `folders`/`scope` en la respuesta | «duplicados por película» |
 | T2 | S1, S5, S6 | frontend: barra de alcance recordada y grupos por película | «duplicados por película» |
 
+Squash `a6d3dfc` en `main` (PR #303), CI verde **antes** de mergear; los commits
+de rama quedaron inalcanzables, así que se citan por asunto.
+
+**Frontera de rebanada**: T1+T2 se entregaron juntos (735 líneas autoradas, por
+encima de las ~400). Se mantuvieron en un solo commit porque el contrato de la
+respuesta y la pantalla que lo consume cambian a la vez: partir por backend y
+frontend habría dejado la pantalla roja entre dos commits.
+
 ## Log
 
 ### L1 — petición del usuario (verbatim)
