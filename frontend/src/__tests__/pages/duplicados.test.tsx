@@ -1,6 +1,20 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Duplicados from '../../pages/Duplicados'
+
+/** `/api/movies/duplicates/delete` también contiene el nombre del recorrido. */
+const isWalk = (url: string) => url.includes('/api/movies/duplicates') && !url.includes('/delete')
+
+/** La pantalla lee las raíces configuradas para ofrecer el alcance. */
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <Duplicados />
+    </QueryClientProvider>,
+  )
+}
 import { setApiKey } from '../../shared/api/auth'
 
 /**
@@ -13,14 +27,17 @@ const WEBDL = 'Now You See Me (2013) WEBDL-1080p - h265 TrueHD Atmos - [EN+ES].m
 
 const GROUP = {
   folder: FOLDER,
-  class: '1080',
+  folders: [FOLDER],
+  classes: ['1080'],
   title: 'Now You See Me',
   files: [
-    { path: `${FOLDER}/${WEBDL}`, name: WEBDL, size: 2_300_000_000, known: false },
-    { path: `${FOLDER}/${WEBRIP}`, name: WEBRIP, size: 2_100_000_000, known: true },
+    { path: `${FOLDER}/${WEBDL}`, name: WEBDL, size: 2_300_000_000, known: false, class: '1080' },
+    { path: `${FOLDER}/${WEBRIP}`, name: WEBRIP, size: 2_100_000_000, known: true, class: '1080' },
   ],
   reclaimable: 2_300_000_000,
 }
+
+const ROOTS = { roots: [{ path: '/mnt/storage', name: 'storage', role: 'library', label: 'Biblioteca' }], detail: '' }
 
 let calls: Array<{ url: string; body?: unknown; init?: RequestInit }> = []
 
@@ -36,38 +53,48 @@ function mockFetch(handler?: (url: string, init?: RequestInit) => unknown) {
       const result = handler(url, init)
       if (result) return result as Response
     }
-    if (String(url).endsWith('/api/movies/duplicates')) {
+    if (String(url).includes('/api/files/roots')) {
+      return { ok: true, json: async () => ROOTS } as Response
+    }
+    if (isWalk(String(url))) {
       return { ok: true, json: async () => ({ groups: [GROUP], total: 1 }) } as Response
     }
     return { ok: true, json: async () => ({ deleted: `${FOLDER}/${WEBDL}` }) } as Response
   }))
 }
 
-beforeEach(() => mockFetch())
-afterEach(() => vi.unstubAllGlobals())
+beforeEach(() => {
+  window.localStorage.clear()
+  mockFetch()
+})
+afterEach(() => {
+  vi.unstubAllGlobals()
+  window.localStorage.clear()
+})
 
 describe('Duplicados', () => {
   it('never walks the library on mount: the button is the trigger', () => {
-    render(<Duplicados />)
+    renderPage()
 
     expect(screen.getByText(/pulsa «Buscar duplicados»/)).toBeTruthy()
-    expect(calls).toHaveLength(0)
+    // Las raíces se leen para ofrecer el alcance; el disco no se camina.
+    expect(calls.filter((c) => isWalk(c.url))).toHaveLength(0)
   })
 
   it('lists both files of the folder, marks which one Radarr knows', async () => {
-    render(<Duplicados />)
+    renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
 
     await screen.findByText('Now You See Me')
     expect(screen.getByText(WEBRIP)).toBeTruthy()
     expect(screen.getByText(WEBDL)).toBeTruthy()
-    expect(screen.getByText('Radarr')).toBeTruthy()
+    expect(screen.getByText('en el catálogo')).toBeTruthy()
     expect(screen.getByText('sobra')).toBeTruthy()
-    expect(screen.getByText(/1 carpeta · 2\.1 GB reclamables/)).toBeTruthy()
+    expect(screen.getByText(/1 título con duplicados · 2 copias · 2\.1 GB recuperables/)).toBeTruthy()
   })
 
   it('warns when you are about to delete the file Radarr tracks', async () => {
-    render(<Duplicados />)
+    renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
     await screen.findByText('Now You See Me')
 
@@ -80,7 +107,7 @@ describe('Duplicados', () => {
   })
 
   it('asks before deleting and only then calls the API', async () => {
-    render(<Duplicados />)
+    renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
     await screen.findByText('Now You See Me')
 
@@ -96,7 +123,7 @@ describe('Duplicados', () => {
   })
 
   it('drops the folder from the list once you delete the extra file', async () => {
-    render(<Duplicados />)
+    renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
     await screen.findByText('Now You See Me')
 
@@ -104,14 +131,14 @@ describe('Duplicados', () => {
     fireEvent.click(screen.getByText('Sí, borrar'))
 
     await waitFor(() => expect(screen.getByText(/Ninguna carpeta repite fichero/)).toBeTruthy())
-    expect(calls.filter((c) => c.url.endsWith('/api/movies/duplicates'))).toHaveLength(1)
+    expect(calls.filter((c) => isWalk(c.url))).toHaveLength(1)
   })
 
   it('shows the reason when the backend refuses to delete', async () => {
     mockFetch((url) => (url.includes('/delete')
       ? ({ ok: false, json: async () => ({ detail: 'fuera de las carpetas permitidas: /etc/passwd' }) } as Response)
       : undefined))
-    render(<Duplicados />)
+    renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
     await screen.findByText('Now You See Me')
 
@@ -123,7 +150,7 @@ describe('Duplicados', () => {
 
   it('sends the stored key on both requests, like every other section', async () => {
     setApiKey('clave-de-prueba')
-    render(<Duplicados />)
+    renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
     await screen.findByText('Now You See Me')
     fireEvent.click(screen.getAllByText('Borrar')[0])
@@ -136,7 +163,7 @@ describe('Duplicados', () => {
 
   it('does not crash when the payload has no groups (old backend, proxy HTML)', async () => {
     mockFetch(() => ({ ok: true, json: async () => ({ detail: 'Not Found' }) } as Response))
-    render(<Duplicados />)
+    renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
 
     expect(await screen.findByText(/Ninguna carpeta repite fichero/)).toBeTruthy()
@@ -145,7 +172,7 @@ describe('Duplicados', () => {
 
 describe('Duplicados con Radarr caído', () => {
   it('marks nothing as extra and says so, instead of inviting the wrong delete', async () => {
-    mockFetch((url) => (url.endsWith('/api/movies/duplicates')
+    mockFetch((url) => (isWalk(url)
       ? ({
         ok: true,
         json: async () => ({
@@ -159,7 +186,7 @@ describe('Duplicados con Radarr caído', () => {
         }),
       } as Response)
       : undefined))
-    render(<Duplicados />)
+    renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
 
     await screen.findByText('Now You See Me')
@@ -168,5 +195,76 @@ describe('Duplicados con Radarr caído', () => {
     expect(screen.getByRole('alert').textContent).toContain('Radarr no respondió')
     // Sin datos no hay cifra que prometer.
     expect(screen.queryByText(/reclamables/)).toBeNull()
+  })
+})
+
+
+describe('Duplicados · dónde busca', () => {
+  it('offers the configured roots and sends the chosen one', async () => {
+    renderPage()
+    const select = (await screen.findByLabelText('Buscar en')) as HTMLSelectElement
+    await waitFor(() => expect(select.value).toBe(''))
+
+    fireEvent.change(select, { target: { value: '/mnt/storage' } })
+    fireEvent.click(screen.getByText('Buscar duplicados'))
+
+    await screen.findByText('Now You See Me')
+    expect(calls.find((c) => isWalk(c.url))?.url).toContain('path=%2Fmnt%2Fstorage')
+  })
+
+  it('remembers the folder for the next search, and walks up from it', async () => {
+    window.localStorage.setItem('duplicados.scope', '/mnt/storage/movies')
+    renderPage()
+
+    // El pan de migas sitúa la carpeta dentro de su raíz.
+    const crumbs = await screen.findByText(/\/mnt\/storage › movies/)
+    expect(crumbs).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Subir'))
+    await waitFor(() =>
+      expect(window.localStorage.getItem('duplicados.scope')).toBe('/mnt/storage'),
+    )
+    expect(screen.queryByText(/› movies/)).toBeNull()
+  })
+
+  it('walks the whole library again when the scope is cleared', async () => {
+    window.localStorage.setItem('duplicados.scope', '/mnt/storage/movies')
+    renderPage()
+
+    fireEvent.click(await screen.findByText('Raíz'))
+    fireEvent.click(screen.getByText('Buscar duplicados'))
+
+    await screen.findByText('Now You See Me')
+    expect(calls.find((c) => isWalk(c.url))?.url).not.toContain('path=')
+  })
+})
+
+describe('Duplicados · un grupo por película', () => {
+  it('puts every repeated class of one movie in a single group', async () => {
+    // La detección es por carpeta y clase; la pantalla pregunta por películas.
+    const twoClasses = {
+      ...GROUP,
+      classes: ['4K', '1080'],
+      reclaimable: 100,
+      files: [
+        { path: `${FOLDER}/a.2160p.mkv`, name: 'a.2160p.mkv', size: 60, known: false, class: '4K' },
+        { path: `${FOLDER}/b.2160p.mkv`, name: 'b.2160p.mkv', size: 40, known: true, class: '4K' },
+        { path: `${FOLDER}/c.1080p.mkv`, name: 'c.1080p.mkv', size: 30, known: false, class: '1080' },
+        { path: `${FOLDER}/d.1080p.mkv`, name: 'd.1080p.mkv', size: 20, known: true, class: '1080' },
+      ],
+    }
+    mockFetch((url) => (isWalk(url)
+      ? ({ ok: true, json: async () => ({ groups: [twoClasses], total: 1, radarr: true }) } as Response)
+      : undefined))
+    renderPage()
+    fireEvent.click(screen.getByText('Buscar duplicados'))
+
+    await screen.findByText('Now You See Me')
+    expect(document.querySelectorAll('.duplicados-group')).toHaveLength(1)
+    expect(screen.getByText(/1 título con duplicados · 4 copias/)).toBeTruthy()
+    // La clase de cada copia, al lado de su fichero (las insignias del grupo
+    // dicen qué clases se repiten, no cuántas copias hay de cada una).
+    const labels = [...document.querySelectorAll('.duplicados-class')].map((n) => n.textContent)
+    expect(labels).toEqual(['4K', '4K', '1080', '1080'])
   })
 })

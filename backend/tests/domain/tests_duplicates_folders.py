@@ -4,7 +4,7 @@ El caso que la destapó es del usuario, literal: dos ficheros 1080p en la carpet
 de «Now You See Me (2013)», de los cuales Radarr sólo conoce uno.
 """
 
-from domain.duplicates_folders import duplicate_folders, resolution_class
+from domain.duplicates_folders import group_by_title, duplicate_folders, resolution_class
 
 FOLDER = "/mnt/storage/movies/es/Now You See Me (2013)"
 WEBRIP = f"{FOLDER}/Now You See Me (2013) WEBRip-1080p - h265 DTS - [ES+EN].mkv"
@@ -129,3 +129,51 @@ def test_the_file_that_is_spare_is_listed_first():
     first, second = groups[0]["files"]
     assert first["known"] is False and "WEBDL" in first["name"]
     assert second["known"] is True
+
+
+class TestOneEntryPerMovie:
+    """La pantalla pregunta por películas; la detección sigue siendo por carpeta."""
+
+    def test_two_classes_of_one_movie_make_one_entry(self):
+        files = [
+            {"path": "/a/Dune (2024)/a.2160p.mkv", "size": 10},
+            {"path": "/a/Dune (2024)/b.2160p.mkv", "size": 20},
+            {"path": "/a/Dune (2024)/c.1080p.mkv", "size": 30},
+            {"path": "/a/Dune (2024)/d.1080p.mkv", "size": 40},
+        ]
+        folders = duplicate_folders(
+            files, known={"/a/Dune (2024)": "a.2160p.mkv"}, titles={"/a/Dune (2024)": "Dune: Parte Dos"}
+        )
+
+        (group,) = group_by_title(folders)
+
+        assert group["title"] == "Dune: Parte Dos"
+        assert sorted(group["classes"]) == ["1080", "4K"]
+        assert len(group["files"]) == 4
+
+    def test_without_a_title_two_folders_with_the_same_name_are_not_merged(self):
+        # Radarr no nombró ninguna: unirlas por título juntaría dos carpetas
+        # distintas que se llaman igual, y borrar en una afectaría a la otra.
+        files = [
+            {"path": "/uno/Sin Titulo/a.1080p.mkv", "size": 10},
+            {"path": "/uno/Sin Titulo/b.1080p.mkv", "size": 20},
+            {"path": "/dos/Sin Titulo/a.1080p.mkv", "size": 30},
+            {"path": "/dos/Sin Titulo/b.1080p.mkv", "size": 40},
+        ]
+
+        groups = group_by_title(duplicate_folders(files))
+
+        assert len(groups) == 2
+        assert {g["folder"] for g in groups} == {"/uno/Sin Titulo", "/dos/Sin Titulo"}
+
+    def test_the_file_that_is_spare_is_first_within_the_group(self):
+        files = [
+            {"path": "/a/Dune/keep.1080p.mkv", "size": 10},
+            {"path": "/a/Dune/spare.1080p.mkv", "size": 20},
+        ]
+        folders = duplicate_folders(files, known={"/a/Dune": "keep.1080p.mkv"}, titles={"/a/Dune": "Dune"})
+
+        (group,) = group_by_title(folders)
+
+        assert group["files"][0]["name"] == "spare.1080p.mkv"
+        assert group["reclaimable"] == 20
