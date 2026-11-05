@@ -197,6 +197,26 @@ describe('Renombrar · la vista Renombrados (S3, S7)', () => {
     expect(await screen.findByText('El fichero ya no está')).toBeInTheDocument()
   })
 
+  it('opens the folder in Archivos instead of only naming it', async () => {
+    stub([], log)
+    window.history.replaceState(null, '', '/renombrar')
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Renombrados/ }))
+
+    const open = await screen.findByRole('button', { name: '/mnt/4k/Dune Parte Dos (2024)' })
+    fireEvent.click(open)
+
+    // El enlace lleva la carpeta dentro: el explorador tiene que abrir EN ella.
+    expect(window.location.pathname).toBe('/archivos')
+    const hash = window.location.hash.replace(/^#\/?/, '')
+    const params = new URLSearchParams(hash.split('?')[1] ?? '')
+    expect(params.get('path')).toBe('/mnt/4k/Dune Parte Dos (2024)')
+
+    // La fila cuyo fichero ya no existe sigue sin ofrecer una carpeta.
+    expect(screen.queryByRole('button', { name: /Heat/ })).toBeNull()
+  })
+
   it('has nothing to select: this view only reports', async () => {
     stub([], log)
     renderPage()

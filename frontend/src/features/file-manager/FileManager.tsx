@@ -10,6 +10,7 @@ import {
   queueAdd,
 } from '../../shared/api/files.ts'
 import { filterByName, useBrowse } from '../../shared/hooks/useFilesNavigator.ts'
+import { readHashParam } from '../../shared/hooks/useHashState.ts'
 import { FileExplorer, type FileExplorerEntry } from '../../shared/ui/FileExplorer.tsx'
 import { LibraryRenameDialog } from './LibraryRenameDialog.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../shared/utils/selection.ts'
@@ -51,13 +52,15 @@ interface PaneProps {
   roots: RootsItem[]
   index: number
   otherPath: string
+  /** The folder a `#/archivos?path=` link opens the first pane at. */
+  initialPath?: string
   onPathChange: (index: number, path: string) => void
 }
 
-function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
+function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PaneProps) {
   const queryClient = useQueryClient()
   const initialRoot = roots[index]?.path || roots[0]?.path || '/'
-  const [path, setPath] = useState(initialRoot)
+  const [path, setPath] = useState(initialPath || initialRoot)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -575,6 +578,16 @@ function FilePane({ roots, index, otherPath, onPathChange }: PaneProps) {
 export function FileManager() {
   const [panePaths, setPanePaths] = useState<Record<number, string>>({})
 
+  // Renombrar's «Abrir carpeta» hands the folder over as `#/archivos?path=`.
+  // The parameter is a door, not state: it is read once here and the URL is
+  // left clean, so a reload cannot drag the user back to a folder they left.
+  const [initialFolder] = useState(() => readHashParam('path'))
+  useEffect(() => {
+    if (initialFolder && window.location.hash) {
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+  }, [initialFolder])
+
   const { data: rootsData } = useQuery({
     queryKey: ['roots'],
     queryFn: fetchRoots,
@@ -605,6 +618,7 @@ export function FileManager() {
               roots={roots}
               index={0}
               otherPath={getOtherPath(0)}
+              initialPath={initialFolder}
               onPathChange={handlePathChange}
             />
             <FilePane
@@ -622,6 +636,7 @@ export function FileManager() {
             roots={roots}
             index={0}
             otherPath={panePaths[0] || roots[0]?.path || '/'}
+            initialPath={initialFolder}
             onPathChange={handlePathChange}
           />
         )}

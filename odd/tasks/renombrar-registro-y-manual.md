@@ -107,3 +107,13 @@ Radarr falso que anota los comandos.
   `RescanMovie [949]`, fila con origen `a mano`.
 - Pantalla: chips `Candidatos 1` / `Renombrados 2`, la fila imposible con
   `Revisar` y su motivo, y el registro con `ANTES`, `CUÁNDO` e insignias.
+
+### L5 — la limitación de L4 se pagó (2026-11-05)
+
+`Abrir carpeta` (S3) navega de verdad. La carpeta viaja en la URL
+(`#/archivos?path=…`), `navigateTo` empuja la ruta, el explorador abre **en esa
+carpeta** y el parámetro se consume al llegar: es una puerta, no estado, así que
+recargar tras navegar no arrastra a nadie a una carpeta ya abandonada. La fila
+cuyo fichero ya no existe sigue sin ofrecer carpeta. Verificado en el navegador
+con un renombrado real en el disco: `Renombrar → Renombrados → clic` aterriza en
+`/private/tmp/fc-expl-demo/Interestellar (2014)` con su fichero, URL limpia.

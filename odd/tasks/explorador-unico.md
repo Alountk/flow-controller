@@ -140,3 +140,14 @@ Backend contra `/private/tmp` (una raíz), `npm run build` y navegador:
   pie `Mostrando 15`; nombres completos tras las dos correcciones de rejilla.
 - Duplicados: **1** barra de ruta compartida (`.explorer-bar`) y ninguna barra
   propia.
+
+### L5 — el explorador acepta carpeta de arranque (2026-11-05)
+
+La deuda que L2/L3 dejaron escrita («`Abrir carpeta` en Renombrados exige que
+Archivos acepte carpeta de arranque por URL») está pagada, y el mecanismo es
+nuevo en la app: `navigateTo(page, hash)` en `usePageRoute.ts` da a una página
+forma de abrir **otra** con un parámetro — `setPage` vive sólo en App y
+`pushState` no dispara nada por sí solo. `FileManager` lee `#/archivos?path=`
+una vez y limpia la URL; el primer panel nace en esa carpeta. Sin banderas
+nuevas: el marco sigue siendo `page`/`dialog`, y lo que cambia es la carpeta de
+partida.

@@ -11,6 +11,7 @@ import {
 } from '../shared/api/files.ts'
 import { LibraryRenameDialog } from '../features/file-manager/LibraryRenameDialog.tsx'
 import { toast } from '../shared/utils/toast.ts'
+import { navigateTo } from '../shared/hooks/usePageRoute.ts'
 import './Renombrar.css'
 import '../shared/ui/atoms.css'
 
@@ -425,13 +426,22 @@ export function Renombrar() {
                       </span>
                     </td>
                     <td className="renombrar-cell-actions">
-                      {/* No hay navegación al explorador con una carpeta como
-                          parámetro: se muestra la ruta en vez de un botón que
-                          llevaría a la raíz. */}
+                      {/* El enlace lleva la carpeta dentro: un botón que
+                          abriera el explorador en la raíz sería un engaño. */}
                       {row.exists ? (
-                        <span className="renombrar-folder" title={parentOf(row.dst)}>
+                        <button
+                          type="button"
+                          className="renombrar-folder"
+                          title="Abrir esta carpeta en el explorador"
+                          onClick={() =>
+                            navigateTo(
+                              'files',
+                              `#/archivos?${new URLSearchParams({ path: parentOf(row.dst) })}`,
+                            )
+                          }
+                        >
                           {parentOf(row.dst)}
-                        </span>
+                        </button>
                       ) : (
                         <span className="renombrar-when">El fichero ya no está</span>
                       )}
