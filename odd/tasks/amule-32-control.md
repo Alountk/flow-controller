@@ -45,7 +45,7 @@ tocar lo que queramos». Decisión (L2): «Plan completo (recomendado)».
 | T3  | S2       | `infrastructure/amuleapi_client.py`: login JWT, 401-terminal, errores tipados | 41c8053 |
 | T4  | S2       | Búsqueda ed2k vía amuleapi (sustituye `amutorrent_search_link`) + categorías | 651b8ec + c1380f8 |
 | T5  | S2/S5    | aMuTorrent fuera del camino activo: flags/Settings/README + frontend | e44e3e1 |
-| T6  | S3       | Gracia sólo para descargas que el arr conoce (`domain/policy`) + `tests_amule_mover_loop` en verde |  |
+| T6  | S3       | Gracia sólo para descargas que el arr conoce (`domain/policy`) + `tests_amule_mover_loop` en verde | df725bb |
 | T7  | S4       | Barrido automático: scheduler + setting + respeta modo seguro       |        |
 | T8  | S1-S5    | Suites completas, evidencia en este doc y cierre                    |        |
 
@@ -135,7 +135,7 @@ Pasos de subida (ejecución asistida: requiere el host/Portainer del usuario):
   `c1380f8`); estrategia invariable: PR único con disclosure.
 - **L8 (límite interpretado de S3)**: «el primer barrido disponible las mueve»
   se cumplió **salvo la guarda D2**: si el destino es la biblioteca del arr y
-  la sonda  no puede responder, se sigue esperando (nunca copiar
-  a ciegas a la biblioteca — eso CREATE duplicados, el dolor del usuario). El
-  destino4K/3D fuera de raíz no sondea y se mueve siempre. Frontera pinneada
+  la sonda `arr_has_file` no puede responder, se sigue esperando (nunca copiar
+  a ciegas a la biblioteca — eso CREA duplicados, el dolor del usuario). El
+  destino 4K/3D fuera de raíz no sondea y se mueve siempre. Frontera pinneada
   por `test_a_direct_download_still_refuses_an_unknown_library_duplicate`.
