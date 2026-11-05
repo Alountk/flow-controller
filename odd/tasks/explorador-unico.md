@@ -77,11 +77,11 @@ pósters: un explorador es una tabla.
 
 | ID | Specs | Ruta | Commit |
 |----|-------|------|--------|
-| T1 | S1, S2, S3, S6 | `shared/ui/FileExplorer.tsx` + `PathBar.tsx` con el chrome único y las dos presentaciones; un solo CSS | — |
-| T2 | S7 | migrar Archivos, Escanear, Búsqueda de releases y Media Mixer (×2); borrar `.scan-*`/`.fm-*` duplicados | — |
-| T3 | S4 | selección múltiple en Archivos + acciones en lote (borrar/mover varios) | — |
-| T4 | S5 | Duplicados usa `PathBar` y deja de tener barra propia | — |
-| T5 | S2 | reforzar `pickerChrome.contract.test.ts`: ninguna clase de explorador fuera del componente | `feat/explorador-unico` |
+| T1 | S1, S2, S3, S6 | `shared/ui/FileExplorer.tsx` (`PathBar` + `FileExplorer`) con el chrome único y las dos presentaciones; un solo CSS | `5e730dd` |
+| T2 | S7 | migrar Archivos, Escanear, Búsqueda de releases y Media Mixer (×2); borrar `.scan-*`/`.fm-*` duplicados | `5e730dd` |
+| T3 | S4 | selección múltiple en Archivos + acciones en lote (borrar/mover varios) | **no hizo falta**: ya existía |
+| T4 | S5 | Duplicados usa `PathBar` y deja de tener barra propia | `5e730dd` |
+| T5 | S2 | reforzar `pickerChrome.contract.test.ts`: ninguna clase de explorador fuera del componente | `5e730dd` |
 
 Frontera real: T1+T2+T4+T5 van en **un solo commit**. No es descuido: el
 componente y sus cinco consumidores comparten el mismo contrato de clases, y
