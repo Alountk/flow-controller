@@ -73,7 +73,7 @@ async function openPicker() {
 }
 
 function filterInput(): HTMLInputElement {
-  return screen.getByPlaceholderText('Buscar carpeta o archivo…') as HTMLInputElement
+  return screen.getByPlaceholderText('Filtrar por nombre…') as HTMLInputElement
 }
 
 afterEach(() => {

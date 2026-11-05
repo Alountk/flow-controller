@@ -5,7 +5,7 @@ import { fetchSeriesEpisodes, scanForMovies } from '../../../shared/api/wanted.t
 import { episodeTagKey, formatEpisodeLabel, parseEpisodeTag } from '../../../shared/utils/episodeTag.ts'
 import { queueAdd } from '../../../shared/api/files.ts'
 import { useRoots } from '../../../shared/hooks/useFilesNavigator.ts'
-import { FileNavigator } from '../../../shared/ui/FileNavigator.tsx'
+import { FileExplorer } from '../../../shared/ui/FileExplorer.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../../shared/utils/selection.ts'
 import { filterScanMatches, scanMatchKey } from '../../../shared/utils/scanResults.ts'
 import '../../../shared/ui/atoms.css'
@@ -119,7 +119,7 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
   }, [onClose])
 
   // Switching volumes invalidates results pointing into the old tree — the
-  // pre-migration handleVolumeChange behavior FileNavigator cannot infer.
+  // Switching volume resets the path: the explorer only reports the move.
   function rootOf(p: string) {
     return rootsQuery.data?.roots.find((r) => p === r.path || p.startsWith(`${r.path}/`))?.path ?? ''
   }
@@ -202,17 +202,11 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
 
         <div className="scan-modal-body">
           <div className="scan-controls">
-            <FileNavigator
-              variant="region"
-              rootPicker="select"
+            <FileExplorer
+              accept="both"
               rootLabel="Carpeta a escanear:"
-              selectPlaceholder="Seleccionar volumen..."
-              showRefresh
-              showIcons
-              showSizes
               renderFileMeta={renderEpisode}
               emptyLabel="Carpeta vacía"
-              mode="both"
               initialPath={currentPath}
               onNavigate={handleNavigate}
             />

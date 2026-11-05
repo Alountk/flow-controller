@@ -171,7 +171,7 @@ async function openPane(firstRow = 'A.mkv') {
 
 /** Accessible name of every row checkbox inside the list. */
 function checkedRowNames(): (string | null)[] {
-  const list = document.querySelector('.fm-list') as HTMLElement
+  const list = document.querySelector('.explorer-rows') as HTMLElement
   return within(list)
     .getAllByRole('checkbox')
     .filter((box) => (box as HTMLInputElement).checked)
@@ -348,7 +348,7 @@ describe('FileManager multi-file selection', () => {
 
     // The store was unreadable for this file: no chip and no fabricated age —
     // a made-up age could justify deleting something never recorded.
-    const row = screen.getByText('SinEdad.mkv').closest('.fm-item') as HTMLElement
+    const row = screen.getByText('SinEdad.mkv').closest('.explorer-row') as HTMLElement
     expect(row.querySelector('.fm-age')).toBeNull()
     expect(within(row).queryByText(/días|día|hoy|caducado/)).toBeNull()
   })
@@ -377,41 +377,37 @@ describe('FileManager multi-file selection', () => {
 
     const row = screen
       .getByText('UnNombreLarguisimo.De.Pelicula.2024.2160p.mkv')
-      .closest('.fm-item') as HTMLElement
-    const main = row.querySelector('.fm-row-main') as HTMLElement
+      .closest('.explorer-row') as HTMLElement
+    const main = row.querySelector('.explorer-name') as HTMLElement
     expect(main).not.toBeNull()
     expect(main.querySelector('.fm-name')?.textContent).toBe(
       'UnNombreLarguisimo.De.Pelicula.2024.2160p.mkv',
     )
 
-    // The second line carries provenance, age and date together…
-    const sub = main.querySelector('.fm-row-sub') as HTMLElement
+    // The second line carries provenance and age…
+    const sub = main.querySelector('.explorer-meta') as HTMLElement
     expect(sub).not.toBeNull()
     expect(await within(sub).findByText('cola · importando')).toBeInTheDocument()
     expect(sub.querySelector('.fm-age')).not.toBeNull()
-    // The date is a fact of the row, so it is here even when nothing else is.
-    expect(sub.querySelector('.fm-date')?.textContent).not.toBe('—')
 
-    // …and none of them is a column of its own any more.
-    expect(row.querySelector(':scope > .fm-prov')).toBeNull()
-    expect(row.querySelector(':scope > .fm-date')).toBeNull()
-    expect(row.querySelector(':scope > .fm-age')).toBeNull()
+    // …and the date is a column of its own now, in every explorador.
+    expect(row.querySelector(':scope > .explorer-date')?.textContent).not.toBe('—')
+    expect(sub.querySelector('.fm-date')).toBeNull()
   })
 
-  it('names only the columns the rows still have (S2)', async () => {
+  it('names the five columns every explorador has (S2)', async () => {
     mockFetch({ listings: { '/mnt/storage': [file('Uno.mkv')] } })
     await openPane('Uno.mkv')
 
-    const head = document.querySelector('.fm-head-row') as HTMLElement
+    const head = document.querySelector('.explorer-head') as HTMLElement
     expect(head).not.toBeNull()
-    expect(within(head).getByText('Nombre')).toBeInTheDocument()
-    expect(within(head).getByText('Tamaño')).toBeInTheDocument()
-    expect(within(head).getByText('Acciones')).toBeInTheDocument()
-    // Provenance, retention and date live under the name now: a header cell
-    // for them would promise a column that does not exist.
+    for (const column of ['Nombre', 'Tipo', 'Tamaño', 'Modificado', 'Acciones']) {
+      expect(within(head).getByText(column)).toBeInTheDocument()
+    }
+    // Provenance and retention are content the slot puts under the name:
+    // a column of their own would promise something no other sitio can fill.
     expect(within(head).queryByText('Procedencia')).toBeNull()
     expect(within(head).queryByText('Retención')).toBeNull()
-    expect(within(head).queryByText('Modificado')).toBeNull()
   })
 
   it('marks each row with its provenance chip, and shows nothing when no source claims it', async () => {
@@ -449,7 +445,7 @@ describe('FileManager multi-file selection', () => {
     expect(screen.getByText('histórico')).toBeInTheDocument()
     expect(screen.getByText('lo pedimos nosotros')).toBeInTheDocument()
 
-    const row = screen.getByText('SinDueno.mkv').closest('.fm-item') as HTMLElement
+    const row = screen.getByText('SinDueno.mkv').closest('.explorer-row') as HTMLElement
     expect(row.querySelector('.fm-prov')).toBeNull()
   })
 
@@ -556,7 +552,7 @@ describe('FileManager multi-file selection', () => {
     renderFileManager()
     await screen.findByText('A.mkv')
 
-    const selects = document.querySelectorAll<HTMLSelectElement>('.fm-volume-select')
+    const selects = document.querySelectorAll<HTMLSelectElement>('.explorer-select')
     expect(selects.length).toBeGreaterThan(0)
 
     for (const select of selects) {
@@ -570,13 +566,13 @@ describe('FileManager multi-file selection', () => {
       expect(texts).not.toContain('es')
 
       // ...the destinations live in their own optgroup...
-      const group = select.querySelector('optgroup')
-      expect(group?.getAttribute('label')).toBe('Destinos')
+      const group = select.querySelector<HTMLOptGroupElement>('optgroup[label="Destinos"]')
+      expect(group).not.toBeNull()
       const groupOptions = options.filter((o) => o.parentElement === group)
 
       // ...and navigation still comes first, before any destination: the two
       // mounts stay the options roots[0]/roots[1] the panes default to.
-      const plain = options.filter((o) => o.parentElement === select)
+      const plain = options.filter((o) => o.parentElement !== group)
       expect(plain.map((o) => o.value)).toEqual(['/mnt/storage', '/mnt/storage-6tb'])
       expect(groupOptions.map((o) => o.value)).toEqual([
         '/mnt/storage/movies/es',
@@ -594,7 +590,8 @@ describe('FileManager multi-file selection', () => {
     const label = box.closest('label') as HTMLLabelElement
     expect(label).not.toBeNull()
     expect(label.getAttribute('for')).toBe(box.id)
-    expect(box.id).toBe('fm-select-all')
-    expect(box.name).toBe('fm-select-all')
+    // Unique per pane: two exploradores on one screen cannot share a DOM id.
+    expect(box.id).toMatch(/^fm-select-all/)
+    expect(box.name).toBe(box.id)
   })
 })

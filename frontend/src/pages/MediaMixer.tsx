@@ -24,7 +24,7 @@ import type {
 } from '../shared/api/mixer.ts'
 import { fetchRoots } from '../shared/api/files.ts'
 import { formatSize } from '../shared/hooks/useFilesNavigator.ts'
-import { FileNavigator } from '../shared/ui/FileNavigator.tsx'
+import { FileExplorer } from '../shared/ui/FileExplorer.tsx'
 import { apiFetch } from '../shared/api/auth.ts'
 import { toast } from '../shared/utils/toast.ts'
 import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
@@ -225,7 +225,10 @@ interface FilePickerProps {
 function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerProps) {
   const [open, setOpen] = useState(false)
   // Session memory (F1 pattern): reopening resumes the last visited folder.
-  const [lastPath, setLastPath] = useState<string | undefined>(roots[0]?.path)
+  // The picker starts inside the volume it is labelled with, not on the list.
+  const [lastPath, setLastPath] = useState<string | undefined>(
+    roots[0]?.path || undefined,
+  )
   const [selected, setSelected] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
@@ -290,17 +293,10 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
             </div>
             <div className="scan-modal-body">
               <div className="scan-controls">
-                <FileNavigator
-                  variant="region"
-                  rootPicker="select"
+                <FileExplorer
+                  accept="both"
                   rootLabel="Volumen:"
-                  showFilter
-                  showIcons
-                  showSizes
-                  layout="split"
-                  selection="file"
                   onlyVideo
-                  mode="both"
                   initialPath={lastPath}
                   onNavigate={(p) => {
                     setSelected(null)
@@ -1411,14 +1407,9 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
             </div>
             <div className="scan-modal-body">
               <div className="scan-controls">
-                <FileNavigator
-                  variant="region"
-                  rootPicker="select"
+                <FileExplorer
+                  accept="folders"
                   rootLabel="Volumen:"
-                  showFilter
-                  showIcons
-                  layout="split"
-                  mode="folder"
                   initialPath={pickerPath || folderDest || roots[0]?.path}
                   onNavigate={setPickerPath}
                 />

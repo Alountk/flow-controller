@@ -132,8 +132,8 @@ describe('FileManager name filter', () => {
     await screen.findByText('Alpha.mkv')
 
     // The FilterBar convention: a search field, Spanish accessible name.
-    const filter = screen.getByRole('searchbox', { name: 'Filtrar archivos' })
-    expect(filter).toHaveAttribute('placeholder', 'Buscar carpeta o archivo... [ / ]')
+    const filter = screen.getByRole('searchbox', { name: 'Filtrar por nombre' })
+    expect(filter).toHaveAttribute('placeholder', 'Filtrar por nombre…')
 
     fireEvent.change(filter, { target: { value: 'ALP' } })
     expect(screen.getByText('Alpha.mkv')).toBeInTheDocument()
@@ -150,12 +150,12 @@ describe('FileManager name filter', () => {
     renderFileManager()
     await screen.findByText('Alpha.mkv')
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Filtrar archivos' }), {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filtrar por nombre' }), {
       target: { value: 'zzz' },
     })
 
     expect(screen.queryByText('Alpha.mkv')).toBeNull()
-    expect(screen.getByText('Sin resultados')).toBeInTheDocument()
-    expect(document.querySelector('.fm-empty')).not.toBeNull()
+    expect(screen.getByText('Sin coincidencias')).toBeInTheDocument()
+    expect(document.querySelector('.explorer-empty')?.textContent).toBe('Sin coincidencias')
   })
 })

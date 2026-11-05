@@ -95,8 +95,9 @@ describe('F3 breadcrumb clicable (S11a)', () => {
     fireEvent.dblClick(screen.getByText('descargas'))
     await screen.findByText('A.mkv')
 
-    const storageSegment = screen.queryByRole('button', { name: 'storage' })
-    expect(storageSegment).toBeInTheDocument() // RED: path is plain text today
+    // The crumb names the real path, and every ancestor is a button again.
+    const storageSegment = screen.queryByRole('button', { name: '/mnt/storage' })
+    expect(storageSegment).toBeInTheDocument()
 
     fireEvent.click(storageSegment as HTMLElement)
     await waitFor(() => expect(browseCountFor(fetchMock, '/mnt/storage')).toBeGreaterThanOrEqual(2))
@@ -112,10 +113,10 @@ describe('F3 cabeceras de columna (S11b)', () => {
     renderFileManager()
     await screen.findByText('A.mkv')
 
-    for (const header of ['Nombre', 'Tamaño', 'Acciones']) {
+    for (const header of ['Nombre', 'Tipo', 'Tamaño', 'Modificado', 'Acciones']) {
       expect(screen.getAllByText(header).length).toBeGreaterThan(0)
     }
-    for (const moved of ['Procedencia', 'Retención', 'Modificado']) {
+    for (const moved of ['Procedencia', 'Retención']) {
       expect(screen.queryByText(moved)).toBeNull()
     }
   })
@@ -128,7 +129,7 @@ describe('F3 placeholder del filtro (S11c)', () => {
     await screen.findByText('A.mkv')
 
     expect(
-      screen.getByPlaceholderText('Buscar carpeta o archivo... [ / ]'),
+      screen.getByPlaceholderText('Filtrar por nombre…'),
     ).toBeInTheDocument() // RED: «Filtrar archivos...» today
   })
 })
@@ -139,7 +140,7 @@ describe('F3 atajo «/» (S11c)', () => {
     renderFileManager()
     await screen.findByText('A.mkv')
 
-    const filter = screen.getByRole('searchbox', { name: 'Filtrar archivos' })
+    const filter = screen.getByRole('searchbox', { name: 'Filtrar por nombre' })
     ;(filter as HTMLElement).blur()
 
     fireEvent.keyDown(document.body, { key: '/' })
@@ -154,7 +155,7 @@ describe('F3 atajo «/» (S11c)', () => {
 
     fireEvent.click(screen.getByTitle('Renombrar'))
     const inputs = Array.from(document.querySelectorAll('input'))
-    const filter = screen.getByRole('searchbox', { name: 'Filtrar archivos' })
+    const filter = screen.getByRole('searchbox', { name: 'Filtrar por nombre' })
     const inline = inputs.find((i) => i !== filter)
     expect(inline).toBeTruthy()
     ;(inline as HTMLInputElement).focus()

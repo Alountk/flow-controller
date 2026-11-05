@@ -17,7 +17,9 @@
 
 .fm-dual {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* One configured root means one pane: a fixed 1fr 1fr left half the
+     explorer empty and squeezed the file name into nothing. */
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
   gap: 16px;
   min-height: 500px;
 }
@@ -70,102 +72,12 @@
   cursor: default;
 }
 
-.fm-volume-select {
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-elev);
-  color: var(--text);
-  font-size: 11px;
-  font-family: monospace;
-  cursor: pointer;
-  flex-shrink: 0;
-  max-width: 140px;
-  outline: none;
-}
-
-.fm-volume-select:hover {
-  border-color: var(--accent);
-}
-
-.fm-volume-select:focus {
-  border-color: var(--accent);
-}
-
 /* Picker live filter — folders AND files of the visible directory. */
-.fm-filter-input {
-  width: 100%;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-elev);
-  color: var(--text);
-  font-size: 11px;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.fm-filter-input:focus {
-  border-color: var(--accent);
-}
-
-.fm-path {
-  flex: 1;
-  font-family: monospace;
-  font-size: 11px;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 4px;
-}
-
 /* Breadcrumb (S11a): the path slot, now with clickable ancestors. */
-.fm-crumb-sep {
-  margin: 0 1px;
-  opacity: 0.6;
-}
-
-.fm-crumb-btn {
-  font: inherit;
-  padding: 0 2px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.fm-crumb-btn:hover {
-  color: var(--accent);
-}
-
 /* Out-of-volume segments are text, not buttons: the volume is the floor. */
-.fm-crumb-seg {
-  padding: 0 2px;
-  opacity: 0.7;
-}
-
 /* The row-name filter (T3): lives in the toolbar, beside the path it does
    NOT repeat. Same convention as the pane's FilterBar — a search field with
    a Spanish accessible name and placeholder. */
-.fm-filter {
-  flex: 0 1 170px;
-  min-width: 90px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 11px;
-  font-family: inherit;
-  outline: none;
-}
-
-.fm-filter:focus {
-  border-color: var(--accent);
-}
-
 .fm-cancel-btn {
   padding: 4px 8px;
   border: 1px solid var(--border);
@@ -211,69 +123,9 @@
 }
 
 .fm-loading,
-.fm-empty {
-  padding: 40px;
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 12px;
-}
-
 /* Column headers (S11b): name the row cells the navigator renders below. */
-.fm-head-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 10px;
-  flex-shrink: 0;
-}
-
 /* Three cells mirror the three the row still lays out: the name block takes the
    leftover width, size and actions keep the widths their cells reserve. */
-.fm-head-row span:nth-child(1) {
-  flex: 1;
-  min-width: 0;
-}
-
-.fm-head-row span:nth-child(2) {
-  min-width: 60px;
-  text-align: right;
-}
-
-.fm-head-row span:nth-child(3) {
-  min-width: 96px;
-  text-align: right;
-}
-
-.fm-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.fm-item {
-  display: flex;
-  /* Wrap only when the row's fixed chips + actions exceed its width (~360px
-     viewports): single-line stays single-line, overflow becomes a second
-     line instead of a horizontal scroll that hides the hover actions. */
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.fm-item:hover {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-
-.fm-item.selected {
-  background: var(--accent-soft);
-}
-
 /* ── Selection ─────────────────────────────────────────────────────────────── */
 
 .fm-select-bar {
@@ -376,33 +228,9 @@
   overflow-wrap: anywhere;
 }
 
-.fm-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
 /* The row's one flexible block: the name on top, what explains it underneath.
    `min-width: 0` is the whole point — without it a long name claims its
    intrinsic width and pushes size and actions out of the pane. */
-.fm-row-main {
-  /* Basis 0, not `auto`: with `flex-wrap` on the row, the hypothetical size of
-     this block decides the line break, and a long name's intrinsic width would
-     push size and actions to a third line. */
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.fm-row-sub {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  min-width: 0;
-}
-
 .fm-name {
   min-width: 0;
   font-size: 12px;
@@ -425,10 +253,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.fm-item.dir .fm-name {
-  font-weight: 500;
 }
 
 .fm-size,
@@ -490,10 +314,6 @@
   justify-content: flex-end;
   opacity: 0;
   transition: opacity 0.15s;
-}
-
-.fm-item:hover .fm-item-actions {
-  opacity: 1;
 }
 
 .fm-sm-btn {
