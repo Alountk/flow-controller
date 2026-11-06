@@ -2456,7 +2456,9 @@ class TestServiceConnectionTester:
             resp = client.get("/api/services/test")
 
         body = resp.json()
-        assert {r["key"] for r in body["results"]} == ARR_KEYS | {"amutorrent", "prowlarr", "qbit"}
+        assert {r["key"] for r in body["results"]} == ARR_KEYS | {
+            "amutorrent", "prowlarr", "qbit", "amuleapi"
+        }
         assert body["ok"] is True
 
     def test_prowlarr_is_probed_with_its_own_v1_api(self):

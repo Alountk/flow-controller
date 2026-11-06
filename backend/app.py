@@ -29,6 +29,7 @@ from application import gateways
 from application.use_cases import downloads_cache, trace_cache
 from infrastructure import amule_ec_client, amule_service, amule_watchdog, arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
 from infrastructure import credentials as credentials_module, prowlarr_client, sqlite_history as history, torznab_client
+import auto_copy_driver
 from config import FRONTEND_DIST
 from state import _LOG_BUFFER, buf_handler, _load_log_file, close_shared_session, open_shared_session
 
@@ -99,6 +100,7 @@ async def lifespan(_app: FastAPI):
             downloads_cache.downloads_poller(),
             trace_cache.trace_refresher(),
             amule_watchdog.watchdog_loop(),
+            auto_copy_driver.sweep_loop(),
         )
     ]
     try:

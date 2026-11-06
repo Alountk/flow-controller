@@ -49,6 +49,7 @@ const SERVICE_NAME: Record<string, string> = {
   sonarr: 'Sonarr',
   prowlarr: 'Prowlarr',
   amutorrent: 'aMuTorrent',
+  amuleapi: 'aMule API',
   qbit: 'qBittorrent',
   amule: 'aMule',
   opensubtitles: 'OpenSubtitles',
@@ -239,7 +240,12 @@ function Section({
  *  optional in the payload (its defaults are env-backed and may never have
  *  been saved), so it is seeded here: `update()` writes nested paths and
  *  needs the object to exist. */
-type SettingsForm = Settings & { services: Settings['services'] & { amule?: AmuleEcValues } }
+type SettingsForm = Settings & {
+  services: Settings['services'] & { amule?: AmuleEcValues }
+  // T7b/S4: `intervals.sweep` postdates the shared Settings shape — declared
+  // like its interval neighbours, a required number.
+  intervals: Settings['intervals'] & { sweep: number }
+}
 
 function withAmuleEc(data: Settings): SettingsForm {
   const next = JSON.parse(JSON.stringify(data)) as SettingsForm
@@ -261,6 +267,13 @@ function withAmuleEc(data: Settings): SettingsForm {
       enabled: ntfy?.enabled ?? false,
     },
   }
+  // Same tolerance for amuleapi: payloads written before amule-32 lack the
+  // group, and the card reads `services.amuleapi.url` without guards.
+  const amuleapi = next.services.amuleapi
+  next.services.amuleapi = { url: amuleapi?.url ?? '', password: amuleapi?.password ?? '' }
+  // Same tolerance for the sweep knob (T7b/S4): pre-T7a payloads lack the key
+  // and the card reads it unguarded; 600 is the backend's own default.
+  next.intervals.sweep = next.intervals.sweep ?? 600
   return next
 }
 
@@ -439,7 +452,7 @@ export function Settings() {
   function update(path: string, value: string) {
     setForm((prev) => {
       if (!prev) return prev
-      const next = JSON.parse(JSON.stringify(prev)) as Settings
+      const next = JSON.parse(JSON.stringify(prev)) as SettingsForm
       const keys = path.split('.')
       let obj = next as unknown as Record<string, unknown>
       for (let i = 0; i < keys.length - 1; i++) {
@@ -461,7 +474,7 @@ export function Settings() {
   function updateList(path: string, value: string) {
     setForm((prev) => {
       if (!prev) return prev
-      const next = JSON.parse(JSON.stringify(prev)) as Settings
+      const next = JSON.parse(JSON.stringify(prev)) as SettingsForm
       const keys = path.split('.')
       let obj = next as unknown as Record<string, unknown>
       for (let i = 0; i < keys.length - 1; i++) {
@@ -676,6 +689,7 @@ export function Settings() {
         </div>
         <div className="settings-group">
           <h4>aMuTorrent</h4>
+          <p className="settings-hint">Ruta de rollback (AMULE_EC_DIRECT=0): el camino activo va por EC directo y búsqueda vía aMule API.</p>
           <Field label="URL" value={form.services.amutorrent.url} onChange={(v) => update('services.amutorrent.url', v)} restart={isRestarting('services.amutorrent.url')} placeholder="http://localhost:4000" />
           <Field label="API Key" value={form.services.amutorrent.api_key} onChange={(v) => update('services.amutorrent.api_key', v)} restart={isRestarting('services.amutorrent.api_key')} placeholder="Tu API key" type="password" />
           <Field label="Usuario" value={form.services.amutorrent.user} onChange={(v) => update('services.amutorrent.user', v)} restart={isRestarting('services.amutorrent.user')} />
@@ -688,6 +702,20 @@ export function Settings() {
                 api_key: form.services.amutorrent.api_key,
                 user: form.services.amutorrent.user,
                 password: form.services.amutorrent.password,
+              }}
+            />
+          </div>
+        </div>
+        <div className="settings-group">
+          <h4>aMule API</h4>
+          <Field label="URL" value={form.services.amuleapi.url} onChange={(v) => update('services.amuleapi.url', v)} restart={isRestarting('services.amuleapi.url')} placeholder="http://localhost:4713" />
+          <Field label="Contraseña" value={form.services.amuleapi.password} onChange={(v) => update('services.amuleapi.password', v)} restart={isRestarting('services.amuleapi.password')} type="password" />
+          <div className="settings-group-actions">
+            <ServiceProbeButton
+              service="amuleapi"
+              values={{
+                url: form.services.amuleapi.url,
+                password: form.services.amuleapi.password,
               }}
             />
           </div>
@@ -764,6 +792,9 @@ export function Settings() {
         <Field label="Delay entre reintentos (segundos)" value={form.intervals.retry_delay} onChange={(v) => update('intervals.retry_delay', v)} type="number" />
         <Field label="Timeout peticiones HTTP (segundos)" value={form.intervals.request_timeout} onChange={(v) => update('intervals.request_timeout', v)} type="number" />
         <Field label="Timeout import (segundos)" value={form.intervals.import_timeout} onChange={(v) => update('intervals.import_timeout', v)} type="number" />
+        {/* T7b/S4: no `restart` badge — the scheduler re-reads the knob at
+            every tick, so a save applies live like the retention window. */}
+        <Field label="Barrido automático (segundos; 0 = apagado)" value={form.intervals.sweep} onChange={(v) => update('intervals.sweep', v)} type="number" />
         {/* The retention window is the Intervalos group's only value measured
             in days instead of seconds; no `restart` badge because the backend
             reads it live through config.rebuild(). */}

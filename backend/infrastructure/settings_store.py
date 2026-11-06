@@ -28,6 +28,10 @@ DEFAULTS: dict[str, Any] = {
         # anterior a la feature lo dejaba ausente y crasheaba la pantalla
         # (regresión de producción del cierre, Log L8).
         "qbit": {"url": "", "user": "", "password": ""},
+        # amuleapi (T2/S1): REST de aMule 3.x. Mismo porqué que qbit: el grupo
+        # va SIEMPRE en GET /api/settings porque la tarjeta lee
+        # `services.amuleapi.url` sin guardas (Log L8 del cierre qbit).
+        "amuleapi": {"url": "", "password": ""},
         "opensubtitles": {"api_key": ""},
     },
     "security": {"api_key_hash": "", "api_key_salt": "", "safe_mode": True},
@@ -49,6 +53,8 @@ DEFAULTS: dict[str, Any] = {
         "retry_delay": 2,
         "request_timeout": 5,
         "import_timeout": 40,
+        # Barrido automático (S4/T7): segundos entre barridos; 0 = interruptor off.
+        "sweep": 600,
     },
     # Avisos al móvil (C-01). Todo vacío a propósito: sin URL o sin topic el
     # canal queda «No configurado» y no se envía nada — el criterio de

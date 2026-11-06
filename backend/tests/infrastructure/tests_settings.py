@@ -5,11 +5,13 @@ silently beat anything saved from the Settings UI — editing a URL or API key
 appeared to do nothing. The environment now only seeds the file on first run.
 """
 
+import copy
 import json
 from unittest.mock import patch
 
 import pytest
 
+import config
 from infrastructure import settings_store as settings
 
 
@@ -86,6 +88,7 @@ class TestTheFileWinsAfterwards:
 
         # Not in the file, so the default applies.
         assert settings.get_setting("intervals", "check") == 15
+        assert settings.get_setting("intervals", "sweep") == 600
 
     def test_a_file_written_before_the_qbit_service_still_falls_back(self, cfg):
         """qbit-nativo producción: un `settings.json` anterior a la feature no
@@ -98,6 +101,35 @@ class TestTheFileWinsAfterwards:
         settings.load_settings()
 
         assert settings.get_settings()["services"]["qbit"] == {"url": "", "user": "", "password": ""}
+
+
+class TestAutoSweepInterval:
+    """S4/T7: `intervals.sweep` — segundos entre barridos, 0 = interruptor off."""
+
+    @pytest.fixture(autouse=True)
+    def _restored_settings(self):
+        """Put the settings and the derived constants back after every test."""
+        before = copy.deepcopy(settings._settings)
+        yield
+        settings._settings = before
+        config.rebuild()
+
+    def test_the_default_is_ten_minutes(self, cfg):
+        (cfg / "settings.json").write_text(json.dumps({"developer": False}))
+
+        settings.load_settings()
+        config.rebuild()
+
+        assert config.SWEEP_INTERVAL == 600
+
+    def test_zero_is_the_switch_off_never_the_default(self, cfg):
+        (cfg / "settings.json").write_text(json.dumps({"intervals": {"sweep": 0}}))
+
+        settings.load_settings()
+        config.rebuild()
+
+        # 0 IS the interruptor: it must not read back as the 600 default.
+        assert config.SWEEP_INTERVAL == 0
 
 
 class TestMixerRequiredLanguages:

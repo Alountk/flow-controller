@@ -15,6 +15,7 @@ const settings = {
     radarr: { url: 'http://localhost:7878', api_key: 'k' },
     sonarr: { url: 'http://localhost:8989', api_key: 'k' },
     amutorrent: { url: 'http://localhost:4000', api_key: 'k', user: 'admin', password: 'p' },
+    amuleapi: { url: 'http://localhost:4713', password: 'clave-amule' },
     qbit: { url: 'http://localhost:8080', user: 'admin', password: 'p' },
     opensubtitles: { api_key: '' },
   },
@@ -28,7 +29,7 @@ const settings = {
     output_mixed: '/mnt/storage/mixed',
     allowed_roots: ['/mnt/storage', '/mnt/storage-6tb'],
   },
-  intervals: { check: 15, max_retries: 3, retry_delay: 2, request_timeout: 5, import_timeout: 40 },
+  intervals: { check: 15, max_retries: 3, retry_delay: 2, request_timeout: 5, import_timeout: 40, sweep: 600 },
   tracing: { limit: 25 },
   // Backend DEFAULTS again: the retention window the settings page reads
   // directly (`backend/settings.py`: retention.amule_days = 7).
@@ -209,6 +210,50 @@ describe('service connection tester', () => {
     )
   })
 
+  it('probes amuleapi with its url and password', async () => {
+    // amule-32 T2: the aMule API card probes the official REST daemon of
+    // aMule 3.x, anonymous version check — password travels with the URL.
+    const fn = mockFetch([
+      result({ key: 'amuleapi', kind: 'amuleapi', url: 'http://localhost:4713', detail: 'Conectado (3.2.0)' }),
+    ])
+    renderSettings()
+
+    const card = (await screen.findByRole('heading', { name: 'aMule API' })).closest(
+      '.settings-group',
+    ) as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: 'Probar conexión' }))
+
+    await waitFor(() => {
+      const post = fn.mock.calls.find(
+        ([input, init]) =>
+          String(input).includes('/api/services/test') && init?.method === 'POST',
+      )
+      expect(post).toBeTruthy()
+      expect(JSON.parse(String(post![1]?.body))).toEqual({
+        service: 'amuleapi',
+        url: 'http://localhost:4713',
+        password: 'clave-amule',
+      })
+    })
+  })
+
+  it('the aMuTorrent card carries the rollback hint and the aMule API card is unaffected', async () => {
+    // amule-32 T5/S2: la tarjeta aMuTorrent es sólo el rollback — la pista lo
+    // dice bajo el <h4>, y la tarjeta aMule API (T2) sigue intacta.
+    mockFetch([])
+    renderSettings()
+
+    const card = (await screen.findByRole('heading', { name: 'aMuTorrent' })).closest(
+      '.settings-group',
+    ) as HTMLElement
+    expect(within(card).getByText(/Ruta de rollback/)).toHaveTextContent('AMULE_EC_DIRECT=0')
+
+    const apiCard = screen.getByRole('heading', { name: 'aMule API' }).closest(
+      '.settings-group',
+    ) as HTMLElement
+    expect(within(apiCard).getByRole('button', { name: 'Probar conexión' })).toBeInTheDocument()
+  })
+
   it('marks each healthy service so a mixed result is readable', async () => {
     mockFetch([
       result({ key: 'radarr', ok: true }),
@@ -276,6 +321,52 @@ describe('aMule retention window', () => {
         retention?: { amule_days?: number }
       }
       expect(body.retention).toEqual({ amule_days: 14 })
+    })
+  })
+})
+
+describe('barrido automático — el mando del intervalo (S4/T7b)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows the knob as a plain number without a restart badge and saves it under intervals.sweep', async () => {
+    const fn = mockFetch([])
+    renderSettings()
+
+    // The backend default of 600 s, straight from the settings payload. The
+    // label carries the units and the 0 = off semantics like its neighbours.
+    const field = await screen.findByLabelText('Barrido automático (segundos; 0 = apagado)')
+    expect(field).toHaveValue(600)
+
+    // The tick re-reads the knob at call time (T7a), so a save applies live:
+    // no "Requiere reinicio" badge.
+    expect(
+      (field.closest('.settings-field') as HTMLElement).querySelector('.settings-restart-badge'),
+    ).toBeNull()
+
+    // 0 is the off switch — it must reach the backend as intervals.sweep, the
+    // group the scheduler reads (config: SWEEP_INTERVAL).
+    fireEvent.change(field, { target: { value: '0' } })
+    const header = screen
+      .getByRole('heading', { name: 'General', level: 2 })
+      .closest('.settings-panel-header') as HTMLElement
+    fireEvent.click(within(header).getByRole('button', { name: /Guardar cambios/ }))
+
+    await waitFor(() => {
+      const post = fn.mock.calls.find(
+        ([input, init]) =>
+          String(input).includes('/api/settings') && init?.method === 'POST',
+      )
+      expect(post).toBeTruthy()
+      const body = JSON.parse(String(post![1]?.body)) as {
+        intervals?: { sweep?: number }
+      }
+      expect(body.intervals?.sweep).toBe(0)
     })
   })
 })

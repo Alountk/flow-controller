@@ -27,8 +27,9 @@ allowed to hold an adapter — puts it in this module's hand (`torznab` below);
 with no hand-off the probe answers `ok:false` instead of crashing.
 
 The T4/S4 unified search (`POST /api/indexers/search`) lives here too: one
-query fans out over the ENABLED Torznab rows plus `prowlarr_search` and
-`gateways.amule_search` in parallel, and one source's failure never discards
+query fans out over the ENABLED Torznab rows plus `prowlarr_search` and the
+aMule seam — the `amuleapi` REST search when configured, the EC seam as its
+fallback (T4b) — in parallel, and one source's failure never discards
 another's results — every absence is a `skipped` entry with an honest reason,
 never a silent `[]`. The optional `indexer_ids` body field (T2/S3) narrows
 the Torznab fan-out to a per-row subset of the registry.
@@ -53,6 +54,7 @@ from urllib.parse import urlsplit
 import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 
+import config
 from application import gateways
 from application.gateways import history, store_available
 from config import find_service, service_unavailable_reason
@@ -274,11 +276,16 @@ def _is_relevant(query: str, title: str) -> bool:
 def _skip_reason(exc: BaseException) -> str:
     """Why something is skipped — never a traceback, never a dangling colon.
 
-    `RuntimeError` is the seams' DESIGNED fail-closed refusal (their shared
-    `service_unavailable_reason` contract), so its message travels verbatim,
-    exactly as `grab_release.py:219-223` maps it; anything else is an accident
-    and gets the honest short `Tipo: mensaje` of `grab_release._ec_add_link`.
+    A typed seam error carries its own user-facing Spanish `detail` (its
+    contract, `AmuleAPIError`-style) and `RuntimeError` is the seams' DESIGNED
+    fail-closed refusal (their shared `service_unavailable_reason` contract):
+    both travel verbatim, exactly as `grab_release.py:219-223` maps them;
+    anything else is an accident and gets the honest short `Tipo: mensaje` of
+    `grab_release._ec_add_link`.
     """
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, str) and detail.strip():
+        return detail.strip()
     if isinstance(exc, RuntimeError):
         return str(exc).strip() or type(exc).__name__
     return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
@@ -465,10 +472,25 @@ async def _search_torznab(
 
 
 async def _search_amule(query: str) -> dict:
-    """aMule via the EC seam — SYNC, so it rides `asyncio.to_thread` (the
-    `grab_release` `record_own_grab` precedent): ED2K is slow and the event
-    loop is not ours to block.
+    """aMule: the `amuleapi` REST seam when configured (T4b), the EC seam
+    otherwise. The REST path is async and rides the loop directly; the EC
+    fallback is SYNC, so it rides `asyncio.to_thread` (the `grab_release`
+    `record_own_grab` precedent): ED2K is slow and the event loop is not ours
+    to block.
     """
+    if config.AMULEAPI_URL and config.AMULEAPI_PASSWORD:
+        try:
+            async with http_session() as session:
+                rows = await gateways.amuleapi_search(session, query)
+        except Exception as exc:  # noqa: BLE001 — errores tipados de amuleapi
+            return {
+                "rows": [],
+                "ok": False,
+                "skipped": [{"source": "amule", "reason": _skip_reason(exc)}],
+            }
+        return {"rows": rows, "ok": True, "skipped": []}
+    # EC stays the fallback until P1 configures amuleapi — this keeps search
+    # working for installs that have not migrated yet.
     try:
         found = await asyncio.to_thread(gateways.amule_search, query)
     except Exception as exc:  # noqa: BLE001 — errores EC tipados + la negativa «no configurado»

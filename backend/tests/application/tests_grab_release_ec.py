@@ -1,7 +1,7 @@
 """The grab's transport IS the dispatch: the row's link goes as-is (T2 / S2).
 
 This file used to pin the ED2K RESOLVE/enqueue the worker ran over the direct
-EC seam (`_ec_search_link` / `_ec_add_link` / `_search_query`) — the step that
+EC seam — the step that
 asked aMule's indexer for the link behind a hash-id guid and joined on the
 result's file hash. calendario-directo T2/S2 deletes that machinery from
 `run_grab` verbatim: «no se re-busca el enlace — la fila ya trae
@@ -22,9 +22,8 @@ into the worker, and these tests pin the grab-level contract of it:
 The transport-level rules of the dispatch itself (refusals, redaction,
 `_BAD_SCHEME`, the off-the-loop EC adapter) are covered endpoint-side by
 `tests/interfaces/routes/tests_indexers_download.py`; the retired resolve
-matching (exact hash / Radarr-suffixed base / size tiebreak) lives on in
-`tests/infrastructure/tests_direct_add.py` against `arr_client.
-amutorrent_search_link`, the one copy of that rule still standing.
+matching (exact hash / Radarr-suffixed base / size tiebreak) died with the
+last search resolver (amule-32 T4b).
 """
 
 from __future__ import annotations

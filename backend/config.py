@@ -180,10 +180,11 @@ def rebuild() -> None:
     """
     global RADARR_URL, SONARR_URL, PROWLARR_URL, AMUTORRENT_URL
     global AMULE_URL, AMULE_EC_PORT, AMULE_EC_PASSWORD
+    global AMULEAPI_URL, AMULEAPI_PASSWORD
     global RADARR_API_KEY, SONARR_API_KEY, PROWLARR_API_KEY, AMUTORRENT_API_KEY
     global AMUTORRENT_USER, AMUTORRENT_PASSWORD, QBIT_URL, QBIT_USER, QBIT_PASSWORD
     global CHECK_INTERVAL, MAX_RETRIES, RETRY_DELAY, REQUEST_TIMEOUT
-    global IMPORT_POLL_TIMEOUT, TRACE_LIMIT
+    global IMPORT_POLL_TIMEOUT, SWEEP_INTERVAL, TRACE_LIMIT
     global SAFE_MODE, DEVELOPER
     global FOLDER_DOWNLOAD_AMULE, FOLDER_DOWNLOAD_TORRENT
     global RETENTION_AMULE_DAYS
@@ -199,6 +200,11 @@ def rebuild() -> None:
     AMULE_URL = get_setting("services", "amule", "url", default=os.getenv("AMULE_URL", ""))
     AMULE_EC_PORT = get_setting("services", "amule", "ec_port", default=os.getenv("AMULE_EC_PORT", "4712"))
     AMULE_EC_PASSWORD = get_setting("services", "amule", "ec_password", default=os.getenv("AMULE_EC_PASSWORD", ""))
+
+    # REST de aMule 3.x (amuleapi, T2/S1): defaults vacíos como qbit — sin
+    # url Y contraseña no hay servicio operable (el login de T3 exige ambas).
+    AMULEAPI_URL = get_setting("services", "amuleapi", "url", default="")
+    AMULEAPI_PASSWORD = get_setting("services", "amuleapi", "password", default="")
 
     RADARR_API_KEY = get_setting("services", "radarr", "api_key", default="")
     SONARR_API_KEY = get_setting("services", "sonarr", "api_key", default="")
@@ -219,6 +225,8 @@ def rebuild() -> None:
     RETRY_DELAY = float(get_setting("intervals", "retry_delay", default=2))
     REQUEST_TIMEOUT = float(get_setting("intervals", "request_timeout", default=5))
     IMPORT_POLL_TIMEOUT = int(get_setting("intervals", "import_timeout", default=40))
+    # 0 = el interruptor del barrido automático apagado; el bucle lo lee en cada tick.
+    SWEEP_INTERVAL = int(get_setting("intervals", "sweep", default=600))
 
     TRACE_LIMIT = int(get_setting("tracing", "limit", default=25))
     RETENTION_AMULE_DAYS = int(get_setting("retention", "amule_days", default=7))
@@ -294,6 +302,17 @@ def rebuild() -> None:
             "url": AMULE_URL,
             "api_key": "",
             "configured": bool(AMULE_URL and AMULE_EC_PASSWORD),
+        },
+        {
+            # amuleapi (T2/S1): REST oficial de aMule 3.x. `kind` propio, ni
+            # 'qbit' (fachada) ni 'amule' (EC). La contraseña sólo la consume
+            # el cliente de T3: esta lista y /api/services no la exponen.
+            "key": "amuleapi",
+            "kind": "amuleapi",
+            "url": AMULEAPI_URL,
+            "api_key": "",
+            "password": AMULEAPI_PASSWORD,
+            "configured": bool(AMULEAPI_URL and AMULEAPI_PASSWORD),
         },
         # Cliente qBittorrent nativo (S3/S4): kind `qbittorrent` ≠ el `qbit` de la fachada; user/password sólo para la sonda de login — ninguna API devuelve la entrada entera (tests_qbit_service).
         {"key": "qbit", "kind": "qbittorrent", "url": QBIT_URL, "api_key": "",

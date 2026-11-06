@@ -32,13 +32,13 @@ Failures raise `aiohttp.ClientError`: a non-200 answer carries its body, and
 a body that is not XML is the same kind of failure (nothing silent, nothing
 empty-disguised-as-success).
 
-Query shaping mirrors `arr_client._search_query` byte-for-byte (the
-`arr_client.py:1028-1046` precedent): head before the first parenthetical,
-cut at the first quality token, dots to spaces, the year appended when the
-title carries one, and an 8-token cap.
+Measured query knowledge (kept from the shaper deleted in amule-32 T4b): a
+slow ED2K-backed indexer answers "Name Year" in ~30 s while the full release
+name times out (>40 s). The winning shape: head before the first
+parenthetical, cut at the first quality token, dots to spaces, the year
+appended when the title carries one, and an 8-token cap.
 """
 
-import re
 import xml.etree.ElementTree as ElementTree
 
 import aiohttp
@@ -50,28 +50,6 @@ __all__ = ["torznab_caps", "torznab_search"]
 
 #: Fan-out search, multiple of `REQUEST_TIMEOUT` (see the module docstring).
 TIMEOUT_MULTIPLE = 12
-
-#: Quality-token cut of `_search_query`: everything from `.<quality>` on dies.
-_QUALITY_TOKENS = (
-    r"\.(?=(?:1080p|720p|2160p|4k|HDTV|WEB-?DL|BluRay|BDRip|HDRip|VHS)\b)"
-)
-
-
-def _search_query(title: str) -> str:
-    """The query a slow index network can answer — measured, not assumed.
-
-    Byte-for-byte mirror of `arr_client._search_query` (and of the one in
-    `grab_release`): the full release name times out while "Name Year" answers
-    in ~30 s. This layer may not import an adapter, so the pure normalization
-    travels with the code that needs it.
-    """
-    head = re.split(r"[()]", title, maxsplit=1)[0]
-    head = re.split(_QUALITY_TOKENS, head, maxsplit=1, flags=re.IGNORECASE)[0]
-    tokens = head.replace(".", " ").split()
-    year = re.search(r"\(((?:19|20)\d{2})\)", title)
-    if year:
-        tokens.append(year.group(1))
-    return " ".join(tokens[:8]).strip()
 
 
 async def torznab_caps(url: str, api_key: str, *, session=None) -> dict:

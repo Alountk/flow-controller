@@ -247,6 +247,62 @@ def test_does_not_mutate_the_trace():
     assert trace == before
 
 
+# ── S3: a direct add is one the arr never saw ────────────────────────────────
+#
+# The grace reason «el arr puede importarlo solo» must be unrepresentable here.
+
+
+def test_a_direct_download_copies_at_once_even_inside_the_grace_window():
+    result = decide_copy(
+        _trace("downloaded"), now=10_000, since=9_999, arr_has_file=False, arr_untracked=True
+    )
+    assert result["decision"] == COPY
+    assert "gracia" not in result["reason"]
+    assert "importarlo solo" not in result["reason"]
+
+
+def test_a_direct_download_needs_no_time_reference():
+    # With no window to measure, a missing reference must not hold the copy.
+    result = decide_copy(
+        _trace("downloaded"), now=10_000, since=None, arr_has_file=False, arr_untracked=True
+    )
+    assert result["decision"] == COPY
+    assert "sin referencia temporal" not in result["reason"]
+
+
+def test_a_direct_download_still_refuses_an_unknown_library_duplicate():
+    # S3 kills the grace, not the duplicate guard: with no destination the copy
+    # lands in the library, so an unanswerable probe still holds it back.
+    result = decide_copy(
+        _trace("downloaded"), now=10_000, since=9_999, arr_has_file=None, arr_untracked=True
+    )
+    assert result["decision"] == WAIT
+    assert "gracia" not in result["reason"]
+    assert "no se pudo comprobar" in result["reason"]
+
+
+def test_a_direct_download_with_a_destination_copies_despite_an_unknown_probe():
+    result = decide_copy(
+        _trace("downloaded"),
+        now=10_000,
+        since=9_999,
+        arr_has_file=None,
+        has_destination=True,
+        arr_untracked=True,
+    )
+    assert result["decision"] == COPY
+    assert "gracia" not in result["reason"]
+
+
+def test_an_arr_tracked_download_keeps_the_grace_verbatim():
+    # The flip side of S3: non-direct traces are exactly as before.
+    result = decide_copy(
+        _trace("downloaded"), now=10_000, since=9_999, arr_untracked=False
+    )
+    assert result["decision"] == WAIT
+    assert "el arr puede importarlo solo" in result["reason"]
+
+
 # ── Identity: auto_copy_key (T4) ─────────────────────────────────────────────
 #
 # The key is the idempotency marker's identity. These tests pin the three

@@ -426,6 +426,9 @@ class SweepDownloads:
         own_grab = find_own_grab(trace, own_grabs)
         destination = own_grab.get("destination") if own_grab else None
         has_destination = bool(destination) and destination in foreign_destinations
+        # A direct add (v9): the arr never saw it — no grace for the policy
+        # (S3) and no queue to detach for `_do_dispatch`. Resolved once here.
+        arr_untracked = bool(own_grab.get("direct")) if own_grab else False
         # Also carried here for the same reason: `_do_dispatch` needs it and is
         # called after the decision. `None` for a row that predates v8 stays
         # `None`.
@@ -453,7 +456,9 @@ class SweepDownloads:
         # already seen in the same stage, which is what lets a later sweep
         # observe the window elapse.
         since = None
-        if is_own and not already and _grace_relevant(stage, trace):
+        # A direct add never reaches the grace gate (S3), so a first-sighting
+        # row for it would be exactly the noise the condition below avoids.
+        if is_own and not already and not arr_untracked and _grace_relevant(stage, trace):
             since = self._grabs.note_auto_copy_seen(key, stage)
 
         decision = decide_copy(
@@ -465,6 +470,7 @@ class SweepDownloads:
             is_own_grab=is_own,
             arr_has_file=has_file,
             has_destination=has_destination,
+            arr_untracked=arr_untracked,
         )
         result = decision["decision"]
         reason = decision["reason"]
@@ -493,7 +499,7 @@ class SweepDownloads:
             # one. The guarantee that this folder never gets catalogued holds
             # by construction, and copy_files must not demand an id that will
             # never exist.
-            arr_untracked=bool(own_grab.get("direct")) if own_grab else False,
+            arr_untracked=arr_untracked,
         )
 
     async def _do_dispatch(

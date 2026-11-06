@@ -30,7 +30,9 @@ persists nothing and queries nothing. What these pin down:
   VERBATIM (`RuntimeError` is the seam's fail-closed contract), an
   unconfigured qBittorrent answers its own S3 hint, and any
   `apikey=` riding in a link is REDACTED before the detail is answered (T3's
-  risk-2 discipline: no secret ever reaches a response).
+  risk-2 discipline: no secret ever reaches a response);
+* the default add path makes NO `:4000` request (S2's active-path tripwire:
+  the aMuTorrent seam left REAL, only the session recording it).
 
 No real network (the gateways seams and the HTTP session are all stubbed).
 """
@@ -46,7 +48,9 @@ from fastapi.testclient import TestClient
 import config
 from app import app
 from application import gateways
+from infrastructure import arr_client
 from interfaces.http.routes import indexers as indexers_routes
+from tests._stubs import _StubSession
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -100,6 +104,14 @@ _SESSION = object()
 @asynccontextmanager
 async def _fake_http_session(*args, **kwargs):
     yield _SESSION
+
+
+def _session_opening(session):
+    @asynccontextmanager
+    async def _open(*args, **kwargs):
+        yield session
+
+    return _open
 
 
 class _Seams:
@@ -396,6 +408,30 @@ class TestSecretDiscipline:
         assert "apikey=****" in body["detail"], (
             "the apikey= value must be masked, not merely hidden in this case"
         )
+
+
+# ── active-path tripwire (S2) ───────────────────────────────────────────────
+
+
+class TestActivePathTripwire:
+    def test_the_default_add_path_never_requests_the_amutorrent_port(self):
+        """S2: «Ninguna llamada activa pasa por aMuTorrent (:4000)» — the ed2k
+        and hash adds with the flag unset (or anything but `"0"`) make NO
+        :4000 request. The bridge seam stays REAL so a routing regression
+        reaches the recording session and trips THIS, not a stubbed void."""
+        session = _StubSession()
+        with (
+            patch.object(gateways, "amule_add_ed2k", lambda link: None),
+            patch.object(gateways, "amule_download_search_result", lambda file_hash: None),
+            patch.object(arr_client, "AMUTORRENT_URL", "http://amutorrent.test:4000"),
+            patch.object(indexers_routes, "http_session", _session_opening(session)),
+        ):
+            for value in (None, "1"):
+                with _flag(value):
+                    assert _post({"link": ED2K}).json() == EC_ADDED
+                    assert _post({"guid": HASH32}).json() == EC_ADDED
+
+        assert [url for url, _ in session.calls if ":4000" in url] == []
 
 
 class TestAuth:
