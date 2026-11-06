@@ -1,4 +1,4 @@
-# amule-32-control — EN CURSO · espejo de odd/amule-32-control/tasks
+# amule-32-control — ENTREGADO (179ff5d) · espejo de odd/amule-32-control/tasks
 
 Subir el stack de descargas a aMule 3.2.0 + `amuleapi` REST, sacar aMuTorrent
 del camino activo y automatizar el barrido. Decisión del usuario: plan completo.
@@ -148,3 +148,13 @@ Pasos de subida (ejecución asistida: requiere el host/Portainer del usuario):
   panel de Seguimiento siembra por él al montar (`prev ?? result`: un seed
   lento no pisa un barrido manual). Ratchet MAX_LEGACY_LOC 3483 → 3569
   (deuda propia, disclosure en el commit). Rebanada 5 = T7a+T7b (~640 líneas).
+- **L10 (entrega)**: PR **#306** → squash **`179ff5d`** en `main`
+  (2026-11-06), rama borrada. CI verde antes de mergear: backend-tests,
+  frontend-build, e2e, docker-verify y GitGuardian (docker-push salta en PRs).
+  Evidencia final verificada: backend **2200**, frontend **1056** (135
+  ficheros), build/`tsc`/eslint/vulture limpios. Las filas T1–T7 citan los
+  hashes de rama: tras el squash sólo viven en el ref del PR
+  (`gh pr view 306` / `refs/pull/306/head`); el commit de entrega es `179ff5d`.
+  **Pendiente del usuario (fuera del repo)**: P1 en su host (runbook arriba),
+  tarjeta «aMule API» y **modo seguro apagado** para que se mueva de verdad;
+  y la captura/consola del bug de Seguimiento.
