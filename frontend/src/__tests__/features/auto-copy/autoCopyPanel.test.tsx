@@ -47,10 +47,19 @@ function renderPanel(actions: ActionsResponse = OPEN_ACTIONS) {
   return render(<AutoCopyPanel safeMode={actions.safe_mode} />)
 }
 
-/** Clicks the trigger and waits for the sweep request to have been made. */
+/** Clicks the trigger and waits for the sweep POST to have been made.
+ *  Scoped to the POST because the panel now also fetches the last sweep on
+ *  mount — «toHaveBeenCalled» would be satisfied by that GET alone. */
 async function clickSweep(fetchMock: ReturnType<typeof vi.fn>) {
   fireEvent.click(screen.getByRole('button', { name: 'Revisar descargas' }))
-  await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).includes('/api/auto-copy/sweep') && init?.method === 'POST',
+      ),
+    ).toBe(true),
+  )
 }
 
 describe('"Revisar descargas" auto-copy trigger', () => {
@@ -227,5 +236,144 @@ describe('"Revisar descargas" auto-copy trigger', () => {
       await pending
     })
     expect(await screen.findByRole('button', { name: 'Revisar descargas' })).not.toBeDisabled()
+  })
+})
+
+describe('el último barrido se muestra al abrir, igual que el manual (S4/T7b)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('opens showing the last sweep result — counts and entries — without clicking', async () => {
+    // The flat GET body: the manual summary plus `swept_at` (auto_copy_driver).
+    const last = {
+      swept_at: 1762000000,
+      ...baseResult({
+        counts: { traces: 7, copy: 3, copied: 2, proposed: 1, wait: 1, skip: 0, failed: 0 },
+        entries: [
+          {
+            key: 'k1',
+            source: 'sonarr',
+            title: 'Some Show S03E07',
+            decision: 'copy' as const,
+            reason: 'La descarga terminó y el arr no se enteró',
+            action: 'copied' as const,
+            detail: null,
+          },
+        ],
+      }),
+    }
+    const fetchMock = vi.fn((input?: RequestInfo | URL) =>
+      String(input).includes('/api/auto-copy/last') ? ok(last) : ok(baseResult()),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderPanel()
+
+    expect((await screen.findByText('Trazas revisadas')).parentElement).toHaveTextContent('7')
+    expect(screen.getByText('Copiadas').parentElement).toHaveTextContent('2')
+    expect(await screen.findByText('Some Show S03E07')).toBeInTheDocument()
+    expect(screen.getByText('La descarga terminó y el arr no se enteró')).toBeInTheDocument()
+  })
+
+  it('renders the «aún no» detail honestly — no counts row, no errors block', async () => {
+    // Before any sweep the body is only `swept_at: null` + `detail`, with NO
+    // counts key: zeroes would pretend a sweep ran and found nothing.
+    const fetchMock = vi.fn((input?: RequestInfo | URL) =>
+      String(input).includes('/api/auto-copy/last')
+        ? ok({ swept_at: null, detail: 'aún no se ha ejecutado ningún barrido' })
+        : ok(baseResult()),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderPanel()
+
+    expect(
+      await screen.findByText('aún no se ha ejecutado ningún barrido'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Trazas revisadas')).not.toBeInTheDocument()
+    expect(screen.queryByText('Errores')).not.toBeInTheDocument()
+  })
+
+  it('a failed last-sweep fetch degrades to the failed-sweep vocabulary', async () => {
+    const fetchMock = vi.fn((input?: RequestInfo | URL) => {
+      if (String(input).includes('/api/auto-copy/last')) {
+        return Promise.reject(new TypeError('Failed to fetch'))
+      }
+      return ok(baseResult())
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderPanel()
+
+    // Same honest-failure rendering a failed manual sweep gets (failedResult):
+    // the errors block, never a made-up counts row.
+    expect(await screen.findByText('Errores')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'No se pudo contactar con el servidor. Comprueba la conexión y que el backend siga activo',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Trazas revisadas')).not.toBeInTheDocument()
+  })
+
+  it('a later manual sweep overwrites the seeded result', async () => {
+    const fetchMock = vi.fn((input?: RequestInfo | URL) =>
+      String(input).includes('/api/auto-copy/last')
+        ? ok({
+            swept_at: 1,
+            ...baseResult({
+              counts: { traces: 1, copy: 0, copied: 0, proposed: 0, wait: 1, skip: 0, failed: 0 },
+            }),
+          })
+        : ok(
+            baseResult({
+              counts: { traces: 9, copy: 0, copied: 0, proposed: 0, wait: 9, skip: 0, failed: 0 },
+            }),
+          ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderPanel()
+
+    expect((await screen.findByText('Trazas revisadas')).parentElement).toHaveTextContent('1')
+
+    await clickSweep(fetchMock)
+    await waitFor(() =>
+      expect(screen.getByText('Trazas revisadas').parentElement).toHaveTextContent('9'),
+    )
+  })
+
+  it('a slow last-sweep fetch never clobbers a finished manual sweep', async () => {
+    let resolveLast!: (res: Response) => void
+    const lastPending = new Promise<Response>((resolve) => {
+      resolveLast = resolve
+    })
+    const fetchMock = vi.fn((input?: RequestInfo | URL) =>
+      String(input).includes('/api/auto-copy/last')
+        ? lastPending
+        : ok(
+            baseResult({
+              counts: { traces: 9, copy: 0, copied: 0, proposed: 0, wait: 9, skip: 0, failed: 0 },
+            }),
+          ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderPanel()
+
+    await clickSweep(fetchMock)
+    await waitFor(() =>
+      expect(screen.getByText('Trazas revisadas').parentElement).toHaveTextContent('9'),
+    )
+
+    await act(async () => {
+      resolveLast(
+        okResponse({
+          swept_at: 1,
+          ...baseResult({
+            counts: { traces: 1, copy: 0, copied: 0, proposed: 0, wait: 1, skip: 0, failed: 0 },
+          }),
+        }),
+      )
+      await lastPending
+    })
+    // The late seed must not erase the manual result the user just saw.
+    expect(screen.getByText('Trazas revisadas').parentElement).toHaveTextContent('9')
   })
 })

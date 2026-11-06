@@ -75,3 +75,43 @@ export async function runAutoCopySweep(): Promise<AutoCopySweepResult> {
     return failedResult(describeFetchFailure(err))
   }
 }
+
+/**
+ * The last sweep's result — manual or automatic — for Seguimiento.
+ *
+ * The body is the manual summary plus `swept_at`; before the first sweep it is
+ * ONLY `swept_at: null` and a `detail` — no counts key, and zeroes must not be
+ * invented here either. Never rejects, like `runAutoCopySweep`.
+ */
+export async function getAutoCopyLast(): Promise<AutoCopySweepResult> {
+  let res: Response
+  try {
+    res = await apiFetch('/api/auto-copy/last')
+  } catch (err) {
+    return failedResult(describeFetchFailure(err))
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    const msg = (typeof body.detail === 'string' ? body.detail : null) || `HTTP ${res.status}`
+    return failedResult(msg)
+  }
+  try {
+    const body = (await res.json()) as Partial<AutoCopySweepResult> & { swept_at: number | null }
+    if (body.counts === undefined) {
+      // «Aún no» is not a failure: no errors block, and ok=false routes it to
+      // the panel's plain-statement branch instead of a zeroed counts row.
+      return {
+        ok: false,
+        running: false,
+        safe_mode: null,
+        detail: body.detail ?? '',
+        counts: emptyCounts(),
+        entries: [],
+        errors: [],
+      }
+    }
+    return body as AutoCopySweepResult
+  } catch (err) {
+    return failedResult(describeFetchFailure(err))
+  }
+}

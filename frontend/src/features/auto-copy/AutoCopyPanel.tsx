@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type {
   AutoCopyAction,
   AutoCopySweepEntry,
   AutoCopySweepResult,
 } from '../../shared/types.ts'
-import { runAutoCopySweep } from '../../shared/api/autoCopy.ts'
+import { getAutoCopyLast, runAutoCopySweep } from '../../shared/api/autoCopy.ts'
 import './AutoCopyPanel.css'
 
 /**
@@ -147,6 +147,15 @@ function AutoCopyResult({
 export function AutoCopyPanel({ safeMode, onDone }: Props) {
   const [sweepResult, setSweepResult] = useState<AutoCopySweepResult | null>(null)
   const [sweeping, setSweeping] = useState(false)
+
+  // S4 (T7b): Seguimiento opens on the last sweep — manual or automatic —
+  // through the same state the button writes. `prev ?? result` keeps a manual
+  // sweep that already landed from being clobbered by a slow answer.
+  useEffect(() => {
+    void getAutoCopyLast().then((result) => {
+      setSweepResult((prev) => prev ?? result)
+    })
+  }, [])
 
   async function runSweep() {
     setSweeping(true)
