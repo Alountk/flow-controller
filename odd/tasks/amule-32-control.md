@@ -46,7 +46,7 @@ tocar lo que queramos». Decisión (L2): «Plan completo (recomendado)».
 | T4  | S2       | Búsqueda ed2k vía amuleapi (sustituye `amutorrent_search_link`) + categorías | 651b8ec + c1380f8 |
 | T5  | S2/S5    | aMuTorrent fuera del camino activo: flags/Settings/README + frontend | e44e3e1 |
 | T6  | S3       | Gracia sólo para descargas que el arr conoce (`domain/policy`) + `tests_amule_mover_loop` en verde | df725bb |
-| T7  | S4       | Barrido automático: scheduler + setting + respeta modo seguro       |        |
+| T7  | S4       | Barrido automático: scheduler + setting + respeta modo seguro       | 7920486 + f235336 |
 | T8  | S1-S5    | Suites completas, evidencia en este doc y cierre                    |        |
 
 Orden: P1 (T1-T2) → P2 (T3-T5) → P3 (T6-T7) → cierre (T8).
@@ -139,3 +139,12 @@ Pasos de subida (ejecución asistida: requiere el host/Portainer del usuario):
   a ciegas a la biblioteca — eso CREA duplicados, el dolor del usuario). El
   destino 4K/3D fuera de raíz no sondea y se mueve siempre. Frontera pinneada
   por `test_a_direct_download_still_refuses_an_unknown_library_duplicate`.
+- **L9 (T7 — cómo quedó)**: `intervals.sweep` (600 s, `0` = apagado) leído
+  **en cada tick** junto a `SAFE_MODE` (una guardada aplica sin reinicio);
+  `sweep_loop` junto a `sweep` en el driver, arrancado como el watchdog
+  (refusal = tick saltado, nunca encolado; excepción = log y sigue);
+  `GET /api/auto-copy/last` en memoria con estado vacío honesto sin conteos
+  (paridad con el resumen manual, que nunca sobrevivió a un reinicio) y el
+  panel de Seguimiento siembra por él al montar (`prev ?? result`: un seed
+  lento no pisa un barrido manual). Ratchet MAX_LEGACY_LOC 3483 → 3569
+  (deuda propia, disclosure en el commit). Rebanada 5 = T7a+T7b (~640 líneas).
