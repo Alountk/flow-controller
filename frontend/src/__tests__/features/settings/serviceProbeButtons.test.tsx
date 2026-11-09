@@ -120,8 +120,9 @@ describe('«Probar conexión» on every Servicios card', () => {
     ) as HTMLElement
 
     const buttons = within(section).getAllByRole('button', { name: 'Probar conexión' })
-    // amule-32 T2 adds the aMule API card: one more probe button (5 → 6).
-    expect(buttons).toHaveLength(6)
+    // amule-32 T2 added the aMule API card (5 → 6); T10 moved that card to
+    // the aMule tab — its probe lives there (serviceConnections), so 5 here.
+    expect(buttons).toHaveLength(5)
   })
 
   it('probes the current form values and never sends the masked password', async () => {

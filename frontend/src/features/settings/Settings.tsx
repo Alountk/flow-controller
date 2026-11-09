@@ -707,20 +707,6 @@ export function Settings() {
           </div>
         </div>
         <div className="settings-group">
-          <h4>aMule API</h4>
-          <Field label="URL" value={form.services.amuleapi.url} onChange={(v) => update('services.amuleapi.url', v)} restart={isRestarting('services.amuleapi.url')} placeholder="http://localhost:4713" />
-          <Field label="Contraseña" value={form.services.amuleapi.password} onChange={(v) => update('services.amuleapi.password', v)} restart={isRestarting('services.amuleapi.password')} type="password" />
-          <div className="settings-group-actions">
-            <ServiceProbeButton
-              service="amuleapi"
-              values={{
-                url: form.services.amuleapi.url,
-                password: form.services.amuleapi.password,
-              }}
-            />
-          </div>
-        </div>
-        <div className="settings-group">
           <h4>qBittorrent</h4>
           <Field label="URL" value={form.services.qbit.url} onChange={(v) => update('services.qbit.url', v)} restart={isRestarting('services.qbit.url')} placeholder="http://localhost:8080" />
           <Field label="Usuario" value={form.services.qbit.user} onChange={(v) => update('services.qbit.user', v)} restart={isRestarting('services.qbit.user')} />
@@ -916,6 +902,22 @@ export function Settings() {
           onSave={doSave}
           saving={saveMutation.isPending}
         />
+        {/* T10 (elección del usuario): la API es del dominio aMule — mismo
+            formulario (services.amuleapi.*) y mismo Guardar; sólo de sitio. */}
+        <div className="settings-group">
+          <h4>aMule API</h4>
+          <Field label="URL" value={form.services.amuleapi.url} onChange={(v) => update('services.amuleapi.url', v)} restart={isRestarting('services.amuleapi.url')} placeholder="http://localhost:4713" />
+          <Field label="Contraseña" value={form.services.amuleapi.password} onChange={(v) => update('services.amuleapi.password', v)} restart={isRestarting('services.amuleapi.password')} type="password" />
+          <div className="settings-group-actions">
+            <ServiceProbeButton
+              service="amuleapi"
+              values={{
+                url: form.services.amuleapi.url,
+                password: form.services.amuleapi.password,
+              }}
+            />
+          </div>
+        </div>
         <AmuleServerActions />
       </div>
     </div>
