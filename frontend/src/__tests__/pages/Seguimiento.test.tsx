@@ -1283,3 +1283,19 @@ describe('the highlighted mix after «Mezclar» (T3/S1)', () => {
     expect(container.querySelector('.sg-row-highlight')).toBeNull()
   })
 })
+
+describe('safe-mode banner', () => {
+  it('announces safe mode when the view opens with it on', async () => {
+    renderView(resp([]), false, { ...OPEN_ACTIONS, safe_mode: true })
+
+    expect(
+      await screen.findByText('Modo seguro activo: nada se mueve, sólo se propone.'),
+    ).toBeInTheDocument()
+  })
+
+  it('stays hidden when safe mode is off', () => {
+    renderView(resp([]), false, OPEN_ACTIONS)
+
+    expect(screen.queryByText(/Modo seguro activo: nada se mueve/)).toBeNull()
+  })
+})

@@ -1051,3 +1051,16 @@ def test_the_auto_sweep_under_safe_mode_only_proposes(monkeypatch):
     assert summary["safe_mode"] is True
     assert summary["entries"][0]["action"] == "proposed"
     assert driver.last_sweep()["counts"]["proposed"] == 1
+
+
+def test_a_tick_records_the_auto_trigger(monkeypatch):
+    _tick_installed(monkeypatch)
+    monkeypatch.setattr(driver, "_last_sweep", None)
+
+    async def fake_sweep(session, *, safe_mode, **kwargs):
+        return _summary(safe_mode=safe_mode)
+
+    monkeypatch.setattr(driver, "sweep", fake_sweep)
+    asyncio.run(driver.sweep_tick())
+
+    assert driver.last_sweep()["trigger"] == "auto"

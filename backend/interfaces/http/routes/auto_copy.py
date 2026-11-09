@@ -72,8 +72,10 @@ async def run_auto_copy_sweep(_key: str = Depends(verify_api_key)):
         }
     # Whatever this POST answers IS the last result (S4: igual que el manual);
     # record_sweep drops refusals so a double click cannot erase the real one.
-    record_sweep(result)
-    return result
+    # The slot's swept_at/trigger ride back so the meta line needs no second
+    # fetch; a dropped refusal keeps the bare body (running: true, no stamp).
+    slot = record_sweep(result, "manual")
+    return {**result, **(slot or {})}
 
 
 @router.get("/api/auto-copy/last")

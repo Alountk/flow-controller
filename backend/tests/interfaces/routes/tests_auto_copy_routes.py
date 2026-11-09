@@ -32,7 +32,10 @@ def test_the_sweep_endpoint_returns_the_summary():
         resp = client.post("/api/auto-copy/sweep")
 
     assert resp.status_code == 200
-    assert resp.json() == summary
+    body = resp.json()
+    assert body["trigger"] == "manual" and body["swept_at"] > 0
+    bare = {k: v for k, v in body.items() if k not in {"trigger", "swept_at"}}
+    assert bare == summary, "el resumen del sweep, más el sello del POST"
 
 
 def test_the_sweep_endpoint_forwards_the_configured_safe_mode():
@@ -180,8 +183,8 @@ def test_the_sweep_endpoint_records_the_last_result(monkeypatch):
 
 def test_the_last_endpoint_answers_the_most_recent_result(monkeypatch):
     monkeypatch.setattr(driver_module, "_last_sweep", None)
-    driver_module.record_sweep(_summary(detail="primero"))
-    driver_module.record_sweep(_summary(detail="segundo"))
+    driver_module.record_sweep(_summary(detail="primero"), "manual")
+    driver_module.record_sweep(_summary(detail="segundo"), "manual")
 
     body = client.get("/api/auto-copy/last").json()
 
@@ -203,7 +206,7 @@ def test_the_last_endpoint_is_honest_before_any_sweep(monkeypatch):
 
 def test_a_refused_sweep_does_not_replace_the_last_result(monkeypatch):
     monkeypatch.setattr(driver_module, "_last_sweep", None)
-    driver_module.record_sweep(_summary(detail="el barrido bueno"))
+    driver_module.record_sweep(_summary(detail="el barrido bueno"), "manual")
     refusal = _summary(ok=False, running=True, detail="ya hay un barrido en curso")
 
     with patch.object(route_module, "sweep", new=AsyncMock(return_value=refusal)):
@@ -224,3 +227,32 @@ def test_the_last_endpoint_requires_auth():
 
     assert resp.status_code == 401
 
+
+
+def test_the_post_answers_with_its_instant_and_trigger(monkeypatch):
+    # The panel paints when and who ran it: the POST body must carry both.
+    monkeypatch.setattr(driver_module, "_last_sweep", None)
+    with patch.object(route_module, "sweep", new=AsyncMock(return_value=_summary())):
+        body = client.post("/api/auto-copy/sweep").json()
+
+    assert body["trigger"] == "manual"
+    assert body["swept_at"] > 0
+
+
+def test_the_get_exposes_the_trigger(monkeypatch):
+    monkeypatch.setattr(driver_module, "_last_sweep", None)
+    with patch.object(route_module, "sweep", new=AsyncMock(return_value=_summary())):
+        client.post("/api/auto-copy/sweep")
+
+    body = client.get("/api/auto-copy/last").json()
+
+    assert body["trigger"] == "manual"
+
+
+def test_the_empty_state_carries_no_fake_origin(monkeypatch):
+    monkeypatch.setattr(driver_module, "_last_sweep", None)
+
+    body = client.get("/api/auto-copy/last").json()
+
+    assert body["trigger"] is None, "un barrido que no corrió no tiene origen"
+    assert body["swept_at"] is None

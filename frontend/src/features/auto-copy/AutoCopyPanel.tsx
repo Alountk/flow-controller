@@ -5,6 +5,7 @@ import type {
   AutoCopySweepResult,
 } from '../../shared/types.ts'
 import { getAutoCopyLast, runAutoCopySweep } from '../../shared/api/autoCopy.ts'
+import { relativeTime } from '../../shared/utils/time.ts'
 import './AutoCopyPanel.css'
 
 /**
@@ -83,6 +84,15 @@ function AutoCopyResult({
 
   return (
     <div className="auto-copy-result">
+      {result.swept_at != null && (
+        <p className="auto-copy-meta">
+          Último barrido:{' '}
+          {relativeTime(new Date(result.swept_at * 1000).toISOString())}
+          {result.trigger != null && (
+            <> · {result.trigger === 'auto' ? 'automático' : 'manual'}</>
+          )}
+        </p>
+      )}
       {safeMode && (
         <p className="auto-copy-safe-banner">
           Modo seguro activo: no se ha copiado nada. Lo que sigue es lo que el

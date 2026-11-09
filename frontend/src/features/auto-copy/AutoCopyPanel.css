@@ -43,6 +43,13 @@
   margin-top: 12px;
 }
 
+/* The store's stamp (swept_at + trigger): when it ran and who did. */
+.auto-copy-meta {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 .auto-copy-safe-banner {
   margin: 0 0 12px;
   font-size: 13px;

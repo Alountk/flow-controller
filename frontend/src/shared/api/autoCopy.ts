@@ -79,9 +79,10 @@ export async function runAutoCopySweep(): Promise<AutoCopySweepResult> {
 /**
  * The last sweep's result — manual or automatic — for Seguimiento.
  *
- * The body is the manual summary plus `swept_at`; before the first sweep it is
- * ONLY `swept_at: null` and a `detail` — no counts key, and zeroes must not be
- * invented here either. Never rejects, like `runAutoCopySweep`.
+ * The body is the manual summary plus `swept_at`/`trigger`; before the first
+ * sweep it is ONLY `swept_at: null`, `trigger: null` and a `detail` — no counts
+ * key, and zeroes must not be invented here either. Never rejects, like
+ * `runAutoCopySweep`.
  */
 export async function getAutoCopyLast(): Promise<AutoCopySweepResult> {
   let res: Response
@@ -96,7 +97,10 @@ export async function getAutoCopyLast(): Promise<AutoCopySweepResult> {
     return failedResult(msg)
   }
   try {
-    const body = (await res.json()) as Partial<AutoCopySweepResult> & { swept_at: number | null }
+    const body = (await res.json()) as Partial<AutoCopySweepResult> & {
+      swept_at: number | null
+      trigger?: 'manual' | 'auto' | null
+    }
     if (body.counts === undefined) {
       // «Aún no» is not a failure: no errors block, and ok=false routes it to
       // the panel's plain-statement branch instead of a zeroed counts row.
@@ -108,6 +112,8 @@ export async function getAutoCopyLast(): Promise<AutoCopySweepResult> {
         counts: emptyCounts(),
         entries: [],
         errors: [],
+        swept_at: body.swept_at ?? null,
+        trigger: body.trigger ?? null,
       }
     }
     return body as AutoCopySweepResult

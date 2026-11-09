@@ -218,6 +218,9 @@ export interface AutoCopySweepResult {
   errors: string[]
   started_at?: number | null
   finished_at?: number | null
+  /** Unix seconds + which trigger ran it — the meta line Seguimiento paints. */
+  swept_at?: number | null
+  trigger?: 'manual' | 'auto' | null
 }
 
 /* ---- Auto-copy decision history ---- */
