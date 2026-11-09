@@ -886,6 +886,11 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
         {/* The sweep belongs below the reading, not on top of it: the top of
             this page is the task list and nothing else. */}
         <div className="sg-sweep">
+          {actions?.safe_mode && (
+            <p className="sg-safe-banner">
+              Modo seguro activo: nada se mueve, sólo se propone.
+            </p>
+          )}
           <AutoCopyPanel safeMode={Boolean(actions?.safe_mode)} onDone={onActionDone} />
         </div>
       </section>

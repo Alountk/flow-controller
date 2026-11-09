@@ -455,6 +455,18 @@
   margin-top: 0;
 }
 
+/* Mismo vocabulario de aviso que el panel: la puerta que hoy nada nombra. */
+.sg-safe-banner {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
 /* ── Panel de detalle (F-09 fase 2) ── */
 
 /* The overlay sits ON the right edge of the frame — absolute, inside the

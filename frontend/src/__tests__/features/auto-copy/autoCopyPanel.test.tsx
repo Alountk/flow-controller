@@ -377,3 +377,53 @@ describe('el último barrido se muestra al abrir, igual que el manual (S4/T7b)',
     expect(screen.getByText('Trazas revisadas').parentElement).toHaveTextContent('9')
   })
 })
+
+describe('last-sweep meta line (when and who)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('paints age and origin from the seeded GET (automático)', async () => {
+    const sweptAt = Math.floor((Date.now() - 30 * 60 * 1000) / 1000)
+    vi.stubGlobal('fetch', vi.fn(() => ok(baseResult({ swept_at: sweptAt, trigger: 'auto' }))))
+    renderPanel()
+
+    const meta = await screen.findByText(/Último barrido:/)
+    expect(meta).toHaveTextContent('hace 30 min')
+    expect(meta).toHaveTextContent('automático')
+  })
+
+  it('names the manual origin of the seeded result', async () => {
+    const sweptAt = Math.floor((Date.now() - 5 * 60 * 1000) / 1000)
+    vi.stubGlobal('fetch', vi.fn(() => ok(baseResult({ swept_at: sweptAt, trigger: 'manual' }))))
+    renderPanel()
+
+    const meta = await screen.findByText(/Último barrido:/)
+    expect(meta).toHaveTextContent('hace 5 min')
+    expect(meta).toHaveTextContent('manual')
+  })
+
+  it('shows the in-session sweep as manual without a second fetch', async () => {
+    const sweptAt = Math.floor(Date.now() / 1000)
+    const fetchMock = vi.fn(() => ok(baseResult({ swept_at: sweptAt, trigger: 'manual' })))
+    vi.stubGlobal('fetch', fetchMock)
+    renderPanel()
+
+    await clickSweep(fetchMock)
+
+    const meta = await screen.findByText(/Último barrido:/)
+    expect(meta).toHaveTextContent('manual')
+    expect(meta).toHaveTextContent('ahora')
+  })
+
+  it('paints no meta line before any sweep has run', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => ok({ swept_at: null, trigger: null, detail: 'aún no se ha ejecutado ningún barrido' })),
+    )
+    renderPanel()
+
+    await screen.findByText(/aún no se ha ejecutado/)
+    expect(screen.queryByText(/Último barrido/)).toBeNull()
+  })
+})

@@ -105,7 +105,9 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: it writes; everything else fit on existing lines. Disclosed as debt in the PR.
 #: 3483 -> 3569 (auto-barrido T7a / S4): +86 — the last-result store and the
 #: `sweep_loop` scheduler in `auto_copy_driver.py` (+82), its lifespan entry in `app.py` (+2), `intervals.sweep` in `config.py` (+2). Disclosed as debt.
-MAX_LEGACY_LOC = 3569
+#: 3569 -> 3576 (T9 meta del barrido / S4): +7 — the `trigger` stamp on the store
+#: slot and the POST's merged answer in `auto_copy_driver.py`/`auto_copy.py`. Disclosed as debt.
+MAX_LEGACY_LOC = 3576
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

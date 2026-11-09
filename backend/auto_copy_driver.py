@@ -211,18 +211,21 @@ async def sweep(
 _last_sweep: dict | None = None
 
 
-def record_sweep(summary: dict) -> None:
-    """Remember what a sweep trigger returned, timestamped for Seguimiento.
+def record_sweep(summary: dict, trigger: str) -> dict | None:
+    """Remember what a sweep trigger returned, timestamped and attributed.
 
     Both triggers record — the manual POST and ``sweep_tick`` — so the GET
-    answers «the last sweep's result» whichever fired it. A ``running=True``
+    answers «the last sweep's result» whichever fired it, and ``trigger`` says
+    which one (Seguimiento paints «automático/manual»). A ``running=True``
     refusal is not a sweep's result: storing it would replace the last real one
-    with «en curso» the moment two triggers overlap.
+    with «en curso» the moment two triggers overlap. Answers the stored slot,
+    or None when the refusal was dropped.
     """
     global _last_sweep
     if summary.get("running"):
-        return
-    _last_sweep = {"swept_at": time.time(), **summary}
+        return None
+    _last_sweep = {"swept_at": time.time(), "trigger": trigger, **summary}
+    return _last_sweep
 
 
 def last_sweep() -> dict:
@@ -232,7 +235,11 @@ def last_sweep() -> dict:
     sweep ran and found nothing.
     """
     if _last_sweep is None:
-        return {"swept_at": None, "detail": "aún no se ha ejecutado ningún barrido"}
+        return {
+            "swept_at": None,
+            "trigger": None,
+            "detail": "aún no se ha ejecutado ningún barrido",
+        }
     return _last_sweep
 
 
@@ -258,7 +265,7 @@ async def sweep_tick() -> dict | None:
     if summary.get("running"):
         log.info("barrido automático: ya hay un barrido en curso — se salta este tick")
         return None
-    record_sweep(summary)
+    record_sweep(summary, "auto")
     return summary
 
 
