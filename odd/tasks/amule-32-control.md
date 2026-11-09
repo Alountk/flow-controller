@@ -158,3 +158,18 @@ Pasos de subida (ejecución asistida: requiere el host/Portainer del usuario):
   **Pendiente del usuario (fuera del repo)**: P1 en su host (runbook arriba),
   tarjeta «aMule API» y **modo seguro apagado** para que se mueva de verdad;
   y la captura/consola del bug de Seguimiento.
+- **L11 (incremento T9, elección del usuario: 1+2)**: «estado visible del
+  mover» — PR **#307** → squash **`16621c5`** en `main` (2026-11-06), CI verde
+  (backend/frontend/e2e/docker-verify/GitGuardian). `record_sweep(summary,
+  trigger)` sella el slot con `manual`/`auto` y responde con él, así que el
+  POST devuelve `swept_at`+`trigger` y la línea meta no necesita segundo
+  fetch; el GET vacío responde `trigger: null` (un barrido que nunca corrió
+  no tiene origen); las refusals siguen sin clobber. El panel pinta «Último
+  barrido: hace N min · automático/manual» con el `relativeTime` de la casa
+  (sin línea en el estado vacío ni con `running`), y Seguimiento muestra la
+  bandera «Modo seguro activo: nada se mueve, sólo se propone.» dentro del
+  bloque del barrido al abrir — antes el estado sólo aparecía tras un
+  resultado o en un `title`. Doctrina del «la cima de esta página es la
+  lista» intacta (la bandera vive en `.sg-sweep`). RED→GREEN en ambos lados:
+  backend 4+4 tests (2204), frontend 4 tests (1062), `tsc`/eslint/pyflakes/
+  vulture limpios; `MAX_LEGACY_LOC` 3569 → 3576 (deuda +7 propia, disclosure).
