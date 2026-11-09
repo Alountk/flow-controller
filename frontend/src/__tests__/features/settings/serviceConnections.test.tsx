@@ -217,6 +217,8 @@ describe('service connection tester', () => {
       result({ key: 'amuleapi', kind: 'amuleapi', url: 'http://localhost:4713', detail: 'Conectado (3.2.0)' }),
     ])
     renderSettings()
+    // T10 (elección del usuario): la card vive en la pestaña aMule, junto a EC.
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
 
     const card = (await screen.findByRole('heading', { name: 'aMule API' })).closest(
       '.settings-group',
@@ -248,10 +250,29 @@ describe('service connection tester', () => {
     ) as HTMLElement
     expect(within(card).getByText(/Ruta de rollback/)).toHaveTextContent('AMULE_EC_DIRECT=0')
 
-    const apiCard = screen.getByRole('heading', { name: 'aMule API' }).closest(
+    // T10: cambio de pestaña — la API es del dominio aMule, no de Servicios.
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
+    const apiCard = (await screen.findByRole('heading', { name: 'aMule API' })).closest(
       '.settings-group',
     ) as HTMLElement
     expect(within(apiCard).getByRole('button', { name: 'Probar conexión' })).toBeInTheDocument()
+  })
+
+  it('lives in the aMule tab next to the EC config, not in Servicios (user pick)', async () => {
+    // Design decision: same form, same domain — the aMule API card sits with
+    // the EC config; Servicios keeps the arr endpoints.
+    mockFetch([])
+    renderSettings()
+
+    // After load, on the default General panel: the card must NOT be there.
+    await screen.findByRole('heading', { name: 'Servicios' })
+    expect(screen.queryByRole('heading', { name: 'aMule API' })).toBeNull()
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
+    expect(await screen.findByRole('heading', { name: 'aMule API' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'aMule — conexión directa (EC)' }),
+    ).toBeInTheDocument()
   })
 
   it('marks each healthy service so a mixed result is readable', async () => {
