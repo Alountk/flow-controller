@@ -1,3 +1,4 @@
+import '../shared/ui/atoms.css'
 import { useEffect, useState } from 'react'
 import { apiFetch, rememberApiKey } from '../shared/api/auth.ts'
 import { saveSetupStep, type SetupSaveResult, type SetupStepBody } from '../shared/api/setup.ts'

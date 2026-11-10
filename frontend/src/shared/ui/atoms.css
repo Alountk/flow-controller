@@ -41,3 +41,219 @@
   font-size: 11px;
   animation: fm-fade-in 0.2s ease;
 }
+
+/* Drawing atoms shared across pages: every drawer of these classes reaches
+   this sheet (cssReachability) — no page sheet may style another route. */
+
+.wanted-loading,
+.wanted-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.wanted-error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  border: 1px solid var(--bad);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.wanted-error strong {
+  color: var(--bad);
+}
+
+.wanted-actions .search-all {
+  background: var(--accent);
+  color: var(--on-fill);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.wanted-actions .search-all:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.wanted-actions .search-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error-box {
+  margin-top: 20px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bad) 25%, transparent);
+  color: var(--bad-text);
+  font-size: 13px;
+}
+
+.sec-tab-note {
+  margin: 0;
+  padding: 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.service-test {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+
+.service-test.ok {
+  border-color: var(--ok);
+}
+
+.service-test.fail {
+  border-color: var(--bad);
+}
+
+.service-test-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.service-test-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.service-test-url {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.service-test-detail {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  word-break: break-word;
+}
+
+.service-test.fail .service-test-detail {
+  color: var(--bad);
+}
+
+.action-btn {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+
+.action-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-btn.destructive {
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+  color: var(--bad-text);
+}
+
+.action-btn.destructive:hover:not(:disabled) {
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+.mixer-task-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.mixer-status-running {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.mixer-status-paused {
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+  color: var(--warn);
+}
+
+.mixer-status-done {
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  color: var(--ok);
+}
+
+.mixer-status-error {
+  background: color-mix(in srgb, var(--bad) 15%, transparent);
+  color: var(--bad-text);
+}
+
+.mixer-status-cancelled {
+  background: color-mix(in srgb, var(--text-dim) 15%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+}
+
+.mixer-status-pending {
+  background: color-mix(in srgb, var(--text-dim) 15%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+}
+
+.mixer-status-queued {
+  background: color-mix(in srgb, var(--text-dim) 15%, transparent);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+}
+
+.mixer-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mixer-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.mixer-progress-pct {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  min-width: 32px;
+  text-align: right;
+}

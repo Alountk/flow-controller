@@ -78,7 +78,7 @@ describe('T1 — success fills use --ok-dim instead of --ok', () => {
 const errorChipSites: Array<[file: string, selector: string]> = [
   ['pages/Sections.css', '.sec-pill-bad'],
   ['pages/Seguimiento.css', '.sg-pill-failed'],
-  ['pages/MediaMixer.css', '.mixer-status-error'],
+  ['shared/ui/atoms.css', '.mixer-status-error'],
   ['features/auto-copy/AutoCopyPanel.css', '.auto-copy-badge.failed'],
   ['pages/Prototypes.css', '.proto-badge.discarded'],
 ]
@@ -95,8 +95,8 @@ describe('T2 — error chip text uses the --bad-text token', () => {
 })
 
 const dimChipSites: Array<[file: string, selector: string]> = [
-  ['pages/MediaMixer.css', '.mixer-status-cancelled'],
-  ['pages/MediaMixer.css', '.mixer-status-pending'],
+  ['shared/ui/atoms.css', '.mixer-status-cancelled'],
+  ['shared/ui/atoms.css', '.mixer-status-pending'],
   ['features/auto-copy/AutoCopyPanel.css', '.auto-copy-badge.skip'],
 ]
 

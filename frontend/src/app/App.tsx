@@ -1,3 +1,4 @@
+import '../shared/ui/atoms.css'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AuthGate } from './AuthGate.tsx'

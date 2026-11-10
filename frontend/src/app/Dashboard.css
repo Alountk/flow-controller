@@ -150,18 +150,7 @@ button.dash-card:focus-visible {
 
 /* Shared: the dashboard fetch error and the Settings error boxes both use it.
    It lived in PipelineVisual.css; the import is app-wide, so it still styles
-   every consumer. */
-.error-box {
-  margin-top: 20px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bad) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--bad) 25%, transparent);
-  color: var(--bad-text);
-  font-size: 13px;
-}
-
-/* ---- Recent activity table (Stitch 01, section 3) ---- */
+   every consumer. *//* ---- Recent activity table (Stitch 01, section 3) ---- */
 
 .act-card {
   background: var(--bg-elev);

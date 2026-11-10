@@ -811,16 +811,7 @@
 /* ---- Detail-panel tabs (PR 6): Archivos · Episodios · Historial ----------
  * The tab bodies are read-only views of what the endpoints already answer.
  * `.sec-tab-note` is an honest state (no path, never requested, nothing
- * here) — a sentence, never an empty table pretending to be data. */
-.sec-tab-note {
-  margin: 0;
-  padding: 16px;
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--text-dim);
-}
-
-/* T3 sections (S1): four grouped listings inside the Archivos tab — the h4
+ * here) — a sentence, never an empty table pretending to be data. *//* T3 sections (S1): four grouped listings inside the Archivos tab — the h4
  * labels the group; the tables keep the exact styles they always had. */
 .sec-files-section h4 {
   margin: 14px 0 6px;

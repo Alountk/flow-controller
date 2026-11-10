@@ -56,35 +56,7 @@
   color: var(--accent);
   font-size: 12px;
   margin-bottom: 12px;
-}
-
-.wanted-loading,
-.wanted-empty {
-  padding: 40px;
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 13px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-}
-
-.wanted-error {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 20px;
-  border: 1px solid var(--bad);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--bad) 8%, transparent);
-  color: var(--text);
-  font-size: 13px;
-}
-
-.wanted-error strong {
-  color: var(--bad);
-}
-
-.wanted-infinite-sentinel {
+}.wanted-infinite-sentinel {
   padding: 24px 0;
   display: flex;
   justify-content: center;
@@ -153,30 +125,7 @@
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
-}
-
-.wanted-actions .search-all {
-  background: var(--accent);
-  color: var(--on-fill);
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.wanted-actions .search-all:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.wanted-actions .search-all:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.wanted-grid {
+}.wanted-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
