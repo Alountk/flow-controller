@@ -59,6 +59,7 @@ from interfaces.http.routes.mediacover import router as mediacover_router
 from interfaces.http.routes.settings import router as settings_router, PROTOTYPES_DIR
 from interfaces.http.routes.amule_shares import router as amule_shares_router
 from interfaces.http.routes.amule_actions import router as amule_actions_router
+from interfaces.http.routes.amule_downloads import router as amule_downloads_router
 from interfaces.http.routes.events import router as events_router
 from interfaces.http.middleware import RequestGuards
 from interfaces.http.routes_mixer import router as mixer_router
@@ -124,7 +125,7 @@ app.add_middleware(RequestGuards)
 
 # Mount order preserved; the loop keeps this file's counted lines for the lifespan above.
 for router in (status_routes.router, wanted_router, calendar_router, files_router,
-               actions_router, auto_copy_router, downloads_router, mediacover_router, amule_actions_router,
+               actions_router, auto_copy_router, downloads_router, mediacover_router, amule_actions_router, amule_downloads_router,
                settings_router, amule_shares_router, mixer_router, events_router, activity_router, indexers_routes.router):
     app.include_router(router)
 

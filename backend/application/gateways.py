@@ -437,6 +437,11 @@ def amule_categories(*args, **kwargs):
     return _amule.amule_categories(*args, **kwargs)
 
 
+def amule_downloads(*args, **kwargs):
+    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
+    return _amule.amule_downloads(*args, **kwargs)
+
+
 def amule_servers(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _amule.amule_servers(*args, **kwargs)

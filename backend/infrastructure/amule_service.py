@@ -22,6 +22,7 @@ __all__ = [
     "amule_categories",
     "amule_delete",
     "amule_download_search_result",
+    "amule_downloads",
     "amule_pause",
     "amule_resume",
     "amule_search",
@@ -73,6 +74,15 @@ def amule_add_ed2k(ed2k_link: str, category: int | None = None) -> None:
     """Encola un enlace ed2k (`EC_OP_ADD_LINK`) en su propia conexión."""
     with _client() as client:
         client.add_ed2k(ed2k_link, category)
+
+
+# -- cola de descargas (pagina-descargas S2) --
+
+
+def amule_downloads() -> list:
+    """Descargas de la cola de aMule como filas S2, en su propia conexión."""
+    with _client() as client:
+        return client.get_downloads()
 
 
 # -- servidores (T2/S3) --
