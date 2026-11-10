@@ -107,7 +107,10 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: `sweep_loop` scheduler in `auto_copy_driver.py` (+82), its lifespan entry in `app.py` (+2), `intervals.sweep` in `config.py` (+2). Disclosed as debt.
 #: 3569 -> 3576 (T9 meta del barrido / S4): +7 — the `trigger` stamp on the store
 #: slot and the POST's merged answer in `auto_copy_driver.py`/`auto_copy.py`. Disclosed as debt.
-MAX_LEGACY_LOC = 3576
+#: 3576 -> 3603 (amule-api-card / S4): +27 — the `amuleapi_base` helper with its
+#: docstring, the composed `AMULEAPI_URL`/`AMULEAPI_PORT` read and the imports in
+#: `config.py`. The card keeps host and port apart like the EC. Disclosed as debt.
+MAX_LEGACY_LOC = 3603
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

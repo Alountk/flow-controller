@@ -102,6 +102,13 @@ class TestAmuleapiServiceEntry:
             config.get_setting = real
             config.rebuild()
 
+    def test_the_settings_payload_always_carries_the_port_key(self):
+        form = client.get("/api/settings").json()
+
+        assert form["services"]["amuleapi"]["port"] == "", (
+            "sin la clave el form de la tarjeta crashea al leer .port"
+        )
+
 
 # ── 2. la sonda anónima ──────────────────────────────────────────────────────
 
@@ -192,3 +199,27 @@ class TestAmuleapiRoutes:
 
         for where, text in texts.items():
             assert SENTINEL not in text, f"{where} filtró la contraseña de amuleapi"
+
+    def test_the_candidate_port_composes_the_probed_url(self):
+        session = _KwargSession({VERSION_PATH: (200, VERSION_BODY)})
+
+        with patch_session(session):
+            resp = client.post(
+                "/api/services/test",
+                json={"service": "amuleapi", "url": "http://amulehost", "port": "4711"},
+            )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["ok"] is True
+        assert session.get_kwargs[0][0] == "http://amulehost:4711/api/v1/version"
+
+    def test_without_a_body_port_the_stored_one_stands(self, monkeypatch):
+        monkeypatch.setattr(config, "AMULEAPI_URL", "http://amulehost", raising=False)
+        monkeypatch.setattr(config, "AMULEAPI_PORT", "4711", raising=False)
+        session = _KwargSession({VERSION_PATH: (200, VERSION_BODY)})
+
+        with patch_session(session):
+            resp = client.post("/api/services/test", json={"service": "amuleapi"})
+
+        assert resp.json()["ok"] is True
+        assert session.get_kwargs[0][0] == "http://amulehost:4711/api/v1/version"

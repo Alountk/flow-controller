@@ -123,7 +123,13 @@ describe('tabla de «Estado de las conexiones» (T4/S2, S4)', () => {
     // A 380px la tabla no cabe: el contenedor scrollea, porque recortar la
     // píldora «Sin comprobar» esconde el estado que la fila viene a mostrar.
     expect(table.parentElement).toHaveClass('connections-table-wrap')
-    const probed = fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/services/test'))
+    // S4: la TABLA no sondea al abrir. La tarjeta «aMule API»
+    // (amule-api-card) sí polla su propio ?service=amuleapi por diseño.
+    const probed = fetchMock.mock.calls.filter(
+      ([input]) =>
+        String(input).includes('/api/services/test') &&
+        !String(input).includes('service=amuleapi'),
+    )
     expect(probed).toHaveLength(0)
 
     // aMule responde por EC (TCP), no por HTTP: el botón no lo sondeará nunca,

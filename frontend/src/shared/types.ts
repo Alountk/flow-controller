@@ -270,7 +270,7 @@ export interface Settings {
     sonarr: { url: string; api_key: string }
     amutorrent: { url: string; api_key: string; user: string; password: string }
     /** aMule 3.x REST daemon (amule-32 T2): no api_key — password auth. */
-    amuleapi: { url: string; password: string }
+    amuleapi: { url: string; port: string; password: string }
     /** Native qBittorrent (qbit-nativo S3): no api_key — login/password auth. */
     qbit: { url: string; user: string; password: string }
     /** Clave de OpenSubtitles (mixer-redesign S6): Configuración → Servicios. */

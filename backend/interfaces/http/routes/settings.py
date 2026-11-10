@@ -324,9 +324,17 @@ async def test_service_candidate(body: dict, _key: str = Depends(verify_api_key)
         return {"results": [], "ok": False, "detail": f"servicio desconocido: {key}"}
 
     candidate = dict(template)
-    for field in ("url", "api_key", "user", "password"):
+    for field in ("url", "api_key", "user", "password", "port"):
         if field in body:
             candidate[field] = body[field]
+
+    if template["kind"] == "amuleapi":
+        # La tarjeta guarda host y puerto aparte (como la EC): la base que se
+        # sondea sale de amuleapi_base; el puerto del body, si lo trae, manda.
+        url = candidate.get("url") or config.AMULEAPI_URL
+        port = candidate["port"] if "port" in candidate else config.AMULEAPI_PORT
+        candidate["url"] = config.amuleapi_base(url, port)
+        candidate.pop("port", None)
 
     async with http_session() as session:
         result = await test_service_connection(session, candidate)

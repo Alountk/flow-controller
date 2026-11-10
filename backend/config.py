@@ -1,4 +1,7 @@
 import os
+import re
+
+from urllib.parse import urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 from infrastructure.settings_store import load_settings, get_setting, migrate_env_vars
@@ -159,6 +162,24 @@ def destination_for_quality(quality: str, *, is3d: bool = False) -> str | None:
     )
 
 
+def amuleapi_base(url, port) -> str:
+    """Effective amuleapi base: the card's port field wins over the URL's.
+
+    Host and port live in separate fields like the EC's, while a stored URL
+    may already carry one — a non-empty port replaces it, and an unparsable
+    URL is left untouched rather than mangled.
+    """
+    text = str(url or "")
+    candidate = str(port or "").strip()
+    if not candidate:
+        return text
+    parsed = urlsplit(text)
+    if not parsed.netloc:
+        return text
+    host = re.sub(r":\d+$", "", parsed.netloc)
+    return urlunsplit((parsed.scheme, f"{host}:{candidate}", parsed.path, parsed.query, parsed.fragment))
+
+
 def rebuild() -> None:
     """Re-read every settings-backed value. Called at import and after a save.
 
@@ -180,7 +201,7 @@ def rebuild() -> None:
     """
     global RADARR_URL, SONARR_URL, PROWLARR_URL, AMUTORRENT_URL
     global AMULE_URL, AMULE_EC_PORT, AMULE_EC_PASSWORD
-    global AMULEAPI_URL, AMULEAPI_PASSWORD
+    global AMULEAPI_URL, AMULEAPI_PORT, AMULEAPI_PASSWORD
     global RADARR_API_KEY, SONARR_API_KEY, PROWLARR_API_KEY, AMUTORRENT_API_KEY
     global AMUTORRENT_USER, AMUTORRENT_PASSWORD, QBIT_URL, QBIT_USER, QBIT_PASSWORD
     global CHECK_INTERVAL, MAX_RETRIES, RETRY_DELAY, REQUEST_TIMEOUT
@@ -203,7 +224,13 @@ def rebuild() -> None:
 
     # REST de aMule 3.x (amuleapi, T2/S1): defaults vacíos como qbit — sin
     # url Y contraseña no hay servicio operable (el login de T3 exige ambas).
-    AMULEAPI_URL = get_setting("services", "amuleapi", "url", default="")
+    # El puerto de la tarjeta se junta AQUÍ: todos los consumidores leen la
+    # base ya compuesta sin tocarse (amule-api-card).
+    AMULEAPI_URL = amuleapi_base(
+        get_setting("services", "amuleapi", "url", default=""),
+        get_setting("services", "amuleapi", "port", default=""),
+    )
+    AMULEAPI_PORT = get_setting("services", "amuleapi", "port", default="")
     AMULEAPI_PASSWORD = get_setting("services", "amuleapi", "password", default="")
 
     RADARR_API_KEY = get_setting("services", "radarr", "api_key", default="")

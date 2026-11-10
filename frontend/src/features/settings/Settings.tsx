@@ -16,6 +16,7 @@ import { SharedDirsSection } from './SharedDirsSection.tsx'
 import { QualityThresholdSection } from './QualityThresholdSection.tsx'
 import { IndexadoresSection } from './IndexadoresSection.tsx'
 import { AmuleEcSection, type AmuleEcValues } from './AmuleEcSection.tsx'
+import { AmuleApiSection } from './AmuleApiSection.tsx'
 import { AmuleServerActions } from './AmuleServerActions.tsx'
 import { Field } from '../../shared/ui/Field.tsx'
 import './Settings.css'
@@ -270,7 +271,11 @@ function withAmuleEc(data: Settings): SettingsForm {
   // Same tolerance for amuleapi: payloads written before amule-32 lack the
   // group, and the card reads `services.amuleapi.url` without guards.
   const amuleapi = next.services.amuleapi
-  next.services.amuleapi = { url: amuleapi?.url ?? '', password: amuleapi?.password ?? '' }
+  next.services.amuleapi = {
+    url: amuleapi?.url ?? '',
+    port: amuleapi?.port ?? '',
+    password: amuleapi?.password ?? '',
+  }
   // Same tolerance for the sweep knob (T7b/S4): pre-T7a payloads lack the key
   // and the card reads it unguarded; 600 is the backend's own default.
   next.intervals.sweep = next.intervals.sweep ?? 600
@@ -312,6 +317,9 @@ function ServiceProbeButton({
       if (apiKey && !apiKey.startsWith('****')) candidate.api_key = apiKey
       const user = (values.user ?? '').trim()
       if (user) candidate.user = user
+      // Puerto aparte como en la EC (amule-api-card): vacío = ausente.
+      const port = (values.port ?? '').trim()
+      if (port) candidate.port = port
       // Nunca se trimmea: los espacios son legales en una contraseña.
       const password = values.password ?? ''
       if (password !== '' && !password.startsWith('****')) candidate.password = password
@@ -902,22 +910,15 @@ export function Settings() {
           onSave={doSave}
           saving={saveMutation.isPending}
         />
-        {/* T10 (elección del usuario): la API es del dominio aMule — mismo
-            formulario (services.amuleapi.*) y mismo Guardar; sólo de sitio. */}
-        <div className="settings-group">
-          <h4>aMule API</h4>
-          <Field label="URL" value={form.services.amuleapi.url} onChange={(v) => update('services.amuleapi.url', v)} restart={isRestarting('services.amuleapi.url')} placeholder="http://localhost:4713" />
-          <Field label="Contraseña" value={form.services.amuleapi.password} onChange={(v) => update('services.amuleapi.password', v)} restart={isRestarting('services.amuleapi.password')} type="password" />
-          <div className="settings-group-actions">
-            <ServiceProbeButton
-              service="amuleapi"
-              values={{
-                url: form.services.amuleapi.url,
-                password: form.services.amuleapi.password,
-              }}
-            />
-          </div>
-        </div>
+        {/* amule-api-card: anatomía de la EC — host/puerto aparte, sonda, su
+            propio «Guardar cambios» y línea de estado de ESTE servicio. */}
+        <AmuleApiSection
+          values={form.services.amuleapi}
+          update={update}
+          isRestarting={isRestarting}
+          onSave={doSave}
+          saving={saveMutation.isPending}
+        />
         <AmuleServerActions />
       </div>
     </div>
