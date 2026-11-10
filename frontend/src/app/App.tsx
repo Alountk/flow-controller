@@ -45,6 +45,7 @@ const Renombrar = lazy(() =>
   import('../pages/Renombrar.tsx').then((m) => ({ default: m.Renombrar })),
 )
 const Duplicados = lazy(() => import('../pages/Duplicados.tsx'))
+const Descargas = lazy(() => import('../pages/Descargas.tsx'))
 const Settings = lazy(() =>
   import('../features/settings/Settings.tsx').then((m) => ({ default: m.Settings })),
 )
@@ -106,6 +107,7 @@ const PAGE_TITLES: Record<Page, string> = {
   series: 'Series',
   estrenos: 'Estrenos',
   seguimiento: 'Seguimiento',
+  descargas: 'Descargas',
   disk: 'Espacio en Disco',
   files: 'Archivos',
   renombrar: 'Renombrar',
@@ -442,6 +444,8 @@ function App() {
                 onActionDone={handleActionDone}
               />
             )}
+
+            {page === 'descargas' && <Descargas />}
 
             {page === 'disk' && <DiskSpace />}
 

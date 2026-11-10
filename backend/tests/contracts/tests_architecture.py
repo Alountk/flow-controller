@@ -110,7 +110,10 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 3576 -> 3603 (amule-api-card / S4): +27 — the `amuleapi_base` helper with its
 #: docstring, the composed `AMULEAPI_URL`/`AMULEAPI_PORT` read and the imports in
 #: `config.py`. The card keeps host and port apart like the EC. Disclosed as debt.
-MAX_LEGACY_LOC = 3603
+#: 3603 -> 3604 (pagina-descargas T2 / S2-S3): the `amule_downloads_router` import
+#: line in `app.py` (+1; the tuple entry fit on the existing line). Router wiring,
+#: the amule-control +1 precedent — disclosed as wiring debt in the PR.
+MAX_LEGACY_LOC = 3604
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

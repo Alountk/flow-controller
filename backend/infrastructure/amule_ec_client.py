@@ -68,6 +68,8 @@ __all__ = [
     "EC_OP_PARTFILE_PRIO_SET",
     "EC_OP_PARTFILE_DELETE",
     "EC_OP_PARTFILE_SET_CAT",
+    "EC_OP_GET_DLOAD_QUEUE",
+    "EC_OP_DLOAD_QUEUE",
     "EC_OP_SEARCH_START",
     "EC_OP_SEARCH_STOP",
     "EC_OP_SEARCH_RESULTS",
@@ -106,12 +108,18 @@ __all__ = [
     "EC_TAG_PARTFILE",
     "EC_TAG_PARTFILE_NAME",
     "EC_TAG_PARTFILE_SIZE_FULL",
+    "EC_TAG_PARTFILE_SIZE_DONE",
+    "EC_TAG_PARTFILE_SPEED",
     "EC_TAG_PARTFILE_STATUS",
     "EC_TAG_PARTFILE_PRIO",
     "EC_TAG_PARTFILE_SOURCE_COUNT",
     "EC_TAG_PARTFILE_SOURCE_COUNT_XFER",
+    "EC_TAG_PARTFILE_ED2K_LINK",
     "EC_TAG_PARTFILE_CAT",
+    "EC_TAG_PARTFILE_STOPPED",
+    "EC_TAG_PARTFILE_DOWNLOAD_ACTIVE",
     "EC_TAG_PARTFILE_HASH",
+    "EC_TAG_PARTFILE_SPEED_SMOOTHED",
     "EC_TAG_SEARCHFILE",
     "EC_TAG_SEARCH_TYPE",
     "EC_TAG_SEARCH_NAME",
@@ -151,6 +159,7 @@ __all__ = [
     "build_add_link",
     "build_auth_request",
     "build_download_search_result",
+    "build_get_dload_queue",
     "build_get_preferences",
     "build_get_shared_files",
     "build_knownfile_delete",
@@ -193,12 +202,14 @@ EC_OP_FAILED = 0x05
 EC_OP_STRINGS = 0x06
 EC_OP_MISC_DATA = 0x07
 EC_OP_ADD_LINK = 0x09
+EC_OP_GET_DLOAD_QUEUE = 0x0D
 EC_OP_GET_SHARED_FILES = 0x10
 EC_OP_PARTFILE_PAUSE = 0x19
 EC_OP_PARTFILE_RESUME = 0x1A
 EC_OP_PARTFILE_PRIO_SET = 0x1C
 EC_OP_PARTFILE_DELETE = 0x1D
 EC_OP_PARTFILE_SET_CAT = 0x1E
+EC_OP_DLOAD_QUEUE = 0x1F  # respuesta a GET_DLOAD_QUEUE
 EC_OP_SHARED_FILES = 0x22  # respuesta a GET_SHARED_FILES
 EC_OP_SEARCH_START = 0x26
 EC_OP_SEARCH_STOP = 0x27
@@ -240,12 +251,18 @@ EC_TAG_SERVER_VERSION = 0x050B
 EC_TAG_PARTFILE = 0x0300
 EC_TAG_PARTFILE_NAME = 0x0301
 EC_TAG_PARTFILE_SIZE_FULL = 0x0303
+EC_TAG_PARTFILE_SIZE_DONE = 0x0306
+EC_TAG_PARTFILE_SPEED = 0x0307
 EC_TAG_PARTFILE_STATUS = 0x0308
 EC_TAG_PARTFILE_PRIO = 0x0309
 EC_TAG_PARTFILE_SOURCE_COUNT = 0x030A
 EC_TAG_PARTFILE_SOURCE_COUNT_XFER = 0x030D
+EC_TAG_PARTFILE_ED2K_LINK = 0x030E
 EC_TAG_PARTFILE_CAT = 0x030F
+EC_TAG_PARTFILE_STOPPED = 0x0317
+EC_TAG_PARTFILE_DOWNLOAD_ACTIVE = 0x0318
 EC_TAG_PARTFILE_HASH = 0x031E
+EC_TAG_PARTFILE_SPEED_SMOOTHED = 0x0324
 EC_TAG_SEARCHFILE = 0x0700
 EC_TAG_SEARCH_TYPE = 0x0701
 EC_TAG_SEARCH_NAME = 0x0702
@@ -716,6 +733,11 @@ def build_get_server_list(detail: int = EC_DETAIL_FULL) -> bytes:
     return encode_frame(EC_OP_GET_SERVER_LIST, [encode_uint_tag(EC_TAG_DETAIL_LEVEL, detail)])
 
 
+def build_get_dload_queue(detail: int = EC_DETAIL_FULL) -> bytes:
+    """Petición de la cola de descargas con `EC_TAG_DETAIL_LEVEL` — igual que `build_get_server_list`."""
+    return encode_frame(EC_OP_GET_DLOAD_QUEUE, [encode_uint_tag(EC_TAG_DETAIL_LEVEL, detail)])
+
+
 # --- Cliente ---------------------------------------------------------------
 
 
@@ -904,6 +926,22 @@ class AmuleECClient:
         self._send(build_partfile_delete(file_hash))
         self._await_ack()
 
+    # -- cola de descargas (pagina-descargas S2) --
+
+    def get_downloads(self) -> list:
+        """Descargas de la cola como filas S2, en el orden del core (sin reordenar).
+
+        `EC_OP_GET_DLOAD_QUEUE` → `EC_OP_DLOAD_QUEUE` con un `EC_TAG_PARTFILE`
+        por descarga; sólo los subtags presentes viajan (`CEC_PartFile_Tag`), y
+        la fila completa la construye `_download_row`.
+        """
+        self._send(build_get_dload_queue())
+        opcode, tags = self._recv_frame()
+        self._raise_if_rejected(opcode, tags)
+        if opcode != EC_OP_DLOAD_QUEUE:
+            raise AmuleECProtocolError("respuesta inesperada a GET_DLOAD_QUEUE")
+        return [_download_row(tag) for tag in tags if tag.code == EC_TAG_PARTFILE]
+
     # -- servidores (T2/S3) --
 
     def server_add(self, address: str, name: str = "") -> None:
@@ -1088,6 +1126,52 @@ def _field_int(tag: ECTag, code: int) -> int:
 def _field_hash(tag: ECTag, code: int) -> str:
     sub = find_tag(tag.subtags, code)
     return sub.as_hash_hex() if sub is not None else ""
+
+
+def _download_row(tag: ECTag) -> dict:
+    """Fila S2 de un `EC_TAG_PARTFILE`: valores crudos + `state`/`eta_seconds`.
+
+    `state` sigue el doc: done>=full → completed; stopped o status7 → paused;
+    DOWNLOAD_ACTIVE, speed>0 o SOURCE_COUNT_XFER>0 → downloading; resto → waiting.
+    """
+    size_full = _field_int(tag, EC_TAG_PARTFILE_SIZE_FULL)
+    size_done = _field_int(tag, EC_TAG_PARTFILE_SIZE_DONE)
+    speed = _field_int(tag, EC_TAG_PARTFILE_SPEED)
+    stopped = bool(_field_int(tag, EC_TAG_PARTFILE_STOPPED))
+    status = _field_int(tag, EC_TAG_PARTFILE_STATUS)
+    active = bool(_field_int(tag, EC_TAG_PARTFILE_DOWNLOAD_ACTIVE))
+    sources_xfer = _field_int(tag, EC_TAG_PARTFILE_SOURCE_COUNT_XFER)
+    # aMule omite ceros: sin la etiqueta CAT, «sin categoría» (None) no es el índice 0.
+    cat = find_tag(tag.subtags, EC_TAG_PARTFILE_CAT)
+    if size_done >= size_full:
+        state = "completed"
+    elif stopped or status == 7:
+        # El 7 es «Paused» en el `StatusString` de amuleweb (amuleweb-main-dload.php,
+        # citado en el doc); `status_code` expone el enum PARTFILE_STATUS crudo.
+        state = "paused"
+    elif active or speed > 0 or sources_xfer > 0:
+        state = "downloading"
+    else:
+        state = "waiting"
+    return {
+        "hash": _field_hash(tag, EC_TAG_PARTFILE_HASH),
+        "name": _field_str(tag, EC_TAG_PARTFILE_NAME),
+        "size_full": size_full,
+        "size_done": size_done,
+        "progress_pct": min(100.0, round(size_done * 100 / size_full, 1)) if size_full > 0 else 0,
+        "speed": speed,
+        "eta_seconds": int((size_full - size_done) / speed) if speed > 0 else None,
+        "state": state,
+        "stopped": stopped,
+        "status_code": status,
+        # `priority` crudo: PrioString de amuleweb da 0=Baja..6=Release y `SetDownPriority`
+        # (src/PartFile.cpp) confirma que EC exporta ese valor — el que POST .../priority acepta.
+        "priority": _field_int(tag, EC_TAG_PARTFILE_PRIO),
+        "category": cat.as_int() if cat is not None else None,
+        "sources": _field_int(tag, EC_TAG_PARTFILE_SOURCE_COUNT),
+        "ed2k_link": _field_str(tag, EC_TAG_PARTFILE_ED2K_LINK),
+        "source": "amule",
+    }
 
 
 def _ipv4_text(data: bytes) -> str:
