@@ -54,11 +54,11 @@ describe('sidebar with unconfigured services', () => {
         active="dashboard"
         onNavigate={() => {}}
         developer={false}
-        hidden={['peliculas', 'series', 'seguimiento']}
+        hidden={['peliculasV2', 'series', 'seguimiento']}
       />,
     )
 
-    expect(screen.queryByText('Películas')).not.toBeInTheDocument()
+    expect(screen.queryByText('Películas V2')).not.toBeInTheDocument()
     expect(screen.queryByText('Series')).not.toBeInTheDocument()
     expect(screen.queryByText('Seguimiento')).not.toBeInTheDocument()
   })
@@ -83,7 +83,7 @@ describe('sidebar with unconfigured services', () => {
     render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 
     expect(screen.getByText('Seguimiento')).toBeInTheDocument()
-    expect(screen.getByText('Películas')).toBeInTheDocument()
+    expect(screen.getByText('Películas V2')).toBeInTheDocument()
   })
 })
 
@@ -107,7 +107,7 @@ describe('the app reflects what is configured', () => {
     // Wait for PRESENCE first: asserting absence passes while the app is still
     // on its loading screen, proving nothing.
     await waitFor(() => expect(screen.getByText('Archivos')).toBeInTheDocument())
-    expect(screen.queryByText('Películas')).not.toBeInTheDocument()
+    expect(screen.queryByText('Películas V2')).not.toBeInTheDocument()
     expect(screen.queryByText('Series')).not.toBeInTheDocument()
     expect(screen.queryByText('Seguimiento')).not.toBeInTheDocument()
   })
@@ -117,7 +117,7 @@ describe('the app reflects what is configured', () => {
     renderApp()
 
     await waitFor(() => expect(screen.getByText('Seguimiento')).toBeInTheDocument())
-    expect(screen.getByText('Películas')).toBeInTheDocument()
+    expect(screen.getByText('Películas V2')).toBeInTheDocument()
   })
 
   it('opens the Seguimiento board from the atascadas card (C-11)', async () => {
@@ -174,7 +174,7 @@ describe('the app reflects what is configured', () => {
     // Start ON an arr-dependent page — the old version of this test set a
     // hash the router never read, so it passed from the dashboard it was
     // already on. A pathname the router does resolve makes it real.
-    window.history.pushState(null, '', '/peliculas')
+    window.history.pushState(null, '', '/peliculas-v2')
     renderApp()
 
     // Hidden pages cannot be displayed, so the app falls back to the dashboard.

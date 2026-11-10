@@ -103,7 +103,6 @@ const SERVICES: { key: ServiceKey; label: string }[] = [
 
 const PAGE_TITLES: Record<Page, string> = {
   dashboard: 'Dashboard',
-  peliculas: 'Películas',
   peliculasV2: 'Películas V2',
   series: 'Series',
   estrenos: 'Estrenos',
@@ -123,7 +122,6 @@ const PAGE_TITLES: Record<Page, string> = {
  *  subtitle: inventing copy the design never wrote would be a lie too. */
 const PAGE_SUBTITLES: Partial<Record<Page, string>> = {
   dashboard: 'Vista general del servidor multimedia',
-  peliculas: 'Catálogo cinematográfico y gestión de indexación',
   peliculasV2: 'La misma biblioteca, con el detalle a pantalla completa',
   estrenos: 'Calendario de estrenos: películas y series',
 }
@@ -304,9 +302,8 @@ function App() {
   // Sonarr. The local pages (disk, files, mixer, config) always work.
   const hiddenPages = useMemo<Page[]>(() => {
     if (!servicesReady || hasAnyArr) return []
-    // «Películas V2» is the same page with another layout: it reads
-    // Radarr too, so it hides with the rest when no arr is configured.
-    return ['peliculas', 'peliculasV2', 'series', 'estrenos', 'seguimiento'] as Page[]
+    // «Películas V2» reads Radarr too, so it hides with the rest when no arr is configured.
+    return ['peliculasV2', 'series', 'estrenos', 'seguimiento'] as Page[]
   }, [servicesReady, hasAnyArr])
 
   useEffect(() => {
@@ -428,8 +425,6 @@ function App() {
                   />
               </>
             )}
-
-            {page === 'peliculas' && <Peliculas />}
 
             {page === 'peliculasV2' && <Peliculas layout="page" />}
 
