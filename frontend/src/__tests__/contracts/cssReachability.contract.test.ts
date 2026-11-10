@@ -25,7 +25,7 @@ const SOURCES = import.meta.glob('/src/**/*.{ts,tsx,css}', {
   eager: true,
 }) as Sources
 
-const ENTRY = '/src/main.tsx'
+const ENTRY = '/src/app/main.tsx'
 const isProduction = (path: string) => !path.includes('__tests__') && !path.includes('/test/')
 const isComponent = (path: string) => isProduction(path) && /\.tsx$/.test(path)
 
@@ -110,32 +110,9 @@ function hosts(component: string): string[] {
 const ALWAYS_LOADED = reach(ENTRY)
 
 /**
- * Debt that predates this check, kept explicit so the test can fail on the
- * *next* one instead of on the backlog. Each family is a rule that a page
- * sheet defines for markup another page draws — the same fault as #279 and
- * #281, still to be burnt down per page (visual checks per route).
- */
-const KNOWN_ORPHANS = new Set([
-  'wanted-empty', // App/DiskSpace/Settings borrow the media pane's states
-  'wanted-error',
-  'wanted-loading',
-  'search-all',
-  'error-box', // settings sections borrow the dashboard's message box
-  'action-btn', // settings sections borrow a button the picker defines
-  'sec-tab-note', // the quality threshold borrows the sections' note
-  'mixer-progress-bar', // Seguimiento borrows the mixer's progress bar
-  'mixer-progress-fill',
-  'mixer-progress-pct',
-  'mixer-task-status',
-  'service-test', // Setup borrows the settings page's service probe
-  'service-test-head',
-  'service-test-name',
-  'service-test-url',
-  'modal', // the bulk search flow borrows the trace actions' modal
-  'modal-backdrop',
-  'modal-buttons',
-  'destructive',
-])
+ * Burned down to zero (2026-11-10): every borrowed family now lives in a
+ * sheet its drawers can reach. Re-add only as an explicitly accepted entry. */
+const KNOWN_ORPHANS = new Set<string>([])
 
 function styled(component: string, className: string): boolean {
   const sheets = DEFINED.get(className)

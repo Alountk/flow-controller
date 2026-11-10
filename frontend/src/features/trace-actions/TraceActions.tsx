@@ -1,3 +1,5 @@
+import '../../shared/ui/atoms.css'
+import '../../shared/ui/modal.css'
 import { useState, useEffect, useContext } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../../shared/types.ts'

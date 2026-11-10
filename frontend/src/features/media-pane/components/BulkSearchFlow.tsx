@@ -1,3 +1,5 @@
+import '../../../shared/ui/atoms.css'
+import '../../../shared/ui/modal.css'
 import { useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import {

@@ -1,3 +1,4 @@
+import '../shared/ui/atoms.css'
 import { useQuery } from '@tanstack/react-query'
 import type { DiskResponse } from '../shared/types.ts'
 import './DiskSpace.css'
