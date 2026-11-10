@@ -30,8 +30,9 @@ DEFAULTS: dict[str, Any] = {
         "qbit": {"url": "", "user": "", "password": ""},
         # amuleapi (T2/S1): REST de aMule 3.x. Mismo porqué que qbit: el grupo
         # va SIEMPRE en GET /api/settings porque la tarjeta lee
-        # `services.amuleapi.url` sin guardas (Log L8 del cierre qbit).
-        "amuleapi": {"url": "", "password": ""},
+        # `services.amuleapi.url` sin guardas (Log L8 del cierre qbit); `port`
+        # es la clave de la tarjeta «aMule API» con su host y puerto aparte.
+        "amuleapi": {"url": "", "port": "", "password": ""},
         "opensubtitles": {"api_key": ""},
     },
     "security": {"api_key_hash": "", "api_key_salt": "", "safe_mode": True},

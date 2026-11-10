@@ -143,11 +143,15 @@ describe('S1 — la tercera pestaña «aMule» del rail', () => {
     expect(document.getElementById('settings-panel-general')).toHaveAttribute('aria-hidden', 'true')
 
     // La config mudada (mismos campos y valores) y el bloque de acciones.
-    const host = within(panel).getByLabelText('Host / URL')
+    // Acotado a la tarjeta EC: «aMule API» comparte las etiquetas Host/Puerto.
+    const ecCard = within(panel)
+      .getByText('aMule — conexión directa (EC)')
+      .closest('.amule-ec-card') as HTMLElement
+    const host = within(ecCard).getByLabelText('Host / URL')
     expect(host).toBeVisible()
     expect(host).toHaveValue('http://192.168.1.10')
-    expect(within(panel).getByLabelText('Puerto')).toHaveAttribute('placeholder', '4712')
-    expect(within(panel).getByLabelText('Contraseña EC')).toHaveValue('****abcd')
+    expect(within(ecCard).getByLabelText('Puerto')).toHaveAttribute('placeholder', '4712')
+    expect(within(ecCard).getByLabelText('Contraseña EC')).toHaveValue('****abcd')
     expect(within(panel).getByText(/aMule — conexión directa \(EC\)/)).toBeVisible()
     expect(within(panel).getByText('Control de aMule')).toBeVisible()
   })

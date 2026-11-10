@@ -48,8 +48,8 @@ export interface ServicesTestResponse {
   ok: boolean
 }
 
-export async function testServiceConnections(): Promise<ServicesTestResponse> {
-  const res = await apiFetch('/api/services/test', {})
+export async function testServiceConnections(service?: string): Promise<ServicesTestResponse> {
+  const res = await apiFetch(`/api/services/test${service ? `?service=${encodeURIComponent(service)}` : ''}`, {})
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`)
   }
@@ -60,6 +60,8 @@ export async function testServiceConnections(): Promise<ServicesTestResponse> {
 export interface ServiceCandidate {
   service: string
   url?: string
+  /** The amuleapi card keeps host and port apart (amule-api-card). */
+  port?: string
   api_key?: string
   user?: string
   password?: string

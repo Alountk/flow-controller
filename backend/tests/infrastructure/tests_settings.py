@@ -103,6 +103,36 @@ class TestTheFileWinsAfterwards:
         assert settings.get_settings()["services"]["qbit"] == {"url": "", "user": "", "password": ""}
 
 
+class TestAmuleapiPort:
+    """`services.amuleapi.port` — la clave nueva de la tarjeta «aMule API»."""
+
+    def test_a_file_written_before_the_port_key_still_fills_it(self, cfg):
+        """settings.json anterior a la tarjeta: sin `port` en el grupo, el form
+        crashea leyendo `form.services.amuleapi.port` (el porqué del qbit)."""
+        (cfg / "settings.json").write_text(
+            json.dumps({"services": {"amuleapi": {"url": "http://x", "password": "p"}}})
+        )
+
+        settings.load_settings()
+
+        assert settings.get_settings()["services"]["amuleapi"]["port"] == ""
+
+    def test_the_port_round_trips_through_save_and_get(self, cfg):
+        settings.load_settings()
+        stored = settings.get_settings()
+        stored["services"]["amuleapi"] = {
+            "url": "http://amulehost",
+            "port": "4711",
+            "password": "s3",
+        }
+
+        settings.save_settings(stored)
+        settings.load_settings()
+
+        assert settings.get_setting("services", "amuleapi", "port") == "4711"
+        assert _file(cfg)["services"]["amuleapi"]["port"] == "4711"
+
+
 class TestAutoSweepInterval:
     """S4/T7: `intervals.sweep` — segundos entre barridos, 0 = interruptor off."""
 

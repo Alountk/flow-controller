@@ -221,7 +221,7 @@ describe('service connection tester', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
 
     const card = (await screen.findByRole('heading', { name: 'aMule API' })).closest(
-      '.settings-group',
+      '.amule-ec-card',
     ) as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: 'Probar conexión' }))
 
@@ -253,7 +253,7 @@ describe('service connection tester', () => {
     // T10: cambio de pestaña — la API es del dominio aMule, no de Servicios.
     fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))
     const apiCard = (await screen.findByRole('heading', { name: 'aMule API' })).closest(
-      '.settings-group',
+      '.amule-ec-card',
     ) as HTMLElement
     expect(within(apiCard).getByRole('button', { name: 'Probar conexión' })).toBeInTheDocument()
   })

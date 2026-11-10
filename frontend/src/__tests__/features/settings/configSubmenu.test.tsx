@@ -32,6 +32,8 @@ import { clearToasts, getToasts } from '../../../shared/utils/toast.ts'
  *    a 2, cada uno localizado en su sitio (cabecera/tarjeta) — aserción más
  *    fuerte, no más floja —, y (b) las búsquedas sin acotar del guardado se
  *    acotan a la cabecera del panel (mismo botón, misma aserción).
+ *  - amule-api-card: la tarjeta «aMule API» suma un tercer «Guardar cambios»
+ *    (cabecera + EC + API): el recuento exacto pasa de 1 a 3, sin aflojar.
  *
  * Cero pérdidas: los comportamientos existentes se reafirman en su nueva
  * ubicación; los tests de los demás ficheros de Settings no se tocan salvo el
@@ -213,6 +215,14 @@ describe('sub-raíl vertical de Configuración (config-1x1 T3/S2)', () => {
   })
 })
 
+/** Host/URL de la tarjeta EC — con «aMule API» conviven dos campos con la
+ *  misma etiqueta, y acotar a la tarjeta es lo único que no afloja nada. */
+async function ecHostField(): Promise<HTMLElement> {
+  const title = await screen.findByText('aMule — conexión directa (EC)')
+  const card = title.closest('.amule-ec-card') as HTMLElement
+  return within(card).getByLabelText('Host / URL')
+}
+
 describe('cabecera del panel «General» — Guardar cambios / Descartar (config-1x1 T3/S2)', () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
@@ -240,10 +250,9 @@ describe('cabecera del panel «General» — Guardar cambios / Descartar (config
 
     // El guardado ya no vive abajo (era «Guardar configuración» en .settings-actions).
     expect(document.querySelector('.settings-actions')).toBeNull()
-    // ADAPTADO (config-1x1 T6/S4, sin aflojar): la enmienda S4 añade un
-    // segundo «Guardar cambios» en la tarjeta aMule, así que el total pasa de
-    // 1 a 2 EXACTOS — y cada uno está en su sitio (cabecera y tarjeta).
-    expect(Array.from(document.querySelectorAll('button')).filter((b) => b.textContent === 'Guardar cambios')).toHaveLength(2)
+    // ADAPTADO (sin aflojar): la enmienda S4 añadió el de la tarjeta EC y
+    // amule-api-card el de «aMule API» — total 3 EXACTOS (cabecera + EC + API).
+    expect(Array.from(document.querySelectorAll('button')).filter((b) => b.textContent === 'Guardar cambios')).toHaveLength(3)
     within(await amuleCard()).getByRole('button', { name: 'Guardar cambios' })
   })
 
@@ -251,7 +260,7 @@ describe('cabecera del panel «General» — Guardar cambios / Descartar (config
     const fn = mockFetch(baseRoutes)
     renderSettings()
 
-    const host = await screen.findByLabelText('Host / URL')
+    const host = await ecHostField()
     fireEvent.change(host, { target: { value: 'http://cambiado' } })
     expect(host).toHaveValue('http://cambiado')
 
@@ -820,8 +829,8 @@ describe('aviso de cambios sin guardar en la cabecera (config-1x1 T6/S4)', () =>
     const header = await panelHeader()
     const save = within(header).getByRole('button', { name: 'Guardar cambios' })
 
-    // Campo de la tarjeta aMule.
-    fireEvent.change(await screen.findByLabelText('Host / URL'), {
+    // Campo de la tarjeta aMule (EC; la API tiene la misma etiqueta).
+    fireEvent.change(await ecHostField(), {
       target: { value: 'http://cambiado' },
     })
     expect(within(header).getByText('cambios sin guardar')).toBeVisible()
@@ -846,7 +855,7 @@ describe('aviso de cambios sin guardar en la cabecera (config-1x1 T6/S4)', () =>
     const header = await panelHeader()
     const save = within(header).getByRole('button', { name: 'Guardar cambios' })
 
-    fireEvent.change(await screen.findByLabelText('Host / URL'), {
+    fireEvent.change(await ecHostField(), {
       target: { value: 'http://uno' },
     })
     expect(within(header).getByText('cambios sin guardar')).toBeVisible()
@@ -859,7 +868,7 @@ describe('aviso de cambios sin guardar en la cabecera (config-1x1 T6/S4)', () =>
     expect(save).not.toHaveClass('settings-btn-dirty')
 
     // El guardado de la tarjeta limpia el MISMO estado (saveMutation común).
-    fireEvent.change(await screen.findByLabelText('Host / URL'), {
+    fireEvent.change(await ecHostField(), {
       target: { value: 'http://dos' },
     })
     expect(within(header).getByText('cambios sin guardar')).toBeVisible()

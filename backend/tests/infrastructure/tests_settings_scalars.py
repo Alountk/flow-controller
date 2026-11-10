@@ -71,3 +71,32 @@ class TestTheTimeoutIsReadAtCallTime:
         assert "intervals.request_timeout" not in RESTART_REQUIRED_FIELDS, (
             "the timeout applies immediately now; asking for a restart would be a lie"
         )
+
+
+class TestAmuleapiBaseComposesThePort:
+    """`services.amuleapi.port` se junta a la URL como el `ec_port` de la EC."""
+
+    @pytest.mark.parametrize(
+        ("url", "port", "expected"),
+        [
+            ("http://h", "4711", "http://h:4711"),
+            ("http://h:9999", "4711", "http://h:4711"),  # el campo puerto manda
+            ("http://h:9999", "", "http://h:9999"),  # vacío = no tocar
+            ("", "4711", ""),  # sin configurar no crea base de la nada
+            ("http://[::1]", "4711", "http://[::1]:4711"),
+            ("http://h", " 4711 ", "http://h:4711"),  # el puerto llega con espacios
+            ("sin-esquema", "4711", "sin-esquema"),  # urlsplit sin netloc: intacto
+        ],
+    )
+    def test_the_rule(self, url, port, expected):
+        assert config.amuleapi_base(url, port) == expected
+
+    def test_a_saved_port_reaches_the_effective_url(self):
+        _set(**{"services.amuleapi.url": "http://amulehost", "services.amuleapi.port": "4711"})
+
+        assert config.AMULEAPI_URL == "http://amulehost:4711"
+
+    def test_without_a_port_field_the_stored_url_stands(self):
+        _set(**{"services.amuleapi.url": "http://amulehost:9999"})
+
+        assert config.AMULEAPI_URL == "http://amulehost:9999"
