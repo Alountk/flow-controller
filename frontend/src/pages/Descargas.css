@@ -1,0 +1,233 @@
+.dl {
+  padding: 24px 32px 48px;
+  max-width: 1200px;
+}
+
+.dl-header {
+  margin-bottom: 20px;
+}
+
+.dl-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.dl-subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 13px;
+}
+
+.dl-empty {
+  color: var(--text-muted, #6b7280);
+  padding: 16px 0;
+}
+
+.dl-alert {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--danger, #dc2626);
+  background: color-mix(in srgb, var(--danger, #dc2626) 8%, transparent);
+}
+
+.dl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dl-row {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--surface, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dl-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.dl-source {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-alt, #f3f4f6);
+  color: var(--text-muted, #6b7280);
+}
+
+/* El nombre es el dato largo: se recorta, no ensancha la fila. */
+.dl-name {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+}
+
+.dl-chip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.dl-chip-downloading {
+  background: color-mix(in srgb, var(--accent, #2563eb) 12%, transparent);
+  color: var(--accent, #2563eb);
+}
+
+.dl-chip-paused {
+  background: color-mix(in srgb, var(--warning, #b45309) 12%, transparent);
+  color: var(--warning, #b45309);
+}
+
+.dl-chip-completed {
+  background: color-mix(in srgb, var(--success, #15803d) 12%, transparent);
+  color: var(--success, #15803d);
+}
+
+.dl-chip-waiting {
+  background: var(--surface-alt, #f3f4f6);
+  color: var(--text-muted, #6b7280);
+}
+
+.dl-category {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-alt, #f3f4f6);
+  color: var(--text-muted, #6b7280);
+}
+
+.dl-row-prog {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+}
+
+.dl-bar {
+  flex: 1 1 180px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-alt, #f3f4f6);
+  overflow: hidden;
+}
+
+.dl-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent, #2563eb);
+}
+
+.dl-pct {
+  font-weight: 700;
+  color: var(--text, #111827);
+  min-width: 48px;
+}
+
+.dl-speed,
+.dl-eta,
+.dl-size,
+.dl-sources {
+  white-space: nowrap;
+}
+
+.dl-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dl-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+}
+
+.dl-field select {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--surface, #fff);
+}
+
+.dl-toggle,
+.dl-delete,
+.dl-danger,
+.dl-confirm-actions button {
+  padding: 5px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--surface, #fff);
+}
+
+.dl-delete,
+.dl-danger {
+  border-color: var(--danger, #dc2626);
+  color: var(--danger, #dc2626);
+  font-weight: 600;
+}
+
+.dl-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.dl-confirm {
+  background: var(--surface, #fff);
+  border-radius: 12px;
+  padding: 18px 20px;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dl-confirm-question {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dl-confirm-files {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+}
+
+.dl-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'series', label: 'Series', icon: '📺' },
   { key: 'estrenos', label: 'Estrenos', icon: '🗓️' },
   { key: 'seguimiento', label: 'Seguimiento', icon: '📡' },
+  { key: 'descargas', label: 'Descargas', icon: '📥' },
   { key: 'disk', label: 'Disco', icon: '💾' },
   { key: 'files', label: 'Archivos', icon: '📂' },
   { key: 'renombrar', label: 'Renombrar', icon: '🏷️' },

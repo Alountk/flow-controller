@@ -650,6 +650,35 @@ export interface DownloadEntry {
   episode_id?: number
 }
 
+/* ---- Descargas · la cola de aMule en vivo (pagina-descargas S2/S4) ---- */
+
+/** S4's seam: the provider a row came from. Only aMule in this feature;
+ *  qBittorrent joins the union later without rewriting the page. */
+export type DownloadSource = 'amule'
+
+/** Derived server-side (S2); the chip paints this, never the raw code. */
+export type AmuleDownloadState = 'completed' | 'paused' | 'downloading' | 'waiting'
+
+/** One `EC_TAG_PARTFILE` row of `GET /api/amule/downloads`. `eta_seconds` is
+ *  null when `speed` is 0 (nothing is moving, so no one measured a time). */
+export interface AmuleDownloadRow {
+  source: DownloadSource
+  hash: string
+  name: string
+  size_full: number
+  size_done: number
+  progress_pct: number
+  speed: number
+  eta_seconds: number | null
+  state: AmuleDownloadState
+  stopped: boolean
+  status_code: number
+  priority: number
+  category: number | null
+  sources: number
+  ed2k_link: string
+}
+
 /** Mirrors GET /api/downloads (snapshot behind `downloads_cache`). */
 export interface DownloadsResponse {
   downloads: DownloadEntry[]
