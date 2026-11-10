@@ -13,6 +13,8 @@
   --bg: #f4f4f5;
   --bg-elev: #ffffff;
   --bg-elev-2: #fafafa;
+  --surface-3: #f4f4f5;
+  --surface-alt: #f3f4f6;
 
   /* Text (primary → secondary → dim → dimmest) */
   --text: #18181b;
@@ -63,6 +65,10 @@
     --bg: #111113;
     --bg-elev: #18181b;
     --bg-elev-2: #1c1c21;
+    /* Row separators fell back to light #f4f4f5 before this token existed. */
+    --surface-3: #27272a;
+    /* Chips fell back to light #f3f4f6 before this token existed. */
+    --surface-alt: #111113;
 
     /* Text — C-06 dark-contrast adjustment pending human visual review:
        --text-dim/--text-dim2 lightened from #71717a to #8b8b93 so dim small

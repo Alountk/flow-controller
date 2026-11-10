@@ -2,6 +2,17 @@
    Shared on purpose — a page stylesheet cannot style another page's markup
    since the per-view chunking (#271). */
 
+/* The scan-family modal × was a UA-grey box in both schemes; restated in the
+   glyph-button language of .explorer-dialog-close (FileExplorer.css). */
+.scan-modal-close {
+  border: 0;
+  background: none;
+  color: var(--text-dim, #71717a);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
 .fm-action-btn {
   padding: 4px 10px;
   border: 1px solid var(--border);

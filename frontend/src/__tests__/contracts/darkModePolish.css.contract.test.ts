@@ -140,3 +140,72 @@ describe('T4 — dark-only --text-dim/--text-dim2 adjustment (C-06)', () => {
     expect(globalRaw).toMatch(/\/\*[\s\S]*C-06[\s\S]*?\*\//)
   })
 })
+
+// Handoff brief: dark-mode breakage in the unified file explorer and its host
+// pages — hard-coded whites behind theme-aware tokens (T5) and UA-grey modal
+// close buttons (T6).
+const explorerControlSites: Array<[file: string, selector: string]> = [
+  ['shared/ui/FileExplorer.css', '.explorer-select'],
+  ['shared/ui/FileExplorer.css', '.explorer-btn'],
+  ['shared/ui/FileExplorer.css', '.explorer-filter'],
+]
+
+describe('T5 — explorer control backgrounds follow --bg-elev', () => {
+  for (const [file, selector] of explorerControlSites) {
+    it(`${selector} in ${file} fills with var(--bg-elev)`, () => {
+      const body = ruleBody(readCss(file), selector)
+      expect(body, `${selector} rule exists`).not.toBe('')
+      expect(hasDecl(body, 'background', 'var(--bg-elev, #ffffff)')).toBe(true)
+      expect(hasDecl(body, 'background', '#fff')).toBe(false)
+    })
+  }
+
+  it('.explorer-btn.is-primary colors text with var(--on-fill)', () => {
+    const body = ruleBody(readCss('shared/ui/FileExplorer.css'), '.explorer-btn.is-primary')
+    expect(body, '.explorer-btn.is-primary rule exists').not.toBe('')
+    expect(hasDecl(body, 'color', 'var(--on-fill, #ffffff)')).toBe(true)
+    expect(hasDecl(body, 'color', '#fff')).toBe(false)
+  })
+
+  it('the light :root defines --surface-3 as #f4f4f5 (the old fallback)', () => {
+    const open = globalClean.indexOf(':root')
+    expect(open, 'light :root rule exists').toBeGreaterThan(-1)
+    const lightRoot = braceBody(globalClean, globalClean.indexOf('{', open))
+    expect(hasDecl(lightRoot, '--surface-3', '#f4f4f5')).toBe(true)
+  })
+
+  it('the light :root defines --surface-alt as #f3f4f6 (the old fallback)', () => {
+    const open = globalClean.indexOf(':root')
+    expect(open, 'light :root rule exists').toBeGreaterThan(-1)
+    const lightRoot = braceBody(globalClean, globalClean.indexOf('{', open))
+    expect(hasDecl(lightRoot, '--surface-alt', '#f3f4f6')).toBe(true)
+  })
+
+  it('the dark :root maps --surface-3 to #27272a (dark --border hue)', () => {
+    const darkRoot = mediaRootBody(globalClean, '(prefers-color-scheme: dark)')
+    expect(darkRoot, 'dark :root rule exists').not.toBe('')
+    expect(hasDecl(darkRoot, '--surface-3', '#27272a')).toBe(true)
+  })
+
+  it('the dark :root maps --surface-alt to #111113 (recessed on elev cards)', () => {
+    const open = globalClean.indexOf('@media (prefers-color-scheme: dark)')
+    expect(open, 'dark media block exists').toBeGreaterThan(-1)
+    const darkRoot = braceBody(globalClean, globalClean.indexOf('{', open))
+    expect(hasDecl(darkRoot, '--surface-alt', '#111113')).toBe(true)
+  })
+})
+
+const closeButtonSites: Array<[file: string, selector: string]> = [
+  ['shared/ui/atoms.css', '.scan-modal-close'],
+]
+
+describe('T6 — modal close buttons are glyph buttons, not UA chrome', () => {
+  for (const [file, selector] of closeButtonSites) {
+    it(`${selector} in ${file} is a transparent --text-dim glyph button`, () => {
+      const body = ruleBody(readCss(file), selector)
+      expect(body, `${selector} rule exists`).not.toBe('')
+      expect(hasDecl(body, 'background', 'none')).toBe(true)
+      expect(hasDecl(body, 'color', 'var(--text-dim, #71717a)')).toBe(true)
+    })
+  }
+})
