@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react'
 
 export type Page =
   | 'dashboard'
-  | 'peliculas'
   | 'peliculasV2'
   | 'series'
   | 'estrenos'
@@ -19,7 +18,6 @@ export type Page =
 /** Single owner of the page → path map: the sidebar reads it, the router derives from it. */
 export const PAGE_PATHS: Record<Page, string> = {
   dashboard: '/dashboard',
-  peliculas: '/peliculas',
   peliculasV2: '/peliculas-v2',
   series: '/series',
   estrenos: '/estrenos',
@@ -40,6 +38,8 @@ const PATH_PAGES: Record<string, Page> = Object.fromEntries(
 
 function resolvePage(): Page {
   const path = window.location.pathname
+  // Deprecated alias: «Películas» V1 is gone and /peliculas must keep old links alive on V2.
+  if (path === '/peliculas') return 'peliculasV2'
   return PATH_PAGES[path] || 'dashboard'
 }
 

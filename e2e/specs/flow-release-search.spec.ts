@@ -1,8 +1,8 @@
 import { test, expect, login } from '../fixtures/app';
 
 /**
- * The headline flow from the backlog — Faltantes → buscar release → encolar —
- * against the STUB-backed install (phase 2: + docker-compose.e2e.yml).
+ * The headline flow from the backlog — missing title → buscar release →
+ * encolar — against the STUB-backed install (phase 2: + docker-compose.e2e.yml).
  *
  * Row → search inside the detail panel's Releases tab (PR 5 of F-08) →
  * results from OUR sources (S1: the app's Torznab registry, seeded in Phase 2
@@ -12,23 +12,24 @@ import { test, expect, login } from '../fixtures/app';
  * serves (S2). The stub adds no torrent, so this proves the UI flow end to
  * end; it does NOT download anything (see e2e/README.md).
  *
- * PR 7 retired the Faltantes page: the wanted card now lives in the
- * Películas section's Faltantes sub-view, and the search opens INLINE in the
- * panel — no backdrop, no Escape. A successful grab then keeps you ON the
- * results, so the panel never lands on the done step at all: only the overlay
- * reaches it (and reads "Cerrar" there). The panel's remaining exit,
- * "Nueva búsqueda", lives on the error step and trades the results for a new
- * indexer round-trip — which is exactly what the assertions below pin as
- * absent after a grab.
+ * PR 7 retired the Faltantes page and the «Películas» page is deprecated in
+ * turn: «Películas V2» is the single source of truth. The wanted row lives in
+ * the catalogue's «Sin archivo» filter, the row's chevron opens the fullscreen
+ * detail, and the search opens INLINE in the detail's Releases tab — no
+ * backdrop, no Escape. A successful grab then keeps you ON the results, so
+ * the panel never lands on the done step at all: only the overlay modal (the
+ * list's «Acciones rápidas» → «Buscar releases») reaches it and reads "Cerrar"
+ * there. The panel's remaining exit, "Nueva búsqueda", lives on the error step
+ * and trades the results for a new indexer round-trip — which is exactly what
+ * the assertions below pin as absent after a grab.
  *
  * The operator initiates every search: selecting a row NEVER searches. The
- * panel lands on its own 🔍 Buscar Releases button, THAT press starts the
+ * detail lands on its own 🔍 Buscar Releases button, THAT press starts the
  * request (and toggling a site re-runs it), the rows read as the file
  * selector (name · size · semillas — S5: chips only for fields the source
  * really states, never invented quality/language) and carry their three
  * destination buttons (→ 1080 / → 4K / → 3D) — the press on one of them
- * is what grabs. The overlay modal keeps its button and its initial step; this
- * spec never leaves the panel to prove the split.
+ * is what grabs. This spec never leaves the panel to prove the split.
  *
  * Same rules as flow-faltantes: role/accessible-name selectors, text only
  * where markup has no role (justified inline), web-first assertions with
@@ -36,34 +37,28 @@ import { test, expect, login } from '../fixtures/app';
  * retries twice.
  */
 
-test('a wanted card searches releases and grabs one end to end', async ({ app }) => {
+test('a wanted row searches releases and grabs one end to end', async ({ app }) => {
   await login(app, 'test-key');
 
-  // Nav link (Sidebar.tsx NAV_ITEMS, label "Películas"), then the section
-  // heading (Peliculas.tsx, <h2>Películas</h2>).
-  await app.locator('a[href="/peliculas"]').click();
-  await expect(app.getByRole('heading', { level: 1, name: 'Películas' })).toBeVisible({ timeout: 15000 });
+  // Nav link (Sidebar.tsx NAV_ITEMS, label "Películas V2"), then the Topbar's
+  // page title as the route proof (App.tsx PAGE_TITLES).
+  await app.getByRole('link', { name: /Películas V2/ }).click();
+  await expect(app.getByRole('heading', { level: 1, name: 'Películas V2' })).toBeVisible({ timeout: 15000 });
 
-  // The wanted card lives in the Faltantes sub-view: the old page opened on
-  // its missing tab, the section opens on Biblioteca — one click restores
-  // the starting point this spec has always used.
-  // Faltantes is a filter button now, not a tab (the tab duplicated it
-  // and the choice moved beside the name search).
-  await app.getByRole('button', { name: 'Faltantes' }).click();
+  // The wanted row lives under the missing filter: the catalogue opens on
+  // «Todas», one click on «Sin archivo» restores the starting point this spec
+  // has always used (the old Faltantes sub-view's successor).
+  await app.getByRole('group', { name: 'Filtrar por clase' }).getByRole('button', { name: /^Sin archivo/ }).click();
 
-  // The movie row keeps the page's own action — MediaPane.tsx,
-  // button "🔍 Buscar" (sectionsPanel.test's routing test proves this exact
-  // click). In the section it bubbles to the row: the row selects and the
-  // Releases tab opens with the panel's OWN "🔍 Buscar Releases" waiting —
-  // no modal ever, and no search either (selection never searches). This
-  // resolves to ONE button even though Playwright matches role names by
-  // substring, because the panel is not open yet: the click below is what
-  // opens it. exact: since C-09 the bulk trigger "🔍 Buscar todas las
-  // faltantes" shares the substring — the row's own button is the target.
-  await app.getByRole('button', { name: '🔍 Buscar', exact: true }).click();
+  // The movie row's own action is the chevron — PeliculasV2List.tsx,
+  // button[aria-label="Abrir Your Name."] (the V1 row's «🔍 Buscar» became
+  // this: only the chevron opens, the row body just selects). The click opens
+  // the detail on its Releases tab with the panel's OWN "🔍 Buscar Releases"
+  // waiting — no search either (selection never searches).
+  await app.getByRole('button', { name: 'Abrir Your Name.' }).click();
 
-  // Releases is what must be showing now: it is the panel's default tab and
-  // every sub-view switch resets it (Peliculas.tsx detailTab), but the detail
+  // Releases is what must be showing now: it is the detail's default tab
+  // (Peliculas.tsx detailTab) and every open resets to it, but the detail
   // tabs expose their state only as a class — no aria-selected on a
   // role=group button — so the class is the only honest "active" selector.
   await expect(app.locator('.sec-dtab.is-active')).toHaveText('Releases', { timeout: 15000 });
@@ -110,9 +105,11 @@ test('a wanted card searches releases and grabs one end to end', async ({ app })
 
   // Success feedback: the backend's own detail — the qBittorrent client's
   // exact words for THIS add, URL and S3 library category pinned — rides
-  // above the list as the panel's notice: plain div, no role → text, scoped
-  // to the panel region because the SAME text also lives in the toast
-  // (F-13), and a document-wide text query is legitimately ambiguous.
+  // above the results as the panel's notice (div.release-detail-note): plain
+  // div, no role → text, scoped to the detail region because the SAME text
+  // also lives in the toast (F-13), and a document-wide text query is
+  // legitimately ambiguous. The fullscreen detail carries the same
+  // aria-label the split panel did.
   await expect(
     app
       .getByRole('region', { name: 'Panel de detalle' })

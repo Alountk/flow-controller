@@ -87,14 +87,16 @@ describe('topbar shell (design 01 + 03)', () => {
     )
   })
 
-  it('shows the Peliculas design subtitle and the chips on Peliculas', async () => {
+  it('shows the V2 subtitle and the chips on the deprecated /peliculas alias', async () => {
+    // /peliculas resolves to Películas V2 (single source of truth): its copy
+    // is what the topbar must show.
     at('/peliculas')
     renderApp()
 
     await waitFor(() =>
       expect(
         document.querySelector('.topbar-subtitle')?.textContent,
-      ).toBe('Catálogo cinematográfico y gestión de indexación'),
+      ).toBe('La misma biblioteca, con el detalle a pantalla completa'),
     )
     expect(document.querySelector('.service-chips')).not.toBeNull()
   })

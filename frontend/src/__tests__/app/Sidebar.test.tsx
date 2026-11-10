@@ -8,7 +8,7 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Seguimiento')).toBeInTheDocument()
-    expect(screen.getByText('Películas')).toBeInTheDocument()
+    expect(screen.getByText('Películas V2')).toBeInTheDocument()
     expect(screen.getByText('Media Mixer')).toBeInTheDocument()
   })
 
@@ -53,30 +53,32 @@ describe('Sidebar', () => {
     expect(screen.getByText('Archivos').closest('a')).toHaveAttribute('href', '/archivos')
   })
 
-  it('renders Películas and Series as nav items', () => {
+  it('renders Películas V2 and Series as nav items — never the retired V1 entry', () => {
     render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 
-    expect(screen.getByText('Películas')).toBeInTheDocument()
+    expect(screen.getByText('Películas V2')).toBeInTheDocument()
     expect(screen.getByText('Series')).toBeInTheDocument()
+    // The deprecated «Películas» page is not navigable any more.
+    expect(screen.queryByText('Películas')).not.toBeInTheDocument()
   })
 
-  it('calls onNavigate with the peliculas page key', () => {
+  it('calls onNavigate with the peliculasV2 page key', () => {
     const onNavigate = vi.fn()
     render(<Sidebar active="dashboard" onNavigate={onNavigate} developer={false} />)
 
-    fireEvent.click(screen.getByText('Películas'))
+    fireEvent.click(screen.getByText('Películas V2'))
 
-    expect(onNavigate).toHaveBeenCalledWith('peliculas')
+    expect(onNavigate).toHaveBeenCalledWith('peliculasV2')
   })
 
   it('points the new sections at their paths', () => {
     render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 
-    expect(screen.getByText('Películas').closest('a')).toHaveAttribute('href', '/peliculas')
+    expect(screen.getByText('Películas V2').closest('a')).toHaveAttribute('href', '/peliculas-v2')
     expect(screen.getByText('Series').closest('a')).toHaveAttribute('href', '/series')
   })
 
-  it('places Películas and Series before Disco', () => {
+  it('places Películas V2 and Series before Disco', () => {
     const { container } = render(
       <Sidebar active="dashboard" onNavigate={() => {}} developer={false} />,
     )
@@ -86,11 +88,11 @@ describe('Sidebar', () => {
     )
     const index = (label: string) => labels.findIndex((text) => text.includes(label))
 
-    expect(index('Películas')).toBeGreaterThan(-1)
+    expect(index('Películas V2')).toBeGreaterThan(-1)
     expect(index('Series')).toBeGreaterThan(-1)
-    expect(index('Películas')).toBeLessThan(index('Disco'))
+    expect(index('Películas V2')).toBeLessThan(index('Disco'))
     expect(index('Series')).toBeLessThan(index('Disco'))
-    expect(index('Películas')).toBeLessThan(index('Series'))
+    expect(index('Películas V2')).toBeLessThan(index('Series'))
   })
 
   it('seats Seguimiento between Series and Disco', () => {

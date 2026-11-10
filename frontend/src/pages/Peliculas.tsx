@@ -484,10 +484,9 @@ function PanelHistory({ facts }: { facts: RowFacts }) {
 }
 
 export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
-  // S1/S3 («detalle-pantalla»): the same page in two shapes. `split` is the
-  // shipped V1 (side panel, sub-view tabs) and stays untouched; `page` is the
-  // V2 experiment reached from its own sidebar entry — no tabs, and the detail
-  // REPLACES the list instead of sitting beside it.
+  // S1/S3 («detalle-pantalla»): `split` is the deprecated V1 — no route reaches
+  // it any more (its tests keep it honest); `page` is the V2 the routes serve:
+  // no tabs, and the detail REPLACES the list instead of sitting beside it.
   const pageMode = layout === 'page'
   const [view, setView] = useState<SubView>('biblioteca')
   const [selected, setSelected] = useState<MediaSelection | null>(null)
