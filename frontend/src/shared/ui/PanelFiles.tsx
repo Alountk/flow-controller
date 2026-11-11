@@ -9,6 +9,7 @@ import { fromDimensions, isBelowThreshold } from '../utils/resolution.ts'
 import { useQualityThreshold } from '../hooks/useQualityThreshold.ts'
 import { probeSpec } from '../utils/probePreview.ts'
 import type { BrowseResponse, FileItem } from '../types.ts'
+import './atoms.css'
 
 /** What the Archivos tab reads of each page's RowFacts — pages pass theirs. */
 export type PanelFilesFacts =
@@ -22,25 +23,29 @@ export const ROW_MISSING = 'No se pudo leer la fila seleccionada.'
 /** The Archivos tab: the selected row's folder, read-only by construction —
  *  rename/delete/copy live in the Archivos PAGE (retired later, not here).
  *  Pages that pass `routing` get T3's four sections (1080/4K/3D/Otros); the
- *  flat listing is the default so Series' tab stays byte-identical. */
+ *  flat listing is the default so Series' tab stays byte-identical.
+ *  `onSearchInFolder` (S3) adds each row's own «Buscar en carpeta»; absent,
+ *  the rows keep their plain read (V1 is retired, Series never asks). */
 export function PanelFiles({
   facts,
   folders,
+  onSearchInFolder,
 }: {
   facts: PanelFilesFacts
   folders?: RoutingFolders
+  onSearchInFolder?: (item: FileItem) => void
 }) {
   if (facts.state === 'empty') return null
   if (facts.state === 'missing') return <p className="sec-tab-note">{ROW_MISSING}</p>
   if (!facts.path) return <p className="sec-tab-note">Esta entrada no tiene ruta</p>
   return folders ? (
-    <FilesSections basePath={facts.path} folders={folders} />
+    <FilesSections basePath={facts.path} folders={folders} onSearch={onSearchInFolder} />
   ) : (
-    <FilesList path={facts.path} />
+    <FilesList path={facts.path} onSearch={onSearchInFolder} />
   )
 }
 
-function FilesList({ path }: { path: string }) {
+function FilesList({ path, onSearch }: { path: string; onSearch?: (item: FileItem) => void }) {
   const query = useBrowse(path, true)
   if (query.isPending) return <p className="sec-tab-note">Cargando ruta…</p>
   if (query.isError) {
@@ -64,13 +69,23 @@ function FilesList({ path }: { path: string }) {
     )
   }
   if (data.items.length === 0) return <p className="sec-tab-note">Esta carpeta está vacía</p>
-  return <FilesTable items={data.items} />
+  return <FilesTable items={data.items} onSearch={onSearch} />
 }
 
 /** The listing table the navigator family renders — one copy for the flat
- *  tab and for every section. Sections pass `actions` (T4's «Analizar»); the
- *  flat tab passes nothing and gains no column. */
-function FilesTable({ items, actions, chips }: { items: FileItem[]; actions?: (item: FileItem) => ReactNode; chips?: (item: FileItem) => ReactNode }) {
+ *  tab and for every section. Sections pass `actions` (T4's «Analizar»); a
+ *  page that passes `onSearch` (S3) gets one «Buscar en carpeta» per row. */
+function FilesTable({
+  items,
+  actions,
+  chips,
+  onSearch,
+}: {
+  items: FileItem[]
+  actions?: (item: FileItem) => ReactNode
+  chips?: (item: FileItem) => ReactNode
+  onSearch?: (item: FileItem) => void
+}) {
   return (
     <table className="sec-table sec-files-table">
       <thead>
@@ -78,6 +93,7 @@ function FilesTable({ items, actions, chips }: { items: FileItem[]; actions?: (i
           <th scope="col">Nombre</th>
           <th scope="col">Tamaño</th>
           <th scope="col">Modificado</th>
+          {onSearch && <th scope="col">Buscar en carpeta</th>}
           {actions && <th scope="col">Analizar</th>}
         </tr>
       </thead>
@@ -90,6 +106,18 @@ function FilesTable({ items, actions, chips }: { items: FileItem[]; actions?: (i
             </td>
             <td>{item.is_dir ? '—' : formatSize(item.size)}</td>
             <td>{new Date(item.modified * 1000).toLocaleDateString('es-ES')}</td>
+            {onSearch && (
+              <td>
+                <button
+                  type="button"
+                  className="action-btn scan-folder-btn"
+                  title="Buscar en carpeta"
+                  onClick={() => onSearch(item)}
+                >
+                  Buscar en carpeta
+                </button>
+              </td>
+            )}
             {actions && <td>{actions(item)}</td>}
           </tr>
         ))}
@@ -151,7 +179,15 @@ async function fetchRoutingCopies(folder: string, prefix: string): Promise<FileI
 }
 
 /** T3 (S1/S4): the three locations as ONE list, split into four sections. */
-function FilesSections({ basePath, folders }: { basePath: string; folders: RoutingFolders }) {
+function FilesSections({
+  basePath,
+  folders,
+  onSearch,
+}: {
+  basePath: string
+  folders: RoutingFolders
+  onSearch?: (item: FileItem) => void
+}) {
   // One probe store for the whole panel: a measurement has to be able to MOVE a
   // file to its true section, so it cannot live inside the section it was made in.
   const [probes, setProbes] = useState<Record<string, ProbeFileResult>>({})
@@ -256,6 +292,7 @@ function FilesSections({ basePath, folders }: { basePath: string; folders: Routi
             routingFailed={routingFailed}
             probes={probes}
             setProbes={setProbes}
+            onSearch={onSearch}
           />
         )
       })}
@@ -287,6 +324,7 @@ function FilesSection({
   routingFailed,
   probes,
   setProbes,
+  onSearch,
 }: {
   section: { id: FileSectionId; label: string; specClass: string }
   root: string
@@ -296,6 +334,7 @@ function FilesSection({
   /// sections, so it cannot stay private to the one that produced it.
   probes: Record<string, ProbeFileResult>
   setProbes: React.Dispatch<React.SetStateAction<Record<string, ProbeFileResult>>>
+  onSearch?: (item: FileItem) => void
 }) {
   const [runningFiles, setRunningFiles] = useState<Set<string>>(() => new Set())
   const [sectionRunning, setSectionRunning] = useState(false)
@@ -372,6 +411,7 @@ function FilesSection({
         <FilesTable
           items={items}
           chips={qualityChip}
+          onSearch={onSearch}
           actions={(item) =>
             isAnalyzable(item) ? (
               <>

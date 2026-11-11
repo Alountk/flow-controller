@@ -13,6 +13,19 @@
   padding: 2px 4px;
 }
 
+/* S3: a row substitution names its victim before any pick is placed — the
+   operator must never wonder WHICH file the queue will overwrite. */
+.scan-replace-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-dim, #71717a);
+}
+
+.scan-replace-note code {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
 .fm-action-btn {
   padding: 4px 10px;
   border: 1px solid var(--border);

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { Calendar } from '../features/calendar/Calendar.tsx'
 import { MediaPane, type MediaDetail, type MediaSelection } from '../features/media-pane/MediaPane.tsx'
-import { ReleaseSearchModal, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
+import { ReleaseSearchModal, fetchOwnGrabs, grabsIdKindOf, type ReleaseSearchItem } from '../features/release-search/ReleaseSearchModal.tsx'
 import { PeliculasV2List } from './PeliculasV2List.tsx'
 import { QuickActionsMenu } from './QuickActionsMenu.tsx'
 import { ScanModal, type ScanItem } from '../features/media-pane/components/ScanModal.tsx'
@@ -19,11 +19,12 @@ import './Sections.css'
  *
  * PR 6 of the plan: the detail panel's tabs all carry real data. Releases
  * (PR 5) holds the release search inline; Archivos lists the selected row's
- * folder read-only through GET /api/files/browse; Historial reads the row's
- * own `grabbed_at`/`grabbed_destination` — this app's own grab record, never
- * the global auto-copy log. The sub-views are unchanged: Biblioteca and
- * Faltantes render MediaPane, Estrenos the calendar, and Calidad the class
- * list — movies grouped by the quality of the file Radarr owns.
+ * folder read-only through GET /api/files/browse; Historial lists THIS
+ * app's own requests for the title (GET /api/grabs), never the global
+ * auto-copy log — the row's own record only stands in while the log loads.
+ * The sub-views are unchanged: Biblioteca and Faltantes render MediaPane,
+ * Estrenos the calendar, and Calidad the class list — movies grouped by the
+ * quality of the file Radarr owns.
  */
 
 type SubView = 'biblioteca' | 'faltantes' | 'estrenos' | 'calidad'
@@ -465,21 +466,60 @@ function selectedRowFacts(
   }
 }
 
-/** The Historial tab: the row's own grab record — grabbed_at and
- *  grabbed_destination — never /api/auto-copy/history, which is a global log
- *  and would imply a per-item history that does not exist. */
-function PanelHistory({ facts }: { facts: RowFacts }) {
+/** The Historial tab: THIS app's own request log for the title
+ *  (GET /api/grabs — every download we asked for), never
+ *  /api/auto-copy/history, a global log that would imply a per-item history
+ *  that does not exist. The row's own record stands in only while the log
+ *  loads; a failed read is unknown, never "we never asked". */
+function PanelHistory({ facts, release }: { facts: RowFacts; release: ReleaseSearchItem }) {
+  const kind = grabsIdKindOf(release)
+  const historyQuery = useQuery({
+    queryKey: ['grabs', release.source, kind, release.id],
+    queryFn: () => fetchOwnGrabs(release.source, kind, release.id),
+    retry: false,
+  })
+
   if (facts.state === 'empty') return null
   if (facts.state === 'missing') return <p className="sec-tab-note">{ROW_MISSING}</p>
-  if (facts.grabbedAt == null) return <p className="sec-tab-note">Nunca se pidió desde la app</p>
+  if (historyQuery.isLoading) {
+    // The row's own record is a fact from the same log — fine to show while
+    // the full list loads; with no record there is nothing known yet.
+    if (facts.grabbedAt == null) return <p className="sec-tab-note">Cargando peticiones…</p>
+    return (
+      <dl className="sec-history">
+        <dt>Pedido el</dt>
+        <dd>{new Date(facts.grabbedAt * 1000).toLocaleDateString('es-ES')}</dd>
+        <dt>Enviado a</dt>
+        {/* null destination means the arr's own library, per the type's contract. */}
+        <dd>{facts.grabbedDestination ?? 'Biblioteca del arr'}</dd>
+      </dl>
+    )
+  }
+  if (historyQuery.isError) return <p className="sec-tab-note">No se pudo leer el historial de peticiones</p>
+  const requests = historyQuery.data ?? []
+  if (requests.length === 0) return <p className="sec-tab-note">Nunca se pidió desde la app</p>
   return (
-    <dl className="sec-history">
-      <dt>Pedido el</dt>
-      <dd>{new Date(facts.grabbedAt * 1000).toLocaleDateString('es-ES')}</dd>
-      <dt>Enviado a</dt>
-      {/* null destination means the arr's own library, per the type's contract. */}
-      <dd>{facts.grabbedDestination ?? 'Biblioteca del arr'}</dd>
-    </dl>
+    <>
+      {requests.map((grab, index) => (
+        <dl className="sec-history" key={`${grab.grabbed_at ?? 'x'}-${index}`}>
+          {grab.grabbed_at != null && (
+            <Fragment>
+              <dt>Pedido el</dt>
+              <dd>{new Date(grab.grabbed_at * 1000).toLocaleDateString('es-ES')}</dd>
+            </Fragment>
+          )}
+          {grab.quality && (
+            <Fragment>
+              <dt>Calidad</dt>
+              <dd>{grab.quality}</dd>
+            </Fragment>
+          )}
+          <dt>Enviado a</dt>
+          {/* null destination means the arr's own library, per the type's contract. */}
+          <dd>{grab.destination ?? 'Biblioteca del arr'}</dd>
+        </dl>
+      ))}
+    </>
   )
 }
 
@@ -788,12 +828,37 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
               // only the files (S4). V1 has no such menu and keeps it here.
               <>
                 {!pageMode && <ProbeLibraryCard />}
-                <PanelFiles facts={facts} folders={foldersQuery.data} />
+                <PanelFiles
+                  facts={facts}
+                  folders={foldersQuery.data}
+                  // S3: each row's «Buscar en carpeta» opens the pick flow at
+                  // the row's folder. V2 only: V1 is retired and keeps its
+                  // plain read-only listing (its tests pin that).
+                  onSearchInFolder={
+                    pageMode && selected
+                      ? (item) =>
+                          setQuickScan({
+                            type: 'movie',
+                            id: selected.id,
+                            title: selected.detail.title,
+                            source: 'radarr',
+                            initialPath: item.is_dir
+                              ? item.path
+                              : item.path.split('/').slice(0, -1).join('/'),
+                            // Only video rows substitute: the flow picks
+                            // videos, and one would corrupt a folder or a
+                            // sidecar written over.
+                            replacePath:
+                              !item.is_dir && item.is_video !== false ? item.path : undefined,
+                          })
+                      : undefined
+                  }
+                />
               </>
             ) : (
               <p className="sec-tab-note">Cargando carpetas…</p>
             ))}
-          {selected && detailTab === 'Historial' && <PanelHistory facts={facts} />}
+          {selected && detailTab === 'Historial' && <PanelHistory facts={facts} release={selected.release} />}
 
           <p className="sec-panel-note">{PANEL_NOTE}</p>
         </section>

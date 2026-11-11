@@ -128,13 +128,19 @@ const GRABS_ID_PARAM: Record<ReleaseIdKind, string> = {
   series: 'series_id',
 }
 
-/** The app's own grabs for ONE title — the second source behind the has-file
- *  tags. Anything that is not a real answer (HTTP failure, the `error` field
- *  the backend reports when the history cannot be read, a body without the
- *  `grabs` array) THROWS: a failed read is "unknown", never `[]` — `[]` would
- *  say "we have nothing", which is exactly the misread this feature exists to
- *  prevent. The caller then leaves the tags as the library said. */
-async function fetchOwnGrabs(
+/** Which id kind a `ReleaseSearchItem` carries — one rule for every caller
+ *  of the request history: the surface knows better than `type` can say. */
+export function grabsIdKindOf(item: Pick<ReleaseSearchItem, 'type' | 'idKind'>): ReleaseIdKind {
+  return item.idKind ?? (item.type === 'movie' ? 'movie' : 'episode')
+}
+
+/** The app's own requests for ONE title — the Historial tab's source of
+ *  truth. Anything that is not a real answer (HTTP failure, the `error`
+ *  field the backend reports when the history cannot be read, a body
+ *  without the `grabs` array) THROWS: a failed read is "unknown", never
+ *  `[]` — `[]` would say "we have nothing", which is the misread this
+ *  honest-failure rule exists to prevent. Requests never feed the tags. */
+export async function fetchOwnGrabs(
   source: string,
   kind: ReleaseIdKind,
   id: number,
@@ -349,30 +355,14 @@ export function ReleaseSearchModal({
   // ── The has-file block's other two sources ─────────────────────────────────
   // The tags are drawn on the initial step, for a title that HAS a file, and
   // only then may any of these ask — no request on mount for an item with no
-  // file. Each query is keyed by what it is ABOUT: grabs by source:type:id (a
-  // different title is a different history), the listings by folder path (the
-  // folder does not change with the selection, so a whole session browses
-  // path_4k and path_3d at most once each — two calls, not one per item). The
-  // settings document needs no new key at all: ['routing-folders'] above is
-  // the same one the Calidad view reads.
+  // file. Each query is keyed by what it is ABOUT: the listings by folder
+  // path (the folder does not change with the selection, so a whole session
+  // browses path_4k and path_3d at most once each — two calls, not one per
+  // item). The settings document needs no new key at all:
+  // ['routing-folders'] above is the same one the Calidad view reads. The
+  // request history (GET /api/grabs) is NOT a tag source — a request is not
+  // a file; the Historial tab owns that log.
   const blockShown = step === 'initial' && !!item.has_file
-
-  // Which id `item.id` IS: the surface says when it knows (a Series card is
-  // `type:'episode'` but carries the SERIES id), the type decides when it
-  // cannot be wrong. Keyed with the kind because the kind changes the URL —
-  // a series and an episode of the same number are different histories.
-  const grabsIdKind: ReleaseIdKind =
-    item.idKind ?? (item.type === 'movie' ? 'movie' : 'episode')
-
-  const grabsQuery = useQuery({
-    queryKey: ['grabs', item.source, grabsIdKind, item.id],
-    queryFn: () => fetchOwnGrabs(item.source, grabsIdKind, item.id),
-    enabled: blockShown,
-    // Terminal on purpose: an errored history must settle as "unknown" (the
-    // tags keep whatever the sources that DID answer said) instead of being
-    // retried into the backend on every render of the block.
-    retry: false,
-  })
 
   // An unconfigured folder ("" while the settings read is pending, failed, or
   // reporting it unconfigured) never enables its query: a folder that does not
@@ -773,20 +763,20 @@ export function ReleaseSearchModal({
    * what you HAVE, grey for what you are MISSING — that grey IS the answer to
    * "cuáles son los que faltan".
    *
-   * THREE sources feed these tags, mirroring backend/config.py
-   * `destination_for_quality` — a tag lights when any of them PROVES the
-   * class, and stays grey while none can:
+   * Two LOCALIZATION sources feed these tags — a tag lights only when a file
+   * that EXISTS proves the class, and stays grey while none can:
    *
    * 1. the arr's library: `item.quality` — contains `1080p` → 1080, contains
-   *    `2160p` → 4K;
-   * 2. THIS app's own grabs: every grab's `quality` says the same, and a grab
-   *    whose `destination` is `path_3d` proves 3D — 3D has no quality token to
-   *    read, so its destination IS the claim (the same way a path inside
-   *    `path_3d` is the library's);
-   * 3. the routing folders on disk: an entry whose name starts with this
+   *    `2160p` → 4K (the backend's `resolution` measurement outranks it);
+   * 2. the routing folders on disk: an entry whose name starts with this
    *    title's folder name AND that is a directory or a video file is a copy
    *    of it — in `path_4k` it proves 4K, in `path_3d` it proves 3D (a
    *    subtitle or `.nfo` there proves nothing at all).
+   *
+   * A request (GET /api/grabs: what we ASKED the arr to download) never
+   * lights anything — a request is not a file; the Historial tab owns that
+   * log instead (the reported bug: requests claiming classes while Archivos
+   * held nothing).
    *
    * Never inferred from a missing value: an unknown/empty quality claims
    * NOTHING, an absent `path` finds NO copy (an empty prefix would match
@@ -797,8 +787,6 @@ export function ReleaseSearchModal({
    * is where the UI says which case it is.
    */
   const libraryQuality = (item.quality ?? '').trim().toLowerCase()
-  const grabs = grabsQuery.data ?? []
-  const grabQualities = grabs.map((grab) => (grab.quality ?? '').toLowerCase())
   const copyPrefix = baseName(item.path ?? '')
   /**
    * An entry in a routing folder that IS a copy of this title.
@@ -837,29 +825,20 @@ export function ReleaseSearchModal({
     : SD_QUALITY.test(libraryQuality)
 
   const hasFileTags = [
-    {
-      label: '1080',
-      on: libraryIs1080 || grabQualities.some((quality) => quality.includes('1080p')),
-    },
+    { label: '1080', on: libraryIs1080 },
     {
       label: '4K',
-      on:
-        libraryIs4k ||
-        grabQualities.some((quality) => quality.includes('2160p')) ||
-        holdsCopy(listing4kQuery.data),
+      on: libraryIs4k || holdsCopy(listing4kQuery.data),
     },
     {
       label: '3D',
-      on:
-        inFolder(item.path ?? '', path3d) ||
-        grabs.some((grab) => inFolder(grab.destination ?? '', path3d)) ||
-        holdsCopy(listing3dQuery.data),
+      on: inFolder(item.path ?? '', path3d) || holdsCopy(listing3dQuery.data),
     },
     {
       // SD used to be the absence of a chip: a 720p release lit nothing, so the
       // one class the user was about to grab looked like it was not there.
       label: 'SD',
-      on: libraryIsSd || grabQualities.some((quality) => SD_QUALITY.test(quality)),
+      on: libraryIsSd,
     },
   ]
 
@@ -871,7 +850,6 @@ export function ReleaseSearchModal({
    * check" from reading as "we checked and there is nothing".
    */
   const hasFileNoteParts: string[] = []
-  if (grabsQuery.isError) hasFileNoteParts.push('las descargas de la app no se pudieron leer')
   if (foldersUnreadable) hasFileNoteParts.push('la configuración de carpetas no se pudo leer')
   if (listing4kQuery.isError) hasFileNoteParts.push('la carpeta path_4k no se pudo leer')
   if (listing3dQuery.isError) hasFileNoteParts.push('la carpeta path_3d no se pudo leer')

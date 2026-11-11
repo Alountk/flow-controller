@@ -326,10 +326,8 @@ describe('Series · the Episodios tab', () => {
     // the search is keyed on, spelled out where the operator can read it.
     expect(within(panel()).getByText('S02E01 · Nuevo rumbo')).toBeInTheDocument()
 
-    // The has-file block asks the history about THAT episode.
-    await waitFor(() => expect(grabUrls(fn)).toHaveLength(1))
-    expect(grabUrls(fn)[0]).toContain('episode_id=21')
-    expect(grabUrls(fn)[0]).not.toContain('series_id')
+    // The has-file block never consults the request history — a request is
+    // not a file; the Historial tab owns that log.
 
     // And the search itself runs under the episode's id.
     fireEvent.click(await screen.findByRole('button', { name: 'Buscar versiones' }))
@@ -340,6 +338,8 @@ describe('Series · the Episodios tab', () => {
       id: 21,
     })
     expect(String(releaseBodies(fn)[0].id)).not.toBe('3')
+    // …and nothing along the way asked the request history.
+    expect(grabUrls(fn)).toHaveLength(0)
   })
 
   it('searches the series itself while no episode is marked', async () => {

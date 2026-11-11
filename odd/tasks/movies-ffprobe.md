@@ -71,7 +71,7 @@ L2 — Exploración (explore `mvvhf36g-3-rwdy`): Películas → detalle → pest
 «Archivos» = `Peliculas.tsx:678` → `PanelFiles` (tabla plana actual, sin secciones);
 convención 1080/4K/3D ya viva (roots `role:4k/3d` en `routes/files.py:147-148`,
 clase en `Peliculas.tsx:93-99`, tres fuentes de «tiene copia» en
-`hasFileThreeSources.test.tsx:10` con `listing4kQuery`/`listing3dQuery` y
+`hasFileTags.test.tsx:10` con `listing4kQuery`/`listing3dQuery` y
 `holdsCopy` en `ReleaseSearchModal.tsx:410,419,845-858`); ffprobe ya operativo
 (`probe_file` `media_mixer.py:85-131`, `POST /api/mixer/probe` con
 `asyncio.to_thread`, binario en el Dockerfile raíz vía paquete `ffmpeg`).

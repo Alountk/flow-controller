@@ -23,11 +23,15 @@ export interface ScanItem {
   episode_number?: number | null
   episode_title?: string | null
   air_date?: string | null
+  // S3 (películas V2): a row's own «Buscar en carpeta» — the explorer opens
+  // at the row's folder and a placed pick takes the row file's place.
+  initialPath?: string
+  replacePath?: string
 }
 
 export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => void }) {
   const queryClient = useQueryClient()
-  const [currentPath, setCurrentPath] = useState('')
+  const [currentPath, setCurrentPath] = useState(item.initialPath ?? '')
   const rootsQuery = useRoots(true)
   const [customTitle, setCustomTitle] = useState('')
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
@@ -83,9 +87,13 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
   const placeQueue = useMutation({
     mutationFn: async (matches: ScanMatch[]) => {
       for (const m of matches) {
-        const dst = m.target_path
-          ? `${m.target_path}/${m.file_name}`
-          : `${m.movie_title} (${m.movie_year || ''})/${m.file_name}`
+        // S3: a row's substitution takes the row's own path — queue-add copy
+        // replaces what is already there (temp + atomic rename over it).
+        const dst = item.replacePath
+          ? item.replacePath
+          : m.target_path
+            ? `${m.target_path}/${m.file_name}`
+            : `${m.movie_title} (${m.movie_year || ''})/${m.file_name}`
         await queueAdd(
           // A copy, never a move: `move` renames the download away and the
           // hardlink aMule/qBittorrent is sharing disappears with it. Placing
@@ -101,7 +109,11 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
       return { ok: true }
     },
     onSuccess: () => {
-      setToast(`${selectedFiles.size} archivos encolados`)
+      setToast(
+        item.replacePath
+          ? 'Archivo encolado: sustituye el de la fila'
+          : `${selectedFiles.size} archivos encolados`,
+      )
       queryClient.invalidateQueries({ queryKey: ['queue'] })
       if (toastTimer.current) clearTimeout(toastTimer.current)
       toastTimer.current = setTimeout(() => setToast(null), 3000)
@@ -134,6 +146,9 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
 
   function toggleFile(path: string) {
     setSelectedFiles((prev) => {
+      // A substitution is ONE file in ONE place: a second pick replaces the
+      // first, because queueing both would copy them over the same row path.
+      if (item.replacePath) return prev.has(path) ? new Set() : new Set([path])
       const next = new Set(prev)
       if (next.has(path)) next.delete(path)
       else next.add(path)
@@ -233,13 +248,20 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
             >
               {scan.isPending ? 'Escaneando...' : `🔍 Buscar "${item.title}" en esta carpeta`}
             </button>
+
+            {item.replacePath && (
+              <p className="scan-replace-note">
+                El archivo elegido sustituirá a:{' '}
+                <code>{item.replacePath.split('/').pop()}</code>
+              </p>
+            )}
           </div>
 
           {scanResult && (
             <div className="scan-results">
               <div className="scan-summary">
                 {scanResult.detail}
-                {visibleCount > 0 && (
+                {visibleCount > 0 && !item.replacePath && (
                   <button className="fm-action-btn" onClick={toggleAll}>
                     {allVisibleSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
                   </button>
@@ -298,7 +320,11 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
                     onClick={() => placeQueue.mutate(selectedMatches)}
                     disabled={placeQueue.isPending}
                   >
-                    {placeQueue.isPending ? 'Encolando...' : `📦 Colocar ${selectedMatches.length} archivos en la cola`}
+                    {placeQueue.isPending
+                      ? 'Encolando...'
+                      : item.replacePath
+                        ? '📦 Sustituir el archivo elegido en la cola'
+                        : `📦 Colocar ${selectedMatches.length} archivos en la cola`}
                   </button>
                 </div>
               )}
