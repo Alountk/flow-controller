@@ -1,9 +1,9 @@
 """Which class a movie belongs to, in the vocabulary the V2 list shows.
 
-Pure: what Radarr reports about the file (its flag, its quality, its path) and
-the configured 3D folder in, one label out. No config, no disk, no network —
-the caller that knows the deployment passes the folder, which is what keeps the
-rule testable and the chips honest.
+Pure: what Radarr reports about the file (its flag, its quality, its path), what
+the disk listed and the configured 3D folder in, one label out. No config, no
+disk, no network — the caller that owns the disk passes what it listed, which is
+what keeps the rule testable and the chips honest.
 
 The five buckets are exclusive and cover the whole catalogue, because the
 header counts them and their sum must be the total. `sin archivo` wins over any
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Iterable, Mapping
 
+from domain.naming import MEDIA_EXTENSIONS
 from domain.resolution import best
 
 #: Order of the chips' counts; `todos` is the total, not a class.
@@ -66,6 +67,13 @@ def library_class(
     return _PROBED_CLASS.get(best(resolution, quality), "otros")
 
 
+def _is_video(name: str) -> bool:
+    """True when a listing entry is a video file. A sidecar named `1080p.srt`
+    must never light a chip its video never earned."""
+    dot = name.rfind(".")
+    return dot > 0 and name[dot:].lower() in MEDIA_EXTENSIONS
+
+
 def _copy_matches(folder: str, child: str) -> bool:
     """True when `child` is a folder of `folder`'s movie.
 
@@ -83,6 +91,47 @@ def _copy_matches(folder: str, child: str) -> bool:
     return child[len(folder)] in " -_.[("
 
 
+def _folder_labels(
+    *,
+    has_file: bool,
+    quality: str,
+    path: str = "",
+    path_3d: str = "",
+    resolution: str = "",
+    file_name: str = "",
+    folder_files: Iterable[str] = (),
+) -> dict[str, str]:
+    """The movie's own folder, classified: `label -> the file that earns it`.
+
+    The file Radarr owns (matched through `file_name`, its probe beating its
+    name) wins its label over any other candidate; the rest are first-listed.
+    """
+    if not has_file:
+        return {}
+    by_label: dict[str, str] = {}
+    own = file_name.replace("\\", "/").rsplit("/", 1)[-1]
+    for name in folder_files:
+        if not _is_video(name):
+            continue
+        is_own = bool(own) and name == own
+        if is_own:
+            # The file Radarr owns: its probe beats its name (the John Wick
+            # rule), and the probe stops at this one file.
+            cls = library_class(
+                has_file=True, quality=quality, path=path, path_3d=path_3d, resolution=resolution
+            )
+        else:
+            cls = library_class(has_file=True, quality=name, path=path, path_3d=path_3d)
+        label = _CLASS_RESOLUTION.get(cls)
+        if not label:
+            continue
+        if is_own:
+            by_label[label] = name  # the own file wins its label over any other
+        else:
+            by_label.setdefault(label, name)
+    return by_label
+
+
 def available_resolutions(
     *,
     has_file: bool,
@@ -93,38 +142,70 @@ def available_resolutions(
     copies_4k: Iterable[str] = (),
     copies_3d: Iterable[str] = (),
     resolution: str = "",
+    file_name: str = "",
+    folder_files: Iterable[str] = (),
 ) -> list[str]:
-    """The resolutions a row lights: what the disk proves, in chip order.
+    """The resolutions a row lights: what the DISK proves, in chip order.
 
-    The movie's own file proves its class; the copies prove the rest. That
-    second half is the whole point: a movie lives in ONE folder, so its own path
-    can never be inside the 4K root and the 3D root at the same time, and a
-    library that keeps a 1080 copy plus a 4K remux would show only one of them.
+    S1: a chip lights only when a physical file of that class is linked. The
+    movie's own folder proves its files (`folder_files`, the names listed on
+    disk); the copies prove the rest. An empty iterable — an unconfigured
+    folder, an unreadable one — proves nothing, which is not the same as
+    proving absence: Radarr's `quality` alone lights nothing.
+
+    The file Radarr adopted keeps its probe (`best(resolution, quality)` beats
+    the name) and is matched to its disk entry through `file_name`; every other
+    entry is classified by its name alone. The probe stops at that one file: a
+    leftover named `720p` is SD even when the movieFile measures 1080.
 
     `copies_4k`/`copies_3d` are the children of each configured root, read once
-    by whoever owns the disk. An empty iterable — an unconfigured folder, an
-    unreadable one — proves nothing, which is not the same as proving absence.
+    by whoever owns the disk.
     """
     if not has_file:
         return []
     folder = path.rstrip("/").split("/")[-1] if path else ""
-    have: set[str] = set()
-    own = _CLASS_RESOLUTION.get(
-        library_class(
+    have = set(
+        _folder_labels(
             has_file=has_file,
             quality=quality,
             path=path,
             path_3d=path_3d,
             resolution=resolution,
+            file_name=file_name,
+            folder_files=folder_files,
         )
     )
-    if own:
-        have.add(own)
     if _in_folder(path, path_4k) or any(_copy_matches(folder, c) for c in copies_4k):
         have.add("4K")
     if _in_folder(path, path_3d) or any(_copy_matches(folder, c) for c in copies_3d):
         have.add("3D")
     return [label for label in RESOLUTIONS if label in have]
+
+
+def own_1080_file(
+    *,
+    has_file: bool,
+    quality: str,
+    path: str = "",
+    path_3d: str = "",
+    resolution: str = "",
+    file_name: str = "",
+    folder_files: Iterable[str] = (),
+) -> str:
+    """The name of the folder's 1080 file, or `""` when there is none.
+
+    S2's presented file, 1080-o-nada: the movieFile wins the 1080 slot when it
+    IS the 1080 file; otherwise any 1080-class video in the folder qualifies.
+    """
+    return _folder_labels(
+        has_file=has_file,
+        quality=quality,
+        path=path,
+        path_3d=path_3d,
+        resolution=resolution,
+        file_name=file_name,
+        folder_files=folder_files,
+    ).get("1080p", "")
 
 
 def class_counts(

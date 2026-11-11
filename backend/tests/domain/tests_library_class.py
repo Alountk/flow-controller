@@ -129,6 +129,8 @@ def _res(
     path_3d: str = "/mnt/movies3d",
     copies_4k: tuple[str, ...] = (),
     copies_3d: tuple[str, ...] = (),
+    file_name: str = "",
+    folder_files: tuple[str, ...] = (),
 ) -> list[str]:
     return library_class.available_resolutions(
         has_file=has_file,
@@ -138,18 +140,25 @@ def _res(
         path_3d=path_3d,
         copies_4k=copies_4k,
         copies_3d=copies_3d,
+        file_name=file_name,
+        folder_files=folder_files,
     )
 
 
 def test_a_1080p_file_with_a_4k_copy_lights_both():
     """The bug: a movie lives in ONE folder, so its own path can never be inside
     the 4K root and the 3D root at once. The copies are the only proof."""
-    assert _res("WEBDL-1080p", copies_4k=("Alien (1979) [4K]",)) == ["4K", "1080p"]
+    assert _res(
+        "WEBDL-1080p",
+        folder_files=("Alien (1979) WEBDL-1080p.mkv",),
+        copies_4k=("Alien (1979) [4K]",),
+    ) == ["4K", "1080p"]
 
 
 def test_a_3d_copy_adds_the_third_resolution():
     assert _res(
         "WEBDL-1080p",
+        folder_files=("Alien (1979) WEBDL-1080p.mkv",),
         copies_4k=("Alien (1979) [4K]",),
         copies_3d=("Alien (1979) [3D]",),
     ) == ["4K", "3D", "1080p"]
@@ -160,31 +169,60 @@ def test_the_own_file_living_in_the_4k_root_lights_4k():
 
 
 def test_a_2160p_file_lights_4k_without_any_copy():
-    assert _res("Bluray-2160p") == ["4K"]
+    assert _res("Bluray-2160p", folder_files=("Alien (1979) Bluray-2160p.mkv",)) == ["4K"]
 
 
 def test_an_sd_file_stays_sd_until_a_copy_proves_more():
-    assert _res("HDTV-720p") == ["SD"]
-    assert _res("HDTV-720p", copies_3d=("Alien (1979) [3D]",)) == ["3D", "SD"]
+    assert _res("HDTV-720p", folder_files=("Alien (1979) HDTV-720p.mkv",)) == ["SD"]
+    assert _res(
+        "HDTV-720p",
+        folder_files=("Alien (1979) HDTV-720p.mkv",),
+        copies_3d=("Alien (1979) [3D]",),
+    ) == ["3D", "SD"]
 
 
 def test_a_movie_without_a_file_lights_nothing_even_with_copies():
     assert _res("", has_file=False, copies_4k=("Alien (1979) [4K]",)) == []
 
 
+def test_the_quality_alone_lights_nothing_without_the_physical_file():
+    """El `movieFile`/`quality` de Radarr NO decide el encendido (S1): the
+    folder listing is the proof, and an unlisted folder proves nothing."""
+    assert _res("WEBDL-1080p") == []
+
+
+def test_a_sidecar_named_1080p_lights_nothing():
+    """S1 says «el archivo»: a subtitle named after the rip proves no video."""
+    assert _res(
+        "Bluray-2160p",
+        folder_files=("Alien (1979) Bluray-2160p.mkv", "Alien (1979) WEBDL-1080p.srt"),
+    ) == ["4K"]
+
+
 def test_an_unconfigured_root_proves_nothing():
     """Empty means "not configured", never "everything"."""
-    assert _res("WEBDL-1080p", path_4k="", path_3d="") == ["1080p"]
+    assert _res(
+        "WEBDL-1080p",
+        folder_files=("Alien (1979) WEBDL-1080p.mkv",),
+        path_4k="",
+        path_3d="",
+    ) == ["1080p"]
 
 
 def test_an_unreadable_root_proves_nothing():
     """The route hands over an empty listing when the folder cannot be read."""
-    assert _res("WEBDL-1080p", copies_4k=(), copies_3d=()) == ["1080p"]
+    assert _res(
+        "WEBDL-1080p",
+        folder_files=("Alien (1979) WEBDL-1080p.mkv",),
+        copies_4k=(),
+        copies_3d=(),
+    ) == ["1080p"]
 
 
 def test_the_order_is_the_chip_order():
     both = _res(
         "WEBDL-1080p",
+        folder_files=("Alien (1979) WEBDL-1080p.mkv",),
         copies_4k=("Alien (1979)",),
         copies_3d=("Alien (1979)",),
     )
@@ -194,9 +232,10 @@ def test_the_order_is_the_chip_order():
 
 def test_a_copy_folder_is_recognised_by_the_movie_folder_prefix():
     """`Alien (1979) [4K]` is the movie's copy; `Aliens (1986)` is another movie."""
-    assert _res("WEBDL-1080p", copies_4k=("Aliens (1986)",)) == ["1080p"]
-    assert _res("WEBDL-1080p", copies_4k=("Alien (1979)",)) == ["4K", "1080p"]
-    assert _res("WEBDL-1080p", copies_4k=("Alien (1979) [IMAX]",)) == ["4K", "1080p"]
+    own = {"folder_files": ("Alien (1979) WEBDL-1080p.mkv",)}
+    assert _res("WEBDL-1080p", **own, copies_4k=("Aliens (1986)",)) == ["1080p"]
+    assert _res("WEBDL-1080p", **own, copies_4k=("Alien (1979)",)) == ["4K", "1080p"]
+    assert _res("WEBDL-1080p", **own, copies_4k=("Alien (1979) [IMAX]",)) == ["4K", "1080p"]
 
 
 class TestTheProbeBeatsTheName:
@@ -229,7 +268,11 @@ class TestTheProbeBeatsTheName:
 
     def test_the_row_lights_1080p_for_the_probed_file(self):
         libraries = library_class.available_resolutions(
-            has_file=True, quality="Bluray-720p", resolution="1080"
+            has_file=True,
+            quality="Bluray-720p",
+            resolution="1080",
+            file_name="Wick (2019) Bluray-720p.mkv",
+            folder_files=("Wick (2019) Bluray-720p.mkv",),
         )
         assert libraries == ["1080p"]
 
@@ -241,3 +284,81 @@ class TestTheProbeBeatsTheName:
         assert counts["1080"] == 1
         assert counts["SD"] == 1
         assert counts["otros"] == 0
+
+
+# ── S2: the presented file is the 1080, or nothing ───────────────────────────
+
+
+def _own(
+    quality: str,
+    *,
+    has_file: bool = True,
+    path: str = "/mnt/movies/Kubo (2016)",
+    resolution: str = "",
+    file_name: str = "",
+    folder_files: tuple[str, ...] = (),
+) -> str:
+    return library_class.own_1080_file(
+        has_file=has_file,
+        quality=quality,
+        path=path,
+        resolution=resolution,
+        file_name=file_name,
+        folder_files=folder_files,
+    )
+
+
+def test_the_1080_file_is_presented_even_after_the_4k_was_adopted():
+    """The reported bug: manualimport adopts the 4K as movieFile and the
+    presented file stopped being the 1080 (S2: 1080-o-nada)."""
+    assert _own(
+        "Bluray-2160p",
+        file_name="Kubo (2016) Bluray-2160p.mkv",
+        folder_files=("Kubo (2016) Bluray-2160p.mkv", "Kubo (2016) WEBDL-1080p.mkv"),
+    ) == "Kubo (2016) WEBDL-1080p.mkv"
+
+
+def test_when_the_moviefile_is_the_1080_file_its_basename_is_presented():
+    assert _own(
+        "WEBDL-1080p",
+        file_name="/mnt/movies/Kubo (2016)/Kubo (2016) WEBDL-1080p.mkv",
+        folder_files=("Kubo (2016) WEBDL-1080p.mkv",),
+    ) == "Kubo (2016) WEBDL-1080p.mkv"
+
+
+def test_no_1080_video_presents_nothing():
+    assert _own(
+        "Bluray-2160p",
+        file_name="Kubo (2016) Bluray-2160p.mkv",
+        folder_files=("Kubo (2016) Bluray-2160p.mkv",),
+    ) == ""
+
+
+def test_a_1080p_sidecar_is_not_a_presented_file():
+    assert _own(
+        "Bluray-2160p",
+        file_name="Kubo (2016) Bluray-2160p.mkv",
+        folder_files=("Kubo (2016) Bluray-2160p.mkv", "Kubo (2016) WEBDL-1080p.srt", "Kubo (2016).nfo"),
+    ) == ""
+
+
+def test_a_movie_without_a_file_presents_nothing():
+    assert _own("", has_file=False, folder_files=("Kubo (2016) WEBDL-1080p.mkv",)) == ""
+
+
+def test_the_moviefile_wins_the_1080_slot_over_an_earlier_listing_entry():
+    assert _own(
+        "WEBDL-1080p",
+        file_name="Kubo (2016) WEBDL-1080p.mkv",
+        folder_files=("Kubo (2016) HDTV-1080p.mkv", "Kubo (2016) WEBDL-1080p.mkv"),
+    ) == "Kubo (2016) WEBDL-1080p.mkv"
+
+
+def test_the_probe_gives_the_1080_slot_to_a_720p_name():
+    """The John Wick rule at presentation: the measure beats the name."""
+    assert _own(
+        "Bluray-720p",
+        resolution="1080",
+        file_name="Kubo (2016) Bluray-720p.mkv",
+        folder_files=("Kubo (2016) Bluray-720p.mkv",),
+    ) == "Kubo (2016) Bluray-720p.mkv"
