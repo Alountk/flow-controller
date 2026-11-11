@@ -4,11 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Peliculas } from '../../pages/Peliculas.tsx'
 
 /**
- * S3 («v2-file-pick-and-release-states»): the per-row «Buscar en carpeta» of
- * the V2 detail's Archivos tab. Each row opens the EXISTING scan/pick flow
- * (ScanModal) pre-anchored to the row's folder, and a placed pick takes the
- * row's own path — queue-add copy already substitutes an existing file, so
- * the substitution needs no backend change.
+ * S3 («v2-file-pick-and-release-states»), corrected placement: each section
+ * CARD of the V2 detail's Archivos tab carries ONE «Buscar en carpeta» in its
+ * head (sec-file-card-head, next to sec-analyze-row), ALWAYS visible — the
+ * empty card is the case that needs it most. It opens the existing scan/pick
+ * flow anchored at the card's folder, and a card with exactly one video takes
+ * that video as substitution target; no column in the table.
  */
 
 const MOVIE_PATH = '/movies/ParaNorman'
@@ -107,11 +108,13 @@ function renderV2() {
 
 const modal = () => document.querySelector('.scan-modal') as HTMLElement
 
-/** The table row whose cell holds this exact file name. */
-const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElement
+const cardOf = (label: string) => screen.getByRole('region', { name: `Archivos ${label}` })
 
-const pickButtonOf = (name: string) =>
-  within(rowOf(name)).getByRole('button', { name: 'Buscar en carpeta' })
+/** The card head's own chip — the only «Buscar en carpeta» the tab has. */
+const headChipOf = (label: string) =>
+  within(cardOf(label).querySelector('.sec-file-card-head') as HTMLElement).getByRole('button', {
+    name: 'Buscar en carpeta',
+  })
 
 async function openFilesTab() {
   renderV2()
@@ -122,9 +125,7 @@ async function openFilesTab() {
   return panel
 }
 
-/** The scan→pick→place run inside the open modal, starting at the scan button.
- *  The match row is keyed by its full path: the visible name line carries an
- *  icon, so only the path line is an exact text match. */
+/** The scan→pick→place run inside the open modal, starting at the scan button. */
 async function pickAndPlace() {
   const scope = within(modal())
   fireEvent.click(scope.getByRole('button', { name: /Buscar "ParaNorman" en esta carpeta/ }))
@@ -140,6 +141,12 @@ function queueBody(calls: Call[]) {
   return JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>
 }
 
+const scanBody = (calls: Call[]) => {
+  const call = calls.find(([input]) => String(input).includes('/api/wanted/scan'))
+  expect(call, 'a /api/wanted/scan request').toBeDefined()
+  return JSON.parse(String(call?.[1]?.body)) as { remote_path?: string }
+}
+
 beforeEach(() => {
   window.location.hash = ''
   stubFetch()
@@ -150,19 +157,21 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('V2 · «Buscar en carpeta» junto a cada archivo (S3)', () => {
-  it('puts a «Buscar en carpeta» on EVERY file row of the detail’s Archivos tab', async () => {
+describe('V2 · «Buscar en carpeta» en la cabecera de cada tarjeta (S3)', () => {
+  it('shows one chip per card head (five), none in the table, and queues nothing on render', async () => {
     const calls = stubFetch()
     const panel = await openFilesTab()
 
+    for (const label of ['1080', '4K', '3D', 'SD', 'Otros']) {
+      expect(headChipOf(label)).toBeInTheDocument()
+    }
+    expect(within(panel).queryByRole('columnheader', { name: 'Buscar en carpeta' })).toBeNull()
     const rows = within(panel).getAllByRole('row').filter((row) => row.querySelector('td'))
-    expect(rows.length).toBe(3)
+    expect(rows).toHaveLength(3)
     for (const row of rows) {
-      expect(within(row).getByRole('button', { name: 'Buscar en carpeta' })).toBeInTheDocument()
+      expect(within(row).queryByRole('button', { name: 'Buscar en carpeta' })).toBeNull()
     }
 
-    // Rendering the buttons is free: nothing scans or queues until a click
-    // (the persisted-probe cache read is the listing's, not the button's).
     const mutating = calls.filter(
       ([input, init]) =>
         /api\/wanted\/scan|api\/files\/queue/.test(String(input)) ||
@@ -171,39 +180,22 @@ describe('V2 · «Buscar en carpeta» junto a cada archivo (S3)', () => {
     expect(mutating).toHaveLength(0)
   })
 
-  it('opens the scan flow anchored to the row’s folder — the scan starts where the row lives', async () => {
+  it('the 1080 card’s chip opens the flow at the movie folder and substitutes its sole video', async () => {
     const calls = stubFetch()
     await openFilesTab()
 
-    fireEvent.click(pickButtonOf('ParaNorman.mkv'))
+    fireEvent.click(headChipOf('1080'))
 
-    // The right flow (the section's own scan modal) over the right movie…
     expect(document.querySelector('.scan-modal-backdrop')).not.toBeNull()
     expect(modal()).toHaveTextContent('ParaNorman')
-    // …pre-anchored at the row's folder: the explorer's crumbs say so (once
-    // the roots resolve, which is what maps the folder to its crumbs).
     const crumbs = within(modal()).getByRole('navigation', { name: 'Ruta' })
     expect(await within(crumbs).findByRole('button', { name: 'ParaNorman' })).toBeInTheDocument()
 
-    fireEvent.click(within(modal()).getByRole('button', { name: /Buscar "ParaNorman" en esta carpeta/ }))
-    await waitFor(() => {
-      const scan = calls.find(([input]) => String(input).includes('/api/wanted/scan'))
-      expect(scan).toBeDefined()
-      expect(JSON.parse(String(scan?.[1]?.body)).remote_path).toBe(MOVIE_PATH)
-    })
-  })
-
-  it('substitutes the row’s file: the queue places the pick OVER the row path', async () => {
-    const calls = stubFetch()
-    await openFilesTab()
-
-    fireEvent.click(pickButtonOf('ParaNorman.mkv'))
     await pickAndPlace()
-
     await waitFor(() => {
+      expect(scanBody(calls).remote_path).toBe(MOVIE_PATH)
       const body = queueBody(calls)
-      // The substitution the user asked for: the better file takes the row's
-      // own place (queue-add copy replaces an existing destination).
+      // The card's sole video is the substitution target the user asked for.
       expect(body.local_path).toBe(ROW_FILE)
       expect(body.remote_path).toBe(PICKED)
       expect(body.source).toBe('copy')
@@ -212,45 +204,37 @@ describe('V2 · «Buscar en carpeta» junto a cada archivo (S3)', () => {
     })
   })
 
-  it('a folder row is a search context, not a substitution: the pick lands named as itself', async () => {
+  it('the EMPTY 4K card still searches: the chip is there and anchors at the 4K root', async () => {
     const calls = stubFetch()
     await openFilesTab()
 
-    fireEvent.click(pickButtonOf('subs'))
+    expect(
+      within(cardOf('4K')).getByText('Sin archivos en esta sección'),
+    ).toBeInTheDocument()
+    fireEvent.click(headChipOf('4K'))
 
-    // Anchored INSIDE the folder the row names…
-    const scanButton = within(modal()).getByRole('button', { name: /Buscar "ParaNorman" en esta carpeta/ })
-    fireEvent.click(scanButton)
+    expect(modal()).toHaveTextContent('ParaNorman')
+    fireEvent.click(within(modal()).getByRole('button', { name: /Buscar "ParaNorman" en esta carpeta/ }))
     await waitFor(() => {
-      const scan = calls.find(([input]) => String(input).includes('/api/wanted/scan'))
-      expect(JSON.parse(String(scan?.[1]?.body)).remote_path).toBe(`${MOVIE_PATH}/subs`)
-    })
-
-    fireEvent.click((await within(modal()).findByText(PICKED)).closest('.scan-match') as HTMLElement)
-    fireEvent.click(within(modal()).getByRole('button', { name: /Colocar \d+ archivos en la cola/ }))
-
-    // …and a video is localized into the movie folder, never written over
-    // the folder row (copytree over an existing dir would fail anyway).
-    await waitFor(() => {
-      const body = queueBody(calls)
-      expect(body.local_path).toBe(`${MOVIE_PATH}/Better.Release.mkv`)
+      expect(scanBody(calls).remote_path).toBe('/movies/4k')
     })
   })
 
-  it('a sidecar row stays intact: a video pick localizes beside it, never over it', async () => {
+  it('the Otros card (sidecar + folder, no video) localizes beside them, never over them', async () => {
     const calls = stubFetch()
     await openFilesTab()
 
-    fireEvent.click(pickButtonOf('notes.srt'))
+    fireEvent.click(headChipOf('Otros'))
     const scope = within(modal())
     fireEvent.click(scope.getByRole('button', { name: /Buscar "ParaNorman" en esta carpeta/ }))
     fireEvent.click((await scope.findByText(PICKED)).closest('.scan-match') as HTMLElement)
     fireEvent.click(scope.getByRole('button', { name: /Colocar \d+ archivos en la cola/ }))
 
     await waitFor(() => {
+      expect(scanBody(calls).remote_path).toBe(MOVIE_PATH)
       const body = queueBody(calls)
-      // The flow only ever picks videos: writing one over a subtitle's path
-      // would corrupt the folder, so the sidecar is never the destination.
+      // No sole video in the card → no victim: the pick lands as its own name
+      // in the movie folder, never over the subtitle or the folder row.
       expect(body.local_path).toBe(`${MOVIE_PATH}/Better.Release.mkv`)
       expect(body.local_path).not.toBe(`${MOVIE_PATH}/notes.srt`)
     })
@@ -259,7 +243,7 @@ describe('V2 · «Buscar en carpeta» junto a cada archivo (S3)', () => {
   it('substitution is one file in one place: a second pick replaces the selection', async () => {
     await openFilesTab()
 
-    fireEvent.click(pickButtonOf('ParaNorman.mkv'))
+    fireEvent.click(headChipOf('1080'))
     const scope = within(modal())
     fireEvent.click(scope.getByRole('button', { name: /Buscar "ParaNorman" en esta carpeta/ }))
     const first = (await scope.findByText(PICKED)).closest('.scan-match') as HTMLElement
@@ -268,8 +252,8 @@ describe('V2 · «Buscar en carpeta» junto a cada archivo (S3)', () => {
     fireEvent.click(first)
     fireEvent.click(second)
 
-    // The row's path is ONE file: two picks would queue over each other, so
-    // the second pick replaces the first instead of adding to it.
+    // The victim is ONE file: two picks would queue over each other, so the
+    // second pick replaces the first instead of adding to it.
     expect(within(first).getByRole('checkbox')).not.toBeChecked()
     expect(within(second).getByRole('checkbox')).toBeChecked()
     fireEvent.click(second)
