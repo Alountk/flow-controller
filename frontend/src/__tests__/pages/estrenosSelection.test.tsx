@@ -89,6 +89,16 @@ function mockFetch(items: unknown[]) {
     if (url.includes('/api/wanted/all')) {
       return ok({ items: [], total: 0, page: 1, page_size: 50 })
     }
+    if (url.includes('/api/grabs')) {
+      // Only the movie with the app's own request record answers with it.
+      const movieId = new URL(url, 'http://x').searchParams.get('movie_id')
+      if (movieId === '857') {
+        return ok({
+          grabs: [{ quality: null, destination: '/mnt/peliculas/_manual', grabbed_at: GRABBED_AT }],
+        })
+      }
+      return ok({ grabs: [] })
+    }
     if (url.includes('/api/wanted?')) {
       return ok({
         wanted: { radarr: { items: [], total: 0 }, sonarr: { items: [], total: 0 } },

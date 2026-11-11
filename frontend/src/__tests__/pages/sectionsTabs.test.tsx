@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ComponentType } from 'react'
 import { Peliculas } from '../../pages/Peliculas.tsx'
@@ -12,9 +12,10 @@ import { Series } from '../../pages/Series.tsx'
  * read-only, with the honest states a real filesystem produces (no path on
  * the row, a file where a folder was expected, a failed fetch). Episodios
  * (Series) lists GET /api/wanted/series/{id}/episodes, only the fields that
- * response carries. Historial reads the row's own `grabbed_at` and
- * `grabbed_destination` — the app's own grab record — and never asks
- * /api/auto-copy/history, which is a global log, not a per-item one.
+ * response carries. Películas' Historial lists the requests THIS app made
+ * (GET /api/grabs: each request's date, quality, destination) and never
+ * asks /api/auto-copy/history, a global log, not a per-item one; Series'
+ * Historial keeps reading its row's own grabbed_at/grabbed_destination.
  *
  * The tab BAR itself (all tabs enabled, the roadmap token) is pinned in
  * Sections.test; the Releases tab's inline search is pinned in
@@ -115,7 +116,7 @@ function ok(body: unknown) {
 }
 
 /** Every listing the sections and the panel's tabs can ask for. */
-function stubFetch(opts: { browse?: unknown; browseReject?: boolean } = {}) {
+function stubFetch(opts: { browse?: unknown; browseReject?: boolean; grabs?: 'error' } = {}) {
   const fn = vi.fn((input: RequestInfo | URL) => {
     const url = String(input)
     if (url.includes('/api/files/browse')) {
@@ -150,6 +151,19 @@ function stubFetch(opts: { browse?: unknown; browseReject?: boolean } = {}) {
     }
     if (url.includes('/api/settings')) {
       return ok({ paths: { path_4k: '', path_3d: '' } })
+    }
+    if (url.includes('/api/grabs')) {
+      if (opts.grabs === 'error') {
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({ detail: 'boom' }) } as Response)
+      }
+      // Only the movie this file's Historial tests ask for carries requests.
+      const movieId = new URL(url, 'http://x').searchParams.get('movie_id')
+      if (movieId === '411') {
+        return ok({
+          grabs: [{ quality: 'Bluray-2160p', destination: '/mnt/peliculas/_manual', grabbed_at: GRABBED_AT }],
+        })
+      }
+      return ok({ grabs: [] })
     }
     return ok({})
   })
@@ -283,18 +297,28 @@ describe('sections · PR 6 — the detail tabs', () => {
     expect(screen.queryByRole('columnheader', { name: 'Nombre' })).not.toBeInTheDocument()
   })
 
-  it('Películas · Historial reads the row’s own grab record in es-ES', async () => {
+  it('Películas · Historial lists the requests made, asked under the movie id', async () => {
     renderSection(Peliculas)
     await screen.findByText('Sin Pedido')
 
     fireEvent.click(rowOf('Your Name.'))
     fireEvent.click(screen.getByRole('button', { name: 'Historial' }))
 
-    // Grabbed_at formatted the Spanish way, grabbed_destination in full.
-    expect(screen.getByText(new Date(GRABBED_AT * 1000).toLocaleDateString('es-ES'))).toBeInTheDocument()
-    expect(screen.getByText('/mnt/peliculas/_manual')).toBeInTheDocument()
+    // The settled list is the state to assert: 'Calidad' appears only in a
+    // request row — the loading fallback never shows one — and scoping to
+    // its dl keeps the row's quality chip (same literal) out of the match.
+    const request = (await within(panel()).findByText('Calidad')).closest('dl') as HTMLElement
+    expect(within(request).getByText(new Date(GRABBED_AT * 1000).toLocaleDateString('es-ES'))).toBeInTheDocument()
+    expect(within(request).getByText('/mnt/peliculas/_manual')).toBeInTheDocument()
+    expect(within(request).getByText('Bluray-2160p')).toBeInTheDocument()
 
-    // The app's own record ONLY: the global auto-copy log is never asked.
+    // Asked for THIS movie: the selection's id on the wire.
+    await waitFor(() => expect(callsMatching(fn, '/api/grabs')).toHaveLength(1))
+    const asked = String(callsMatching(fn, '/api/grabs')[0][0])
+    expect(asked).toContain('movie_id=411')
+    expect(asked).toContain('source=radarr')
+
+    // The app's own request log ONLY: the global auto-copy log is never asked.
     expect(callsMatching(fn, '/api/auto-copy/history')).toHaveLength(0)
   })
 
@@ -307,6 +331,19 @@ describe('sections · PR 6 — the detail tabs', () => {
 
     expect(await screen.findByText('Nunca se pidió desde la app')).toBeInTheDocument()
     expect(callsMatching(fn, '/api/auto-copy/history')).toHaveLength(0)
+  })
+
+  it('Películas · Historial reports a failed history read as unknown, not as no requests', async () => {
+    stubFetch({ grabs: 'error' })
+    renderSection(Peliculas)
+    await screen.findByText('Sin Pedido')
+
+    fireEvent.click(rowOf('Your Name.'))
+    fireEvent.click(screen.getByRole('button', { name: 'Historial' }))
+
+    // Unknown must never read as "we asked and nothing came back".
+    expect(await screen.findByText('No se pudo leer el historial de peticiones')).toBeInTheDocument()
+    expect(screen.queryByText('Nunca se pidió desde la app')).toBeNull()
   })
 
   it('Series · Episodios lists the series’ episodes, only what the payload carries', async () => {
