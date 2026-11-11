@@ -151,8 +151,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend-tests, frontend-build]
     # The workflow carries no other timeout; without this a hung browser run
-    # would sit on GitHub's 6-hour default. It now covers BOTH variants.
-    timeout-minutes: 15
+    # would sit on GitHub's 6-hour default. The budget also spans bounded
+    # retries of the OS-deps install, whose runner-side DNS outages (3/3 on
+    # 2026-11-11) used to kill the job before a single spec ran.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -185,9 +187,22 @@ jobs:
       - name: Install Playwright browser
         # `--with-deps` also installs the OS libraries the browser needs
         # (libnspr4 & co — they are NOT in the runner image by default).
+        # apt goes through the runner's DNS: when it fails (observed
+        # 2026-11-11, Temporary failure resolving security.ubuntu.com,
+        # 3/3 runs, zero specs) the WHOLE job died — so the fetches get
+        # apt-level retries and the command gets bounded re-attempts.
         run: |
           cd e2e
-          npx playwright install --with-deps chromium
+          echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/99-retries >/dev/null
+          for attempt in 1 2 3; do
+            echo "── playwright install — attempt $attempt/3"
+            if npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "❌ playwright install failed 3 times"
+          exit 1
 
       # ── Phase 1: bare install (no services) ─────────────────────
       - name: "Phase 1 — start bare container"

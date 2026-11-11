@@ -831,25 +831,18 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
                 <PanelFiles
                   facts={facts}
                   folders={foldersQuery.data}
-                  // S3: each row's «Buscar en carpeta» opens the pick flow at
-                  // the row's folder. V2 only: V1 is retired and keeps its
-                  // plain read-only listing (its tests pin that).
+                  // S3 (corrected): the card head's chip opens the flow at the
+                  // card's folder. V2 only: V1/Series keep the plain listing.
                   onSearchInFolder={
                     pageMode && selected
-                      ? (item) =>
+                      ? (target) =>
                           setQuickScan({
                             type: 'movie',
                             id: selected.id,
                             title: selected.detail.title,
                             source: 'radarr',
-                            initialPath: item.is_dir
-                              ? item.path
-                              : item.path.split('/').slice(0, -1).join('/'),
-                            // Only video rows substitute: the flow picks
-                            // videos, and one would corrupt a folder or a
-                            // sidecar written over.
-                            replacePath:
-                              !item.is_dir && item.is_video !== false ? item.path : undefined,
+                            initialPath: target.path || undefined,
+                            replacePath: target.replaceVideo,
                           })
                       : undefined
                   }
