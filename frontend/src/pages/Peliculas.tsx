@@ -828,7 +828,32 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
               // only the files (S4). V1 has no such menu and keeps it here.
               <>
                 {!pageMode && <ProbeLibraryCard />}
-                <PanelFiles facts={facts} folders={foldersQuery.data} />
+                <PanelFiles
+                  facts={facts}
+                  folders={foldersQuery.data}
+                  // S3: each row's «Buscar en carpeta» opens the pick flow at
+                  // the row's folder. V2 only: V1 is retired and keeps its
+                  // plain read-only listing (its tests pin that).
+                  onSearchInFolder={
+                    pageMode && selected
+                      ? (item) =>
+                          setQuickScan({
+                            type: 'movie',
+                            id: selected.id,
+                            title: selected.detail.title,
+                            source: 'radarr',
+                            initialPath: item.is_dir
+                              ? item.path
+                              : item.path.split('/').slice(0, -1).join('/'),
+                            // Only video rows substitute: the flow picks
+                            // videos, and one would corrupt a folder or a
+                            // sidecar written over.
+                            replacePath:
+                              !item.is_dir && item.is_video !== false ? item.path : undefined,
+                          })
+                      : undefined
+                  }
+                />
               </>
             ) : (
               <p className="sec-tab-note">Cargando carpetas…</p>
