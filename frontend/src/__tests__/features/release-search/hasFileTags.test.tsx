@@ -7,10 +7,13 @@ import { ReleaseSearchModal, type ReleaseSearchItem } from '../../../features/re
 /**
  * The has-file tags' sources of truth: LOCALIZED files only.
  *
- * Two sources may prove a class:
+ * Three sources may prove a class:
  * 1. the arr's library (`item.quality`, or `item.resolution` when the backend
  *    measured it) — the file Radarr reports IS on disk;
- * 2. the routing folders on disk (GET /api/files/browse — an entry whose name
+ * 2. the movie's own folder (GET /api/files/browse of `item.path`) — the
+ *    physical 1080 file the movieFile stopped naming after a manual import
+ *    adopts a 4K;
+ * 3. the routing folders on disk (GET /api/files/browse — an entry whose name
  *    starts with this title's folder name is a copy of it).
  *
  * This app's own REQUESTS (GET /api/grabs: what we ASKED the arr to
@@ -22,8 +25,9 @@ import { ReleaseSearchModal, type ReleaseSearchItem } from '../../../features/re
  * - a tag lights when a localization source PROVES the class, grey otherwise;
  * - "unknown" (a failed read, an unconfigured folder) never masquerades as
  *   "absent" — the tags do not grey DOWN and `Comprobación parcial` says why;
- * - the request economy: the has-file block never asks /api/grabs, two browse
- *   calls per session (keyed by folder), none at all for an item with no file.
+ * - the request economy: the has-file block never asks /api/grabs, the routing
+ *   folders once per session and the title's own folder once per folder (all
+ *   keyed by folder), none at all for an item with no file.
  */
 
 function makeItem(overrides: Partial<ReleaseSearchItem> = {}): ReleaseSearchItem {
@@ -53,7 +57,10 @@ interface StubOpts {
   grabs?: GrabsBody | 'error'
   /** Per-folder /api/files/browse bodies, by folder path. A folder mapped to
    *  'error' answers HTTP 500; an unlisted folder answers an empty listing. */
-  listings?: Record<string, { ok?: boolean; items?: { name: string }[] } | 'error'>
+  listings?: Record<
+    string,
+    { ok?: boolean; items?: { name: string; is_dir?: boolean; is_video?: boolean }[] } | 'error'
+  >
 }
 
 function ok(body: unknown, status = 200) {
@@ -311,8 +318,13 @@ describe('the tags · unknown is not absent', () => {
       await screen.findByText(/path_4k sin configurar · path_3d sin configurar/),
     ).toBeInTheDocument()
     expect(screen.queryByText(/no se pudo leer/)).toBeNull()
-    // The rule itself: a folder that does not exist is never browsed.
-    expect(callsWith(fn, '/api/files/browse')).toHaveLength(0)
+    // The rule itself: folders that do not exist are never browsed — the one
+    // browse is the title's own folder, the 1080 file's physical source.
+    const browsed = callsWith(fn, '/api/files/browse')
+    expect(browsed).toHaveLength(1)
+    expect(String(browsed[0][0])).toContain(
+      `path=${encodeURIComponent('/peliculas/ParaNorman (2012)')}`,
+    )
     expect(tags()).toEqual([
       { label: '1080', on: true },
       { label: '4K', on: false },
@@ -355,20 +367,26 @@ describe('the tags · what each request costs', () => {
       <ReleaseSearchModal item={makeItem({ id: 111 })} presentation="panel" />,
       client,
     )
-    // Both routing folders, once each: the listing is per FOLDER, not per item.
-    await waitFor(() => expect(callsWith(fn, '/api/files/browse')).toHaveLength(2))
+    // Both routing folders, once each, plus the title's own folder: the
+    // listings are per FOLDER, not per item.
+    await waitFor(() => expect(callsWith(fn, '/api/files/browse')).toHaveLength(3))
     first.unmount()
 
     renderPanel(
       <ReleaseSearchModal item={makeItem({ id: 222, path: '/peliculas/Otra (2020)' })} presentation="panel" />,
       client,
     )
-    // ZERO more browse calls: same two folders, already listed this session —
-    // and still zero grabs calls: the request history is not the tags' source.
-    expect(callsWith(fn, '/api/files/browse')).toHaveLength(2)
+    // ONE more browse: the new title's own folder. The routing folders stay
+    // cached this session — and still zero grabs calls: the request history
+    // is not the tags' source.
+    expect(callsWith(fn, '/api/files/browse')).toHaveLength(4)
     expect(callsWith(fn, '/api/grabs')).toHaveLength(0)
-    const browsed = callsWith(fn, '/api/files/browse').map(([input]) => String(input))
-    expect(browsed.every((url) => url.includes('path=%2Fmnt%2F4k') || url.includes('path=%2Fmnt%2F3d'))).toBe(true)
+    const browsed = callsWith(fn, '/api/files/browse').map(([input]) =>
+      new URL(String(input), 'http://x').searchParams.get('path'),
+    )
+    expect([...browsed].sort()).toEqual(
+      ['/mnt/4k', '/mnt/3d', '/peliculas/ParaNorman (2012)', '/peliculas/Otra (2020)'].sort(),
+    )
   })
 
   it('reads settings through the shared routing-folders document, once', async () => {
@@ -425,5 +443,219 @@ describe('the tags · the block still offers its way out', () => {
 
     await screen.findByPlaceholderText('Filtrar por título...')
     expect(callsWith(fn, '/api/calendar/releases')).toHaveLength(1)
+  })
+})
+
+describe('the tags and the presented file · physical links (S1, S2)', () => {
+  beforeEach(() => {
+    stubFetch()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  // The reported bug: after localizing a 4K, post_move_import →
+  // arr_manual_import makes Radarr ADOPT it as movieFile, so quality,
+  // resolution and file_name all re-read from the 4K — while the 1080 file
+  // is still on disk in the movie folder.
+  const adopted4k = {
+    quality: 'Bluray-2160p',
+    resolution: '2160',
+    file_name: 'ParaNorman.2012.2160p.WEB-DL.mkv',
+  }
+
+  it('lights 1080 from the movie folder file even when the movieFile is the adopted 4K (S1)', async () => {
+    stubFetch({
+      listings: {
+        '/peliculas/ParaNorman (2012)': {
+          ok: true,
+          items: [{ name: 'ParaNorman.2012.1080p.BluRay.x264.mkv', is_dir: false, is_video: true }],
+        },
+        '/mnt/4k': { ok: true, items: [{ name: 'ParaNorman (2012)', is_dir: true }] },
+      },
+    })
+    renderPanel(<ReleaseSearchModal item={makeItem(adopted4k)} presentation="panel" />)
+
+    await waitFor(() =>
+      expect(tags()).toEqual([
+        { label: '1080', on: true },
+        { label: '4K', on: true },
+        { label: '3D', on: false },
+        { label: 'SD', on: false },
+      ]),
+    )
+  })
+
+  it('never lights 1080 without a physical 1080 file (S1)', async () => {
+    stubFetch({
+      listings: {
+        '/peliculas/ParaNorman (2012)': { ok: true, items: [] },
+        '/mnt/4k': { ok: true, items: [{ name: 'ParaNorman (2012)', is_dir: true }] },
+      },
+    })
+    renderPanel(<ReleaseSearchModal item={makeItem(adopted4k)} presentation="panel" />)
+
+    await waitFor(() =>
+      expect(tags()).toEqual([
+        { label: '1080', on: false },
+        { label: '4K', on: true },
+        { label: '3D', on: false },
+        { label: 'SD', on: false },
+      ]),
+    )
+  })
+
+  it('presents the physical 1080 as the downloaded file — or nothing at all (S2)', async () => {
+    // The 1080 file is on disk: IT is presented, never the adopted 4K.
+    stubFetch({
+      listings: {
+        '/peliculas/ParaNorman (2012)': {
+          ok: true,
+          items: [{ name: 'ParaNorman.2012.1080p.BluRay.x264.mkv', is_dir: false, is_video: true }],
+        },
+      },
+    })
+    const first = renderPanel(
+      <ReleaseSearchModal item={makeItem(adopted4k)} presentation="panel" />,
+    )
+    await waitFor(() =>
+      expect(document.querySelector('.has-file-name')?.textContent).toBe(
+        'ParaNorman.2012.1080p.BluRay.x264.mkv',
+      ),
+    )
+    first.unmount()
+
+    // No 1080 anywhere: no file line at all — while the tags still draw the
+    // physical 4K copy per S1.
+    stubFetch({
+      listings: {
+        '/peliculas/ParaNorman (2012)': { ok: true, items: [] },
+        '/mnt/4k': { ok: true, items: [{ name: 'ParaNorman (2012)', is_dir: true }] },
+      },
+    })
+    renderPanel(<ReleaseSearchModal item={makeItem(adopted4k)} presentation="panel" />)
+    await waitFor(() =>
+      expect(tags()).toEqual([
+        { label: '1080', on: false },
+        { label: '4K', on: true },
+        { label: '3D', on: false },
+        { label: 'SD', on: false },
+      ]),
+    )
+    expect(document.querySelector('.has-file-name')).toBeNull()
+    expect(document.querySelector('.has-file-missing')).toBeNull()
+  })
+})
+
+describe("the tags · the detail reads the row's physical answer (libraries)", () => {
+  beforeEach(() => {
+    stubFetch()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  // Same reported bug as above: the movieFile is the adopted 4K while the
+  // 1080 file is still on disk — but here the ROW already answered for both.
+  const adopted4k = {
+    quality: 'Bluray-2160p',
+    resolution: '2160',
+    file_name: 'ParaNorman.2012.2160p.WEB-DL.mkv',
+  }
+
+  it('lights the tags purely from the row answer and never browses the movie folder', async () => {
+    const fn = stubFetch()
+    renderPanel(
+      <ReleaseSearchModal
+        item={makeItem({ ...adopted4k, libraries: ['1080p', '4K'] })}
+        presentation="panel"
+      />,
+    )
+
+    await waitFor(() =>
+      expect(tags()).toEqual([
+        { label: '1080', on: true },
+        { label: '4K', on: true },
+        { label: '3D', on: false },
+        { label: 'SD', on: false },
+      ]),
+    )
+    // The routing folders may still be read (their queries stay as they are);
+    // the movie's OWN folder must not be — the row answered for it already.
+    await waitFor(() => expect(callsWith(fn, '/api/files/browse')).toHaveLength(2))
+    expect(
+      callsWith(fn, `path=${encodeURIComponent('/peliculas/ParaNorman (2012)')}`),
+    ).toHaveLength(0)
+  })
+
+  it('passes the row answer through verbatim — an empty answer lights nothing', async () => {
+    stubFetch()
+    renderPanel(<ReleaseSearchModal item={makeItem({ libraries: [] })} presentation="panel" />)
+
+    // quality: 'Bluray-1080p' claims nothing here: the backend proved none.
+    await waitFor(() => expect(tags()).toHaveLength(4))
+    expect(tags().every((tag) => !tag.on)).toBe(true)
+  })
+
+  it('never ORs the fallback sources into a present row answer', async () => {
+    // Both fallback sources would light tags here (the own 1080 file, the
+    // path_4k copy); with the row answer present they contribute nothing.
+    stubFetch({
+      listings: {
+        '/peliculas/ParaNorman (2012)': {
+          ok: true,
+          items: [{ name: 'ParaNorman.2012.1080p.BluRay.x264.mkv', is_dir: false, is_video: true }],
+        },
+        '/mnt/4k': { ok: true, items: [{ name: 'ParaNorman (2012)', is_dir: true }] },
+      },
+    })
+    renderPanel(<ReleaseSearchModal item={makeItem({ libraries: [] })} presentation="panel" />)
+
+    await waitFor(() => expect(tags()).toHaveLength(4))
+    expect(tags().every((tag) => !tag.on)).toBe(true)
+  })
+
+  it('presents file_1080 as the downloaded file — and nothing when it is "" (S2)', async () => {
+    stubFetch()
+    const first = renderPanel(
+      <ReleaseSearchModal
+        item={
+          makeItem({
+            ...adopted4k,
+            libraries: ['1080p', '4K'],
+            file_1080: 'ParaNorman.2012.1080p.BluRay.x264.mkv',
+          })
+        }
+        presentation="panel"
+      />,
+    )
+    await waitFor(() =>
+      expect(document.querySelector('.has-file-name')?.textContent).toBe(
+        'ParaNorman.2012.1080p.BluRay.x264.mkv',
+      ),
+    )
+    first.unmount()
+
+    // "" = the backend proved no 1080 file: no name line at all — never the
+    // adopted 4K's — while the physical tags still draw.
+    stubFetch()
+    renderPanel(
+      <ReleaseSearchModal
+        item={makeItem({ ...adopted4k, libraries: ['1080p', '4K'], file_1080: '' })}
+        presentation="panel"
+      />,
+    )
+    await waitFor(() =>
+      expect(tags()).toEqual([
+        { label: '1080', on: true },
+        { label: '4K', on: true },
+        { label: '3D', on: false },
+        { label: 'SD', on: false },
+      ]),
+    )
+    expect(document.querySelector('.has-file-name')).toBeNull()
+    expect(document.querySelector('.has-file-missing')).toBeNull()
   })
 })

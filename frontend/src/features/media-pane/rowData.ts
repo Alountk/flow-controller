@@ -163,6 +163,10 @@ export function catalogMovieRelease(movie: AllMovie): ReleaseSearchItem {
     // was measured (a `720p` name over a 1920×800 frame is a 1080 file).
     resolution: movie.resolution,
     path: movie.path,
+    // The row's physical answer (S3/L7) travels as-is: the detail passes it
+    // through instead of re-deriving classes from its own browses.
+    libraries: movie.libraries,
+    file_1080: movie.file_1080,
     idKind: 'movie',
   }
 }

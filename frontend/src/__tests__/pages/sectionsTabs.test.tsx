@@ -35,6 +35,8 @@ const movieGrabbed = {
   path_exists: true,
   monitored: true,
   quality: 'Bluray-2160p',
+  // Catalog rows always carry the backend's physical answer (S3/L7).
+  libraries: ['1080p'],
   grabbed_at: GRABBED_AT,
   grabbed_destination: '/mnt/peliculas/_manual',
 }
@@ -49,6 +51,7 @@ const movieQuiet = {
   path_exists: true,
   monitored: true,
   quality: 'WEBDL-1080p',
+  libraries: ['1080p'],
   grabbed_at: null,
   grabbed_destination: null,
 }
