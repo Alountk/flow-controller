@@ -10,14 +10,14 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    // No changeOrigin: the session CSRF check compares Origin with Host, and
+    // rewriting Host to the backend's would reject every write that has a cookie.
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
-        changeOrigin: true,
       },
       '/prototypes': {
         target: 'http://localhost:8000',
-        changeOrigin: true,
       },
     },
   },
