@@ -53,6 +53,30 @@ def _validate_path(path: str) -> str:
     raise HTTPException(status_code=403, detail=f"Ruta no permitida: {path}")
 
 
+def _require_path(path: str) -> str:
+    """`_validate_path` for mutations: an empty path must not reach the disk.
+
+    `Path("")` is `.`, so an empty delete would rmtree the working directory.
+    """
+    if not path:
+        raise HTTPException(status_code=400, detail="Ruta requerida")
+    return _validate_path(path)
+
+
+def _require_inside_root(path: str) -> str:
+    """Like `_require_path`, but a whole allowed root is not touchable."""
+    resolved = _require_path(path)
+    if resolved in {os.path.realpath(r) for r in config.ALLOWED_ROOTS}:
+        raise HTTPException(status_code=403, detail=f"No se puede modificar un volumen: {path}")
+    return resolved
+
+
+def _reject_into_itself(src: str, dst: str) -> None:
+    """A folder cannot be copied or moved under itself: the tree recurses."""
+    if dst.startswith(src.rstrip("/") + "/"):
+        raise HTTPException(status_code=400, detail="El destino está dentro del origen")
+
+
 def _file_entry(p: Path) -> dict:
     """Construye la información de un archivo/directorio."""
     stat = p.stat()
@@ -280,8 +304,8 @@ async def file_mkdir(req: ActionRequest, _key: str = Depends(verify_api_key)):
 @router.post("/api/files/rename")
 async def file_rename(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Renombra un archivo o directorio."""
-    src = _validate_path(req.remote_path or "")
-    dst = _validate_path(req.local_path or "")
+    src = _require_inside_root(req.remote_path or "")
+    dst = _require_path(req.local_path or "")
     blocked = place_file.seed_block_reason(src, config.FOLDER_DOWNLOAD_TORRENT, "renombrar")
     if blocked:
         return {"ok": False, "detail": blocked}
@@ -505,15 +529,16 @@ async def file_renames(limit: int = 200, _key: str = Depends(verify_api_key)):
 @router.post("/api/files/delete")
 async def file_delete(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Elimina un archivo o directorio."""
-    target = _validate_path(req.remote_path or "")
+    target = _require_inside_root(req.remote_path or "")
     return await asyncio.to_thread(place_file.delete_path, target)
 
 
 @router.post("/api/files/copy")
 async def file_copy(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Copia un archivo o directorio."""
-    src = _validate_path(req.remote_path or "")
-    dst = _validate_path(req.local_path or "")
+    src = _require_path(req.remote_path or "")
+    dst = _require_path(req.local_path or "")
+    _reject_into_itself(src, dst)
     return await asyncio.to_thread(place_file.copy_path, src, dst)
 
 
@@ -636,6 +661,9 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
     dst = _validate_path(req.local_path or "")
     if not src or not dst:
         return {"ok": False, "detail": "Se requieren remote_path y local_path"}
+    if op_type == "move":
+        _require_inside_root(src)
+    _reject_into_itself(src, dst)
     if op_type == "move":
         blocked = place_file.seed_block_reason(src, config.FOLDER_DOWNLOAD_TORRENT, "mover")
         if blocked:
