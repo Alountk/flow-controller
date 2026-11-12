@@ -3416,7 +3416,7 @@ class TestFirstRunSetup:
         # the value never reaches the settings the rebuild reads from.
         assert body["restart_required"] == [], body["restart_required"]
 
-    def test_setup_is_refused_once_the_app_is_protected(self, fresh, monkeypatch):
+    def test_setup_is_refused_to_a_stranger_once_the_app_is_protected(self, fresh, monkeypatch):
         """Otherwise anyone could rewrite the deployment's credentials."""
         monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: True)
 
@@ -3424,6 +3424,27 @@ class TestFirstRunSetup:
 
         assert resp.status_code == 403
         assert not fresh, "nothing may be written when setup is refused"
+
+    def test_setup_still_works_for_the_admin_who_just_signed_in(self, fresh, monkeypatch):
+        """The admin is created first, so the wizard runs authenticated."""
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: True)
+        monkeypatch.setattr("interfaces.http.routes.settings.session_ok", lambda token: token == "owner")
+
+        resp = client.post("/api/setup", json={"services": {"radarr": {"url": "http://r:1"}}},
+                           cookies={"fc_session": "owner"})
+
+        assert resp.status_code == 200
+        assert fresh["services"]["radarr"]["url"] == "http://r:1"
+
+    def test_needs_setup_does_not_depend_on_having_auth(self, fresh, monkeypatch):
+        """With the admin created first, `auth_required` is already true at setup time."""
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: True)
+        monkeypatch.setattr("config.configured_services", lambda: [], raising=False)
+        monkeypatch.setattr("interfaces.http.routes.settings.configured_services", lambda: [])
+
+        body = client.get("/api/setup").json()
+
+        assert body == {"needs_setup": True, "auth_required": True}
 
     def test_setup_ignores_unknown_service_keys(self, fresh, monkeypatch):
         monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
