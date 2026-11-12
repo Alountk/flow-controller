@@ -1465,6 +1465,189 @@ class TestRowChipsFollowPhysicalFiles:
         assert by_title["Capa Cuatro"] == ""
 
 
+# ── S4: the chips answer from the stored relation, the disk only on a miss ──
+
+
+class TestMovieClassesReadThrough:
+    """«toda esta relacion deberiamos tenerla guardada en la base de datos, más
+    que nada para no tener que verificar cada dos por tres» (spec S4).
+
+    A fresh row serves the page with ZERO listings, a miss or a stale row is
+    computed from the disk ONCE and saved, and a dead store recomputes instead
+    of taking the catalogue down — a cache miss must never blank the chips.
+    """
+
+    PATH = "/mnt/movies/Capa Cuatro (2024)"
+
+    MOVIES = [
+        {
+            "id": 1,
+            "title": "Capa Cuatro",
+            "year": 2024,
+            "hasFile": True,
+            "path": PATH,
+            "movieFile": {
+                "relativePath": "Capa Cuatro (2024) Bluray-2160p.mkv",
+                "quality": {"quality": {"name": "Bluray-2160p"}},
+            },
+        },
+    ]
+
+    NO_FILE = [
+        {
+            "id": 2,
+            "title": "Sin Archivo",
+            "year": 2020,
+            "hasFile": False,
+            "path": "/mnt/movies/Sin Archivo (2020)",
+        },
+    ]
+
+    FOLDERS = {
+        "/mnt/4k": ["Capa Cuatro (2024) [4K]"],
+        "/mnt/3d": [],
+        PATH: [
+            "Capa Cuatro (2024) Bluray-2160p.mkv",
+            "Capa Cuatro (2024) WEBDL-1080p.mkv",
+        ],
+    }
+
+    def _store(self, monkeypatch):
+        """A dict-backed store replacing the real helpers on the route's binding.
+
+        The store names are patched on `history` — the same module the route
+        resolves through `gateways.history` on every call, and the one the
+        unavailable-store test manipulates with `history.close()`.
+        """
+        rows: dict[str, dict] = {}
+        saved: list[tuple[str, dict]] = []
+
+        def fetch(paths):
+            return {
+                p: {"verified_at": rows[p]["verified_at"], "files": dict(rows[p]["files"])}
+                for p in paths
+                if p in rows
+            }
+
+        def save(path, files, *, verified_at=None):
+            stamp = time.time() if verified_at is None else verified_at
+            rows[path] = {"verified_at": stamp, "files": dict(files)}
+            saved.append((path, dict(files)))
+
+        monkeypatch.setattr(history, "fetch_movie_classes", fetch)
+        monkeypatch.setattr(history, "save_movie_classes", save)
+        return rows, saved
+
+    def _counting_listings(self, monkeypatch):
+        """Every listdir the route makes, counted and answered from FOLDERS."""
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/4k")
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+        seen: list[str] = []
+
+        def children(folder):
+            seen.append(folder)
+            return list(self.FOLDERS.get(folder, []))
+
+        monkeypatch.setattr(wanted_routes, "_root_children", children)
+        monkeypatch.setattr(
+            wanted_routes, "_movie_folder_files", lambda path: children(path)
+        )
+        return seen
+
+    def _get(self, movies):
+        routes = {f"{CONFIGURED_RADARR_URL}/api/v3/movie": (200, movies)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            resp = client.get("/api/wanted/all", params={"page": 1, "page_size": 50})
+        assert resp.status_code == 200
+        return resp.json()["items"]
+
+    def test_a_fresh_row_saves_on_the_miss_and_the_second_request_never_walks_the_disk(
+        self, monkeypatch
+    ):
+        rows, saved = self._store(monkeypatch)
+        seen = self._counting_listings(monkeypatch)
+
+        first = self._get(self.MOVIES)
+        walked = list(seen)
+        second = self._get(self.MOVIES)
+
+        assert first[0]["libraries"] == ["4K", "1080p"]
+        assert first[0]["file_1080"] == "Capa Cuatro (2024) WEBDL-1080p.mkv"
+        assert [path for path, _files in saved] == [self.PATH]  # computed once, SAVED
+        assert walked  # the first request walked the disk
+        assert second[0]["libraries"] == first[0]["libraries"]
+        assert second[0]["file_1080"] == first[0]["file_1080"]
+        assert list(seen) == walked  # the second request: ZERO listings
+        assert len(saved) == 1  # and nothing to save again
+
+    def test_a_stale_row_recomputes_and_refreshes_the_store(self, monkeypatch):
+        rows, saved = self._store(monkeypatch)
+        rows[self.PATH] = {
+            "verified_at": time.time() - history.MOVIE_CLASSES_MAX_AGE - 60,
+            "files": {"SD": "/mnt/movies/Capa Cuatro (2024)/viejo.mkv"},
+        }
+        seen = self._counting_listings(monkeypatch)
+
+        items = self._get(self.MOVIES)
+
+        assert items[0]["libraries"] == ["4K", "1080p"]  # the stale mapping is never served
+        assert seen  # it re-walked the disk
+        assert [path for path, _files in saved] == [self.PATH]  # and refreshed the row
+        assert rows[self.PATH]["files"]["1080p"].endswith("WEBDL-1080p.mkv")
+
+    def test_a_row_without_a_file_never_touches_the_store(self, monkeypatch):
+        calls: list = []
+        monkeypatch.setattr(
+            history,
+            "fetch_movie_classes",
+            lambda paths: calls.append(("fetch", list(paths))) or {},
+        )
+        monkeypatch.setattr(
+            history,
+            "save_movie_classes",
+            lambda path, files, **kwargs: calls.append(("save", path)),
+        )
+        seen = self._counting_listings(monkeypatch)
+
+        items = self._get(self.NO_FILE)
+
+        assert items[0]["libraries"] == []
+        assert items[0]["file_1080"] == ""
+        assert calls == []  # no read, no write
+        assert seen == []  # and its folder is never listed
+
+    def test_the_sentinel_row_serves_zero_chips_with_zero_listings(self, monkeypatch):
+        rows, saved = self._store(monkeypatch)
+        rows[self.PATH] = {"verified_at": time.time(), "files": {}}
+        seen = self._counting_listings(monkeypatch)
+
+        items = self._get(self.MOVIES)
+
+        assert items[0]["libraries"] == []
+        assert items[0]["file_1080"] == ""
+        assert seen == []
+        assert saved == []
+
+    def test_a_dead_store_never_blanks_the_chips(self, monkeypatch):
+        import sqlite3
+
+        def broken_fetch(paths):
+            raise sqlite3.Error("store caído")
+
+        def broken_save(path, files, *, verified_at=None):
+            raise sqlite3.Error("store caído")
+
+        monkeypatch.setattr(history, "fetch_movie_classes", broken_fetch)
+        monkeypatch.setattr(history, "save_movie_classes", broken_save)
+        seen = self._counting_listings(monkeypatch)
+
+        items = self._get(self.MOVIES)
+
+        assert items[0]["libraries"] == ["4K", "1080p"]
+        assert items[0]["file_1080"] == "Capa Cuatro (2024) WEBDL-1080p.mkv"
+        assert seen  # computed from the disk — the fail-open path
+
+
 # ── Failures must not masquerade as "nothing missing" ────────────────────────
 
 

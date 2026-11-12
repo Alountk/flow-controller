@@ -23,11 +23,12 @@ import threading
 import time
 from pathlib import Path
 
+from domain.library_class import RESOLUTIONS
 from infrastructure import credentials
 
 log = logging.getLogger("flow-controller")
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS operations (
@@ -250,6 +251,19 @@ CREATE TABLE IF NOT EXISTS rename_log (
     renamed_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_rename_log_at ON rename_log (renamed_at DESC);
+-- v15: the movie ↔ class ↔ proving-file relation («release-chips» S4): the
+-- catalogue answers from here instead of re-walking the folders every load.
+-- The sentinel `label=''` row is «verificado sin clases» — without it a
+-- chipless movie would look like a miss and be re-walked forever. Same
+-- migration discipline as v2-v14: `CREATE TABLE IF NOT EXISTS` inside the
+-- script `init_db` runs on every start; the version bump only records it.
+CREATE TABLE IF NOT EXISTS movie_classes (
+    movie_path  TEXT NOT NULL,
+    label       TEXT NOT NULL,
+    file_path   TEXT NOT NULL,
+    verified_at REAL NOT NULL,
+    PRIMARY KEY (movie_path, label)
+);
 """
 
 # Columns mirrored from the in-memory op. Kept explicit so an unexpected key
@@ -1442,6 +1456,75 @@ def recent_renames(limit: int = 200) -> list[dict]:
         }
         for row in rows
     ]
+
+
+# ── Movie classes — the chips' relation («release-chips» S4) ─────────────────
+#
+# These helpers RAISE instead of degrading: the route fails open around them,
+# and a swallow here would blur "the store is down" into "verified, nothing".
+
+#: The out-of-band safety net on top of the event invalidation (T8).
+MOVIE_CLASSES_MAX_AGE = 24 * 3600
+
+
+def fetch_movie_classes(paths) -> dict[str, dict]:
+    """`{movie_path: {"verified_at": float, "files": {label: file_path}}}` for
+    the paths that HAVE rows; an absent path is a miss. Unknown labels are
+    dropped, never served — a corrupt row must not light a chip."""
+    wanted = list(paths)
+    if not wanted:
+        return {}
+    out: dict[str, dict] = {}
+    with _lock:
+        if _conn is None:
+            raise sqlite3.Error("movie classes store unavailable")
+        # Chunked: SQLite caps bound parameters per statement.
+        for i in range(0, len(wanted), 400):
+            chunk = wanted[i:i + 400]
+            rows = _conn.execute(
+                "SELECT movie_path, label, file_path, verified_at FROM movie_classes "
+                f"WHERE movie_path IN ({','.join('?' * len(chunk))})",
+                chunk,
+            ).fetchall()
+            for movie_path, label, file_path, verified_at in rows:
+                sentinel = (label, file_path) == ("", "")
+                if not sentinel and (label not in RESOLUTIONS or not file_path):
+                    continue
+                entry = out.setdefault(movie_path, {"verified_at": 0.0, "files": {}})
+                if label:
+                    entry["files"][label] = file_path
+                entry["verified_at"] = max(entry["verified_at"], float(verified_at))
+        return out
+
+
+def save_movie_classes(movie_path: str, files: dict, *, verified_at: float | None = None) -> None:
+    """Replace `movie_path`'s rows atomically. `files` must map labels in
+    `RESOLUTIONS` to proving paths; an empty mapping stores the sentinel row
+    («verificado sin clases»). Anything else raises ValueError — an unvalidated
+    label is never persisted."""
+    unknown = set(files) - set(RESOLUTIONS)
+    if unknown:
+        raise ValueError(f"unknown movie-class labels: {sorted(unknown)}")
+    stamp = time.time() if verified_at is None else float(verified_at)
+    rows = (
+        [(movie_path, label, files[label], stamp) for label in RESOLUTIONS if label in files]
+        if files
+        else [(movie_path, "", "", stamp)]
+    )
+    with _lock:
+        if _conn is None:
+            raise sqlite3.Error("movie classes store unavailable")
+        try:
+            _conn.execute("DELETE FROM movie_classes WHERE movie_path = ?", (movie_path,))
+            _conn.executemany(
+                "INSERT INTO movie_classes (movie_path, label, file_path, verified_at) "
+                "VALUES (?, ?, ?, ?)",
+                rows,
+            )
+            _conn.commit()
+        except sqlite3.Error:
+            _conn.rollback()
+            raise
 
 
 def close() -> None:
