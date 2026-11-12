@@ -474,13 +474,15 @@ async def setup_status():
     """Whether this install still needs first-run configuration.
 
     Anonymous on purpose, and it reveals nothing that /api/config does not.
-    The admin is created BEFORE the wizard, so "needs setup" no longer implies
-    "has no auth": it only asks whether any service is configured yet.
+    The admin is created BEFORE the wizard, so a login user no longer means
+    "already set up". What does: an API key (the install predates the login and
+    chose not to configure services) or any configured service. Forcing the
+    wizard on a keyed install would trap it, since «Entrar» needs Radarr or Sonarr.
     """
-    from application.gateways import auth_required
+    from application.gateways import auth_required, settings
 
     return {
-        "needs_setup": not configured_services(),
+        "needs_setup": not settings.auth_required() and not configured_services(),
         "auth_required": auth_required(),
     }
 
