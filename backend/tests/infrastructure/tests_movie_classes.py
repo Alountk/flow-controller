@@ -7,6 +7,8 @@ sentinel row) distinguishable from «sin fila». Labels outside
 
 Errors RAISE here — the route fails open around these helpers; a helper that
 swallowed would make a dead store indistinguishable from "verified, nothing".
+The one exception is the event seam (`invalidate_movie_classes_for`): a cache
+invalidation must never fail the file operation that triggered it.
 """
 
 import sqlite3
@@ -132,3 +134,114 @@ def test_helpers_raise_when_the_store_is_unavailable(tmp_path):
         history.fetch_movie_classes(["/mnt/movies/A"])
     with pytest.raises(sqlite3.Error):
         history.save_movie_classes("/mnt/movies/A", {"1080p": "/mnt/movies/A/a.mkv"})
+
+
+# ── T8: event invalidation (L7 «eventos») ───────────────────────────────────
+#
+# Whole movies only, never a single label row: a partial row would read later
+# as «verified, that class is absent» and blank a chip.
+
+
+def _movie_ab():
+    history.save_movie_classes(
+        "/m/A (2020)",
+        {"1080p": "/m/A (2020)/a.mkv", "4K": "/4k/A (2020)"},
+        verified_at=100.0,
+    )
+    history.save_movie_classes(
+        "/m/B (2021)", {"1080p": "/m/B (2021)/b.mkv"}, verified_at=100.0
+    )
+
+
+_SURVIVOR = {"/m/B (2021)": {"verified_at": 100.0, "files": {"1080p": "/m/B (2021)/b.mkv"}}}
+
+
+def test_touching_a_file_inside_the_movie_folder_drops_every_row_of_that_movie(db):
+    _movie_ab()
+
+    history.invalidate_movie_classes_for("/m/A (2020)/a.mkv")
+
+    assert history.fetch_movie_classes(["/m/A (2020)", "/m/B (2021)"]) == _SURVIVOR
+
+
+def test_touching_the_movie_folder_itself_drops_it(db):
+    _movie_ab()
+
+    history.invalidate_movie_classes_for("/m/A (2020)")
+
+    assert history.fetch_movie_classes(["/m/A (2020)", "/m/B (2021)"]) == _SURVIVOR
+
+
+def test_touching_a_file_under_a_cited_copy_drops_the_movie(db):
+    _movie_ab()
+
+    history.invalidate_movie_classes_for("/4k/A (2020)/x.mkv")
+
+    assert history.fetch_movie_classes(["/m/A (2020)", "/m/B (2021)"]) == _SURVIVOR
+
+
+def test_a_new_entry_named_after_the_folder_drops_the_movie(db):
+    _movie_ab()
+
+    history.invalidate_movie_classes_for("/4k/A (2020).mkv")
+
+    assert history.fetch_movie_classes(["/m/A (2020)", "/m/B (2021)"]) == _SURVIVOR
+
+
+def test_an_unrelated_path_drops_nothing(db):
+    _movie_ab()
+
+    history.invalidate_movie_classes_for("/m/C (1999)/c.mkv")
+
+    assert history.fetch_movie_classes(["/m/A (2020)", "/m/B (2021)"]) == {
+        "/m/A (2020)": {
+            "verified_at": 100.0,
+            "files": {"1080p": "/m/A (2020)/a.mkv", "4K": "/4k/A (2020)"},
+        },
+        **_SURVIVOR,
+    }
+
+
+def test_an_ancestor_touch_drops_every_movie_under_it(db):
+    _movie_ab()
+
+    history.invalidate_movie_classes_for("/m")
+
+    assert history.fetch_movie_classes(["/m/A (2020)", "/m/B (2021)"]) == {}
+
+
+def test_a_sentinel_only_movie_is_dropped_too(db):
+    history.save_movie_classes("/m/V (2020)", {}, verified_at=100.0)
+    history.save_movie_classes("/m/W (2019)", {}, verified_at=100.0)
+
+    history.invalidate_movie_classes_for("/m/V (2020)/extra.mkv")
+    history.invalidate_movie_classes_for("/4k/W (2019) [4K]")
+
+    assert history.fetch_movie_classes(["/m/V (2020)", "/m/W (2019)"]) == {}
+
+
+def test_the_event_helper_never_raises_when_the_store_is_closed(db):
+    _movie_ab()
+    history.close()
+
+    assert history.invalidate_movie_classes_for("/m/A (2020)") is None
+
+
+@pytest.mark.parametrize("boom", [sqlite3.Error, OSError])
+def test_the_event_helper_never_raises_on_a_broken_store(db, monkeypatch, boom):
+    _movie_ab()
+
+    class _Broken:
+        def execute(self, *args, **kwargs):
+            raise boom("store rota")
+
+    monkeypatch.setattr(history, "_conn", _Broken())
+
+    assert history.invalidate_movie_classes_for("/m/A (2020)") is None
+
+
+def test_the_invalidation_primitive_raises_when_the_store_is_unavailable(tmp_path):
+    history.close()
+
+    with pytest.raises(sqlite3.Error):
+        history.invalidate_movie_classes("/m/A (2020)")

@@ -74,7 +74,7 @@ def _is_video(name: str) -> bool:
     return dot > 0 and name[dot:].lower() in MEDIA_EXTENSIONS
 
 
-def _copy_matches(folder: str, child: str) -> bool:
+def copy_matches(folder: str, child: str) -> bool:
     """True when `child` is a folder of `folder`'s movie.
 
     Copies keep the movie folder at the FRONT and add their own marker
@@ -89,6 +89,14 @@ def _copy_matches(folder: str, child: str) -> bool:
     if not child.startswith(folder):
         return False
     return child[len(folder)] in " -_.[("
+
+
+def overlaps(a: str, b: str) -> bool:
+    """True when the paths are equal or one lives under the other.
+
+    The relation a file event needs: touching `b` can change what `a` proves.
+    """
+    return _in_folder(a, b) or _in_folder(b, a)
 
 
 def _folder_labels(
@@ -141,7 +149,7 @@ def _root_proof(*, path: str, folder: str, root: str, entries: Iterable[str]) ->
     if _in_folder(path, root):
         return path
     for entry in entries:
-        if _copy_matches(folder, entry):
+        if copy_matches(folder, entry):
             return f"{root.rstrip('/')}/{entry}"
     return ""
 

@@ -26,10 +26,22 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from application import gateways
 from domain.policy import placement
 
 #: Bytes per chunk of a progress-reported copy (1MB).
 CHUNK_SIZE = 1024 * 1024
+
+
+def _invalidate_movie_classes(*paths: str) -> None:
+    """Drop the movie-classes rows these touched paths may have changed (S4).
+
+    Deliberately unfailing and order-free: the store absorbs its own errors,
+    and an unbound port is a run without persistence, not a refused rename.
+    """
+    invalidate = getattr(gateways.history, "invalidate_movie_classes_for", None)
+    if invalidate is not None:
+        invalidate(*paths)
 
 
 def seed_block_reason(src: str, torrent_root: str, verb: str) -> str | None:
@@ -52,6 +64,8 @@ def rename_path(src: str, dst: str) -> dict:
         return {"ok": True, "detail": f"Renombrado: {Path(src).name} → {Path(dst).name}"}
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    finally:
+        _invalidate_movie_classes(src, dst)
 
 
 def delete_path(target: str) -> dict:
@@ -70,6 +84,8 @@ def delete_path(target: str) -> dict:
         return {"ok": True, "detail": f"Eliminado: {p.name}"}
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    finally:
+        _invalidate_movie_classes(target)
 
 
 def copy_path(src: str, dst: str) -> dict:
@@ -88,6 +104,8 @@ def copy_path(src: str, dst: str) -> dict:
         return {"ok": True, "detail": f"Copiado: {src_path.name} → {dst}"}
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    finally:
+        _invalidate_movie_classes(dst)
 
 
 def _link_or_copy(src: str, dst: str) -> None:
@@ -198,10 +216,13 @@ def _copytree_with_progress(src: str, dst: str, op: dict) -> None:
 
 def place_path(src: str, dst: str, op: dict) -> None:
     """A queue operation of type "copy": a tree with counts, a file placed."""
-    if Path(src).is_dir():
-        _copytree_with_progress(src, dst, op)
-    else:
-        _place_file(src, dst, op)
+    try:
+        if Path(src).is_dir():
+            _copytree_with_progress(src, dst, op)
+        else:
+            _place_file(src, dst, op)
+    finally:
+        _invalidate_movie_classes(dst)
 
 
 def move_path(src: str, dst: str, op: dict) -> None:
@@ -216,18 +237,23 @@ def move_path(src: str, dst: str, op: dict) -> None:
     """
     src_path = Path(src)
     try:
-        dst_parent = Path(dst).parent
-        if not dst_parent.exists():
-            dst_parent.mkdir(parents=True, exist_ok=True)
-        os.rename(src, dst)
-    except OSError:
-        if src_path.is_dir():
-            _copytree_with_progress(src, dst, op)
-        else:
-            _copy_with_progress(src, dst, op)
-        cleanup = placement.fallback_source_cleanup(cancelled=bool(op.get("cancelled")))
-        if cleanup == placement.DELETE_SOURCE:
-            (shutil.rmtree if src_path.is_dir() else os.remove)(src)
+        try:
+            dst_parent = Path(dst).parent
+            if not dst_parent.exists():
+                dst_parent.mkdir(parents=True, exist_ok=True)
+            os.rename(src, dst)
+        except OSError:
+            if src_path.is_dir():
+                _copytree_with_progress(src, dst, op)
+            else:
+                _copy_with_progress(src, dst, op)
+            cleanup = placement.fallback_source_cleanup(cancelled=bool(op.get("cancelled")))
+            if cleanup == placement.DELETE_SOURCE:
+                (shutil.rmtree if src_path.is_dir() else os.remove)(src)
+    finally:
+        # A cancelled fallback keeps partial bytes at `dst`: both ends are
+        # tainted whatever happened, so the cache is dropped for each.
+        _invalidate_movie_classes(src, dst)
 
 
 def trim_queue(ops: list) -> None:

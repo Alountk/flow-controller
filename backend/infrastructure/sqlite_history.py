@@ -23,7 +23,7 @@ import threading
 import time
 from pathlib import Path
 
-from domain.library_class import RESOLUTIONS
+from domain.library_class import RESOLUTIONS, copy_matches, overlaps
 from infrastructure import credentials
 
 log = logging.getLogger("flow-controller")
@@ -1462,6 +1462,8 @@ def recent_renames(limit: int = 200) -> list[dict]:
 #
 # These helpers RAISE instead of degrading: the route fails open around them,
 # and a swallow here would blur "the store is down" into "verified, nothing".
+# The single exception is the event seam `invalidate_movie_classes_for`: a
+# cache invalidation must never fail the file operation that triggered it.
 
 #: The out-of-band safety net on top of the event invalidation (T8).
 MOVIE_CLASSES_MAX_AGE = 24 * 3600
@@ -1525,6 +1527,69 @@ def save_movie_classes(movie_path: str, files: dict, *, verified_at: float | Non
         except sqlite3.Error:
             _conn.rollback()
             raise
+
+
+def invalidate_movie_classes(*paths: str) -> None:
+    """Drop EVERY row of the movies whose relation `paths` may have changed.
+
+    `paths` are the paths a file event just touched, as given. A movie is
+    affected when its folder overlaps one of them (rule: its files changed),
+    when a path its rows CITE does (the provenance was touched), or when one of
+    them is named after its folder (`copy_matches` — a new copy arriving at a
+    routing root, which cites nothing yet). Whole-movie deletes only: a single
+    label row left behind would read later as «verified, that class is absent»
+    and blank a chip. RAISES like `fetch_movie_classes`; the event seam wraps
+    it.
+    """
+    touched = [p for p in paths if p]
+    if not touched:
+        return
+    with _lock:
+        if _conn is None:
+            raise sqlite3.Error("movie classes store unavailable")
+        rows = _conn.execute(
+            "SELECT DISTINCT movie_path, file_path FROM movie_classes"
+        ).fetchall()
+        doomed: set[str] = set()
+        for movie_path, file_path in rows:
+            if movie_path in doomed:
+                continue
+            folder = movie_path.rstrip("/").split("/")[-1]
+            for p in touched:
+                if (
+                    overlaps(movie_path, p)
+                    or (file_path and overlaps(file_path, p))
+                    or copy_matches(folder, p.rstrip("/").split("/")[-1])
+                ):
+                    doomed.add(movie_path)
+                    break
+        dead = sorted(doomed)
+        try:
+            # Chunked: SQLite caps bound parameters per statement.
+            for i in range(0, len(dead), 400):
+                chunk = dead[i:i + 400]
+                _conn.execute(
+                    "DELETE FROM movie_classes WHERE movie_path IN "
+                    f"({','.join('?' * len(chunk))})",
+                    chunk,
+                )
+            if dead:
+                _conn.commit()
+        except sqlite3.Error:
+            _conn.rollback()
+            raise
+
+
+def invalidate_movie_classes_for(*paths: str) -> None:
+    """The event seam (T8): invalidate after a file event, or nothing.
+
+    NEVER raises — `sqlite3.Error`/`OSError` become a warning and a skip: a
+    cache must never fail the file operation that triggered it.
+    """
+    try:
+        invalidate_movie_classes(*paths)
+    except (sqlite3.Error, OSError) as exc:
+        log.warning("movie-classes invalidation skipped: %s", exc)
 
 
 def close() -> None:
