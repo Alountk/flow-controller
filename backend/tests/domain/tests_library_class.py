@@ -362,3 +362,66 @@ def test_the_probe_gives_the_1080_slot_to_a_720p_name():
         file_name="Kubo (2016) Bluray-720p.mkv",
         folder_files=("Kubo (2016) Bluray-720p.mkv",),
     ) == "Kubo (2016) Bluray-720p.mkv"
+
+
+# ── S4: the proving path behind each label ───────────────────────────────────
+
+
+def _files(**kwargs) -> dict[str, str]:
+    """`resolution_files` over a 1080 movie in the library root, overridden per case."""
+    args = {
+        "has_file": True,
+        "quality": "WEBDL-1080p",
+        "path": "/mnt/movies/Alien (1979)",
+        "path_4k": "/mnt/movies4k",
+        "path_3d": "/mnt/movies3d",
+        "file_name": "Alien (1979) WEBDL-1080p.mkv",
+        "folder_files": ("Alien (1979) WEBDL-1080p.mkv",),
+    }
+    args.update(kwargs)
+    return library_class.resolution_files(**args)
+
+
+def test_the_own_1080_file_is_proven_by_its_full_path():
+    assert _files() == {"1080p": "/mnt/movies/Alien (1979)/Alien (1979) WEBDL-1080p.mkv"}
+
+
+def test_a_copy_entry_under_the_4k_root_is_proven_by_the_located_entry():
+    files = _files(copies_4k=("Alien (1979) [4K]",))
+
+    assert files["4K"] == "/mnt/movies4k/Alien (1979) [4K]"
+
+
+def test_a_movie_inside_the_3d_root_is_proven_by_its_own_file():
+    files = _files(
+        quality="Bluray-1080p",
+        path="/mnt/movies3d/Alien (1979)",
+        file_name="Alien (1979) Bluray-1080p.mkv",
+        folder_files=("Alien (1979) Bluray-1080p.mkv",),
+    )
+
+    assert files["3D"] == "/mnt/movies3d/Alien (1979)/Alien (1979) Bluray-1080p.mkv"
+
+
+def test_an_unconfigured_root_contributes_nothing():
+    files = _files(
+        path_4k="",
+        path_3d="",
+        copies_4k=("Alien (1979) [4K]",),
+        copies_3d=("Alien (1979) [3D]",),
+    )
+
+    assert files == {"1080p": "/mnt/movies/Alien (1979)/Alien (1979) WEBDL-1080p.mkv"}
+
+
+def test_a_movie_without_a_file_proves_no_paths():
+    assert _files(has_file=False, copies_4k=("Alien (1979) [4K]",)) == {}
+
+
+def test_a_stored_mapping_replays_through_the_same_vocabulary():
+    """S4's hit path: the stored relation answers with no disk inputs at all,
+    through the SAME functions the miss path classifies with."""
+    files = {"1080p": "/mnt/movies/Alien (1979)/Alien (1979) WEBDL-1080p.mkv", "4K": "/mnt/4k/Alien (1979) [4K]"}
+
+    assert library_class.available_resolutions(files=files) == ["4K", "1080p"]
+    assert library_class.own_1080_file(files=files) == "Alien (1979) WEBDL-1080p.mkv"

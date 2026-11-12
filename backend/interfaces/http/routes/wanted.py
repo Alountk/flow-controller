@@ -219,7 +219,7 @@ def _movie_folder_files(path: str) -> list[str]:
     return _root_children(config.host_path(path))
 
 
-def _classified_movies_page(
+async def _classified_movies_page(
     result: dict, q: str, class_filter: str, page: int, page_size: int
 ) -> dict:
     """The movies body with each item's class, the chips' counts and a page.
@@ -233,6 +233,10 @@ def _classified_movies_page(
     `counts` always describes the catalogue, not the current filter: choosing
     `4K` narrows the list while the chips keep telling how much is in each
     bucket, which is what a chip row is read for.
+
+    S4: each row's chips answer from the stored relation; the disk is walked
+    only on a miss or a stale row, computed once and saved. A dead store or a
+    failed save must never blank the chips — the request recomputes.
     """
     counts = library_class.class_counts(result.get("items") or [], path_3d=config.PATH_3D)
     failure = _failure_fields(result)
@@ -240,11 +244,6 @@ def _classified_movies_page(
         # A failed fetch must not be reported as "no matches for your filter".
         return {**_empty_page(page, page_size), **failure, "filtered": True, "counts": counts}
 
-    # Read once for the whole catalogue: two listings per request, never two
-    # per row — and the copies are what proves a 4K/3D resolution the movie's
-    # own path cannot (it lives in exactly one folder).
-    copies_4k = _root_children(config.PATH_4K)
-    copies_3d = _root_children(config.PATH_3D)
     items = [
         {
             **item,
@@ -266,37 +265,52 @@ def _classified_movies_page(
         and (not class_filter or item["class"] == class_filter)
     ]
     page_items = _paginate(matches, page, page_size)
-    # S1: the chips light only for physical files, so each row's folder is read
-    # on disk — bounded to the page, since the class and the counts never need it.
+    # S4 read-through: one batched store read per page, and the copies' root
+    # listings only when a row actually misses — a fully served page walks
+    # zero directories.
+    paths = [str(row.get("path") or "") for row in page_items if row.get("has_file")]
+    stored: dict[str, dict] = {}
+    if paths:
+        try:
+            stored = await asyncio.to_thread(gateways.history.fetch_movie_classes, paths)
+        except Exception:
+            # A dead store must not take the catalogue down: recompute all.
+            stored = {}
+    now = time.time()
+    max_age = gateways.history.MOVIE_CLASSES_MAX_AGE
+    copies: tuple[list[str], list[str]] | None = None
     for row in page_items:
-        # One listing per row feeds both the chips and the presented 1080; no
-        # linked file, no listing — its folder is never read for nothing.
-        folder_files = (
-            _movie_folder_files(str(row.get("path") or ""))
-            if row.get("has_file")
-            else ()
-        )
-        row["libraries"] = library_class.available_resolutions(
-            has_file=bool(row.get("has_file")),
-            quality=str(row.get("quality") or ""),
-            path=str(row.get("path") or ""),
-            path_4k=config.PATH_4K,
-            path_3d=config.PATH_3D,
-            copies_4k=copies_4k,
-            copies_3d=copies_3d,
-            resolution=str(row.get("resolution") or ""),
-            file_name=str(row.get("file_name") or ""),
-            folder_files=folder_files,
-        )
-        row["file_1080"] = library_class.own_1080_file(
-            has_file=bool(row.get("has_file")),
-            quality=str(row.get("quality") or ""),
-            path=str(row.get("path") or ""),
-            path_3d=config.PATH_3D,
-            resolution=str(row.get("resolution") or ""),
-            file_name=str(row.get("file_name") or ""),
-            folder_files=folder_files,
-        )
+        if not row.get("has_file"):
+            row["libraries"] = []
+            row["file_1080"] = ""
+            continue
+        path = str(row.get("path") or "")
+        entry = stored.get(path)
+        if entry is not None and now - entry["verified_at"] <= max_age:
+            files = entry["files"]
+        else:
+            # One listing per row feeds both fields from the SAME mapping; no
+            # linked file, no listing — its folder is never read for nothing.
+            if copies is None:
+                copies = (_root_children(config.PATH_4K), _root_children(config.PATH_3D))
+            files = library_class.resolution_files(
+                has_file=True,
+                quality=str(row.get("quality") or ""),
+                path=path,
+                path_4k=config.PATH_4K,
+                path_3d=config.PATH_3D,
+                copies_4k=copies[0],
+                copies_3d=copies[1],
+                resolution=str(row.get("resolution") or ""),
+                file_name=str(row.get("file_name") or ""),
+                folder_files=_movie_folder_files(path),
+            )
+            try:
+                await asyncio.to_thread(gateways.history.save_movie_classes, path, files)
+            except Exception:
+                pass  # a failed save must not fail the request
+        row["libraries"] = library_class.available_resolutions(files=files)
+        row["file_1080"] = library_class.own_1080_file(files=files)
     body = {
         "items": page_items,
         "total": len(matches),
@@ -337,7 +351,7 @@ async def get_all_movies(
         result = await fetch_all_movies_detailed(session, service, 1, 0)
     # Every /api/wanted/all item is a Radarr movie, so the key is explicit.
     return await attach_grabbed_at(
-        _classified_movies_page(result, q, class_filter or "", page, page_size),
+        await _classified_movies_page(result, q, class_filter or "", page, page_size),
         source="radarr",
         kind="movie",
     )

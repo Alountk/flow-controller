@@ -20,6 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
+from application import gateways
 from application.ports import FileStorage
 
 #: (copied_bytes, total_bytes, files_done, files_total)
@@ -60,58 +61,71 @@ def copy_files(
     if not src.exists():
         return {"ok": False, "detail": f"fuente no encontrada: {src}", "files_copied": 0, "code": "not_found"}
 
-    dst_dir.mkdir(parents=True, exist_ok=True)
+    touched: list[str] = []
+    try:
+        created_root = not dst_dir.exists()
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        if created_root:
+            touched.append(str(dst_dir))
 
-    if src.is_file():
-        total = src.stat().st_size
-        final_name = target_name or src.name
-        dst = dst_dir / final_name
-        _report(0, total, 0, 1)
-        storage.copy_file(
-            src,
-            dst,
-            is_cancelled=is_cancelled,
-            on_progress=lambda written: _report(written, total, 0, 1),
-        )
-        _report(total, total, 1, 1)
-        return {"ok": True, "detail": f"copiado: {final_name} → {dst_dir}", "files_copied": 1}
-
-    if src.is_dir():
-        all_files = sorted(f for f in src.rglob("*") if f.is_file())
-        to_copy = [f for f in all_files if not (dst_dir / f.relative_to(src)).exists()]
-        skipped = len(all_files) - len(to_copy)
-        total_bytes = sum(f.stat().st_size for f in to_copy)
-        copied_bytes = 0
-        count = 0
-        _report(0, total_bytes, 0, len(to_copy))
-        for item in to_copy:
-            if is_cancelled and is_cancelled():
-                return {
-                    "ok": False,
-                    "detail": f"cancelado por el usuario ({count}/{len(to_copy)} archivos copiados)",
-                    "files_copied": count,
-                }
-            dst = dst_dir / item.relative_to(src)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            base = copied_bytes
-            written = storage.copy_file(
-                item,
+        if src.is_file():
+            total = src.stat().st_size
+            final_name = target_name or src.name
+            dst = dst_dir / final_name
+            touched.append(str(dst))
+            _report(0, total, 0, 1)
+            storage.copy_file(
+                src,
                 dst,
                 is_cancelled=is_cancelled,
-                on_progress=lambda w, _b=base: _report(_b + w, total_bytes, count, len(to_copy)),
+                on_progress=lambda written: _report(written, total, 0, 1),
             )
-            copied_bytes += written
-            count += 1
-            _report(copied_bytes, total_bytes, count, len(to_copy))
-        return {
-            "ok": True,
-            "detail": f"copiados {count} archivos a {dst_dir} ({skipped} ya existían)",
-            "files_copied": count,
-        }
+            _report(total, total, 1, 1)
+            return {"ok": True, "detail": f"copiado: {final_name} → {dst_dir}", "files_copied": 1}
 
-    return {
-        "ok": False,
-        "detail": f"fuente no es archivo ni directorio: {src}",
-        "files_copied": 0,
-        "code": "not_a_file_or_dir",
-    }
+        if src.is_dir():
+            all_files = sorted(f for f in src.rglob("*") if f.is_file())
+            to_copy = [f for f in all_files if not (dst_dir / f.relative_to(src)).exists()]
+            skipped = len(all_files) - len(to_copy)
+            total_bytes = sum(f.stat().st_size for f in to_copy)
+            copied_bytes = 0
+            count = 0
+            # The entries this copy can create at the destination's top level.
+            touched.extend(sorted({str(dst_dir / f.relative_to(src).parts[0]) for f in to_copy}))
+            _report(0, total_bytes, 0, len(to_copy))
+            for item in to_copy:
+                if is_cancelled and is_cancelled():
+                    return {
+                        "ok": False,
+                        "detail": f"cancelado por el usuario ({count}/{len(to_copy)} archivos copiados)",
+                        "files_copied": count,
+                    }
+                dst = dst_dir / item.relative_to(src)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                base = copied_bytes
+                written = storage.copy_file(
+                    item,
+                    dst,
+                    is_cancelled=is_cancelled,
+                    on_progress=lambda w, _b=base: _report(_b + w, total_bytes, count, len(to_copy)),
+                )
+                copied_bytes += written
+                count += 1
+                _report(copied_bytes, total_bytes, count, len(to_copy))
+            return {
+                "ok": True,
+                "detail": f"copiados {count} archivos a {dst_dir} ({skipped} ya existían)",
+                "files_copied": count,
+            }
+
+        return {
+            "ok": False,
+            "detail": f"fuente no es archivo ni directorio: {src}",
+            "files_copied": 0,
+            "code": "not_a_file_or_dir",
+        }
+    finally:
+        # Partial trees stay on disk when a copy fails or is cancelled.
+        invalidate = getattr(gateways.history, "invalidate_movie_classes_for", None)
+        if invalidate is not None:
+            invalidate(*touched)

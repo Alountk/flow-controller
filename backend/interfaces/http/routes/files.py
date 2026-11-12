@@ -270,6 +270,11 @@ async def file_mkdir(req: ActionRequest, _key: str = Depends(verify_api_key)):
         return {"ok": True, "detail": f"Directorio creado: {target}"}
     except Exception as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+    finally:
+        # A new folder entry can itself light a chip (the copy-name rule).
+        invalidate = getattr(gateways.history, "invalidate_movie_classes_for", None)
+        if invalidate is not None:
+            invalidate(target)
 
 
 @router.post("/api/files/rename")

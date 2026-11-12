@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 
 import config
+from application import gateways
 
 
 class DuplicateDeleteError(Exception):
@@ -52,4 +53,8 @@ def delete_duplicate(path: str) -> dict:
         raise DuplicateDeleteError(
             f"el sistema de ficheros lo rechazó: {exc}", kind="io"
         ) from exc
+    invalidate = getattr(gateways.history, "invalidate_movie_classes_for", None)
+    if invalidate is not None:
+        # Rows cite Radarr's view of the path AND the host's; both, cheaply.
+        invalidate(path, translated)
     return {"deleted": translated}

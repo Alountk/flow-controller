@@ -74,7 +74,7 @@ def _is_video(name: str) -> bool:
     return dot > 0 and name[dot:].lower() in MEDIA_EXTENSIONS
 
 
-def _copy_matches(folder: str, child: str) -> bool:
+def copy_matches(folder: str, child: str) -> bool:
     """True when `child` is a folder of `folder`'s movie.
 
     Copies keep the movie folder at the FRONT and add their own marker
@@ -89,6 +89,14 @@ def _copy_matches(folder: str, child: str) -> bool:
     if not child.startswith(folder):
         return False
     return child[len(folder)] in " -_.[("
+
+
+def overlaps(a: str, b: str) -> bool:
+    """True when the paths are equal or one lives under the other.
+
+    The relation a file event needs: touching `b` can change what `a` proves.
+    """
+    return _in_folder(a, b) or _in_folder(b, a)
 
 
 def _folder_labels(
@@ -132,7 +140,21 @@ def _folder_labels(
     return by_label
 
 
-def available_resolutions(
+def _root_proof(*, path: str, folder: str, root: str, entries: Iterable[str]) -> str:
+    """The path proving a routed class: the movie's own folder when it lives
+    under the root, else the entry located in it (folder or flat file — the
+    roots are never descended). An unconfigured root ("") proves nothing."""
+    if not root:
+        return ""
+    if _in_folder(path, root):
+        return path
+    for entry in entries:
+        if copy_matches(folder, entry):
+            return f"{root.rstrip('/')}/{entry}"
+    return ""
+
+
+def resolution_files(
     *,
     has_file: bool,
     quality: str,
@@ -144,6 +166,54 @@ def available_resolutions(
     resolution: str = "",
     file_name: str = "",
     folder_files: Iterable[str] = (),
+) -> dict[str, str]:
+    """`label -> the path that PROVES it` (S4's stored relation).
+
+    Own-folder files prove themselves at `f"{path}/{name}"`, Radarr's movie
+    path exactly as the row carries it; a copy is proven by the entry located
+    in its routing root; a movie inside a root is proven by its own files (or
+    by its folder when none is listed). Same label semantics as
+    `available_resolutions`, which is a thin wrapper over this.
+    """
+    if not has_file:
+        return {}
+    files = {
+        label: f"{path}/{name}"
+        for label, name in _folder_labels(
+            has_file=has_file,
+            quality=quality,
+            path=path,
+            path_3d=path_3d,
+            resolution=resolution,
+            file_name=file_name,
+            folder_files=folder_files,
+        ).items()
+    }
+    folder = path.rstrip("/").split("/")[-1] if path else ""
+    for label, root, entries in (
+        ("4K", path_4k, copies_4k),
+        ("3D", path_3d, copies_3d),
+    ):
+        if label not in files:
+            proof = _root_proof(path=path, folder=folder, root=root, entries=entries)
+            if proof:
+                files[label] = proof
+    return files
+
+
+def available_resolutions(
+    *,
+    has_file: bool = True,
+    quality: str = "",
+    path: str = "",
+    path_4k: str = "",
+    path_3d: str = "",
+    copies_4k: Iterable[str] = (),
+    copies_3d: Iterable[str] = (),
+    resolution: str = "",
+    file_name: str = "",
+    folder_files: Iterable[str] = (),
+    files: Mapping[str, str] | None = None,
 ) -> list[str]:
     """The resolutions a row lights: what the DISK proves, in chip order.
 
@@ -160,12 +230,46 @@ def available_resolutions(
 
     `copies_4k`/`copies_3d` are the children of each configured root, read once
     by whoever owns the disk.
+
+    `files` REPLAYS an already-classified mapping (S4's stored relation) with no
+    disk inputs at all: the served and the computed chips answer through this
+    same function, so the two can never disagree.
     """
-    if not has_file:
-        return []
-    folder = path.rstrip("/").split("/")[-1] if path else ""
-    have = set(
-        _folder_labels(
+    if files is None:
+        files = resolution_files(
+            has_file=has_file,
+            quality=quality,
+            path=path,
+            path_4k=path_4k,
+            path_3d=path_3d,
+            copies_4k=copies_4k,
+            copies_3d=copies_3d,
+            resolution=resolution,
+            file_name=file_name,
+            folder_files=folder_files,
+        )
+    return [label for label in RESOLUTIONS if label in files]
+
+
+def own_1080_file(
+    *,
+    has_file: bool = True,
+    quality: str = "",
+    path: str = "",
+    path_3d: str = "",
+    resolution: str = "",
+    file_name: str = "",
+    folder_files: Iterable[str] = (),
+    files: Mapping[str, str] | None = None,
+) -> str:
+    """The name of the folder's 1080 file, or `""` when there is none.
+
+    S2's presented file, 1080-o-nada: the movieFile wins the 1080 slot when it
+    IS the 1080 file; otherwise any 1080-class video in the folder qualifies.
+    `files` replays an already-classified mapping like `available_resolutions`.
+    """
+    if files is None:
+        files = resolution_files(
             has_file=has_file,
             quality=quality,
             path=path,
@@ -174,38 +278,8 @@ def available_resolutions(
             file_name=file_name,
             folder_files=folder_files,
         )
-    )
-    if _in_folder(path, path_4k) or any(_copy_matches(folder, c) for c in copies_4k):
-        have.add("4K")
-    if _in_folder(path, path_3d) or any(_copy_matches(folder, c) for c in copies_3d):
-        have.add("3D")
-    return [label for label in RESOLUTIONS if label in have]
-
-
-def own_1080_file(
-    *,
-    has_file: bool,
-    quality: str,
-    path: str = "",
-    path_3d: str = "",
-    resolution: str = "",
-    file_name: str = "",
-    folder_files: Iterable[str] = (),
-) -> str:
-    """The name of the folder's 1080 file, or `""` when there is none.
-
-    S2's presented file, 1080-o-nada: the movieFile wins the 1080 slot when it
-    IS the 1080 file; otherwise any 1080-class video in the folder qualifies.
-    """
-    return _folder_labels(
-        has_file=has_file,
-        quality=quality,
-        path=path,
-        path_3d=path_3d,
-        resolution=resolution,
-        file_name=file_name,
-        folder_files=folder_files,
-    ).get("1080p", "")
+    proved = files.get("1080p", "")
+    return proved.rsplit("/", 1)[-1]
 
 
 def class_counts(

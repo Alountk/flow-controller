@@ -22,6 +22,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Iterable, Iterator
 
+from application import gateways
 from domain import media_info, naming
 from domain import rename_plan
 from domain.release_tokens import quality_from_title
@@ -376,6 +377,10 @@ def apply_rename(
 
     if not moved:
         return refusal(failed[0]["detail"] if failed else "No se renombró nada")
+
+    invalidate = getattr(gateways.history, "invalidate_movie_classes_for", None)
+    if invalidate is not None:
+        invalidate(str(parent), *(p for m in moved for p in (m["from"], m["to"])))
 
     detail = f"Renombrado: {moved[0]['from']} → {moved[0]['to']}"
     if failed:
