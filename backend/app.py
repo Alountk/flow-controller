@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 
 from application import gateways
 from application.use_cases import downloads_cache, trace_cache
-from infrastructure import amule_ec_client, amule_service, amule_watchdog, arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
+from infrastructure import auth_store, amule_ec_client, amule_service, amule_watchdog, arr_client, opensubtitles_client, settings_store, sqlite_history, system_probe, wanted_scan
 from infrastructure import credentials as credentials_module, prowlarr_client, sqlite_history as history, torznab_client
 import auto_copy_driver
 from config import FRONTEND_DIST
@@ -45,6 +45,7 @@ gateways.bind(
     opensubtitles=opensubtitles_client,
     prowlarr=prowlarr_client,
     amule=amule_service,
+    login_store=auth_store.AuthStore(os.path.join(settings_store.CONFIG_DIR, "auth.db")),
 )
 
 from interfaces.http.routes import indexers as indexers_routes, settings as settings_routes, status as status_routes

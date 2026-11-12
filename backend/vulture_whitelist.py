@@ -10,6 +10,7 @@ list of names (vulture's generated style) reports as undefined names to every
 other tool.
 """
 
+from infrastructure.auth_store import AuthStore
 from media_mixer import select_best_video
 from state import queue_consumer_task
 
@@ -41,7 +42,23 @@ from state import queue_consumer_task
 # were removed together with the typed-ports migration — a mis-binding now
 # fails at import in `bind()` instead of being invisible to static analysis.)
 
+# ── Temporary: login store methods whose callers land in the next PR ──────────
+#
+# `AuthStore` is bound at the composition root but nothing calls its write and
+# verify methods until the login routes (login-auth PR 2). Remove the
+# `AuthStore` entry and the `_AUTH_STORE_METHODS` line in that PR; they exist
+# only so this slice keeps CI green on its own.
+_AUTH_STORE_METHODS = (
+    AuthStore.create_user,
+    AuthStore.verify_login,
+    AuthStore.create_session,
+    AuthStore.session_valid,
+    AuthStore.delete_session,
+)
+
 __all__ = [
+    "AuthStore",
+    "_AUTH_STORE_METHODS",
     "queue_consumer_task",
     "select_best_video",
 ]

@@ -30,11 +30,14 @@ delegates below ever touches it.
 
 from __future__ import annotations
 
+import logging
+
 from application.ports import (
     AmuleECService,
     ArrClient,
     CredentialsStore,
     HistoryStore,
+    LoginStore,
     OpenSubtitlesClient,
     ProwlarrClient,
     ScanWalk,
@@ -42,6 +45,8 @@ from application.ports import (
     SystemProbe,
     port_members,
 )
+
+log = logging.getLogger("flow-controller")
 
 #: Bound by the composition root. None until `bind` runs — a route reaching one
 #: before that is a wiring bug, and says so rather than half-working.
@@ -52,6 +57,7 @@ credentials: CredentialsStore | None = None
 system: SystemProbe | None = None
 scan: ScanWalk | None = None
 _opensubtitles: OpenSubtitlesClient | None = None
+login: LoginStore | None = None
 _prowlarr: ProwlarrClient | None = None
 _amule: AmuleECService | None = None
 
@@ -76,6 +82,7 @@ def bind(
     system: SystemProbe,
     scan: ScanWalk,
     opensubtitles: OpenSubtitlesClient | None = None,
+    login_store: LoginStore | None = None,
     prowlarr: ProwlarrClient | None = None,
     amule: AmuleECService | None = None,
 ) -> None:
@@ -106,6 +113,9 @@ def bind(
     if opensubtitles is not None:
         _require(opensubtitles, OpenSubtitlesClient, "opensubtitles")
         globals().update(_opensubtitles=opensubtitles)
+    if login_store is not None:
+        _require(login_store, LoginStore, "login_store")
+        globals().update(login=login_store)
     if prowlarr is not None:
         _require(prowlarr, ProwlarrClient, "prowlarr")
         globals().update(_prowlarr=prowlarr)
@@ -267,9 +277,25 @@ def arr_series_metadata(*args, **kwargs):
     return _arr.arr_series_metadata(*args, **kwargs)
 
 
+def has_login_user() -> bool:
+    """Whether the login exists. An unreadable store reads as "a user exists".
+
+    Failing OPEN here would let a locked, corrupt or unreadable auth.db turn a
+    gated install into an anonymous one. Closed locks the owner out until the
+    store is readable again, which is the safe side of that trade.
+    """
+    if login is None:
+        return False
+    try:
+        return login.has_user()
+    except Exception:
+        log.exception("login store unreadable; keeping the app closed")
+        return True
+
+
 def auth_required(*args, **kwargs):
-    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
-    return settings.auth_required(*args, **kwargs)
+    """The app is closed when a login user exists OR an API key is set."""
+    return settings.auth_required(*args, **kwargs) or has_login_user()
 
 
 def check_service(*args, **kwargs):
