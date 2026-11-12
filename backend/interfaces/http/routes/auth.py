@@ -31,7 +31,7 @@ def _store():
     return gateways.login
 
 
-def _open_session(request: Request, response: Response) -> None:
+def open_session(request: Request, response: Response) -> None:
     secure = (
         request.url.scheme == "https"
         or request.headers.get("x-forwarded-proto", "").split(",")[0].strip() == "https"
@@ -47,6 +47,22 @@ def _open_session(request: Request, response: Response) -> None:
     )
 
 
+def create_first_user(username: str, password: str) -> None:
+    """Create THE user or say why not: 400 for weak input, 409 if one exists.
+
+    Shared by `register` and the first-run setup, so both enforce one rule.
+    """
+    store = _store()
+    if store.has_user():
+        raise HTTPException(status_code=409, detail="Ya existe un usuario")
+    try:
+        created = store.create_user(username, password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not created:
+        raise HTTPException(status_code=409, detail="Ya existe un usuario")
+
+
 @router.post("/api/auth/login")
 async def login(creds: Credentials, request: Request, response: Response):
     try:
@@ -55,7 +71,7 @@ async def login(creds: Credentials, request: Request, response: Response):
         raise HTTPException(status_code=503, detail="Login no disponible")
     if not ok:
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
-    _open_session(request, response)
+    open_session(request, response)
     return {"ok": True}
 
 
@@ -93,16 +109,10 @@ async def register(
     migrating to login). With neither key nor user it is the first run, which
     is as open as the setup wizard it belongs to.
     """
-    store = _store()
-    if store.has_user():
+    if _store().has_user():
         raise HTTPException(status_code=409, detail="Ya existe un usuario")
     if gateways.settings.auth_required() and not key_matches(x_api_key):
         raise HTTPException(status_code=401, detail="API key inválida")
-    try:
-        created = store.create_user(creds.username, creds.password)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    if not created:
-        raise HTTPException(status_code=409, detail="Ya existe un usuario")
-    _open_session(request, response)
+    create_first_user(creds.username, creds.password)
+    open_session(request, response)
     return {"ok": True}

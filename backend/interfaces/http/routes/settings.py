@@ -6,7 +6,7 @@ import json
 import os
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from application.gateways import credentials as credentials
 from config import BASE_DIR
@@ -15,6 +15,7 @@ from application.gateways import test_service_connection
 from application.use_cases import notifier
 from config import SERVICES, configured_services
 from interfaces.http.deps import verify_api_key
+from interfaces.http.routes.auth import create_first_user, open_session
 from state import http_session
 import config
 
@@ -486,7 +487,7 @@ async def setup_status():
 
 
 @router.post("/api/setup")
-async def run_setup(body: dict):
+async def run_setup(body: dict, request: Request, response: Response):
     """Apply the first-run configuration.
 
     Refuses outright once an API key exists. Without that guard this endpoint
@@ -500,6 +501,14 @@ async def run_setup(body: dict):
             status_code=403,
             detail="La aplicación ya está configurada. Usa Configuración para cambiarla.",
         )
+
+    # The login goes first: a refused user (weak password) must leave nothing
+    # half-saved. It also signs the browser in, so the wizard does not end on
+    # a login screen for the account it just created.
+    login = body.get("login")
+    if isinstance(login, dict):
+        create_first_user(str(login.get("username", "")), str(login.get("password", "")))
+        open_session(request, response)
 
     incoming = body.get("services") or {}
     current = get_settings()
@@ -525,7 +534,7 @@ async def run_setup(body: dict):
             continue
         merged.setdefault(group, {}).update(value)
 
-    # The app key is optional: leave it unset and the app stays open on the LAN.
+    # The API key is now an optional script token; the UI's door is `login`.
     app_key = body.get("api_key", "")
     if app_key:
         credentials.set_app_key(merged, app_key)
