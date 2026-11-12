@@ -38,7 +38,7 @@ import { test, expect, login } from '../fixtures/app';
  */
 
 test('a wanted row searches releases and grabs one end to end', async ({ app }) => {
-  await login(app, 'test-key');
+  await login(app);
 
   // Nav link (Sidebar.tsx NAV_ITEMS, label "Películas V2"), then the Topbar's
   // page title as the route proof (App.tsx PAGE_TITLES).

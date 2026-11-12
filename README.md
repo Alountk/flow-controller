@@ -125,6 +125,15 @@ El workflow `.github/workflows/ci.yml` ejecuta automáticamente:
 
 **Si el health check falla, el pipeline para y NO crea la imagen Docker.**
 
+## Acceso
+
+La primera pantalla de la aplicación es la cuenta: en una instalación nueva se **crea el administrador** (usuario y contraseña de al menos 8 caracteres) y entras directamente; después aparece el asistente de primer arranque. Desde entonces hay que **iniciar sesión**. La sesión viaja en una cookie `HttpOnly` + `SameSite=Strict` (y `Secure` si llegas por https o con `X-Forwarded-Proto: https`) y dura 30 días; la contraseña se guarda solo como hash `scrypt` en `config/auth.db`.
+
+- **Instalaciones que ya tenían `API_KEY`:** al abrir la aplicación se pide crear el administrador y, **una sola vez**, esa API key como prueba de que la instalación es tuya. Después la key deja de usarse en la interfaz.
+- **La API key sigue siendo un token opcional para scripts:** `X-Api-Key: <clave>` autoriza las rutas `/api/*`, igual que la sesión. Ya no se acepta en la URL del stream de eventos (`/api/events?key=`).
+- **Si `auth.db` se corrompe o queda ilegible** la aplicación se queda cerrada (nunca abierta) y el login responde 503 hasta que el fichero vuelva a poder leerse. Borrar `auth.db` reabre la creación del administrador.
+- **Limitación conocida:** el límite de intentos fallidos es por dirección IP; detrás de un proxy inverso todos los clientes comparten la del proxy.
+
 ## Variables de entorno
 
 Copia `backend/.env.example` a `backend/.env` y rellena:
