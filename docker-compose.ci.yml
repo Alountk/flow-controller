@@ -10,8 +10,9 @@ services:
       - SAFE_MODE=true
       - DEVELOPER=false
       - API_KEY=test-key
-    # The image's /app/config belongs to root and the service runs as 1000:1000,
-    # so without this nothing persists: settings, history and now the login
-    # account (register would answer 503). Production mounts a writable volume.
-    tmpfs:
-      - /app/config:uid=1000,gid=1000
+      # `volumes: []` above does not drop the base file's bind mount (compose
+      # concatenates lists), so /app/config is a root-owned host dir the
+      # 1000:1000 service cannot write. Settings, history and the login account
+      # all need a writable CONFIG_DIR; /tmp always is. Production mounts a
+      # writable volume.
+      - CONFIG_DIR=/tmp/fc-config
