@@ -127,7 +127,6 @@ const PAGE_SUBTITLES: Partial<Record<Page, string>> = {
 
 function App() {
   const queryClient = useQueryClient()
-  const { ready: servicesReady, isConfigured, hasAnyArr } = useConfiguredServices()
 
   // Declared before the queries: they are gated on it. `null` while /api/auth/me
   // is in flight. A missing field never gates anything: only an explicit
@@ -135,6 +134,8 @@ function App() {
   const [authState, setAuthState] = useState<AuthState | null>(null)
   const authenticated =
     authState !== null && authState.has_user !== false && authState.authenticated !== false
+
+  const { ready: servicesReady, isConfigured, hasAnyArr } = useConfiguredServices(authenticated)
 
   const { data: configData } = useQuery<ConfigResponse>({
     queryKey: ['config'],
