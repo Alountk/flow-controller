@@ -1271,14 +1271,23 @@ class TestAllListingsLibraryClass:
         assert body["counts"]["3D"] == 0
         assert [i["class"] for i in body["items"] if i["title"] == "Tres D"] == ["1080"]
 
-    # ── S1: the resolutions a row lights come from the configured roots ──────
+    # ── S1: the row's chips come from the physical files and the roots ───────
 
     def test_every_item_lights_the_resolutions_the_roots_prove(self, monkeypatch):
         """A 1080 movie with a 4K copy lights BOTH: its own path can only ever
-        be in one root, so the copies are the only proof of the others."""
+        be in one root, so the copies are the only proof of the others. S1: the
+        own chips are proven by the physical files in the movie's folder."""
         monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
         monkeypatch.setattr(config, "PATH_4K", "/mnt/4k")
-        listed = {"/mnt/4k": ["Diez Ochenta (2022) [4K]"], "/mnt/3d": []}
+        listed = {
+            "/mnt/4k": ["Diez Ochenta (2022) [4K]"],
+            "/mnt/3d": [],
+            "/mnt/movies/Cuatro K (2024)": ["Cuatro K (2024) Bluray-2160p.mkv"],
+            "/mnt/3d/Tres D (2023)": ["Tres D (2023) Bluray-1080p.mkv"],
+            "/mnt/movies/Diez Ochenta (2022)": ["Diez Ochenta (2022) WEBDL-1080p.mkv"],
+            "/mnt/movies/Setecientos Veinte (2021)": ["Setecientos Veinte (2021) HDTV-720p.mkv"],
+            "/mnt/movies/Sin Archivo (2020)": [],
+        }
         monkeypatch.setattr(wanted_routes, "_root_children", lambda folder: listed.get(folder, []))
 
         body = self._get().json()
@@ -1294,7 +1303,12 @@ class TestAllListingsLibraryClass:
         monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
         monkeypatch.setattr(config, "PATH_4K", "")
         monkeypatch.setattr(
-            wanted_routes, "_root_children", lambda folder: ["Cuatro K (2024)"] if folder else []
+            wanted_routes,
+            "_root_children",
+            lambda folder: {
+                "/mnt/3d": ["Cuatro K (2024)"],
+                "/mnt/movies/Cuatro K (2024)": ["Cuatro K (2024) Bluray-2160p.mkv"],
+            }.get(folder, []),
         )
 
         body = self._get().json()
@@ -1303,7 +1317,9 @@ class TestAllListingsLibraryClass:
         assert by_title["Cuatro K"] == ["4K", "3D"]
 
     def test_the_roots_are_listed_once_per_request(self, monkeypatch):
-        """Two listings for the whole catalogue, never two per row."""
+        """Roots twice for the whole catalogue, never per row. S1 adds one
+        listing per SHOWN row (its chips need the disk) — and only per shown
+        row: a page of 50 must not walk the whole catalogue."""
         monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
         monkeypatch.setattr(config, "PATH_4K", "/mnt/4k")
         seen: list[str] = []
@@ -1313,18 +1329,140 @@ class TestAllListingsLibraryClass:
 
         self._get()
 
-        assert seen == ["/mnt/4k", "/mnt/3d"]
+        assert seen == [
+            "/mnt/4k",
+            "/mnt/3d",
+            "/mnt/movies/Cuatro K (2024)",
+            "/mnt/3d/Tres D (2023)",
+            "/mnt/movies/Diez Ochenta (2022)",
+            "/mnt/movies/Setecientos Veinte (2021)",
+        ]
 
     def test_an_unreadable_root_never_turns_into_a_claim(self, monkeypatch):
-        """Neither an exception nor a missing chip: the class still shows."""
+        """Neither an exception nor a missing chip: a root that cannot be read
+        proves nothing about the copies — the row's own physical file still
+        lights its chip (S1)."""
         monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
         monkeypatch.setattr(config, "PATH_4K", "/mnt/4k")
-        monkeypatch.setattr(wanted_routes, "_root_children", lambda folder: [])
+        monkeypatch.setattr(
+            wanted_routes,
+            "_root_children",
+            lambda folder: ["Diez Ochenta (2022) WEBDL-1080p.mkv"]
+            if folder == "/mnt/movies/Diez Ochenta (2022)"
+            else [],
+        )
 
         body = self._get().json()
 
         by_title = {item["title"]: item["libraries"] for item in body["items"]}
         assert by_title["Diez Ochenta"] == ["1080p"]
+
+
+# ── S1: the chips light only for physical files (verbatim, spec L2) ──────────
+
+
+class TestRowChipsFollowPhysicalFiles:
+    """«solo se encienden los chips cuando el archivo este enlazado…
+    1080 con el archivo de 1080, 4k con su archivo y lo mismo con 3d».
+
+    The bug this pins: after a 4K localization Radarr adopts the 4K file as
+    `movieFile`, and the row showed only 4K even with the 1080 still on disk.
+    """
+
+    MOVIES = [
+        {
+            "id": 1,
+            "title": "Capa Cuatro",
+            "year": 2024,
+            "hasFile": True,
+            "path": "/mnt/movies/Capa Cuatro (2024)",
+            "movieFile": {
+                "relativePath": "Capa Cuatro (2024) Bluray-2160p.mkv",
+                "quality": {"quality": {"name": "Bluray-2160p"}},
+            },
+        },
+    ]
+
+    REMEMBERED = [
+        {
+            "id": 2,
+            "title": "Memoria Diez Ochenta",
+            "year": 2022,
+            "hasFile": True,
+            "path": "/mnt/movies/Memoria Diez Ochenta (2022)",
+            "movieFile": {
+                "relativePath": "Memoria Diez Ochenta (2022) WEBDL-1080p.mkv",
+                "quality": {"quality": {"name": "WEBDL-1080p"}},
+            },
+        },
+    ]
+
+    def _items(self, monkeypatch, movies, folders):
+        monkeypatch.setattr(config, "PATH_4K", "/mnt/4k")
+        monkeypatch.setattr(config, "PATH_3D", "/mnt/3d")
+        listing = {"/mnt/4k": [], "/mnt/3d": [], **folders}
+        monkeypatch.setattr(
+            wanted_routes, "_root_children", lambda folder: list(listing.get(folder, []))
+        )
+        routes = {f"{CONFIGURED_RADARR_URL}/api/v3/movie": (200, movies)}
+        with patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+            body = client.get("/api/wanted/all", params={"page": 1, "page_size": 50}).json()
+        return body["items"]
+
+    def _libraries(self, monkeypatch, movies, folders):
+        return {item["title"]: item["libraries"] for item in self._items(monkeypatch, movies, folders)}
+
+    def test_the_physical_1080_file_lights_1080p_beside_the_4k_moviefile(self, monkeypatch):
+        libraries = self._libraries(monkeypatch, self.MOVIES, {
+            "/mnt/movies/Capa Cuatro (2024)": [
+                "Capa Cuatro (2024) Bluray-2160p.mkv",
+                "Capa Cuatro (2024) WEBDL-1080p.mkv",
+            ],
+        })
+
+        assert libraries["Capa Cuatro"] == ["4K", "1080p"]
+
+    def test_the_quality_alone_lights_nothing_the_disk_does_not_prove(self, monkeypatch):
+        """El `movieFile`/`quality` de Radarr NO decide el encendido (spec S1):
+        it remembers WEBDL-1080p while the disk holds no 1080 file at all."""
+        libraries = self._libraries(monkeypatch, self.REMEMBERED, {
+            "/mnt/movies/Memoria Diez Ochenta (2022)": [
+                "Memoria Diez Ochenta (2022) Bluray-2160p.mkv",
+            ],
+        })
+
+        assert libraries["Memoria Diez Ochenta"] == ["4K"]
+
+    def test_only_the_4k_file_lights_only_the_4k_chip(self, monkeypatch):
+        libraries = self._libraries(monkeypatch, self.MOVIES, {
+            "/mnt/movies/Capa Cuatro (2024)": ["Capa Cuatro (2024) Bluray-2160p.mkv"],
+        })
+
+        assert libraries["Capa Cuatro"] == ["4K"]
+
+    # ── S2: the row carries the presented file: the 1080, or nothing ─────────
+
+    def test_the_row_carries_the_1080_file_beside_the_adopted_4k_moviefile(self, monkeypatch):
+        """S2: the presented file is the 1080 even after manualimport made the
+        4K the movieFile — the row hands the detail panel its «Fichero
+        descargado» so the panel never browses the folder itself."""
+        items = self._items(monkeypatch, self.MOVIES, {
+            "/mnt/movies/Capa Cuatro (2024)": [
+                "Capa Cuatro (2024) Bluray-2160p.mkv",
+                "Capa Cuatro (2024) WEBDL-1080p.mkv",
+            ],
+        })
+        by_title = {item["title"]: item["file_1080"] for item in items}
+
+        assert by_title["Capa Cuatro"] == "Capa Cuatro (2024) WEBDL-1080p.mkv"
+
+    def test_the_row_carries_an_empty_file_1080_when_no_1080_is_on_disk(self, monkeypatch):
+        items = self._items(monkeypatch, self.MOVIES, {
+            "/mnt/movies/Capa Cuatro (2024)": ["Capa Cuatro (2024) Bluray-2160p.mkv"],
+        })
+        by_title = {item["title"]: item["file_1080"] for item in items}
+
+        assert by_title["Capa Cuatro"] == ""
 
 
 # ── Failures must not masquerade as "nothing missing" ────────────────────────

@@ -196,7 +196,7 @@ def _filter_all_endpoint(result: dict, q: str, page: int, page_size: int) -> dic
 
 
 def _root_children(folder: str) -> list[str]:
-    """The entries of a configured root, or nothing when it cannot be read.
+    """The entries of a folder on disk, or nothing when it cannot be read.
 
     Nothing is the honest answer here: an unconfigured folder (""), a mount that
     is not there and a permission problem all prove the same thing about a
@@ -208,6 +208,15 @@ def _root_children(folder: str) -> list[str]:
         return os.listdir(folder)
     except OSError:
         return []
+
+
+def _movie_folder_files(path: str) -> list[str]:
+    """The names in a movie's own folder, or nothing when it cannot be read.
+
+    The path is Radarr's view of it; the disk is reached where this host sees
+    it (`arr_client` maps the same way before `isdir`).
+    """
+    return _root_children(config.host_path(path))
 
 
 def _classified_movies_page(
@@ -246,18 +255,6 @@ def _classified_movies_page(
                 path_3d=config.PATH_3D,
                 resolution=str(item.get("resolution") or ""),
             ),
-            # What the row lights up (S1): resolved here for the same reason the
-            # class is — the browser has no disk to look at.
-            "libraries": library_class.available_resolutions(
-                has_file=bool(item.get("has_file")),
-                quality=str(item.get("quality") or ""),
-                path=str(item.get("path") or ""),
-                path_4k=config.PATH_4K,
-                path_3d=config.PATH_3D,
-                copies_4k=copies_4k,
-                copies_3d=copies_3d,
-                resolution=str(item.get("resolution") or ""),
-            ),
         }
         for item in result.get("items") or []
     ]
@@ -268,8 +265,40 @@ def _classified_movies_page(
         if (not needle or _matches(item, needle))
         and (not class_filter or item["class"] == class_filter)
     ]
+    page_items = _paginate(matches, page, page_size)
+    # S1: the chips light only for physical files, so each row's folder is read
+    # on disk — bounded to the page, since the class and the counts never need it.
+    for row in page_items:
+        # One listing per row feeds both the chips and the presented 1080; no
+        # linked file, no listing — its folder is never read for nothing.
+        folder_files = (
+            _movie_folder_files(str(row.get("path") or ""))
+            if row.get("has_file")
+            else ()
+        )
+        row["libraries"] = library_class.available_resolutions(
+            has_file=bool(row.get("has_file")),
+            quality=str(row.get("quality") or ""),
+            path=str(row.get("path") or ""),
+            path_4k=config.PATH_4K,
+            path_3d=config.PATH_3D,
+            copies_4k=copies_4k,
+            copies_3d=copies_3d,
+            resolution=str(row.get("resolution") or ""),
+            file_name=str(row.get("file_name") or ""),
+            folder_files=folder_files,
+        )
+        row["file_1080"] = library_class.own_1080_file(
+            has_file=bool(row.get("has_file")),
+            quality=str(row.get("quality") or ""),
+            path=str(row.get("path") or ""),
+            path_3d=config.PATH_3D,
+            resolution=str(row.get("resolution") or ""),
+            file_name=str(row.get("file_name") or ""),
+            folder_files=folder_files,
+        )
     body = {
-        "items": _paginate(matches, page, page_size),
+        "items": page_items,
         "total": len(matches),
         "page": page,
         "page_size": page_size,

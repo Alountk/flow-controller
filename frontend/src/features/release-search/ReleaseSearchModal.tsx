@@ -12,10 +12,12 @@ import { grabCalendarRelease, fetchGrabStatus, type GrabTask } from '../../share
 import { apiFetch } from '../../shared/api/auth.ts'
 import { slug } from '../../shared/utils/slug.ts'
 import { fetchIndexers } from '../../shared/api/indexers.ts'
+import { browsePath } from '../../shared/api/files.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
 import { FileExplorer } from '../../shared/ui/FileExplorer.tsx'
 import { ReleaseResultsTable } from './ReleaseResultsTable.tsx'
 import { looksThreeD } from '../../shared/utils/threeD.ts'
+import { fromName } from '../../shared/utils/resolution.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import {
   NO_RELEASE_FILTERS,
@@ -61,6 +63,11 @@ export interface ReleaseSearchItem {
   resolution?: string
   /** The title's folder, the one signal the 3D tag reads (path_3d membership). */
   path?: string
+  /** The row's physical answer (S3/L7): the classes the disk proves, in the
+   *  labels the V2 list renders. Present → the tags pass it through verbatim. */
+  libraries?: string[]
+  /** The physical 1080 file's name in the movie's folder ("" = none, S2). */
+  file_1080?: string
   /** What `id` IS, when the surface knows better than `type` can say. A
    *  Series card is typed `episode` — the only thing Sonarr can grab — while
    *  carrying the SERIES id, and asking the grabs history for that under
@@ -213,6 +220,27 @@ function baseName(path: string): string {
   const at = clean.lastIndexOf('/')
   return at === -1 ? clean : clean.slice(at + 1)
 }
+
+/** What a video entry of the movie's own folder proves: the name's own token,
+ *  else the library default 1080 — fileSections' rule for a tokenless file there. */
+function ownEntryClass(entry: FileItem): OwnClass | null {
+  if (entry.is_dir || entry.is_video === false) return null
+  if (looksThreeD(entry.name)) return '3D'
+  switch (fromName(entry.name)) {
+    case '2160':
+      return '4K'
+    case '1080':
+      return '1080'
+    case '720':
+    case '576':
+    case '480':
+      return 'SD'
+    default:
+      return '1080'
+  }
+}
+
+type OwnClass = '1080' | '4K' | '3D' | 'SD'
 
 /**
  * One component, two presentations.
@@ -383,6 +411,25 @@ export function ReleaseSearchModal({
     retry: false,
     staleTime: 5 * 60_000,
   })
+
+  // S3/L7: the row's physical answer (`available_resolutions` labels). Present
+  // → pure passthrough — lista y detalle no pueden discrepar.
+  const physicalLibraries = Array.isArray(item.libraries) ? item.libraries : null
+
+  // S1/S2: the movie's OWN folder — the physical source for the 1080 file the
+  // adopted movieFile stopped naming. `useBrowse` IS the Archivos read: one
+  // listing per folder across surfaces (same key), mirroring the disk.
+  // Fallback only: a row carrying `libraries` already answered for its folder,
+  // so the detail never re-browses it.
+  const ownBrowse = useQuery({
+    queryKey: ['files-browse', item.path ?? ''],
+    queryFn: () => browsePath(item.path ?? ''),
+    staleTime: 0,
+    enabled: blockShown && physicalLibraries === null && !!item.path,
+  })
+  const ownReadable = ownBrowse.data?.ok === true && Array.isArray(ownBrowse.data.items)
+  const ownItems = ownReadable ? ownBrowse.data?.items : undefined
+  const ownUnreadable = ownBrowse.isError || (ownBrowse.data != null && !ownReadable)
 
   // An unconfigured folder ("" while the settings read is pending, failed, or
   // reporting it unconfigured) never enables its query: a folder that does not
@@ -763,12 +810,15 @@ export function ReleaseSearchModal({
    * what you HAVE, grey for what you are MISSING — that grey IS the answer to
    * "cuáles son los que faltan".
    *
-   * Two LOCALIZATION sources feed these tags — a tag lights only when a file
-   * that EXISTS proves the class, and stays grey while none can:
+   * Three LOCALIZATION sources feed these tags — a tag lights only when a
+   * file that EXISTS proves the class, and stays grey while none can:
    *
-   * 1. the arr's library: `item.quality` — contains `1080p` → 1080, contains
-   *    `2160p` → 4K (the backend's `resolution` measurement outranks it);
-   * 2. the routing folders on disk: an entry whose name starts with this
+   * 1. the movie's OWN folder (S1): a video file there is the 1080 file, or
+   *    whatever class its name states — the physical link that keeps the 1080
+   *    chip alive after a manual import makes Radarr adopt the 4K;
+   * 2. the arr's library: the movieFile Radarr reports IS on disk, and its
+   *    `resolution` measurement (or `quality`) proves ITS class only;
+   * 3. the routing folders on disk: an entry whose name starts with this
    *    title's folder name AND that is a directory or a video file is a copy
    *    of it — in `path_4k` it proves 4K, in `path_3d` it proves 3D (a
    *    subtitle or `.nfo` there proves nothing at all).
@@ -824,23 +874,58 @@ export function ReleaseSearchModal({
     ? ['720', '576', '480'].includes(measuredClass)
     : SD_QUALITY.test(libraryQuality)
 
-  const hasFileTags = [
-    { label: '1080', on: libraryIs1080 },
-    {
-      label: '4K',
-      on: libraryIs4k || holdsCopy(listing4kQuery.data),
-    },
-    {
-      label: '3D',
-      on: inFolder(item.path ?? '', path3d) || holdsCopy(listing3dQuery.data),
-    },
-    {
-      // SD used to be the absence of a chip: a 720p release lit nothing, so the
-      // one class the user was about to grab looked like it was not there.
-      label: 'SD',
-      on: libraryIsSd,
-    },
-  ]
+  // S1: each class lights on its own physical file — the movie's folder for
+  // 1080, the routing copies for 4K/3D — never on a single-value flip.
+  const ownClasses = new Set(
+    (ownItems ?? []).map(ownEntryClass).filter((cls): cls is OwnClass => cls !== null),
+  )
+
+  const hasFileTags =
+    // S3/L7: a present row answer IS the source — the V2 list renders the same
+    // field, so the detail never ORs local sources into it.
+    physicalLibraries !== null
+      ? [
+          { label: '1080', on: physicalLibraries.includes('1080p') },
+          { label: '4K', on: physicalLibraries.includes('4K') },
+          { label: '3D', on: physicalLibraries.includes('3D') },
+          { label: 'SD', on: physicalLibraries.includes('SD') },
+        ]
+      : [
+          { label: '1080', on: libraryIs1080 || ownClasses.has('1080') },
+          {
+            label: '4K',
+            on: libraryIs4k || ownClasses.has('4K') || holdsCopy(listing4kQuery.data),
+          },
+          {
+            label: '3D',
+            on:
+              inFolder(item.path ?? '', path3d) ||
+              ownClasses.has('3D') ||
+              holdsCopy(listing3dQuery.data),
+          },
+          {
+            // SD used to be the absence of a chip: a 720p release lit nothing, so the
+            // one class the user was about to grab looked like it was not there.
+            label: 'SD',
+            on: libraryIsSd || ownClasses.has('SD'),
+          },
+        ]
+
+  // S2: the presented file is the 1080 — physical (`file_1080` on the row's
+  // answer, else the folder listing), or the arr's file when that IS the 1080.
+  const own1080 =
+    physicalLibraries !== null
+      ? item.file_1080
+        ? { name: item.file_1080 }
+        : undefined
+      : (ownItems ?? []).find((entry) => ownEntryClass(entry) === '1080')
+  const movieFileClass = libraryIs1080 ? '1080' : libraryIs4k ? '4K' : libraryIsSd ? 'SD' : null
+  const presentedFile =
+    own1080 && !libraryIs1080
+      ? { name: own1080.name, fromMovieFile: false }
+      : libraryIs1080 || movieFileClass === null
+        ? { name: item.file_name ?? null, fromMovieFile: true }
+        : null
 
   /**
    * The one thing the tags cannot say alone: WHY a source is not here. Grey
@@ -851,6 +936,7 @@ export function ReleaseSearchModal({
    */
   const hasFileNoteParts: string[] = []
   if (foldersUnreadable) hasFileNoteParts.push('la configuración de carpetas no se pudo leer')
+  if (ownUnreadable) hasFileNoteParts.push('la carpeta de la película no se pudo leer')
   if (listing4kQuery.isError) hasFileNoteParts.push('la carpeta path_4k no se pudo leer')
   if (listing3dQuery.isError) hasFileNoteParts.push('la carpeta path_3d no se pudo leer')
   // Only a SUCCESSFUL settings read may call "" "unconfigured": while the
@@ -1025,16 +1111,16 @@ export function ReleaseSearchModal({
                  name and never claims a class the arr did not report. */
               <div className="has-file-block">
                 <span className="has-file-label">Fichero descargado</span>
-                {item.file_name ? (
-                  <code className="has-file-name">{item.file_name}</code>
-                ) : (
+                {presentedFile?.name ? (
+                  <code className="has-file-name">{presentedFile.name}</code>
+                ) : presentedFile ? (
                   <span className="has-file-name has-file-missing">
                     Nombre no disponible en esta vista
                   </span>
-                )}
-                {/* Only when the file's languages exist: an empty list renders
-                    nothing — no dash, no "sin idioma" invention. */}
-                {(item.languages?.length ?? 0) > 0 && (
+                ) : null}
+                {/* Only when the file's languages exist — and only for the
+                    arr's own file, the one they belong to. */}
+                {presentedFile?.fromMovieFile && (item.languages?.length ?? 0) > 0 && (
                   <span className="has-file-langs">{(item.languages ?? []).join(', ')}</span>
                 )}
                 <div className="has-file-tags">

@@ -379,6 +379,9 @@ export interface AllMovie {
    *  backend — the browser has no disk to look at. Missing means "not
    *  answered", which lights nothing, never a guess. */
   libraries?: string[]
+  /** The physical 1080 file's name in the movie's folder, per the backend's
+   *  1080-o-nada rule (S2): "" or missing means none was proven. */
+  file_1080?: string
   /** Radarr has NOT imported a file for this title, but its folder holds a
    *  video — read off disk by the backend, only when `has_file` is false.
    *  True is direct evidence of bytes on disk; false means "checked, no

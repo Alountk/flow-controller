@@ -221,15 +221,19 @@ const tags = () =>
     on: el.classList.contains('is-on'),
   }))
 
-const browseCalls = (fn: FetchMock) =>
-  fn.mock.calls.filter(([input]) => String(input).includes('/api/files/browse')).length
+/** The routing-folder browse this helper must wait for — the title's own
+ *  folder is browsed too (the 1080 source), so "any browse" no longer means it. */
+const routingBrowsed = (fn: FetchMock) =>
+  fn.mock.calls.some(([input]) =>
+    String(input).includes(`path=${encodeURIComponent('/mnt/4k')}`),
+  )
 
 /**
  * The 4K tag ONCE the routing listing has landed — settled state, never the
  * grey "still fetching" render the tags show on their first paint.
  */
 const fourK = async (fn: FetchMock) => {
-  await waitFor(() => expect(browseCalls(fn)).toBe(1))
+  await waitFor(() => expect(routingBrowsed(fn)).toBe(true))
   // The stub answers with resolved promises: one macrotask drains the whole
   // fetch → setData → re-render chain, so what follows is the settled tag.
   await new Promise((resolve) => setTimeout(resolve, 10))
