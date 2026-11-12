@@ -3436,15 +3436,24 @@ class TestFirstRunSetup:
         assert resp.status_code == 200
         assert fresh["services"]["radarr"]["url"] == "http://r:1"
 
-    def test_needs_setup_does_not_depend_on_having_auth(self, fresh, monkeypatch):
-        """With the admin created first, `auth_required` is already true at setup time."""
-        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: True)
-        monkeypatch.setattr("config.configured_services", lambda: [], raising=False)
+    def test_a_login_user_alone_does_not_end_the_setup(self, fresh, monkeypatch):
+        """The admin is created first, so «there is auth» cannot mean «already set up»."""
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
+        monkeypatch.setattr("application.gateways.has_login_user", lambda: True)
         monkeypatch.setattr("interfaces.http.routes.settings.configured_services", lambda: [])
 
         body = client.get("/api/setup").json()
 
         assert body == {"needs_setup": True, "auth_required": True}
+
+    def test_a_keyed_install_with_no_services_is_not_sent_to_the_wizard(self, fresh, monkeypatch):
+        """Its «Entrar» needs Radarr or Sonarr: forcing the wizard would trap it."""
+        monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: True)
+        monkeypatch.setattr("interfaces.http.routes.settings.configured_services", lambda: [])
+
+        body = client.get("/api/setup").json()
+
+        assert body == {"needs_setup": False, "auth_required": True}
 
     def test_setup_ignores_unknown_service_keys(self, fresh, monkeypatch):
         monkeypatch.setattr("infrastructure.settings_store.auth_required", lambda: False)
