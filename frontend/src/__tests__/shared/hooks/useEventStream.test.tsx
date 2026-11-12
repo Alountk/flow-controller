@@ -2,22 +2,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEventStream } from '../../../shared/hooks/useEventStream.ts'
-import { forgetApiKey, rememberApiKey } from '../../../shared/api/auth.ts'
 
 /**
  * sse-events T3/T4 — the hook that turns server events into invalidations.
  *
  * The polling fallback (`refetchInterval`) stays exactly as it is — this hook
  * is an accelerator on top, never a replacement. Four things are pinned:
- * the URL opens on `/api/events` carrying the same key `apiFetch` would; each
+ * the URL opens on `/api/events` with nothing secret in it (the session
+ * cookie authenticates); each
  * event kind invalidates the query key that surface ACTUALLY uses (grep-verified
  * keys; the dashboard's ['downloads'] card gave the downloads event its real
  * consumer); a
  * environment without `EventSource` (jsdom, a blocked browser) must leave the
  * app running on polling alone instead of crashing; and the stream NEVER
- * opens while auth is required and no key is stored — a keyless 401 retry
- * loop fills C-05's auth-failure budget (10/60s per address) and can 429 the
- * browser's other requests before the user ever types the key.
+ * opens before the page is signed in — a cookieless 401 retry loop fills
+ * C-05's auth-failure budget (10/60s per address) and can 429 the browser's
+ * other requests before the user ever types the password.
  */
 
 type Listener = (event: MessageEvent) => void
@@ -56,24 +56,24 @@ class MockEventSource {
   }
 }
 
-function Probe({ authRequired }: { authRequired: boolean }) {
-  useEventStream(authRequired)
+function Probe({ signedIn }: { signedIn: boolean }) {
+  useEventStream(signedIn)
   return null
 }
 
-function setup({ authRequired = false }: { authRequired?: boolean } = {}) {
+function setup({ signedIn = true }: { signedIn?: boolean } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
   // The provider must stay in the tree across rerenders (the gating tests
-  // flip authRequired on the SAME client), so the UI is a function of state.
-  const ui = (required: boolean) => (
+  // flip signedIn on the SAME client), so the UI is a function of state.
+  const ui = (on: boolean) => (
     <QueryClientProvider client={queryClient}>
-      <Probe authRequired={required} />
+      <Probe signedIn={on} />
     </QueryClientProvider>
   )
-  const view = render(ui(authRequired))
+  const view = render(ui(signedIn))
   return { queryClient, invalidate, ui, ...view }
 }
 
@@ -84,21 +84,18 @@ async function openStream(): Promise<MockEventSource> {
 
 beforeEach(() => {
   MockEventSource.instances = []
-  forgetApiKey()
   vi.stubGlobal('EventSource', MockEventSource)
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  forgetApiKey()
 })
 
 describe('opening the stream', () => {
-  it('carries the stored key as ?key= so EventSource authenticates', async () => {
-    rememberApiKey('clave-secreta')
+  it('opens /api/events with no secret in the URL: the session cookie authenticates', async () => {
     setup()
     const source = await openStream()
-    expect(source.url).toBe('/api/events?key=clave-secreta')
+    expect(source.url).toBe('/api/events')
   })
 
   it('closes the connection when the component unmounts', async () => {
@@ -112,40 +109,32 @@ describe('opening the stream', () => {
 })
 
 describe('auth gating', () => {
-  it('never opens while auth is required and no key is stored (pre-login)', async () => {
-    setup({ authRequired: true })
+  it('never opens before the page is signed in', async () => {
+    setup({ signedIn: false })
 
     // Effects flush inside render's act(), so an ungated hook would have
     // constructed the EventSource already. A second turn for good measure:
-    // one keyless 401 every ~3s is exactly the budget this gate exists to
+    // one cookieless 401 every ~3s is exactly the budget this gate exists to
     // keep out of C-05's AUTH_FAILURE_LIMIT.
     expect(MockEventSource.instances).toHaveLength(0)
     await Promise.resolve()
     expect(MockEventSource.instances).toHaveLength(0)
   })
 
-  it('opens when a key is stored, even though auth is required', async () => {
-    rememberApiKey('clave-secreta')
-    setup({ authRequired: true })
+  it('opens once the page signs in', async () => {
+    const { ui, rerender } = setup({ signedIn: false })
+
+    rerender(ui(true))
 
     const source = await openStream()
-
-    expect(source.url).toBe('/api/events?key=clave-secreta')
-  })
-
-  it('opens without a key when auth is disabled', async () => {
-    setup({ authRequired: false })
-
-    const source = await openStream()
-
     expect(source.url).toBe('/api/events')
   })
 
-  it('closes the stream when auth becomes required again', async () => {
-    const { ui, rerender } = setup({ authRequired: false })
+  it('closes the stream when the session ends', async () => {
+    const { ui, rerender } = setup({ signedIn: true })
     const source = await openStream()
 
-    rerender(ui(true)) // logout / rotated key: no key stored, auth back on
+    rerender(ui(false)) // signed out, or the session expired
 
     expect(source.closed).toBe(true)
     // No replacement stream may open behind the closed one.

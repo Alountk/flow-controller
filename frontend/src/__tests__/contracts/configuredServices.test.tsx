@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../../app/App.tsx'
 import { Sidebar } from '../../app/Sidebar.tsx'
-import { rememberApiKey, forgetApiKey, setUnauthorizedHandler } from '../../shared/api/auth.ts'
+import { markSessionActive, resetSession, setUnauthorizedHandler } from '../../shared/api/auth.ts'
 import type { ServiceKey } from '../../shared/types.ts'
 
 /**
@@ -89,15 +89,15 @@ describe('sidebar with unconfigured services', () => {
 
 describe('the app reflects what is configured', () => {
   beforeEach(() => {
-    forgetApiKey()
-    rememberApiKey('clave')
+    resetSession()
+    markSessionActive()
     window.location.hash = ''
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
     setUnauthorizedHandler(null)
-    forgetApiKey()
+    resetSession()
   })
 
   it('hides the arr-dependent pages when no arr is configured', async () => {
@@ -188,15 +188,15 @@ describe('the app reflects what is configured', () => {
 
 describe('unreadable credentials are announced', () => {
   beforeEach(() => {
-    forgetApiKey()
-    rememberApiKey('clave')
+    resetSession()
+    markSessionActive()
     window.location.hash = ''
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
     setUnauthorizedHandler(null)
-    forgetApiKey()
+    resetSession()
   })
 
   function mockWithEncryptionError() {

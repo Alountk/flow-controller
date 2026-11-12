@@ -15,7 +15,6 @@ function renderPage() {
     </QueryClientProvider>,
   )
 }
-import { setApiKey } from '../../shared/api/auth'
 
 /**
  * El caso de prueba es el del usuario, literal: dos ficheros 1080p en la carpeta
@@ -148,8 +147,7 @@ describe('Duplicados', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('fuera de las carpetas permitidas')
   })
 
-  it('sends the stored key on both requests, like every other section', async () => {
-    setApiKey('clave-de-prueba')
+  it('sends both requests through the shared apiFetch, like every other section', async () => {
     renderPage()
     fireEvent.click(screen.getByText('Buscar duplicados'))
     await screen.findByText('Now You See Me')
@@ -158,7 +156,8 @@ describe('Duplicados', () => {
     await waitFor(() => expect(calls.some((c) => c.url.includes('/delete'))).toBe(true))
 
     const headers = calls.map((c) => (c.init?.headers ?? {}) as Record<string, string>)
-    expect(headers.every((h) => h['X-Api-Key'] === 'clave-de-prueba')).toBe(true)
+    expect(headers.every((h) => h['Content-Type'] === 'application/json')).toBe(true)
+    expect(headers.some((h) => 'X-Api-Key' in h)).toBe(false)
   })
 
   it('does not crash when the payload has no groups (old backend, proxy HTML)', async () => {
