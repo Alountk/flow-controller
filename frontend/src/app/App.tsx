@@ -54,6 +54,7 @@ const Settings = lazy(() =>
 import {
   apiFetch,
   fetchAuthState,
+  logout,
   setUnauthorizedHandler,
   type AuthState,
 } from '../shared/api/auth.ts'
@@ -256,6 +257,12 @@ function App() {
     }
   }, [configData])
 
+  async function handleLogout() {
+    await logout()
+    queryClient.clear()
+    setAuthState({ authenticated: false, auth_required: true, has_user: true })
+  }
+
   function handleAuthenticated() {
     setAuthState({ authenticated: true, auth_required: true, has_user: true })
     // The data queries failed while unauthenticated; refetch them now.
@@ -340,6 +347,7 @@ function App() {
             lastUpdated={data ? Date.now() : null}
             right={<ServiceChips services={services} />}
             subtitle={PAGE_SUBTITLES[page]}
+            onLogout={authState.has_user ? handleLogout : undefined}
           />
 
           <div className="content-and-queue">

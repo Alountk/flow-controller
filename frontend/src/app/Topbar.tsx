@@ -8,9 +8,11 @@ interface Props {
   loading: boolean
   lastUpdated: number | null
   right?: ReactNode
+  /** Present only when a login account protects the panel. */
+  onLogout?: () => void
 }
 
-export function Topbar({ title, subtitle, loading, lastUpdated, right }: Props) {
+export function Topbar({ title, subtitle, loading, lastUpdated, right, onLogout }: Props) {
   return (
     <div className="topbar">
       <div className="topbar-left">
@@ -28,6 +30,11 @@ export function Topbar({ title, subtitle, loading, lastUpdated, right }: Props) 
           </span>
         )}
         {right}
+        {onLogout && (
+          <button type="button" className="topbar-logout" onClick={onLogout}>
+            Cerrar sesión
+          </button>
+        )}
       </div>
     </div>
   )

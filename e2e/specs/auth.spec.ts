@@ -44,6 +44,18 @@ test('the session survives a reload', async ({ app }) => {
   await expect(app.getByLabel('Usuario')).toHaveCount(0);
 });
 
+test('signing out returns to the login and the old session no longer opens the app', async ({ app }) => {
+  await login(app);
+  await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
+
+  await app.getByRole('button', { name: 'Cerrar sesión' }).click();
+
+  await expect(app.getByLabel('Usuario')).toBeVisible();
+  await app.reload();
+  await expect(app.getByLabel('Usuario')).toBeVisible();
+  await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toHaveCount(0);
+});
+
 test('the script key still opens the API, but is not how the UI signs in', async ({ request }) => {
   await ensureAdmin(request);
 
