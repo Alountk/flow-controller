@@ -14,6 +14,7 @@ import {
 } from '../../shared/api/services.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import { SharedDirsSection } from './SharedDirsSection.tsx'
+import { PasswordSection } from './PasswordSection.tsx'
 import { QualityThresholdSection } from './QualityThresholdSection.tsx'
 import { IndexadoresSection } from './IndexadoresSection.tsx'
 import { AmuleEcSection, type AmuleEcValues } from './AmuleEcSection.tsx'
@@ -776,6 +777,8 @@ export function Settings() {
           effect on its own button, where "Guardar cambios" would
           otherwise claim to have saved something it never saw. */}
       <SharedDirsSection />
+
+      <PasswordSection />
 
       <Section
         icon="⏱️"

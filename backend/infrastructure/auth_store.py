@@ -135,6 +135,24 @@ class AuthStore:
         name_ok = bool(row) and hmac.compare_digest(row[0].encode(), username.strip().encode())
         return password_ok and name_ok
 
+    def change_password(self, current: str, new: str) -> bool:
+        """False when `current` is wrong; ValueError on a weak `new`.
+
+        Every session is revoked: whoever held the old password (or a stolen
+        cookie) must not stay signed in. The caller opens a fresh one.
+        """
+        if len(new) < MIN_PASSWORD_LENGTH:
+            raise ValueError(f"password must have at least {MIN_PASSWORD_LENGTH} characters")
+        if not self._exists():
+            return False
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT pw_hash FROM users").fetchone()
+            if not row or not check_password(current, row[0]):
+                return False
+            db.execute("UPDATE users SET pw_hash = ?", (hash_password(new),))
+            db.execute("DELETE FROM sessions")
+        return True
+
     def create_session(self) -> str:
         token = secrets.token_urlsafe(32)
         now = self._clock()

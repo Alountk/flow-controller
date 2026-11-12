@@ -68,6 +68,14 @@ export function login(username: string, password: string): Promise<void> {
   return post('/api/auth/login', { username, password })
 }
 
+/** Needs the current password too; the server keeps this browser signed in. */
+export function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return post('/api/auth/password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  })
+}
+
 /**
  * Create THE administrator. An install that still has its old API key must
  * present it once (`currentApiKey`): that is the proof it belongs to you.

@@ -11,12 +11,12 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from application import gateways
 from application.ports import SESSION_TTL_SECONDS
-from interfaces.http.deps import SESSION_COOKIE, key_matches, session_ok
+from interfaces.http.deps import SESSION_COOKIE, key_matches, session_ok, verify_api_key
 
 router = APIRouter()
 log = logging.getLogger("flow-controller")
@@ -125,5 +125,30 @@ async def register(
     if gateways.settings.auth_required() and not key_matches(x_api_key):
         raise HTTPException(status_code=401, detail="API key inválida")
     create_first_user(creds.username, creds.password)
+    open_session(request, response)
+    return {"ok": True}
+
+
+class PasswordChange(BaseModel):
+    current_password: str = ""
+    new_password: str = ""
+
+
+@router.post("/api/auth/password", dependencies=[Depends(verify_api_key)])
+async def change_password(body: PasswordChange, request: Request, response: Response):
+    """Needs a live session AND the current password, so a stolen cookie alone cannot lock the owner out.
+
+    A wrong current password is a 400, not a 401: a 401 would make the page
+    think its session died and spend the failure budget.
+    """
+    try:
+        changed = _store().change_password(body.current_password, body.new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except (sqlite3.Error, OSError):
+        log.exception("could not change the login password")
+        raise HTTPException(status_code=503, detail="No se pudo guardar la contraseña")
+    if not changed:
+        raise HTTPException(status_code=400, detail="La contraseña actual no es correcta")
     open_session(request, response)
     return {"ok": True}

@@ -129,3 +129,34 @@ class TestReadingNeverCreatesTheFile:
 
         with pytest.raises(sqlite3.DatabaseError):
             AuthStore(path).has_user()
+
+
+class TestChangePassword:
+    def test_the_current_password_unlocks_the_change_and_kills_the_sessions(self, store):
+        store.create_user("raul", "correct horse")
+        token = store.create_session()
+
+        assert store.change_password("correct horse", "brand new pass") is True
+
+        assert store.verify_login("raul", "brand new pass") is True
+        assert store.verify_login("raul", "correct horse") is False
+        assert store.session_valid(token) is False
+
+    def test_a_wrong_current_password_leaves_everything_as_it_was(self, store):
+        store.create_user("raul", "correct horse")
+        token = store.create_session()
+
+        assert store.change_password("wrong horse!!", "brand new pass") is False
+
+        assert store.verify_login("raul", "correct horse") is True
+        assert store.session_valid(token) is True
+
+    def test_a_weak_new_password_raises_and_changes_nothing(self, store):
+        store.create_user("raul", "correct horse")
+
+        with pytest.raises(ValueError):
+            store.change_password("correct horse", "short")
+        assert store.verify_login("raul", "correct horse") is True
+
+    def test_nothing_to_change_before_a_user_exists(self, store):
+        assert store.change_password("anything long", "brand new pass") is False

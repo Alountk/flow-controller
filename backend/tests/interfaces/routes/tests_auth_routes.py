@@ -261,3 +261,47 @@ class TestAnUnwritableConfigVolume:
             )
 
         assert "set-cookie" not in resp.headers
+
+
+class TestChangePassword:
+    NEW = "a brand new pass"
+
+    @pytest.fixture
+    def signed_in(self, client):
+        client.post("/api/auth/register", json={"username": "raul", "password": PASSWORD})
+        return client
+
+    def _change(self, client, current=PASSWORD, new=NEW):
+        return client.post(
+            "/api/auth/password", json={"current_password": current, "new_password": new}
+        )
+
+    def test_the_new_password_logs_in_and_the_old_one_stops_working(self, signed_in):
+        assert self._change(signed_in).status_code == 200
+
+        assert _login(TestClient(app), self.NEW).status_code == 200
+        assert _login(TestClient(app), PASSWORD).status_code == 401
+
+    def test_the_caller_stays_signed_in_but_every_other_session_is_revoked(self, signed_in):
+        other = TestClient(app)
+        _login(other)
+        assert other.get(PROTECTED).status_code == 200
+
+        self._change(signed_in)
+
+        assert signed_in.get(PROTECTED).status_code == 200
+        assert other.get(PROTECTED).status_code == 401
+
+    def test_a_wrong_current_password_changes_nothing_and_is_not_a_401(self, signed_in):
+        resp = self._change(signed_in, current="not my password")
+
+        assert resp.status_code == 400
+        assert _login(TestClient(app), PASSWORD).status_code == 200
+
+    def test_a_weak_new_password_is_refused(self, signed_in):
+        assert self._change(signed_in, new="short").status_code == 400
+        assert _login(TestClient(app), PASSWORD).status_code == 200
+
+    def test_without_a_session_nothing_can_be_changed(self, signed_in):
+        assert self._change(TestClient(app)).status_code == 401
+        assert _login(TestClient(app), PASSWORD).status_code == 200
