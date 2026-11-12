@@ -8,6 +8,7 @@ failure budget (10 per minute per address) throttles guessing; ``me`` answers
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response
@@ -18,6 +19,7 @@ from application.ports import SESSION_TTL_SECONDS
 from interfaces.http.deps import SESSION_COOKIE, key_matches, session_ok
 
 router = APIRouter()
+log = logging.getLogger("flow-controller")
 
 
 class Credentials(BaseModel):
@@ -59,6 +61,15 @@ def create_first_user(username: str, password: str) -> None:
         created = store.create_user(username, password)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except (sqlite3.Error, OSError):
+        # A read-only config volume cannot hold the account. Saying so beats an
+        # anonymous 500, and it must not be papered over with an in-memory user:
+        # after a restart the install would look unclaimed and open.
+        log.exception("could not persist the login account")
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo guardar la cuenta: el directorio de configuración no es escribible",
+        )
     if not created:
         raise HTTPException(status_code=409, detail="Ya existe un usuario")
 

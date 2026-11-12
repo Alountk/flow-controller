@@ -230,3 +230,34 @@ class TestTheUnauthorizedText:
 
         assert no_header.json()["detail"] == "API key inválida"
         assert wrong_key.json()["detail"] == "API key inválida"
+
+
+class _ReadOnlyVolumeStore:
+    """Reads fine (nobody registered yet) but cannot write the account."""
+
+    def has_user(self):
+        return False
+
+    def create_user(self, username, password):
+        import sqlite3
+
+        raise sqlite3.OperationalError("unable to open database file")
+
+
+class TestAnUnwritableConfigVolume:
+    def test_register_says_why_instead_of_a_500(self):
+        with patch.object(gateways, "login", _ReadOnlyVolumeStore()):
+            resp = TestClient(app, raise_server_exceptions=False).post(
+                "/api/auth/register", json={"username": "raul", "password": PASSWORD}
+            )
+
+        assert resp.status_code == 503
+        assert "directorio de configuración" in resp.json()["detail"]
+
+    def test_the_install_stays_unclaimed_and_no_session_is_issued(self):
+        with patch.object(gateways, "login", _ReadOnlyVolumeStore()):
+            resp = TestClient(app, raise_server_exceptions=False).post(
+                "/api/auth/register", json={"username": "raul", "password": PASSWORD}
+            )
+
+        assert "set-cookie" not in resp.headers

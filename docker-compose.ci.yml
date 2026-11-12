@@ -10,3 +10,8 @@ services:
       - SAFE_MODE=true
       - DEVELOPER=false
       - API_KEY=test-key
+    # The image's /app/config belongs to root and the service runs as 1000:1000,
+    # so without this nothing persists: settings, history and now the login
+    # account (register would answer 503). Production mounts a writable volume.
+    tmpfs:
+      - /app/config:uid=1000,gid=1000
