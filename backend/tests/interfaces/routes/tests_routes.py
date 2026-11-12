@@ -2602,6 +2602,14 @@ class TestAuthBoundary:
         # write anything once a key exists (see TestFirstRunSetup), so it is not
         # an open door to a configured deployment.
         "/api/setup",
+        # The login door: a browser has no session until these answer. A wrong
+        # password is a 401 the edge counts; `me` always answers 200 so the
+        # boot probe is free; `register` refuses once a user exists and, on an
+        # install with a key, demands that key (see tests_auth_routes).
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/me",
+        "/api/auth/register",
         # /api/mediacover serves poster images to an <img src>, which cannot
         # send an X-Api-Key header: gating it would silently blank every poster
         # the moment anyone configured a key. The exposure is bounded on

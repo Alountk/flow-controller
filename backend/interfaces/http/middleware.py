@@ -49,13 +49,14 @@ import hashlib
 import logging
 import re
 import uuid
+from urllib.parse import urlsplit
 
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from application.gateways import auth_required
-from interfaces.http.deps import key_matches
+from interfaces.http.deps import SESSION_COOKIE, key_matches, session_ok
 from interfaces.http.rate_limit import FixedWindow
 
 log = logging.getLogger("flow-controller")
@@ -89,11 +90,33 @@ def _client_key(request: Request, address: str) -> str:
     bucket, so an attacker rotating guesses all land in the same address
     budget instead of minting one per guess.
     """
+    session = request.cookies.get(SESSION_COOKIE)
+    if session and auth_required() and session_ok(session):
+        return f"{address}|{hashlib.sha256(session.encode('utf-8')).hexdigest()[:16]}"
     presented = request.headers.get("x-api-key")
     if presented and auth_required() and key_matches(presented):
         digest = hashlib.sha256(presented.encode("utf-8")).hexdigest()[:16]
         return f"{address}|{digest}"
     return address
+
+
+_UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _cross_site_write(request: Request) -> bool:
+    """A cookie-carrying write whose Origin is another site.
+
+    SameSite=Strict already stops the browser sending the cookie cross-site;
+    this is the second lock. No Origin (curl, scripts) is not a browser
+    cross-site request, so it passes.
+    """
+    if request.method not in _UNSAFE or not request.cookies.get(SESSION_COOKIE):
+        return False
+    origin = request.headers.get("origin")
+    if not origin:
+        return False
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    return urlsplit(origin).netloc != host
 
 
 def _refused(retry_after: int, request_id: str, detail: str) -> JSONResponse:
@@ -113,6 +136,14 @@ class RequestGuards(BaseHTTPMiddleware):
         try:
             address = request.client.host if request.client else "unknown"
 
+            if _cross_site_write(request):
+                response = JSONResponse(
+                    status_code=403,
+                    content={"detail": "Origen no permitido"},
+                    headers={"X-Request-Id": request_id},
+                )
+                response.headers["X-Request-Id"] = request_id
+                return response
             wait = auth_failures.peek(address)
             if wait is not None:
                 response = _refused(wait, request_id, "Demasiados intentos de API key")

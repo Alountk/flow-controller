@@ -48,7 +48,7 @@ gateways.bind(
     login_store=auth_store.AuthStore(os.path.join(settings_store.CONFIG_DIR, "auth.db")),
 )
 
-from interfaces.http.routes import indexers as indexers_routes, settings as settings_routes, status as status_routes
+from interfaces.http.routes import auth as auth_routes, indexers as indexers_routes, settings as settings_routes, status as status_routes
 from interfaces.http.routes.wanted import router as wanted_router
 from interfaces.http.routes.calendar import router as calendar_router
 from interfaces.http.routes.files import router as files_router
@@ -125,7 +125,7 @@ app.add_middleware(RequestGuards)
 # ── Include routers ───────────────────────────────────────────────────────────
 
 # Mount order preserved; the loop keeps this file's counted lines for the lifespan above.
-for router in (status_routes.router, wanted_router, calendar_router, files_router,
+for router in (status_routes.router, auth_routes.router, wanted_router, calendar_router, files_router,
                actions_router, auto_copy_router, downloads_router, mediacover_router, amule_actions_router, amule_downloads_router,
                settings_router, amule_shares_router, mixer_router, events_router, activity_router, indexers_routes.router):
     app.include_router(router)

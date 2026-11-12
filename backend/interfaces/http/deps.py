@@ -7,9 +7,29 @@ the bag. FastAPI's `Depends` does not care where the callable comes from — onl
 that it is the same callable — so every signature keeps working unchanged.
 """
 
-from fastapi import Header, HTTPException
+import logging
+
+from fastapi import Cookie, Header, HTTPException
 
 from application.gateways import credentials
+
+log = logging.getLogger("flow-controller")
+
+#: The login session cookie: HttpOnly, so the page can never read it.
+SESSION_COOKIE = "fc_session"
+
+
+def session_ok(token: str | None) -> bool:
+    """Whether the cookie carries a live login session. A broken store means no."""
+    from application import gateways
+
+    if not token or gateways.login is None:
+        return False
+    try:
+        return gateways.login.session_valid(token)
+    except Exception:
+        log.exception("login store unreadable; treating the session as invalid")
+        return False
 
 
 def key_matches(x_api_key: str | None) -> bool:
@@ -30,17 +50,30 @@ def key_matches(x_api_key: str | None) -> bool:
     )
 
 
-async def verify_api_key(x_api_key: str | None = Header(default=None)):
-    """Reject anything that does not match the stored hash of the app key.
+def unauthorized() -> HTTPException:
+    """The 401. An install with an API key keeps the text clients already match on."""
+    from application.gateways import settings
 
-    The key itself is not kept anywhere, so this compares hashes in constant
-    time instead of the two strings.
+    detail = "API key inválida" if settings.auth_required() else "No autenticado"
+    return HTTPException(status_code=401, detail=detail)
+
+
+async def verify_api_key(
+    x_api_key: str | None = Header(default=None),
+    fc_session: str | None = Cookie(default=None),
+):
+    """Let in a live login session or the (optional) script key; reject the rest.
+
+    The name stays because ~140 routes depend on it. The key itself is not
+    kept anywhere, so it is compared by hash in constant time.
     """
     from application.gateways import auth_required as _auth_required
 
     if not _auth_required():
         return ""
 
-    if not key_matches(x_api_key):
-        raise HTTPException(status_code=401, detail="API key inválida")
-    return x_api_key
+    if session_ok(fc_session):
+        return ""
+    if key_matches(x_api_key):
+        return x_api_key
+    raise unauthorized()
