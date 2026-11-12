@@ -194,3 +194,70 @@ class TestScanScoringIsOffTheEventLoop:
         assert resp.json().get("ok") is not False, resp.text
         assert "scoring" in seen, "the scoring never ran — the test did not reach phase 3"
         assert seen["scoring"] is False, "folder scoring ran on the event loop"
+
+
+class TestMutationsRejectEmptyAndRootPaths:
+    """An empty path resolves to `.` and a root is the whole volume: neither may be deleted or copied."""
+
+    def test_delete_with_an_empty_path_is_rejected_and_touches_nothing(self):
+        with patch("interfaces.http.routes.files.place_file.delete_path") as delete:
+            resp = client.post("/api/files/delete", json={"remote_path": ""})
+
+        assert resp.status_code == 400, resp.text
+        delete.assert_not_called()
+
+    def test_delete_of_an_allowed_root_is_rejected(self):
+        import config
+
+        root = config.ALLOWED_ROOTS[0]
+        with patch("interfaces.http.routes.files.place_file.delete_path") as delete:
+            resp = client.post("/api/files/delete", json={"remote_path": root})
+
+        assert resp.status_code == 403, resp.text
+        delete.assert_not_called()
+
+    def test_copy_with_an_empty_source_or_destination_is_rejected(self):
+        with patch("interfaces.http.routes.files.place_file.copy_path") as copy:
+            no_src = client.post("/api/files/copy", json={"remote_path": "", "local_path": "/mnt/storage/x"})
+            no_dst = client.post("/api/files/copy", json={"remote_path": "/mnt/storage/x", "local_path": ""})
+
+        assert no_src.status_code == 400, no_src.text
+        assert no_dst.status_code == 400, no_dst.text
+        copy.assert_not_called()
+
+    def test_rename_rejects_an_allowed_root_and_empty_paths(self):
+        import config
+
+        root = config.ALLOWED_ROOTS[0]
+        with patch("interfaces.http.routes.files.place_file.rename_path") as rename:
+            of_root = client.post("/api/files/rename", json={"remote_path": root, "local_path": root + "-x"})
+            no_dst = client.post("/api/files/rename", json={"remote_path": root + "/a", "local_path": ""})
+
+        assert of_root.status_code == 403, of_root.text
+        assert no_dst.status_code == 400, no_dst.text
+        rename.assert_not_called()
+
+    def test_queue_move_of_an_allowed_root_is_rejected_and_nothing_is_queued(self):
+        import config
+        from state import file_queue
+
+        root = config.ALLOWED_ROOTS[0]
+        before = len(file_queue)
+        resp = client.post("/api/files/queue/add",
+                           json={"source": "move", "remote_path": root, "local_path": root + "/elsewhere"})
+
+        assert resp.status_code == 403, resp.text
+        assert len(file_queue) == before
+
+    def test_copy_and_move_into_their_own_subfolder_are_rejected(self):
+        import config
+
+        root = config.ALLOWED_ROOTS[0]
+        body = {"remote_path": root + "/A", "local_path": root + "/A/sub/A"}
+        with patch("interfaces.http.routes.files.place_file.copy_path") as copy:
+            copied = client.post("/api/files/copy", json=body)
+        queued = client.post("/api/files/queue/add", json={**body, "source": "move"})
+
+        assert copied.status_code == 400, copied.text
+        assert queued.status_code == 400, queued.text
+        copy.assert_not_called()
