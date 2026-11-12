@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../../app/App.tsx'
 import { Sidebar } from '../../app/Sidebar.tsx'
-import { rememberApiKey, forgetApiKey, setUnauthorizedHandler } from '../../shared/api/auth.ts'
+import { markSessionActive, resetSession, setUnauthorizedHandler } from '../../shared/api/auth.ts'
 import type { ServiceKey } from '../../shared/types.ts'
 
 /**
@@ -89,15 +89,15 @@ describe('sidebar with unconfigured services', () => {
 
 describe('the app reflects what is configured', () => {
   beforeEach(() => {
-    forgetApiKey()
-    rememberApiKey('clave')
+    resetSession()
+    markSessionActive()
     window.location.hash = ''
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
     setUnauthorizedHandler(null)
-    forgetApiKey()
+    resetSession()
   })
 
   it('hides the arr-dependent pages when no arr is configured', async () => {
@@ -107,7 +107,9 @@ describe('the app reflects what is configured', () => {
     // Wait for PRESENCE first: asserting absence passes while the app is still
     // on its loading screen, proving nothing.
     await waitFor(() => expect(screen.getByText('Archivos')).toBeInTheDocument())
-    expect(screen.queryByText('Películas V2')).not.toBeInTheDocument()
+    // The services answer now arrives after the sign-in check, so the arr
+    // pages show until it lands and are then hidden.
+    await waitFor(() => expect(screen.queryByText('Películas V2')).not.toBeInTheDocument())
     expect(screen.queryByText('Series')).not.toBeInTheDocument()
     expect(screen.queryByText('Seguimiento')).not.toBeInTheDocument()
   })
@@ -188,15 +190,15 @@ describe('the app reflects what is configured', () => {
 
 describe('unreadable credentials are announced', () => {
   beforeEach(() => {
-    forgetApiKey()
-    rememberApiKey('clave')
+    resetSession()
+    markSessionActive()
     window.location.hash = ''
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
     setUnauthorizedHandler(null)
-    forgetApiKey()
+    resetSession()
   })
 
   function mockWithEncryptionError() {

@@ -1,123 +1,137 @@
 /**
  * Shared authentication module.
  *
- * The key is NOT served by the backend: /api/config is anonymous, and handing
- * the key out there let anyone reaching the port bootstrap to every stored
- * credential via /api/settings. Instead the user enters the key once and the
- * browser remembers it ("bring your own key").
- *
- * It is read synchronously at module load so no request can fire before the
- * key is in place.
+ * The browser authenticates with a login session: the backend sets an
+ * HttpOnly cookie that scripts cannot read, so there is nothing to remember
+ * here. What this module keeps is one flag: whether THIS page ever held a live
+ * session, which is what tells a mid-session 401 (ask again) from the expected
+ * 401 of the probes that mount before anyone has signed in.
  */
 
-const STORAGE_KEY = 'flow-controller-api-key'
+export interface AuthState {
+  authenticated: boolean
+  auth_required: boolean
+  has_user: boolean
+}
 
-function readStored(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEY) ?? ''
-  } catch {
-    // Private mode or storage disabled: fall back to in-memory only.
-    return ''
+/** A login/register failure with the message the backend gave. */
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AuthError'
   }
 }
 
-let _apiKey = readStored()
+let _hadSession = false
 
-export function setApiKey(key: string) {
-  _apiKey = key
+/** The page is signed in from now on; a later 401 means the session ended. */
+export function markSessionActive() {
+  _hadSession = true
 }
 
-export function rememberApiKey(key: string) {
-  setApiKey(key)
-  try {
-    localStorage.setItem(STORAGE_KEY, key)
-  } catch {
-    // Not fatal: the key still works for this session.
-  }
-}
-
-export function forgetApiKey() {
-  _apiKey = ''
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch {
-    // Nothing to clean up.
-  }
-}
-
-/** Whether a key is available without asking the user. */
-export function hasStoredApiKey(): boolean {
-  return _apiKey !== ''
-}
-
-/** Validate a key against a protected endpoint. */
-export async function verifyApiKey(key: string): Promise<boolean> {
-  try {
-    const res = await fetch('/api/auth/check', { headers: { 'X-Api-Key': key } })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
-export function getApiKey(): string {
-  return _apiKey
+export function resetSession() {
+  _hadSession = false
 }
 
 export function authHeaders(): Record<string, string> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (_apiKey) h['X-Api-Key'] = _apiKey
-  return h
+  return { 'Content-Type': 'application/json' }
 }
 
+/** Who am I? Always answers 200, so asking never spends the 401 budget. */
+export async function fetchAuthState(): Promise<AuthState> {
+  const res = await fetch('/api/auth/me')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const state = (await res.json()) as AuthState
+  if (state.authenticated && state.has_user !== false) markSessionActive()
+  return state
+}
+
+async function post(url: string, body: unknown, headers: Record<string, string> = {}) {
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { ...authHeaders(), ...headers },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new AuthError('No se pudo conectar con el servidor')
+  }
+  if (!res.ok) {
+    const parsed = (await res.json().catch(() => ({}))) as { detail?: string }
+    throw new AuthError(parsed.detail || `Error ${res.status}`)
+  }
+  markSessionActive()
+}
+
+export function login(username: string, password: string): Promise<void> {
+  return post('/api/auth/login', { username, password })
+}
+
+/** Needs the current password too; the server keeps this browser signed in. */
+export function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return post('/api/auth/password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  })
+}
+
+/**
+ * Create THE administrator. An install that still has its old API key must
+ * present it once (`currentApiKey`): that is the proof it belongs to you.
+ */
+export function register(username: string, password: string, currentApiKey = ''): Promise<void> {
+  return post(
+    '/api/auth/register',
+    { username, password },
+    currentApiKey ? { 'X-Api-Key': currentApiKey } : {},
+  )
+}
+
+export async function logout(): Promise<void> {
+  resetSession()
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+}
 
 /* ── Central 401 handling ──────────────────────────────────────────────────
  *
- * The key used to be validated exactly once, at boot. If it was later cleared,
- * rotated, or rejected, every call failed and the app never asked again — the
- * user just saw broken panels.
- *
- * Every request now goes through `apiFetch`, which reacts to a 401 by
- * forgetting the key and telling the app to ask for it again.
+ * Every request goes through `apiFetch`, which reacts to a 401 on a page that
+ * held a session by telling the app to show the login again.
  */
 
 type UnauthorizedHandler = () => void
 
 let _onUnauthorized: UnauthorizedHandler | null = null
 
-/** The app registers how to react when the backend rejects the key. */
+/** The app registers how to react when the session is gone. */
 export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
   _onUnauthorized = handler
 }
 
-/** Thrown when the backend rejects the key, so callers can skip their own UI. */
+/** Thrown on a 401, so callers can skip their own error UI. */
 export class UnauthorizedError extends Error {
   constructor() {
-    super('API key rechazada')
+    super('Sesión no válida')
     this.name = 'UnauthorizedError'
   }
 }
 
 /**
- * `fetch` with the auth header, plus one place that handles a rejected key.
+ * `fetch` plus one place that handles a lost session.
  *
- * On 401: forget the stored key and signal the app, so the key is asked for
- * again instead of silently failing every subsequent call.
+ * A 401 on a page that never had a session is not a lost session — it is the
+ * expected answer to the probes that fire before sign-in
+ * (`useConfiguredServices` mounts with the shell). Signalling on those would
+ * bounce the app back to the login right after a successful one.
  */
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const headers = { ...authHeaders(), ...(init.headers as Record<string, string> | undefined) }
   const res = await fetch(input, { ...init, headers })
 
   if (res.status === 401) {
-    // A 401 on a request that carried NO key is not a rejected key — it is the
-    // expected answer to the probes that fire before one exists. The hook
-    // `useConfiguredServices` mounts with the shell, ahead of any key, and its
-    // rejection used to arrive after a successful login and knock the app
-    // straight back to the key prompt: the dashboard rendered nothing and no
-    // test of the login flow alone could see why.
-    const hadKey = Boolean(_apiKey)
-    forgetApiKey()
-    if (hadKey) _onUnauthorized?.()
+    const hadSession = _hadSession
+    resetSession()
+    if (hadSession) _onUnauthorized?.()
     throw new UnauthorizedError()
   }
 

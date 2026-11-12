@@ -22,7 +22,9 @@ interface ServicesResponse {
  * with an error, because the user expects it to work and needs to know it does
  * not.
  */
-export function useConfiguredServices() {
+/** `enabled` keeps the login screen from spending the 401 budget on a request
+ *  that cannot succeed yet. */
+export function useConfiguredServices(enabled = true) {
   const query = useQuery({
     queryKey: ['services'],
     queryFn: async (): Promise<ServicesResponse> => {
@@ -31,6 +33,7 @@ export function useConfiguredServices() {
       return (await res.json()) as ServicesResponse
     },
     staleTime: 60_000,
+    enabled,
   })
 
   const configured = query.data?.configured ?? []

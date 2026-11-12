@@ -205,7 +205,7 @@ class MockEventSource {
 
 /** The arrangement App uses: the hook owns the status, the provider passes it down. */
 function StreamHarness({ children }: { children: ReactNode }) {
-  const stream = useEventStream(false)
+  const stream = useEventStream(true)
   return <EventStreamContext.Provider value={stream}>{children}</EventStreamContext.Provider>
 }
 

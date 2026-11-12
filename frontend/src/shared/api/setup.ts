@@ -30,7 +30,6 @@ export interface SetupStepBody {
   intervals?: Record<string, number>
   tracing?: { limit?: number }
   server?: { port?: number }
-  api_key?: string
 }
 
 export interface SetupSaveResult {
@@ -49,8 +48,8 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
 /**
  * Save one wizard step.
  *
- * Anonymous while the install has no app key — and it answers 403 the moment
- * one exists, which is why the protection step is the last one that writes.
+ * Needs the signed-in administrator: the account is created before the wizard,
+ * so it answers 403 to anyone else.
  */
 export async function saveSetupStep(body: SetupStepBody): Promise<SetupSaveResult> {
   const res = await apiFetch('/api/setup', {

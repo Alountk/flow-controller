@@ -113,7 +113,9 @@ ALLOWED_INWARD: dict[str, set[str]] = {
 #: 3603 -> 3604 (pagina-descargas T2 / S2-S3): the `amule_downloads_router` import
 #: line in `app.py` (+1; the tuple entry fit on the existing line). Router wiring,
 #: the amule-control +1 precedent — disclosed as wiring debt in the PR.
-MAX_LEGACY_LOC = 3604
+#: 3604 -> 3605 (login-auth T1 / S2): the `login_store=` argument of `gateways.bind`
+#: in `app.py` (+1). Composition-root wiring — disclosed as wiring debt in the PR.
+MAX_LEGACY_LOC = 3605
 
 
 def _is_ignored(rel: pathlib.PurePath) -> bool:

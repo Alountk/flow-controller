@@ -4,9 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../../app/App.tsx'
 import {
   apiFetch,
-  forgetApiKey,
-  hasStoredApiKey,
-  rememberApiKey,
+  markSessionActive,
+  resetSession,
   setUnauthorizedHandler,
   UnauthorizedError,
 } from '../../shared/api/auth.ts'
@@ -14,10 +13,10 @@ import {
 /**
  * Central auth handling.
  *
- * Two bugs motivated this: `fetchJson` sent no auth header at all, so the
- * dashboard's own calls failed once those routes started requiring the key; and
- * the key was only validated once at boot, so a cleared or rotated key left
- * every panel failing with no way to re-enter it.
+ * The session lives in an HttpOnly cookie the browser sends by itself, so
+ * `apiFetch` adds no credential header. What it still owns is the reaction to
+ * a 401: a page that held a session goes back to the login, instead of every
+ * panel failing with no way to sign in again.
  */
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
@@ -33,7 +32,7 @@ const ok = (body: unknown = {}) =>
 
 describe('apiFetch', () => {
   beforeEach(() => {
-    forgetApiKey()
+    resetSession()
     setUnauthorizedHandler(null)
   })
 
@@ -42,46 +41,47 @@ describe('apiFetch', () => {
     setUnauthorizedHandler(null)
   })
 
-  it('sends the stored key as a header', async () => {
-    rememberApiKey('mi-clave')
+  it('sends no credential header: the session cookie travels by itself', async () => {
+    markSessionActive()
     const fn = mockFetch(() => ok())
 
     await apiFetch('/api/status')
 
     const [, init] = fn.mock.calls[0]
-    expect((init?.headers as Record<string, string>)['X-Api-Key']).toBe('mi-clave')
+    const headers = init?.headers as Record<string, string>
+    expect(headers['X-Api-Key']).toBeUndefined()
+    expect(headers['Content-Type']).toBe('application/json')
   })
 
-  it('forgets the key and notifies on 401', async () => {
-    rememberApiKey('caducada')
+  it('notifies once on a 401 after a session, then stops until a new one', async () => {
+    markSessionActive()
     const onUnauthorized = vi.fn()
     setUnauthorizedHandler(onUnauthorized)
     mockFetch(() => ({ ok: false, status: 401, json: async () => ({}) }) as Response)
 
     await expect(apiFetch('/api/status')).rejects.toBeInstanceOf(UnauthorizedError)
+    await expect(apiFetch('/api/status')).rejects.toBeInstanceOf(UnauthorizedError)
 
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
-    expect(hasStoredApiKey()).toBe(false)
   })
 
   it('leaves other failures to the caller and does not notify', async () => {
-    rememberApiKey('buena')
+    markSessionActive()
     const onUnauthorized = vi.fn()
     setUnauthorizedHandler(onUnauthorized)
     mockFetch(() => ({ ok: false, status: 500, json: async () => ({}) }) as Response)
 
-    // Only 401 is a credential problem; a 500 must not log the user out.
+    // Only 401 is a credential problem; a 500 must not sign the user out.
     const res = await apiFetch('/api/status')
 
     expect(res.status).toBe(500)
     expect(onUnauthorized).not.toHaveBeenCalled()
-    expect(hasStoredApiKey()).toBe(true)
   })
 })
 
-describe('the app sends its auth header', () => {
+describe('the app under a session', () => {
   beforeEach(() => {
-    forgetApiKey()
+    resetSession()
     window.location.hash = ''
   })
 
@@ -90,50 +90,14 @@ describe('the app sends its auth header', () => {
     setUnauthorizedHandler(null)
   })
 
-  it('authenticates the dashboard calls, not just the page-level ones', async () => {
-    // The regression: fetchJson called bare fetch, so /api/status, /api/trace
-    // and /api/actions went out without the key and failed with 401.
-    rememberApiKey('clave-valida')
-    const fn = mockFetch((url) => {
+  function routes(rejectStatus: () => boolean) {
+    return (url: string) => {
       if (url.includes('/api/config')) return ok({ developer: false, auth_required: true })
-      if (url.includes('/api/auth/check')) return ok({ ok: true })
-      if (url.includes('/api/status')) return ok({ radarr: 'online:ok', sonarr: 'online:ok', amutorrent: 'online:ok', flow: 'running' })
-      if (url.includes('/api/trace')) return ok({ items: [], summary: {} })
-      if (url.includes('/api/actions')) return ok({ actions: {} })
-      if (url.includes('/api/downloads')) return ok({ downloads: [], errors: [] })
-      if (url.includes('/api/services')) {
-        return ok({ services: [], configured: ['radarr', 'sonarr', 'amutorrent'] })
+      if (url.includes('/api/auth/me')) {
+        return ok({ authenticated: true, auth_required: true, has_user: true })
       }
-      return ok({})
-    })
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-
-    render(
-      <QueryClientProvider client={client}>
-        <App />
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => {
-      const statusCall = fn.mock.calls.find(([url]) => String(url).includes('/api/status'))
-      expect(statusCall).toBeDefined()
-    })
-
-    const statusCall = fn.mock.calls.find(([url]) => String(url).includes('/api/status'))!
-    const headers = statusCall[1]?.headers as Record<string, string>
-    expect(headers['X-Api-Key']).toBe('clave-valida')
-  })
-
-  it('returns to the key prompt when a call is rejected mid-session', async () => {
-    // The reported bug: the key was only checked at boot, so a later rejection
-    // left the app failing with no way to enter it again.
-    rememberApiKey('se-invalido')
-    let rejectStatus = false
-    mockFetch((url) => {
-      if (url.includes('/api/config')) return ok({ developer: false, auth_required: true })
-      if (url.includes('/api/auth/check')) return ok({ ok: true })
       if (url.includes('/api/status')) {
-        return rejectStatus
+        return rejectStatus()
           ? ({ ok: false, status: 401, json: async () => ({}) } as Response)
           : ok({ radarr: 'online:ok', sonarr: 'online:ok', amutorrent: 'online:ok', flow: 'running' })
       }
@@ -144,22 +108,44 @@ describe('the app sends its auth header', () => {
         return ok({ services: [], configured: ['radarr', 'sonarr', 'amutorrent'] })
       }
       return ok({})
-    })
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    }
+  }
 
+  function renderApp() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
         <App />
       </QueryClientProvider>,
     )
+    return client
+  }
 
-    // Authenticated to start with: no prompt.
-    await waitFor(() => expect(screen.queryByLabelText('API key')).not.toBeInTheDocument())
+  it('loads the dashboard calls with no extra credential', async () => {
+    const fn = mockFetch(routes(() => false))
+    renderApp()
 
-    // The backend starts rejecting the stored key.
+    await waitFor(() => {
+      expect(fn.mock.calls.some(([url]) => String(url).includes('/api/status'))).toBe(true)
+    })
+    const statusCall = fn.mock.calls.find(([url]) => String(url).includes('/api/status'))!
+    expect((statusCall[1]?.headers as Record<string, string>)['X-Api-Key']).toBeUndefined()
+  })
+
+  it('returns to the login when a call is rejected mid-session', async () => {
+    let rejectStatus = false
+    mockFetch(routes(() => rejectStatus))
+    const client = renderApp()
+
+    // Signed in to start with: no login screen.
+    await waitFor(() => expect(screen.queryByLabelText('Usuario')).not.toBeInTheDocument())
+    await screen.findByRole('heading', { level: 1, name: 'Dashboard' })
+
+    // The session ends server-side.
     rejectStatus = true
     await client.refetchQueries({ queryKey: ['status'] })
 
-    await waitFor(() => expect(screen.getByLabelText('API key')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByLabelText('Usuario')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument()
   })
 })

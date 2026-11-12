@@ -53,11 +53,10 @@ const Settings = lazy(() =>
 
 import {
   apiFetch,
-  forgetApiKey,
-  getApiKey,
-  hasStoredApiKey,
+  fetchAuthState,
+  logout,
   setUnauthorizedHandler,
-  verifyApiKey,
+  type AuthState,
 } from '../shared/api/auth.ts'
 import { usePageRoute } from '../shared/hooks/usePageRoute.ts'
 import { useHashState } from '../shared/hooks/useHashState.ts'
@@ -128,11 +127,15 @@ const PAGE_SUBTITLES: Partial<Record<Page, string>> = {
 
 function App() {
   const queryClient = useQueryClient()
-  const { ready: servicesReady, isConfigured, hasAnyArr } = useConfiguredServices()
 
-  // Declared before the queries: they are gated on it.
-  const [authenticated, setAuthenticated] = useState(false)
-  const [checkingStored, setCheckingStored] = useState(true)
+  // Declared before the queries: they are gated on it. `null` while /api/auth/me
+  // is in flight. A missing field never gates anything: only an explicit
+  // `false` from the backend does.
+  const [authState, setAuthState] = useState<AuthState | null>(null)
+  const authenticated =
+    authState !== null && authState.has_user !== false && authState.authenticated !== false
+
+  const { ready: servicesReady, isConfigured, hasAnyArr } = useConfiguredServices(authenticated)
 
   const { data: configData } = useQuery<ConfigResponse>({
     queryKey: ['config'],
@@ -142,17 +145,16 @@ function App() {
 
   // Mounted ONCE, shell-wide: server events invalidate queries the moment
   // they happen; every refetchInterval stays as the fallback (sse-events T3).
-  // The stream is gated on auth being satisfied (key stored OR auth
-  // disabled): while /api/config is still loading, treat auth as required
-  // and fail closed — a keyless EventSource would 401-retry into C-05's
-  // auth-failure budget before the user ever reaches the key prompt.
+  // The stream is gated on being signed in: a cookieless EventSource would
+  // 401-retry into C-05's auth-failure budget before the user ever reaches the
+  // login.
   // B1: the returned status is what the provider below feeds to the task
   // polls — connected, they sleep; disconnected (the default), they stand.
   // B2: it also feeds the status/trace queries below — the backend
   // announces both surfaces (check_all publishes after every check; the
   // trace refresher on the TTL), so connected they sleep too. Declared
   // above them because they gate on `connected`.
-  const eventStream = useEventStream(configData?.auth_required ?? true)
+  const eventStream = useEventStream(authenticated)
 
   // Hoisted with the queries: the dashboard-only readers below gate on it.
   const [page, setPage] = usePageRoute()
@@ -234,60 +236,45 @@ function App() {
     enabled: authenticated && page === 'dashboard',
   })
 
-  // A fresh install has no key to authenticate with, so it gets the setup page
-  // instead of the key prompt.
+  // The first-run wizard follows the account: the administrator is created
+  // first, so by the time the wizard shows the page is already signed in.
   const { data: setupData } = useQuery({
     queryKey: ['setup'],
     queryFn: fetchSetupStatus,
     staleTime: Infinity,
-    enabled: configData !== undefined && !configData.auth_required,
+    enabled: authenticated,
   })
 
-
-  // The backend no longer serves the key, so one is either already remembered
-  // by this browser or the user is asked for it.
-
+  // Who is this browser? Asked once the backend is reachable; the answer picks
+  // between creating the administrator, the login, or the app.
   useEffect(() => {
     if (!configData) return
-
-    if (!configData.auth_required) {
-      setAuthenticated(true)
-      setCheckingStored(false)
-      return
-    }
-
-    // A remembered key may have been rotated on the server, so validate it
-    // rather than trusting it and firing a screenful of 401s.
-    if (!hasStoredApiKey()) {
-      setCheckingStored(false)
-      return
-    }
     let active = true
-    verifyApiKey(getApiKey()).then((ok) => {
-      if (!active) return
-      if (ok) setAuthenticated(true)
-      else forgetApiKey()
-      setCheckingStored(false)
-    })
+    fetchAuthState()
+      .then((state) => active && setAuthState(state))
+      .catch(() => active && setAuthState({ authenticated: false, auth_required: true, has_user: true }))
     return () => {
       active = false
     }
   }, [configData])
 
+  async function handleLogout() {
+    await logout()
+    queryClient.clear()
+    setAuthState({ authenticated: false, auth_required: true, has_user: true })
+  }
+
   function handleAuthenticated() {
-    setAuthenticated(true)
+    setAuthState({ authenticated: true, auth_required: true, has_user: true })
     // The data queries failed while unauthenticated; refetch them now.
     queryClient.invalidateQueries()
   }
 
-  // Any 401 from anywhere brings the user back to the key prompt. Without this
-  // the key was only checked once at boot, so a cleared or rotated key left
-  // every panel failing silently.
+  // Any 401 on a page that held a session brings the user back to the login.
   useEffect(() => {
-    setUnauthorizedHandler(() => {
-      setAuthenticated(false)
-      setCheckingStored(false)
-    })
+    setUnauthorizedHandler(() =>
+      setAuthState({ authenticated: false, auth_required: true, has_user: true }),
+    )
     return () => setUnauthorizedHandler(null)
   }, [])
 
@@ -329,26 +316,24 @@ function App() {
   // healthy. Nothing configured is not the same as everything working.
   const nothingConfigured = servicesReady && services.length === 0
 
-  // Waiting on /api/config, or validating a remembered key.
-  if (checkingStored) {
+  // Waiting on /api/config and /api/auth/me.
+  if (authState === null) {
     return <div className="app-loading">Cargando…</div>
   }
 
-  if (configData?.auth_required && !authenticated) {
-    return <AuthGate onAuthenticated={handleAuthenticated} />
-  }
-
-  if (!configData?.auth_required && setupData?.needs_setup) {
+  // The first thing anyone sees: create the administrator, or sign in.
+  if (!authenticated) {
     return (
-      <SetupPage
-        onDone={() => {
-          // The new config needs a refetch, and setting a key takes effect at
-          // once, so the browser must already hold it.
-          queryClient.invalidateQueries()
-          setAuthenticated(true)
-        }}
+      <AuthGate
+        mode={authState.has_user === false ? 'create' : 'login'}
+        needsApiKey={authState.has_user === false && authState.auth_required}
+        onAuthenticated={handleAuthenticated}
       />
     )
+  }
+
+  if (setupData?.needs_setup) {
+    return <SetupPage onDone={() => queryClient.invalidateQueries()} />
   }
 
   return (
@@ -363,6 +348,7 @@ function App() {
             lastUpdated={data ? Date.now() : null}
             right={<ServiceChips services={services} />}
             subtitle={PAGE_SUBTITLES[page]}
+            onLogout={authState.has_user ? handleLogout : undefined}
           />
 
           <div className="content-and-queue">

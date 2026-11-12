@@ -1,6 +1,6 @@
 import '../shared/ui/atoms.css'
 import { useEffect, useState } from 'react'
-import { apiFetch, rememberApiKey } from '../shared/api/auth.ts'
+import { apiFetch } from '../shared/api/auth.ts'
 import { saveSetupStep, type SetupSaveResult, type SetupStepBody } from '../shared/api/setup.ts'
 import { probeService, type ServiceTestResult } from '../shared/api/services.ts'
 import { Field } from '../shared/ui/Field.tsx'
@@ -42,7 +42,6 @@ type StepId =
   | 'amutorrent'
   | 'paths'
   | 'advanced'
-  | 'protect'
   | 'review'
 
 const STEPS: StepId[] = [
@@ -52,7 +51,6 @@ const STEPS: StepId[] = [
   'amutorrent',
   'paths',
   'advanced',
-  'protect',
   'review',
 ]
 
@@ -148,14 +146,12 @@ function seedFromSettings(data: Record<string, unknown>): Record<string, string>
 export function SetupPage({ onDone }: { onDone: () => void }) {
   const [current, setCurrent] = useState(0)
   const [form, setForm] = useState<Record<string, string>>({ ...DEFAULT_FORM })
-  const [apiKey, setApiKey] = useState('')
   const [probes, setProbes] = useState<Partial<Record<ServiceKey, ProbeState>>>({})
   const [notice, setNotice] = useState<{ tone: Tone; text: string } | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   // True once the app key exists: from then on POST /api/setup answers 403,
   // so every earlier step becomes read-only instead of failing on save.
-  const [writeLocked, setWriteLocked] = useState(false)
 
   // Show what the deployment actually has, not just the defaults: a step that
   // re-saves a group must not clobber values set through the environment.
@@ -246,8 +242,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
           tracing: { limit: numberOr('tracing.limit') },
           server: { port: numberOr('server.port') },
         }
-      case 'protect':
-        return { api_key: apiKey.trim() }
       default:
         return null
     }
@@ -278,15 +272,9 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
     setError('')
     try {
       const body = stepBody(step)
-      if (body && !writeLocked) {
+      if (body) {
         const res = await saveSetupStep(body)
         applyNotice(res)
-        if (step === 'protect' && apiKey.trim()) {
-          // The key takes effect immediately: every later request needs
-          // X-Api-Key, or a 401 sends the user to the AuthGate.
-          rememberApiKey(apiKey.trim())
-          setWriteLocked(true)
-        }
       }
       setCurrent((c) => c + 1)
     } catch (err) {
@@ -338,7 +326,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
         type={opts.type}
         placeholder={opts.placeholder}
         restart={opts.restart}
-        disabled={writeLocked}
         value={f[path] ?? ''}
         onChange={(v) => update(path, v)}
       />
@@ -539,28 +526,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
             </p>
           </>
         )
-      case 'protect':
-        return (
-          <>
-            <h2>Proteger la app</h2>
-            <p className="setup-lede">Última escritura del asistente.</p>
-            <div className="setup-form">
-              <Field
-                label="API key de la app"
-                type="password"
-                placeholder="Déjalo vacío para no protegerla"
-                disabled={writeLocked}
-                value={apiKey}
-                onChange={setApiKey}
-              />
-            </div>
-            <p className="setup-callout">
-              🛡️ Sin clave, cualquiera que alcance el puerto puede entrar. Con la clave definida, el
-              endpoint de primera ejecución responde 403: este asistente ya no puede escribir — por
-              eso es el último paso que guarda.
-            </p>
-          </>
-        )
       case 'review':
         return (
           <>
@@ -595,11 +560,7 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
                 f['server.port'],
                 <span className="settings-restart-badge">Requiere reinicio</span>,
               )}
-              {summaryRow(
-                'Protección',
-                apiKey.trim() ? 'Clave de la app definida' : 'Sin clave de la app',
-                <span className="sum-k">{apiKey.trim() ? 'protegida' : 'abierto'}</span>,
-              )}
+              {summaryRow('Acceso', 'Cuenta de administrador', <span className="sum-k">protegida</span>)}
             </div>
             {!canEnter && (
               <p className="setup-hint setup-enter-hint">
@@ -638,12 +599,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
             {notice.text}
           </div>
         )}
-        {writeLocked && step !== 'welcome' && step !== 'review' && (
-          <div className="setup-notice warn" role="status">
-            La clave de la app ya está definida: este paso ya no puede escribir. Los cambios se
-            hacen después, desde Configuración.
-          </div>
-        )}
 
         <section className="setup-step">{stepContent()}</section>
 
@@ -663,7 +618,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
             Atrás
           </button>
           <div className="setup-nav-right">
-            {step === 'protect' && <span className="setup-gate">Último paso que guarda</span>}
             <button
               type="button"
               className="action-btn setup-primary"

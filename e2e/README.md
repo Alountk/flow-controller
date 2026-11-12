@@ -81,6 +81,12 @@ cd e2e && npx playwright test specs/auth.spec.ts specs/dashboard-bare.spec.ts
 cd .. && docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
 ```
 
+Auth in the specs: the instance is born with `API_KEY=test-key`, so the first
+`login()` of a run goes through «Crear administrador» (presenting that key once
+as proof of ownership) and every later spec signs in as the same `admin`
+account. The `X-Api-Key: test-key` curls below keep working: the key is now only
+a token for scripts.
+
 Then seed the app's two sources (same commands as the CI step
 `Phase 2 — seed our sources (Torznab registry + qbit service)` — copy-paste
 after boot):

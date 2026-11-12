@@ -138,3 +138,4 @@ class TestTheConnectionTestAcceptsCandidates:
 
         assert resp.status_code in (200, 404), resp.text
         assert resp.json().get("ok") is False
+

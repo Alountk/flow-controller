@@ -61,7 +61,7 @@ function measureIn(page: Page, cardSel: string, bodySel: string, boardSel: strin
 }
 
 test('the kanban prototype fits its columns at the stacked breakpoint', async ({ app }) => {
-  await login(app, 'test-key');
+  await login(app);
   // The reported width: <=900px is where the sidebar stacks and the shell
   // used to stop wrapping. Measure exactly there, not at a comfortable size.
   await app.setViewportSize({ width: 900, height: 900 });
@@ -76,10 +76,10 @@ test('the kanban prototype fits its columns at the stacked breakpoint', async ({
 });
 
 test('the Seguimiento task rows fit the unified list (S2)', async ({ app }) => {
-  await login(app, 'test-key');
-  // login() returns the moment the button is clicked, but the key is only
-  // stored after the async verification answers. Navigating before that
-  // reloads the app with no key and drops us back on the AuthGate.
+  await login(app);
+  // login() returns the moment the button is clicked, but the session cookie is
+  // only set once the backend answers. Navigating before that reloads the app
+  // with no session and drops us back on the AuthGate.
   await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
 
   await app.goto('/seguimiento');
@@ -117,7 +117,7 @@ test('the Seguimiento task rows fit the unified list (S2)', async ({ app }) => {
 });
 
 test('the view is one filtered task list — tabs above, sweep below, no board (S2)', async ({ app }) => {
-  await login(app, 'test-key');
+  await login(app);
   await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
 
   await app.goto('/seguimiento');
@@ -176,7 +176,7 @@ test('the view is one filtered task list — tabs above, sweep below, no board (
 });
 
 test('the unified list fills the view — the 70/30 split is gone (S2)', async ({ app }) => {
-  await login(app, 'test-key');
+  await login(app);
   await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible({ timeout: 15000 });
 
   await app.goto('/seguimiento');

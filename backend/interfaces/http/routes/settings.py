@@ -6,7 +6,7 @@ import json
 import os
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException
 
 from application.gateways import credentials as credentials
 from config import BASE_DIR
@@ -14,7 +14,7 @@ from application.gateways import get_settings, save_settings
 from application.gateways import test_service_connection
 from application.use_cases import notifier
 from config import SERVICES, configured_services
-from interfaces.http.deps import verify_api_key
+from interfaces.http.deps import key_matches, session_ok, verify_api_key
 from state import http_session
 import config
 
@@ -473,32 +473,38 @@ async def list_services(_key: str = Depends(verify_api_key)):
 async def setup_status():
     """Whether this install still needs first-run configuration.
 
-    Anonymous on purpose: an unconfigured install has no key to authenticate
-    with, and it is already fully open in that state, so this reveals nothing
-    that /api/config does not.
+    Anonymous on purpose, and it reveals nothing that /api/config does not.
+    The admin is created BEFORE the wizard, so a login user no longer means
+    "already set up". What does: an API key (the install predates the login and
+    chose not to configure services) or any configured service. Forcing the
+    wizard on a keyed install would trap it, since «Entrar» needs Radarr or Sonarr.
     """
-    from application.gateways import auth_required
+    from application.gateways import auth_required, settings
 
     return {
-        "needs_setup": not auth_required() and not configured_services(),
+        "needs_setup": not settings.auth_required() and not configured_services(),
         "auth_required": auth_required(),
     }
 
 
 @router.post("/api/setup")
-async def run_setup(body: dict):
+async def run_setup(
+    body: dict,
+    x_api_key: str | None = Header(default=None),
+    fc_session: str | None = Cookie(default=None),
+):
     """Apply the first-run configuration.
 
-    Refuses outright once an API key exists. Without that guard this endpoint
-    would let anyone rewrite the deployment's credentials, since it has to be
-    reachable before authentication can work.
+    Open only while the install has no auth at all. Once the admin exists it
+    needs that admin's session (or the script key): without that guard this
+    endpoint would let anyone rewrite the deployment's credentials.
     """
     from application.gateways import auth_required, get_settings
 
-    if auth_required():
+    if auth_required() and not (session_ok(fc_session) or key_matches(x_api_key)):
         raise HTTPException(
             status_code=403,
-            detail="La aplicación ya está configurada. Usa Configuración para cambiarla.",
+            detail="La aplicación ya está configurada. Inicia sesión para cambiarla.",
         )
 
     incoming = body.get("services") or {}
@@ -525,7 +531,7 @@ async def run_setup(body: dict):
             continue
         merged.setdefault(group, {}).update(value)
 
-    # The app key is optional: leave it unset and the app stays open on the LAN.
+    # The API key is now an optional script token; the UI's door is the login.
     app_key = body.get("api_key", "")
     if app_key:
         credentials.set_app_key(merged, app_key)

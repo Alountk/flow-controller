@@ -144,24 +144,36 @@ async def _open(path: str, headers: dict[str, str] | None = None) -> _LiveStream
     return stream
 
 
-def test_the_right_query_key_opens_the_stream():
+class _Sessions:
+    def session_valid(self, token):
+        return token == "good-session"
+
+
+def test_a_login_session_cookie_opens_the_stream_and_a_query_key_no_longer_does():
+    """EventSource sends cookies by itself, so the key stays out of the URL."""
+    from application import gateways  # noqa: PLC0415
     from interfaces.http.routes import events as events_route  # noqa: PLC0415
 
     async def scenario():
         with patch("infrastructure.settings_store.auth_required", return_value=True), patch.object(
             deps_module, "credentials"
-        ) as creds:
+        ) as creds, patch.object(gateways, "login", _Sessions()):
             creds.verify_api_key.side_effect = lambda key, salt, stored: key == CORRECT_KEY
             with patch.object(events_route, "HEARTBEAT_SECONDS", 15.0):
-                stream = await _open(f"/api/events?key={CORRECT_KEY}")
+                stream = await _open("/api/events", headers={"Cookie": "fc_session=good-session"})
                 try:
-                    return stream.status, stream.headers
+                    opened = stream.status
                 finally:
                     await stream.disconnect()
+                try:
+                    await _open(f"/api/events?key={CORRECT_KEY}")
+                except AssertionError as exc:
+                    return opened, str(exc)
+                return opened, None
 
-    status, headers = asyncio.run(scenario())
-    assert status == 200
-    assert headers["content-type"].startswith("text/event-stream")
+    opened, refused = asyncio.run(scenario())
+    assert opened == 200
+    assert refused is not None and "API key inv" in refused  # the 401 body, not a stream
 
 
 def test_the_header_key_still_opens_the_stream():

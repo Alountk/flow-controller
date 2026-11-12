@@ -41,11 +41,11 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Cookie, Header
 from fastapi.responses import StreamingResponse
 
 import event_bus
-from interfaces.http.deps import key_matches
+from interfaces.http.deps import key_matches, session_ok, unauthorized
 
 router = APIRouter()
 
@@ -81,10 +81,13 @@ async def _stream():
 
 @router.get("/api/events")
 async def events(
-    key: str | None = Query(default=None),
     x_api_key: str | None = Header(default=None),
+    fc_session: str | None = Cookie(default=None),
 ):
-    """Open the stream for a reader that proved the key (or needs no key).
+    """Open the stream for a reader with a login session, the script key, or no auth.
+
+    The browser sends the session cookie by itself, so the key no longer
+    travels in the URL (and the proxy logs).
 
     Auth is checked BEFORE the stream opens: a 401 is a complete response,
     while an unauthorized stream would never end.
@@ -93,8 +96,8 @@ async def events(
     # composition root before any route can run.
     from application.gateways import auth_required as _auth_required
 
-    if _auth_required() and not key_matches(key or x_api_key):
-        raise HTTPException(status_code=401, detail="API key inválida")
+    if _auth_required() and not (session_ok(fc_session) or key_matches(x_api_key)):
+        raise unauthorized()
 
     return StreamingResponse(
         _stream(),

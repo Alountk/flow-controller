@@ -10,7 +10,7 @@ import { test, expect, login } from '../fixtures/app';
  */
 
 test('shows the honest empty state and gates the arr-dependent pages', async ({ app }) => {
-  await login(app, 'test-key');
+  await login(app);
 
   // Dashboard rendered (config loaded, key accepted).
   await expect(app.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();

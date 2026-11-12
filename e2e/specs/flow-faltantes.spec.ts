@@ -23,7 +23,7 @@ import { test, expect, login } from '../fixtures/app';
  */
 
 test('the stub listing renders rows and the catalogue filter is reachable', async ({ app }) => {
-  await login(app, 'test-key');
+  await login(app);
 
   // The nav link only exists when an arr is configured (App.tsx hiddenPages);
   // its label comes from Sidebar.tsx NAV_ITEMS — "Películas V2", the

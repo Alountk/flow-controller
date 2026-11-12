@@ -8,19 +8,14 @@
  * stays until SSE is proven in prod), and B1 only lets the TASK queries
  * covered in full sleep while the stream reports connected (see below).
  *
- * Auth: `EventSource` cannot send headers, so the key rides as `?key=` —
- * the same key `apiFetch` would put in `X-Api-Key`, read through the same
- * `getApiKey`.
+ * Auth: `EventSource` cannot send headers, but the browser sends the login's
+ * HttpOnly session cookie by itself, so the URL carries nothing secret.
  *
- * GATE: the stream opens only when auth is already satisfied — a key is
- * stored, OR auth is disabled (`authRequired === false`, the same
- * `auth_required` config `AuthGate` and `apiFetch` act on). Before login
- * (auth required, no key) a connection would 401 and EventSource would retry
- * ~every 3 s, filling C-05's AUTH_FAILURE_LIMIT (10/60 s per address) and
- * 429-ing the browser's OTHER requests — a broken stream must cost nothing.
- * `enabled` is part of the effect deps, so flipping auth closed the stream
- * (logout) and appearing key opens it (login): the key stays the secondary
- * trigger it always was.
+ * GATE: the stream opens only once the page is signed in. Before that a
+ * connection would 401 and EventSource would retry ~every 3 s, filling C-05's
+ * AUTH_FAILURE_LIMIT (10/60 s per address) and 429-ing the browser's OTHER
+ * requests — a broken stream must cost nothing. `enabled` is part of the
+ * effect deps, so signing out closes the stream and signing in opens it.
  *
  * Feature detection: jsdom has no `EventSource`, and a hardened browser may
  * have it blocked. Either way this hook must no-op — an app that crashes
@@ -43,7 +38,6 @@
 
 import { createContext, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { getApiKey } from '../api/auth.ts'
 
 export interface EventStreamStatus {
   connected: boolean
@@ -83,14 +77,8 @@ function parsePayload(data: string): TaskEvent | null {
   return null
 }
 
-export function useEventStream(authRequired: boolean): EventStreamStatus {
+export function useEventStream(enabled: boolean): EventStreamStatus {
   const queryClient = useQueryClient()
-  // Read at render time: logging in re-renders App, which re-runs the effect
-  // and reopens the stream WITH the key the first connection never had.
-  const apiKey = getApiKey()
-  // Condition (a) a key exists, or (b) auth is disabled — nothing else may
-  // open the stream (see the GATE note above).
-  const enabled = Boolean(apiKey) || !authRequired
   // B1: the latest stream event wins — `open` true, `error`/close false.
   const [connected, setConnected] = useState(false)
 
@@ -98,8 +86,7 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
     if (!enabled) return // auth pending: polling fallback covers everything
     if (typeof EventSource === 'undefined') return // blocked or non-browser: polling stands
 
-    const url = apiKey ? `/api/events?key=${encodeURIComponent(apiKey)}` : '/api/events'
-    const source = new EventSource(url)
+    const source = new EventSource('/api/events')
 
     const onOpen = () => setConnected(true)
     const onError = () => setConnected(false)
@@ -157,7 +144,7 @@ export function useEventStream(authRequired: boolean): EventStreamStatus {
       // covers task events until a replacement stream reports `open`.
       setConnected(false)
     }
-  }, [queryClient, apiKey, enabled])
+  }, [queryClient, enabled])
 
   // Memoized so a re-render of App that does not flip `connected` hands the
   // provider the same object and the gated consumers do not re-render.

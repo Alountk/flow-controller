@@ -226,6 +226,23 @@ class SettingsStore(Protocol):
     encryption_error: str
 
 
+#: A login session without a visit for this long is gone.
+SESSION_TTL_SECONDS = 30 * 24 * 3600
+
+
+@runtime_checkable
+class LoginStore(Protocol):
+    """The one user and the sessions that prove a login."""
+
+    def has_user(self) -> bool: ...
+    def create_user(self, username: str, password: str) -> bool: ...
+    def verify_login(self, username: str, password: str) -> bool: ...
+    def change_password(self, current: str, new: str) -> bool: ...
+    def create_session(self) -> str: ...
+    def session_valid(self, token: str) -> bool: ...
+    def delete_session(self, token: str) -> None: ...
+
+
 @runtime_checkable
 class OpenSubtitlesClient(Protocol):
     """The subtitles extraction could not give (S6): find and download.

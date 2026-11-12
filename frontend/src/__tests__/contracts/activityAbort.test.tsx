@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../../app/App.tsx'
-import { forgetApiKey, setUnauthorizedHandler } from '../../shared/api/auth.ts'
+import { resetSession, setUnauthorizedHandler } from '../../shared/api/auth.ts'
 
 /**
  * B-12 — the activity queryFn never handed React Query's abort signal to the
@@ -26,7 +26,7 @@ const ok = (body: unknown = {}) =>
 
 describe('activity fetch abort (B-12)', () => {
   beforeEach(() => {
-    forgetApiKey()
+    resetSession()
     setUnauthorizedHandler(null)
     window.location.hash = ''
   })

@@ -1,15 +1,14 @@
-import { test as base, expect, type Page } from '@playwright/test';
+import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test';
 
 export { expect };
 
 /**
  * Fresh browser context per test.
  *
- * The API key lives in localStorage (`flow-controller-api-key`, written by
- * `rememberApiKey`), so a key logged in by one test must never be visible to
- * the next. Playwright already creates a new context per test; this fixture
- * makes that the explicit contract of the suite and gives every spec the same
- * entry point (a bare `goto('/')`, no stored key).
+ * The login session is an HttpOnly cookie, so a session opened by one test must
+ * never be visible to the next. Playwright already creates a new context per
+ * test; this fixture makes that the explicit contract of the suite and gives
+ * every spec the same entry point (a bare `goto('/')`, no session).
  */
 export const test = base.extend<{ app: Page }>({
   app: async ({ page }, use) => {
@@ -37,14 +36,48 @@ export const test = base.extend<{ app: Page }>({
   },
 });
 
+/** The administrator every spec signs in as. One instance, one account. */
+export const ADMIN = { username: 'admin', password: 'e2e-admin-password' };
+
 /**
- * Drive the AuthGate: open `/`, type the key, press Entrar.
- *
- * Leaves the page wherever the click lands — callers assert the outcome, so
- * the same helper serves both the happy path and the rejected-key path.
+ * CI's install was born with `API_KEY=test-key`. That old key is the proof of
+ * ownership the very first «Crear administrador» has to present; after that it
+ * is only a token for scripts and the UI never asks for it again.
  */
-export async function login(app: Page, key: string): Promise<void> {
+export const LEGACY_API_KEY = 'test-key';
+
+/**
+ * Drive the AuthGate: open `/`, fill the account, press the button.
+ *
+ * The instance outlives the tests, so the FIRST caller creates the
+ * administrator and every later one signs in; the helper looks at which form
+ * the app shows instead of assuming an order. Leaves the page wherever the
+ * click lands — callers assert the outcome.
+ */
+export async function login(app: Page, password: string = ADMIN.password): Promise<void> {
   await app.goto('/');
-  await app.getByLabel('API key').fill(key);
-  await app.getByRole('button', { name: 'Entrar' }).click();
+  const create = app.getByRole('button', { name: 'Crear administrador' });
+  const enter = app.getByRole('button', { name: 'Entrar' });
+  await create.or(enter).waitFor();
+
+  await app.getByLabel('Usuario').fill(ADMIN.username);
+  await app.getByLabel('Contraseña', { exact: true }).fill(password);
+  if (await create.isVisible()) {
+    await app.getByLabel('Repite la contraseña').fill(password);
+    await app.getByLabel('API key actual').fill(LEGACY_API_KEY);
+    await create.click();
+  } else {
+    await enter.click();
+  }
+}
+
+/** Make sure the administrator exists, without a browser (for specs about the login form). */
+export async function ensureAdmin(request: APIRequestContext): Promise<void> {
+  const me = await (await request.get('/api/auth/me')).json();
+  if (me.has_user) return;
+  const res = await request.post('/api/auth/register', {
+    data: ADMIN,
+    headers: { 'X-Api-Key': LEGACY_API_KEY },
+  });
+  expect(res.ok()).toBe(true);
 }
