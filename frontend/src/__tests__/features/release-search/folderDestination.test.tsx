@@ -199,6 +199,17 @@ describe('Carpeta destination (folder navigator)', () => {
     expect(screen.getByRole('button', { name: 'Elegir esta carpeta' })).toBeEnabled()
   })
 
+  it('is a named modal dialog with a labelled close button', async () => {
+    const onClose = vi.fn()
+    mockFetch()
+    renderModal(onClose)
+    const dialog = screen.getAllByRole('dialog')[0]
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveAccessibleName(/Buscar release/)
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar ventana' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('closes the navigator on Escape before it ends the whole dialog', async () => {
     const onClose = vi.fn()
     mockFetch()

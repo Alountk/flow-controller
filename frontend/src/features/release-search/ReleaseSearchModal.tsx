@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useContext } from 'react'
+import { useDialog } from '../../shared/hooks/useDialog.ts'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { addCalendarItem } from '../../shared/api/calendar.ts'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
@@ -330,21 +331,9 @@ export function ReleaseSearchModal({
     if (e.target === e.currentTarget) onClose?.()
   }, [onClose])
 
-  useEffect(() => {
-    if (inPanel) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      // Escape sheds the top layer: the open navigator closes first, the
-      // dialog it belongs to only once the navigator is gone.
-      if (pickerOpen) {
-        setPickerOpen(false)
-        return
-      }
-      onClose?.()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, inPanel, pickerOpen])
+  // Escape sheds the top layer: the open navigator first, the dialog after.
+  // In panel mode the ref is never attached, so the hook does nothing.
+  useDialog(modalRef, () => (pickerOpen ? setPickerOpen(false) : onClose?.()))
 
   // Our own Torznab registry — the checkbox list's rows. The backend's
   // empty-with-reason answer is a FAILURE here, never "no sites": an
@@ -1391,13 +1380,19 @@ export function ReleaseSearchModal({
 
   return (
     <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
-      <div className="scan-modal scan-modal-wide" ref={modalRef}>
+      <div
+        className="scan-modal scan-modal-wide"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Buscar release de ${item.series_title || item.title}`}
+      >
         <div className="scan-modal-header">
           <div className="scan-selected-info">
             <span className="scan-selected-type">{item.type === 'movie' ? '🎬' : '📺'}</span>
             <strong>{item.series_title || item.title}</strong>
           </div>
-          <button className="scan-modal-close" onClick={() => onClose?.()}>×</button>
+          <button className="scan-modal-close" onClick={() => onClose?.()} aria-label="Cerrar ventana">×</button>
         </div>
         {body}
       </div>
