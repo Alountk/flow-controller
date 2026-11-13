@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useDialog } from '../../shared/hooks/useDialog.ts'
 import {
   renameApply,
   renameMovies,
@@ -94,13 +95,8 @@ export function LibraryRenameDialog({ path, onClose, onRenamed, origin = 'lote' 
     }
   }
 
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialog(dialogRef, onClose)
 
   async function apply() {
     setBusy(true)
@@ -143,6 +139,7 @@ export function LibraryRenameDialog({ path, onClose, onRenamed, origin = 'lote' 
     <div className="fm-rename-backdrop" onClick={onClose}>
       <div
         className="fm-rename-dialog"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Renombrar como Radarr"

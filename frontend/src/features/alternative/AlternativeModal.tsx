@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useDialog } from '../../shared/hooks/useDialog.ts'
 import { useQuery } from '@tanstack/react-query'
 import {
   downloadIndexer,
@@ -167,15 +168,8 @@ export function AlternativeModal({
     }
   }
 
-  // Chrome: Escape closes (the overlay owns its dialog — `ReleaseSearchModal`
-  // closes the same way).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialog(dialogRef, onClose)
 
   function handleBackdropClick(e: ReactMouseEvent<HTMLDivElement>) {
     if (e.target === e.currentTarget) onClose()
@@ -185,6 +179,7 @@ export function AlternativeModal({
     <div className="alt-modal-backdrop" onClick={handleBackdropClick}>
       <div
         className="alt-modal"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Buscar y descargar alternativa"
