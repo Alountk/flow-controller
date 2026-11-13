@@ -3,6 +3,12 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { Sidebar } from '../../app/Sidebar.tsx'
 
 describe('Sidebar', () => {
+  it('shows the build version, not a hardcoded literal', () => {
+    const { container } = render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
+
+    expect(container.querySelector('.sb-version')).toHaveTextContent(`v${__APP_VERSION__}`)
+  })
+
   it('renders the main navigation items', () => {
     render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 

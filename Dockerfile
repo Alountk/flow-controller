@@ -4,6 +4,9 @@ WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
 COPY frontend/ ./
+# After the source copy: the commit changes every build and must not bust the `npm ci` layer.
+ARG APP_BUILD=dev
+ENV VITE_APP_BUILD=$APP_BUILD
 RUN npm run build
 
 # --- Etapa 2: runtime backend FastAPI ---
