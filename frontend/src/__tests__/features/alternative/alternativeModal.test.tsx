@@ -444,6 +444,19 @@ describe('AlternativeModal — checklist de indexadores → título → resultad
     expect(screen.queryByText(/no está en la librería/i)).toBeNull()
   })
 
+  it('keeps focus inside the dialog: it moves in on open and Tab wraps around', async () => {
+    mockFetch({ 'GET /api/indexers': () => ROWS })
+    renderModal()
+    await screen.findByLabelText('Título a buscar')
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.contains(document.activeElement)).toBe(true)
+
+    const items = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])'))
+    items[items.length - 1].focus()
+    fireEvent.keyDown(window, { key: 'Tab' })
+    expect(document.activeElement).toBe(items[0])
+  })
+
   it('chrome: Escape and backdrop clicks close; inner clicks do not; the × button closes', async () => {
     const onClose = vi.fn()
     mockFetch({ 'GET /api/indexers': () => ROWS })
