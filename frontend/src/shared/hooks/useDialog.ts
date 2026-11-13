@@ -10,14 +10,15 @@ const stack: symbol[] = []
  * Keyboard behaviour every modal dialog needs: Escape closes only the top-most
  * one, focus moves in on open, Tab stays inside, and focus returns to the opener.
  * The dialog element still carries role="dialog", aria-modal and its name.
+ * `enabled` is for dialogs that stay mounted while closed.
  */
-export function useDialog(ref: RefObject<HTMLElement | null>, onClose: () => void) {
+export function useDialog(ref: RefObject<HTMLElement | null>, onClose: () => void, enabled = true) {
   const closeRef = useRef(onClose)
   closeRef.current = onClose
 
   useEffect(() => {
     const node = ref.current
-    if (!node) return
+    if (!enabled || !node) return
     const id = Symbol('dialog')
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     stack.push(id)
@@ -59,5 +60,5 @@ export function useDialog(ref: RefObject<HTMLElement | null>, onClose: () => voi
       stack.splice(stack.indexOf(id), 1)
       if (opener?.isConnected) opener.focus()
     }
-  }, [ref])
+  }, [ref, enabled])
 }

@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useDialog } from '../hooks/useDialog.ts'
 import {
   filterByName,
   formatDate,
@@ -245,6 +246,8 @@ export function FileExplorer({
   const rootsQuery = useRoots(active)
   const roots = rootsQuery.data?.roots ?? []
   const browseQuery = useBrowse(currentPath, active && currentPath !== '')
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialog(dialogRef, () => onCancel?.(), presentation === 'dialog' && active)
 
   function visit(next: string) {
     if (path === undefined) setInternalPath(next)
@@ -423,7 +426,7 @@ export function FileExplorer({
     return (
       <>
         <div className="explorer-backdrop" onClick={onCancel} />
-        <div className="explorer-dialog" role="dialog" aria-label={title}>
+        <div className="explorer-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-label={title}>
           <header className="explorer-dialog-head">
             <div>
               <h2 className="explorer-dialog-title">{title}</h2>

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { useDialog } from '../shared/hooks/useDialog.ts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   amuleDownloadsAction,
@@ -211,6 +212,11 @@ export default function Descargas() {
     })()
   }
 
+  const cancelDelete = () => {
+    setPending(null)
+    setDeleteFiles(false)
+  }
+
   const confirmDelete = () => {
     if (!pending) return
     const { hash } = pending
@@ -264,36 +270,47 @@ export default function Descargas() {
       )}
 
       {pending && (
-        <div className="dl-backdrop">
-          <div className="dl-confirm" role="dialog" aria-label="Confirmar borrado">
-            <p className="dl-confirm-question">
-              ¿Borrar «{pending.name}»? La descarga se quitará de la cola de aMule.
-            </p>
-            <label className="dl-confirm-files">
-              <input
-                type="checkbox"
-                checked={deleteFiles}
-                onChange={(e) => setDeleteFiles(e.target.checked)}
-              />
-              Borrar también los ficheros descargados
-            </label>
-            <div className="dl-confirm-actions">
-              <button type="button" className="dl-danger" onClick={confirmDelete}>
-                Sí, borrar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPending(null)
-                  setDeleteFiles(false)
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
+        <ConfirmDialog onClose={cancelDelete}>
+          <p className="dl-confirm-question">
+            ¿Borrar «{pending.name}»? La descarga se quitará de la cola de aMule.
+          </p>
+          <label className="dl-confirm-files">
+            <input
+              type="checkbox"
+              checked={deleteFiles}
+              onChange={(e) => setDeleteFiles(e.target.checked)}
+            />
+            Borrar también los ficheros descargados
+          </label>
+          <div className="dl-confirm-actions">
+            <button type="button" className="dl-danger" onClick={confirmDelete}>
+              Sí, borrar
+            </button>
+            <button type="button" onClick={cancelDelete}>
+              Cancelar
+            </button>
           </div>
-        </div>
+        </ConfirmDialog>
       )}
     </section>
+  )
+}
+
+function ConfirmDialog({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialog(ref, onClose)
+  return (
+    <div className="dl-backdrop" onClick={onClose}>
+      <div
+        className="dl-confirm"
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Confirmar borrado"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
   )
 }

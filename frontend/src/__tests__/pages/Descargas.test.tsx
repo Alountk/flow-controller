@@ -207,6 +207,21 @@ describe('Descargas (T3)', () => {
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
   })
 
+  it('la confirmación es un diálogo modal: Escape cancela sin borrar y devuelve el foco', async () => {
+    renderPage(envelope([row()]))
+
+    const trigger = await screen.findByRole('button', { name: 'Borrar' })
+    trigger.focus()
+    fireEvent.click(trigger)
+    expect(screen.getByRole('dialog', { name: 'Confirmar borrado' })).toHaveAttribute('aria-modal', 'true')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
+    expect(trigger).toHaveFocus()
+  })
+
   it('borrar sin marcar la casilla manda delete_files: false', async () => {
     renderPage(envelope([row()]))
 
