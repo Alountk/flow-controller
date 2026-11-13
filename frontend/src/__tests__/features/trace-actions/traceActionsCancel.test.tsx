@@ -90,6 +90,21 @@ describe('"Cancelar descarga" visibility', () => {
     // screen says the same words — a document-wide query would be ambiguous).
     expect(modal).toHaveTextContent('Cancelar descarga')
   })
+
+  it('is a named modal dialog; Escape dismisses it and focus returns to the trigger', () => {
+    renderActions(trace())
+    const trigger = screen.getByRole('button', { name: 'Cancelar descarga' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: 'Cancelar descarga' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
 })
 
 describe('confirm checkbox binding (S2)', () => {

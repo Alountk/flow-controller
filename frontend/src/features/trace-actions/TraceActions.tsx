@@ -1,6 +1,7 @@
 import '../../shared/ui/atoms.css'
 import '../../shared/ui/modal.css'
-import { useState, useEffect, useContext } from 'react'
+import { useState, useEffect, useContext, useRef, type ReactNode } from 'react'
+import { useDialog } from '../../shared/hooks/useDialog.ts'
 import { useQuery } from '@tanstack/react-query'
 import type { ActionKey, ActionMeta, ActionResult, Trace } from '../../shared/types.ts'
 import { runAction, type ActionOptions } from '../../shared/api/actions.ts'
@@ -316,153 +317,174 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
       )}
 
       {pending && (
-        <div className="modal-backdrop" onClick={() => setPending(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{meta[pending.action].label}</h3>
-            <p>{meta[pending.action].description}</p>
+        <TraceDialog label={meta[pending.action].label} onClose={() => setPending(null)}>
+          <h3>{meta[pending.action].label}</h3>
+          <p>{meta[pending.action].description}</p>
 
-            {pending.action === 'fix_path_mapping' && (
-              <div className="modal-fields">
-                <label htmlFor={HOST_ID}>
-                  {HOST_LABEL}
-                  <input
-                    type="text"
-                    id={HOST_ID}
-                    name={HOST_ID}
-                    value={pending.options.host || ''}
-                    onChange={(e) =>
-                      setPending((p) => p ? { ...p, options: { ...p.options, host: e.target.value } } : p)
-                    }
-                  />
-                </label>
-                <label htmlFor={REMOTE_ID}>
-                  {REMOTE_LABEL}
-                  <input
-                    type="text"
-                    id={REMOTE_ID}
-                    name={REMOTE_ID}
-                    value={pending.options.remote_path || ''}
-                    onChange={(e) =>
-                      setPending((p) => p ? { ...p, options: { ...p.options, remote_path: e.target.value } } : p)
-                    }
-                  />
-                </label>
-                <label htmlFor={LOCAL_ID}>
-                  {LOCAL_LABEL}
-                  <input
-                    type="text"
-                    id={LOCAL_ID}
-                    name={LOCAL_ID}
-                    value={pending.options.local_path || ''}
-                    onChange={(e) =>
-                      setPending((p) => p ? { ...p, options: { ...p.options, local_path: e.target.value } } : p)
-                    }
-                  />
-                </label>
-              </div>
-            )}
-
-            {pending.action !== 'fix_path_mapping' && (
-              <label className="modal-check" htmlFor={confirmOptionId(pending.action)}>
+          {pending.action === 'fix_path_mapping' && (
+            <div className="modal-fields">
+              <label htmlFor={HOST_ID}>
+                {HOST_LABEL}
                 <input
-                  type="checkbox"
-                  id={confirmOptionId(pending.action)}
-                  name={confirmOptionId(pending.action)}
-                  checked={Boolean(
-                    pending.action === 'remove_queue'
-                      ? pending.options.blocklist
-                      : pending.options.delete_files,
-                  )}
-                  onChange={(e) => {
-                    const value = e.target.checked
-                    setPending((p) =>
-                      p
-                        ? {
-                            ...p,
-                            options:
-                              p.action === 'remove_queue'
-                                ? { blocklist: value }
-                                : { delete_files: value },
-                          }
-                        : p,
-                    )
-                  }}
+                  type="text"
+                  id={HOST_ID}
+                  name={HOST_ID}
+                  value={pending.options.host || ''}
+                  onChange={(e) =>
+                    setPending((p) => p ? { ...p, options: { ...p.options, host: e.target.value } } : p)
+                  }
                 />
-                {confirmOptionText(pending.action)}
               </label>
-            )}
-
-            <div className="modal-buttons">
-              <button className="action-btn" onClick={() => setPending(null)}>
-                Cancelar
-              </button>
-              <button
-                className="action-btn destructive"
-                onClick={() => void execute(pending.action, pending.options)}
-              >
-                Confirmar
-              </button>
+              <label htmlFor={REMOTE_ID}>
+                {REMOTE_LABEL}
+                <input
+                  type="text"
+                  id={REMOTE_ID}
+                  name={REMOTE_ID}
+                  value={pending.options.remote_path || ''}
+                  onChange={(e) =>
+                    setPending((p) => p ? { ...p, options: { ...p.options, remote_path: e.target.value } } : p)
+                  }
+                />
+              </label>
+              <label htmlFor={LOCAL_ID}>
+                {LOCAL_LABEL}
+                <input
+                  type="text"
+                  id={LOCAL_ID}
+                  name={LOCAL_ID}
+                  value={pending.options.local_path || ''}
+                  onChange={(e) =>
+                    setPending((p) => p ? { ...p, options: { ...p.options, local_path: e.target.value } } : p)
+                  }
+                />
+              </label>
             </div>
+          )}
+
+          {pending.action !== 'fix_path_mapping' && (
+            <label className="modal-check" htmlFor={confirmOptionId(pending.action)}>
+              <input
+                type="checkbox"
+                id={confirmOptionId(pending.action)}
+                name={confirmOptionId(pending.action)}
+                checked={Boolean(
+                  pending.action === 'remove_queue'
+                    ? pending.options.blocklist
+                    : pending.options.delete_files,
+                )}
+                onChange={(e) => {
+                  const value = e.target.checked
+                  setPending((p) =>
+                    p
+                      ? {
+                          ...p,
+                          options:
+                            p.action === 'remove_queue'
+                              ? { blocklist: value }
+                              : { delete_files: value },
+                        }
+                      : p,
+                  )
+                }}
+              />
+              {confirmOptionText(pending.action)}
+            </label>
+          )}
+
+          <div className="modal-buttons">
+            <button className="action-btn" onClick={() => setPending(null)}>
+              Cancelar
+            </button>
+            <button
+              className="action-btn destructive"
+              onClick={() => void execute(pending.action, pending.options)}
+            >
+              Confirmar
+            </button>
           </div>
-        </div>
+        </TraceDialog>
       )}
 
       {copyTask && (
-        <div className="modal-backdrop">
-          <div className="modal copy-progress-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>
-              {copyTask.status === 'importing' ? 'Verificando import...' :
-               copyTask.status === 'imported' ? 'Importado correctamente' :
-               copyTask.status === 'renamed_needed' ? 'Importado — renombrado pendiente' :
-               copyTask.status === 'import_timeout' ? 'Timeout de import' :
-               'Copiar archivos'}
-            </h3>
+        <TraceDialog label="Progreso de la copia" className="copy-progress-modal">
+          <h3>
+            {copyTask.status === 'importing' ? 'Verificando import...' :
+             copyTask.status === 'imported' ? 'Importado correctamente' :
+             copyTask.status === 'renamed_needed' ? 'Importado — renombrado pendiente' :
+             copyTask.status === 'import_timeout' ? 'Timeout de import' :
+             'Copiar archivos'}
+          </h3>
 
-            <div className="copy-paths">
-              <div className="copy-path-row">
-                <span className="copy-path-label">origen:</span>
-                <code className="copy-path-value">{copyTask.src_path}</code>
-              </div>
-              <div className="copy-path-row">
-                <span className="copy-path-label">destino:</span>
-                <code className="copy-path-value">{copyTask.dst_path}</code>
-              </div>
+          <div className="copy-paths">
+            <div className="copy-path-row">
+              <span className="copy-path-label">origen:</span>
+              <code className="copy-path-value">{copyTask.src_path}</code>
             </div>
-
-            {copyTask.status !== 'importing' && (
-              <>
-                <div className="copy-bar-container">
-                  <div className="copy-bar" style={{ width: `${progressPct}%` }} />
-                </div>
-                <div className="copy-stats">
-                  <span>{formatBytes(copyTask.copied_bytes)} / {formatBytes(copyTask.total_bytes)}</span>
-                  <span>{progressPct}%</span>
-                </div>
-                {copyTask.files_total > 0 && (
-                  <div className="copy-files-count">
-                    {copyTask.files_done} / {copyTask.files_total} archivos
-                  </div>
-                )}
-              </>
-            )}
-
-            {copyTask.status === 'importing' && (
-              <div className="copy-importing">
-                <span className="copy-spinner" />
-                <span>Esperando que Sonarr/Radarr importe y renombre el archivo...</span>
-              </div>
-            )}
-
-            <p className="copy-detail">{copyTask.detail}</p>
-
-            <div className="modal-buttons">
-              <button className="action-btn cancel-btn" onClick={cancelTask}>
-                Cancelar copia
-              </button>
+            <div className="copy-path-row">
+              <span className="copy-path-label">destino:</span>
+              <code className="copy-path-value">{copyTask.dst_path}</code>
             </div>
           </div>
-        </div>
+
+          {copyTask.status !== 'importing' && (
+            <>
+              <div className="copy-bar-container">
+                <div className="copy-bar" style={{ width: `${progressPct}%` }} />
+              </div>
+              <div className="copy-stats">
+                <span>{formatBytes(copyTask.copied_bytes)} / {formatBytes(copyTask.total_bytes)}</span>
+                <span>{progressPct}%</span>
+              </div>
+              {copyTask.files_total > 0 && (
+                <div className="copy-files-count">
+                  {copyTask.files_done} / {copyTask.files_total} archivos
+                </div>
+              )}
+            </>
+          )}
+
+          {copyTask.status === 'importing' && (
+            <div className="copy-importing">
+              <span className="copy-spinner" />
+              <span>Esperando que Sonarr/Radarr importe y renombre el archivo...</span>
+            </div>
+          )}
+
+          <p className="copy-detail">{copyTask.detail}</p>
+
+          <div className="modal-buttons">
+            <button className="action-btn cancel-btn" onClick={cancelTask}>
+              Cancelar copia
+            </button>
+          </div>
+        </TraceDialog>
       )}
+    </div>
+  )
+}
+
+/** Without `onClose` the dialog cannot be dismissed (copy in progress): Escape and the backdrop do nothing. */
+function TraceDialog({ label, onClose, className, children }: {
+  label: string
+  onClose?: () => void
+  className?: string
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialog(ref, () => onClose?.())
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className={className ? `modal ${className}` : 'modal'}
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
     </div>
   )
 }
