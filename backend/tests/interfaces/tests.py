@@ -464,7 +464,7 @@ class TestSpaFallback:
 
     def test_api_unknown_returns_not_found(self):
         resp = client.get("/api/nonexistent")
-        assert resp.status_code == 200
+        assert resp.status_code == 404
         data = resp.json()
         assert data["detail"] == "Not Found"
 
