@@ -4,6 +4,7 @@ import type { ScanMatch, ScanResult } from '../../../shared/types.ts'
 import { fetchSeriesEpisodes, scanForMovies } from '../../../shared/api/wanted.ts'
 import { episodeTagKey, formatEpisodeLabel, parseEpisodeTag } from '../../../shared/utils/episodeTag.ts'
 import { queueAdd } from '../../../shared/api/files.ts'
+import { useDialog } from '../../../shared/hooks/useDialog.ts'
 import { useRoots } from '../../../shared/hooks/useFilesNavigator.ts'
 import { FileExplorer } from '../../../shared/ui/FileExplorer.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../../shared/utils/selection.ts'
@@ -124,11 +125,7 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
     if (e.target === e.currentTarget) onClose()
   }, [onClose])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  useDialog(modalRef, onClose)
 
   // Switching volumes invalidates results pointing into the old tree — the
   // Switching volume resets the path: the explorer only reports the move.
@@ -203,7 +200,13 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
 
   return (
     <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
-      <div className="scan-modal" ref={modalRef}>
+      <div
+        className="scan-modal"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Buscar archivos para ${episodeLabel ?? item.title}`}
+      >
         {toast && <div className="fm-toast">{toast}</div>}
 
         <div className="scan-modal-header">
@@ -212,7 +215,7 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
             <strong>{episodeLabel ?? item.title}</strong>
             {episodeLabel && <span className="scan-selected-series">{item.title}</span>}
           </div>
-          <button className="scan-modal-close" onClick={onClose}>×</button>
+          <button className="scan-modal-close" onClick={onClose} aria-label="Cerrar">×</button>
         </div>
 
         <div className="scan-modal-body">
