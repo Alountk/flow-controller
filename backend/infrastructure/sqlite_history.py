@@ -323,6 +323,7 @@ def init_db(path: Path | None = None) -> None:
     with _lock:
         if _conn is not None:
             return
+        conn = None
         try:
             # The mkdir can raise OSError (unwritable or missing config
             # directory) and connect can raise sqlite3.Error. Both must degrade,
@@ -350,6 +351,8 @@ def init_db(path: Path | None = None) -> None:
             # Never take the app down over history: it is a record, not a
             # requirement for copying files.
             log.warning("History database unavailable at %s: %s", target, exc)
+            if conn is not None:
+                conn.close()
             _conn = None
 
 

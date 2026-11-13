@@ -330,6 +330,34 @@ class TestUnavailableDatabase:
         history.close()
 
 
+class TestFailedMigration:
+    def test_a_failed_migration_closes_the_connection_it_opened(self, tmp_path, monkeypatch):
+        history.close()
+        opened = []
+        real_connect = sqlite3.connect
+
+        def spy(*args, **kwargs):
+            opened.append(real_connect(*args, **kwargs))
+            return opened[-1]
+
+        def broken(conn, version):
+            raise sqlite3.OperationalError("migration exploded")
+
+        monkeypatch.setattr(history.sqlite3, "connect", spy)
+        monkeypatch.setattr(history, "_apply_migrations", broken)
+        # An older schema forces the migration path.
+        real = real_connect(tmp_path / "history.db")
+        real.execute("PRAGMA user_version=1")
+        real.commit()
+        real.close()
+
+        history.init_db(tmp_path / "history.db")
+
+        assert history.recent_operations() == []
+        with pytest.raises(sqlite3.ProgrammingError):
+            opened[0].execute("SELECT 1")  # closed, not leaked
+
+
 # ── Auto-copy idempotency markers ────────────────────────────────────────────
 #
 # The key is `auto_copy_key`'s output; these tests pin the durable half of the
