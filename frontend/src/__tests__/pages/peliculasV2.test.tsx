@@ -493,6 +493,37 @@ describe('V2 · el pie y la vuelta', () => {
     expect(screen.getByRole('button', { name: 'Página siguiente' })).toBeDisabled()
   })
 
+  it('does not request the old page with the new filter before going back to page 1', async () => {
+    const { calls } = stubFetch([paraNorman, dune], 60)
+    renderV2()
+    await rowOf('ParaNorman')
+    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }))
+    await waitFor(() => expect(lastWanted(calls)).toContain('page=2'))
+    const before = wantedCalls(calls).length
+
+    fireEvent.click(screen.getByRole('button', { name: /^4K/ }))
+
+    await waitFor(() => expect(lastWanted(calls)).toContain('class=4K'))
+    const mixed = wantedCalls(calls).slice(before).filter((u) => u.includes('class=4K') && u.includes('page=2'))
+    expect(mixed).toEqual([])
+  })
+
+  it('keeps the rows on screen while the next page loads', async () => {
+    const { mock } = stubFetch([paraNorman, dune], 60)
+    renderV2()
+    await rowOf('ParaNorman')
+    vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
+      String(input).includes('/api/wanted/all') && String(input).includes('page=2')
+        ? new Promise<Response>(() => {})
+        : mock(input),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }))
+
+    expect(await screen.findByText('Pág 2 de 2')).toBeInTheDocument()
+    expect(screen.getByText('ParaNorman')).toBeInTheDocument()
+  })
+
   it('hides the list while the detail is open and gives it back untouched (S8)', async () => {
     stubFetch([paraNorman, dune])
     renderV2()

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../shared/api/auth.ts'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue.ts'
 import { QualityBelowList } from '../features/quality/QualityBelowList.tsx'
@@ -107,16 +107,23 @@ export function PeliculasV2List({
   onReleases: (item: ReleaseSearchItem) => void
   onScan: (item: ScanItem) => void
 }) {
-  const [page, setPage] = useState(1)
   const [className, setClassName] = useState('')
   const [search, setSearch] = useState('')
   const debounced = useDebouncedValue(search, 350)
+  // A page belongs to the filter it was chosen under: a new filter reads as
+  // page 1 by itself, so no effect has to reset it after a wasted fetch.
+  const filterKey = `${className}\u0000${debounced}`
+  const [pageState, setPageState] = useState({ filterKey, page: 1 })
+  const page = pageState.filterKey === filterKey ? pageState.page : 1
+  const setPage = (update: (current: number) => number) =>
+    setPageState({ filterKey, page: update(page) })
   const searchRef = useRef<HTMLInputElement>(null)
   const rowsRef = useRef(new Map<number, HTMLDivElement>())
 
   const query = useQuery({
     queryKey: ['v2-movies', page, className, debounced],
     queryFn: () => fetchMovies(page, className, debounced),
+    placeholderData: keepPreviousData,
   })
 
   const items = query.data?.items ?? []
@@ -124,12 +131,6 @@ export function PeliculasV2List({
   const counts = query.data?.counts ?? {}
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const selected = items.find((m) => m.id === selectedId) ?? null
-
-  // A new filter or a new search is a new list: page 1, never a page that the
-  // narrowed result set does not have.
-  useEffect(() => {
-    setPage(1)
-  }, [className, debounced])
 
   // Ctrl+K puts the cursor in the design's search box from anywhere on the page.
   useEffect(() => {
