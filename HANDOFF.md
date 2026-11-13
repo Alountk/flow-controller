@@ -5,7 +5,7 @@
 
 ## Novedades 2026-11-13 (posteriores a #256; el resto del documento es anterior y puede estar desfasado)
 
-**Despliegue pendiente**: nada de lo siguiente está desplegado. Pull + redeploy manual en Portainer.
+**Despliegue**: no verificado si lo siguiente está en producción; el deploy es manual (pull + redeploy en Portainer).
 
 ### Acceso (login) — #322 y seguimientos
 - Un único administrador (`users.id=1`) + contraseña scrypt en `CONFIG_DIR/auth.db`; sesión en cookie `fc_session` (HttpOnly, SameSite=Strict, token guardado como SHA-256). Doc de la feature: `odd/tasks/login-auth.md`.
@@ -34,7 +34,7 @@
 
 ### Convenciones de trabajo
 - Respuestas y comentarios cortos; una pregunta cada vez; sin atribución de IA en commits; confirmar antes de push/merge/borrado. Trabajar en worktrees bajo `../flow-controller-worktrees/` para no pisar el checkout de VS Code (`node_modules` enlazado al principal).
-- `frontend/pnpm-lock.yaml` sin seguimiento no es de nadie del equipo de trabajo: no tocar.
+- `frontend/pnpm-lock.yaml` sin seguimiento es ajeno a este trabajo: no tocar.
 
 ---
 
