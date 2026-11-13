@@ -159,6 +159,26 @@ describe('bulk wanted search asks for confirmation with the count', () => {
     expect(getToasts()).toHaveLength(0)
   })
 
+  it('confirm dialog is a named modal; Escape closes it, launches nothing and returns focus', async () => {
+    const { searchCalls } = mockFetch({ total: 24 })
+    renderFaltantes()
+
+    const trigger = await screen.findByRole('button', { name: /Buscar todas las faltantes/ })
+    await waitFor(() => expect(trigger).toBeEnabled())
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmar búsqueda masiva' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog.contains(document.activeElement)).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(searchCalls).toHaveLength(1)
+    expect(trigger).toHaveFocus()
+  })
+
   it('hands the command id to the cancel endpoint after the launch', async () => {
     const { searchCalls, cancelCalls } = mockFetch({ total: 24 })
 
