@@ -1,6 +1,7 @@
 import '../../../shared/ui/atoms.css'
 import '../../../shared/ui/modal.css'
-import { useEffect, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { useDialog } from '../../../shared/hooks/useDialog.ts'
 import { useMutation } from '@tanstack/react-query'
 import {
   searchWanted,
@@ -111,18 +112,6 @@ export function BulkSearchFlow({ kind, count, filtered }: BulkSearchFlowProps) {
     setLaunched(null)
   }
 
-  useEffect(() => {
-    if (!dialog) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !dialogBusy) {
-        setDialog(null)
-        setLaunched(null)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [dialog, dialogBusy])
-
   const countLabel = `${count} ${count === 1 ? 'resultado' : 'resultados'}`
   const commandId = launched?.commandId ?? null
   const triggerLabel = isMovies ? '🔍 Buscar todas las faltantes' : '🔍 Buscar todos los faltantes'
@@ -145,54 +134,70 @@ export function BulkSearchFlow({ kind, count, filtered }: BulkSearchFlowProps) {
       </button>
 
       {dialog === 'confirm' && (
-        <div className="modal-backdrop" onClick={close}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{countLabel} — ¿lanzar búsqueda?</h3>
-            <p>
-              Se lanzará la búsqueda masiva de faltantes en {service}. Puede disparar muchas
-              descargas de golpe: revisa el recuento antes de confirmar.
-            </p>
-            <div className="modal-buttons">
-              <button className="action-btn" onClick={close}>
-                Cancelar
-              </button>
-              <button
-                className="action-btn destructive"
-                onClick={() => launch.mutate()}
-                disabled={launch.isPending}
-              >
-                {launch.isPending ? 'Lanzando...' : 'Confirmar'}
-              </button>
-            </div>
-          </div>
+        <BulkDialog label="Confirmar búsqueda masiva" onClose={close}>
+        <h3>{countLabel} — ¿lanzar búsqueda?</h3>
+        <p>
+          Se lanzará la búsqueda masiva de faltantes en {service}. Puede disparar muchas
+          descargas de golpe: revisa el recuento antes de confirmar.
+        </p>
+        <div className="modal-buttons">
+          <button className="action-btn" onClick={close}>
+            Cancelar
+          </button>
+          <button
+            className="action-btn destructive"
+            onClick={() => launch.mutate()}
+            disabled={launch.isPending}
+          >
+            {launch.isPending ? 'Lanzando...' : 'Confirmar'}
+          </button>
         </div>
+        </BulkDialog>
       )}
 
       {dialog === 'launched' && launched && (
-        <div className="modal-backdrop" onClick={close}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Búsqueda lanzada</h3>
-            <p>{launched.detail || 'La búsqueda masiva ya está en curso.'}</p>
-            {commandId != null && (
-              <p>Comando #{commandId} — se puede cancelar mientras siga en curso.</p>
-            )}
-            <div className="modal-buttons">
-              <button className="action-btn" onClick={close}>
-                Cerrar
-              </button>
-              {commandId != null && (
-                <button
-                  className="action-btn destructive"
-                  onClick={() => cancel.mutate(commandId)}
-                  disabled={cancel.isPending}
-                >
-                  {cancel.isPending ? 'Cancelando...' : 'Cancelar búsqueda'}
-                </button>
-              )}
-            </div>
-          </div>
+        <BulkDialog label="Búsqueda lanzada" onClose={close}>
+        <h3>Búsqueda lanzada</h3>
+        <p>{launched.detail || 'La búsqueda masiva ya está en curso.'}</p>
+        {commandId != null && (
+          <p>Comando #{commandId} — se puede cancelar mientras siga en curso.</p>
+        )}
+        <div className="modal-buttons">
+          <button className="action-btn" onClick={close}>
+            Cerrar
+          </button>
+          {commandId != null && (
+            <button
+              className="action-btn destructive"
+              onClick={() => cancel.mutate(commandId)}
+              disabled={cancel.isPending}
+            >
+              {cancel.isPending ? 'Cancelando...' : 'Cancelar búsqueda'}
+            </button>
+          )}
         </div>
+        </BulkDialog>
       )}
     </>
+  )
+}
+
+/** Escape and the backdrop go through `onClose`, which ignores them while busy. */
+function BulkDialog({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialog(ref, onClose)
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
   )
 }
