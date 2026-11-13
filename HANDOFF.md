@@ -1,7 +1,42 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-10-29 · **PR #256 (amule-control — tercera pestaña «aMule» en Ajustes con su config+watchdog trasladados y control EC de servidores y enlaces: `GET /api/amule/servers`, `POST /api/amule/servers/{add,remove,connect}`, `POST /api/amule/links`)** · RDD global **on** / **clone-local OFF** (razón D, decisión del usuario)
-> · specs: **1744 backend / 831 frontend** · main pre-#256 = `5403694` · público: próxima sesión + Raul.
+> Última actualización: 2026-11-13 · **login de usuario + sesión (#322) y serie de accesibilidad de modales (#327–#334)** · `main` = `562916e` · RDD global **on** / **clone-local OFF**
+> · specs: **2383 backend / 1144 frontend** (1 fallo local conocido: `tests_dist_fresh`, `frontend/dist` obsoleto; pasa en CI) · `MAX_LEGACY_LOC` **3605**
+
+## Novedades 2026-11-13 (posteriores a #256; el resto del documento es anterior y puede estar desfasado)
+
+**Despliegue pendiente**: nada de lo siguiente está desplegado. Pull + redeploy manual en Portainer.
+
+### Acceso (login) — #322 y seguimientos
+- Un único administrador (`users.id=1`) + contraseña scrypt en `CONFIG_DIR/auth.db`; sesión en cookie `fc_session` (HttpOnly, SameSite=Strict, token guardado como SHA-256). Doc de la feature: `odd/tasks/login-auth.md`.
+- La **API key ya no es la puerta de la UI**: queda como token opcional para scripts (`X-Api-Key`). `/api/events` autentica por cookie (sin `?key=`).
+- Primer arranque: la pantalla de entrada pide «crear administrador» (con API key existente, presentarla como prueba de propiedad); el asistente de Setup corre después, ya autenticado. `needs_setup` solo aplica a instalaciones sin key.
+- Cerrar sesión (botón en la barra) y cambiar contraseña (Ajustes → `POST /api/auth/password`, revoca todas las sesiones y abre una nueva). Contraseña actual errónea → 400 (no 401, para no gastar el presupuesto de fallos).
+- Segundo cerrojo CSRF: las escrituras con cookie exigen Origin == Host (o `X-Forwarded-Host`). **El proxy de Vite no debe reescribir Host** (sin `changeOrigin`); el e2e no lo detecta porque ataca al backend directo.
+- Presupuesto de fallos: 10 × 401/min por **dirección** (429 después). Detrás de un proxy un anónimo puede bloquear a todos 60 s (aceptado, ya ocurría con la key). Las queries deben ir condicionadas a `authenticated` para no gastarlo en la pantalla de login.
+- `auth.db` ilegible o corrupta cuenta como «hay usuario» (cerrado, 503 en login); borrar el fichero (acceso al FS) reabre la instalación. El directorio de config debe ser escribible (503 si no).
+- **Aviso de despliegue**: un frontend viejo con key en el navegador reintenta el SSE con 401; desplegar la cadena completa.
+
+### Otros arreglos (análisis de código)
+- #317 rutas vacías/raíz/autoanidadas rechazadas en endpoints mutantes de ficheros · #323 el fallback SPA responde 404 a `/api/*` y `/prototypes/*` desconocidos y no sirve nada fuera de `dist` · #325 `init_db` cierra la conexión si falla la migración · #326 Películas V2: sin petición de más al cambiar filtro y sin parpadeo al paginar.
+- #324 Dockerfile: Python 3.12, `npm ci`, `pip install` desde `requirements.txt` antes de copiar el código (capa cacheable), `HEALTHCHECK` contra `/api/health`. No hay `USER` en el Dockerfile: el compose ya corre como `1000:1000`.
+
+### Accesibilidad de modales — #327–#334
+- Hook `frontend/src/shared/hooks/useDialog.ts` (`useDialog(ref, onClose, enabled?)`, `hasOpenDialog()`): Escape solo llega al diálogo de arriba (pila), foco al abrir, Tab atrapado, foco devuelto al abridor. El elemento sigue llevando `role="dialog"`, `aria-modal` y nombre.
+- Los diálogos que se montan condicionalmente envuelven su contenido en un marco con el hook (`BulkDialog`, `ScanFrame`, `TraceDialog`, `ConfirmDialog`); si el diálogo sigue montado al cerrarse, usar `enabled`.
+- Migrados: ScanModal, ReleaseSearchModal (overlay), BulkSearchFlow (2), selectores de archivo y carpeta del Mixer, TraceActions (confirmación y progreso, este último no cerrable), Descargas (confirmar borrado), FileExplorer (modo diálogo), AlternativeModal, LibraryRenameDialog. `Ctrl+K` de Películas V2 no actúa con un diálogo abierto.
+- No tocados a propósito: `Seguimiento` (panel lateral no modal) y `QuickActionsMenu` (menú). El `/` de FileManager ya no interfiere.
+- Gotchas: usar `tsc -b` (no `tsc --noEmit -p .`) para reproducir el `frontend-build` de CI; `user-event` no es dependencia, los tests usan `fireEvent` sobre `window`.
+
+### Pendiente (análisis, sin verificar desde la lectura original del código)
+- Límite de 401 por dirección detrás de proxy · socket de Docker `:ro` (valorar socket-proxy) · módulos grandes (`arr_client.py` ~2300 líneas, `sqlite_history.py` ~1600, `MediaMixer.tsx`, `ReleaseSearchModal.tsx`) · una conexión SQLite global · 5 bucles en segundo plano sin supervisión · manejo de errores desigual · huecos de e2e y `e2e` sin bloquear `docker-push` · sin ruff/mypy/audit/Trivy · `docker-verify` usa `sleep 15` · `key` por índice · `outline: none` · sin reintento/skeleton en Películas V2.
+- Del handoff anterior sigue vigente: bloque de diseño 🟡, backlog C-01…, B3 publishers, «conexiones directas» pasos 5–6.
+
+### Convenciones de trabajo
+- Respuestas y comentarios cortos; una pregunta cada vez; sin atribución de IA en commits; confirmar antes de push/merge/borrado. Trabajar en worktrees bajo `../flow-controller-worktrees/` para no pisar el checkout de VS Code (`node_modules` enlazado al principal).
+- `frontend/pnpm-lock.yaml` sin seguimiento no es de nadie del equipo de trabajo: no tocar.
+
+---
 
 ## Estado actual
 
