@@ -210,6 +210,17 @@ describe('Carpeta destination (folder navigator)', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('the folder navigator is a modal dialog of its own', async () => {
+    mockFetch()
+    renderModal(vi.fn())
+    await showResults()
+    fireEvent.click(await screen.findByRole('button', { name: /^→ Carpeta$/ }))
+    await screen.findByRole('button', { name: 'storage' })
+    const nav = document.querySelector('.explorer-dialog')
+    expect(nav).toHaveAttribute('aria-modal', 'true')
+    expect(nav?.contains(document.activeElement)).toBe(true)
+  })
+
   it('closes the navigator on Escape before it ends the whole dialog', async () => {
     const onClose = vi.fn()
     mockFetch()
