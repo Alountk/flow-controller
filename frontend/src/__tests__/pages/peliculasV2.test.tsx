@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+import { useDialog } from '../../shared/hooks/useDialog.ts'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -149,6 +151,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+function OpenDialog() {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialog(ref, () => {})
+  return <div ref={ref} role="dialog" aria-label="x"><button>ok</button></div>
+}
+
 describe('V2 · la cabecera del diseño L2', () => {
   it('states the title and the catalogue counts, not the page count (S5)', async () => {
     stubFetch([paraNorman, dune, missing])
@@ -214,6 +222,17 @@ describe('V2 · la cabecera del diseño L2', () => {
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
 
     expect(screen.getByLabelText('Buscar película')).toHaveFocus()
+  })
+
+  it('Ctrl+K leaves focus alone while a dialog is open', async () => {
+    renderV2()
+    await rowOf('ParaNorman')
+    render(<OpenDialog />)
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    expect(screen.getByLabelText('Buscar película')).not.toHaveFocus()
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
   })
 
   it('refetches from Actualizar, saying it is busy (S5)', async () => {

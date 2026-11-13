@@ -6,6 +6,11 @@ const FOCUSABLE =
 // Open dialogs, oldest first: Escape only reaches the one on top.
 const stack: symbol[] = []
 
+/** Page-level shortcuts use this to stay out of the way of an open dialog. */
+export function hasOpenDialog() {
+  return stack.length > 0
+}
+
 /**
  * Keyboard behaviour every modal dialog needs: Escape closes only the top-most
  * one, focus moves in on open, Tab stays inside, and focus returns to the opener.

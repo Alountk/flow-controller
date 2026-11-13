@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { hasOpenDialog } from '../shared/hooks/useDialog.ts'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../shared/api/auth.ts'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue.ts'
@@ -136,6 +137,7 @@ export function PeliculasV2List({
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if ((event.key !== 'k' && event.key !== 'K') || (!event.ctrlKey && !event.metaKey)) return
+      if (hasOpenDialog()) return
       event.preventDefault()
       searchRef.current?.focus()
     }
