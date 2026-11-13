@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, useContext } from 'react'
+import { useRef, useState, useContext, type ReactNode } from 'react'
+import { useDialog } from '../shared/hooks/useDialog.ts'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { EventStreamContext } from '../shared/hooks/useEventStream.ts'
 import { slug } from '../shared/utils/slug.ts'
@@ -230,18 +231,6 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
     roots[0]?.path || undefined,
   )
   const [selected, setSelected] = useState<string | null>(null)
-  const modalRef = useRef<HTMLDivElement>(null)
-
-  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) setOpen(false)
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
 
   return (
     <>
@@ -282,53 +271,69 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
       </div>
 
       {open && (
-        <div className="scan-modal-backdrop" onClick={handleBackdropClick}>
-          <div className="scan-modal" ref={modalRef}>
-            <div className="scan-modal-header">
-              <div className="scan-selected-info">
-                <span className="scan-selected-type">📂</span>
-                <strong>Seleccionar {label}</strong>
-              </div>
-              <button className="scan-modal-close" onClick={() => setOpen(false)}>×</button>
+        <ScanFrame label={`Seleccionar ${label}`} onClose={() => setOpen(false)}>
+          <div className="scan-modal-header">
+            <div className="scan-selected-info">
+              <span className="scan-selected-type">📂</span>
+              <strong>Seleccionar {label}</strong>
             </div>
-            <div className="scan-modal-body">
-              <div className="scan-controls">
-                <FileExplorer
-                  accept="both"
-                  rootLabel="Volumen:"
-                  onlyVideo
-                  initialPath={lastPath}
-                  onNavigate={(p) => {
-                    setSelected(null)
-                    setLastPath(p)
-                  }}
-                  onSelect={setSelected}
-                  onConfirm={(p) => {
-                    onSelect(p)
-                    setOpen(false)
-                  }}
-                />
-              </div>
+            <button className="scan-modal-close" onClick={() => setOpen(false)}>×</button>
+          </div>
+          <div className="scan-modal-body">
+            <div className="scan-controls">
+              <FileExplorer
+                accept="both"
+                rootLabel="Volumen:"
+                onlyVideo
+                initialPath={lastPath}
+                onNavigate={(p) => {
+                  setSelected(null)
+                  setLastPath(p)
+                }}
+                onSelect={setSelected}
+                onConfirm={(p) => {
+                  onSelect(p)
+                  setOpen(false)
+                }}
+              />
+            </div>
 
-              <div className="scan-actions">
-                <button
-                  className="action-btn"
-                  disabled={!selected}
-                  onClick={() => {
-                    if (selected) {
-                      onSelect(selected)
-                      setOpen(false)
-                    }
-                  }}
-                >
-                  Seleccionar archivo
-                </button>
-              </div>
+            <div className="scan-actions">
+              <button
+                className="action-btn"
+                disabled={!selected}
+                onClick={() => {
+                  if (selected) {
+                    onSelect(selected)
+                    setOpen(false)
+                  }
+                }}
+              >
+                Seleccionar archivo
+              </button>
             </div>
           </div>
-        </div>
+        </ScanFrame>
       )}
     </>
+  )
+}
+
+/** Backdrop + dialog shell shared by the two pickers; mounts only while open. */
+function ScanFrame({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialog(ref, onClose)
+  return (
+    <div
+      className="scan-modal-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="scan-modal" ref={ref} role="dialog" aria-modal="true" aria-label={label}>
+        {children}
+      </div>
+    </div>
   )
 }
 
@@ -1389,54 +1394,47 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
 
       {/* ── S2: folder picker for the folder destination ─────────────── */}
       {folderPickerOpen && (
-        <div
-          className="scan-modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setFolderPickerOpen(false)
-          }}
-        >
-          <div className="scan-modal" role="dialog" aria-label="Elegir carpeta de destino">
-            <div className="scan-modal-header">
-              <div className="scan-selected-info">
-                <span className="scan-selected-type">📂</span>
-                <strong>Elegir carpeta</strong>
-              </div>
-              <button className="scan-modal-close" onClick={() => setFolderPickerOpen(false)}>
-                ×
+        <ScanFrame label="Elegir carpeta de destino" onClose={() => setFolderPickerOpen(false)}>
+          <div className="scan-modal-header">
+            <div className="scan-selected-info">
+              <span className="scan-selected-type">📂</span>
+              <strong>Elegir carpeta</strong>
+            </div>
+            <button className="scan-modal-close" onClick={() => setFolderPickerOpen(false)}>
+              ×
+            </button>
+          </div>
+          <div className="scan-modal-body">
+            <div className="scan-controls">
+              <FileExplorer
+                accept="folders"
+                rootLabel="Volumen:"
+                initialPath={pickerPath || folderDest || roots[0]?.path}
+                onNavigate={setPickerPath}
+              />
+            </div>
+            <div className="scan-actions">
+              <button
+                type="button"
+                className="action-btn"
+                disabled={!pickerPath && !folderDest}
+                onClick={() => {
+                  setFolderDest(pickerPath || folderDest || roots[0]?.path || '')
+                  setFolderPickerOpen(false)
+                }}
+              >
+                Elegir esta carpeta
+              </button>
+              <button
+                type="button"
+                className="action-btn"
+                onClick={() => setFolderPickerOpen(false)}
+              >
+                Cancelar
               </button>
             </div>
-            <div className="scan-modal-body">
-              <div className="scan-controls">
-                <FileExplorer
-                  accept="folders"
-                  rootLabel="Volumen:"
-                  initialPath={pickerPath || folderDest || roots[0]?.path}
-                  onNavigate={setPickerPath}
-                />
-              </div>
-              <div className="scan-actions">
-                <button
-                  type="button"
-                  className="action-btn"
-                  disabled={!pickerPath && !folderDest}
-                  onClick={() => {
-                    setFolderDest(pickerPath || folderDest || roots[0]?.path || '')
-                    setFolderPickerOpen(false)
-                  }}
-                >
-                  Elegir esta carpeta
-                </button>
-                <button
-                  type="button"
-                  className="action-btn"
-                  onClick={() => setFolderPickerOpen(false)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
           </div>
-        </div>
+        </ScanFrame>
       )}
 
       {/* ── Releases of the movie the indexer lookup found (S7) ───────── */}

@@ -71,4 +71,25 @@ describe('mixer — el picker recuerda la última carpeta al reabrir', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Examinar…' })[0])
     expect(await screen.findByText('/mnt/Pelis')).toBeInTheDocument()
   })
+
+  it('el picker es un diálogo modal con nombre; Escape lo cierra y devuelve el foco', async () => {
+    mockFetch(handlers())
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MediaMixer />
+      </QueryClientProvider>,
+    )
+
+    const open = (await screen.findAllByRole('button', { name: 'Examinar…' }))[0]
+    open.focus()
+    fireEvent.click(open)
+
+    const dialog = await screen.findByRole('dialog', { name: /^Seleccionar / })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: /^Seleccionar / })).not.toBeInTheDocument()
+    expect(open).toHaveFocus()
+  })
 })
