@@ -21,7 +21,7 @@ import asyncio
 import logging
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -153,8 +153,8 @@ async def root():
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     if full_path.startswith(("api/", "prototypes/")):
-        return {"detail": "Not Found"}
+        raise HTTPException(status_code=404, detail="Not Found")
     candidate = os.path.normpath(os.path.join(FRONTEND_DIST, full_path))
-    if candidate.startswith(FRONTEND_DIST) and os.path.isfile(candidate):
+    if candidate.startswith(FRONTEND_DIST + os.sep) and os.path.isfile(candidate):
         return FileResponse(candidate)
     return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
