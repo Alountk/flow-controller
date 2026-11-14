@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Icon } from '../../shared/ui/Icon.tsx'
 import { useQuery } from '@tanstack/react-query'
 import type { CalendarItem, CalendarResponse } from '../../shared/types.ts'
 import { formatGrabMark } from '../../shared/utils/grabMark.ts'
@@ -144,7 +145,7 @@ export function Calendar({ type, onSelect }: CalendarProps) {
                           </div>
                         )}
                         <div className="calendar-type-badge">
-                          {item.type === 'movie' ? '🎬 Película' : '📺 Episodio'}
+                          <Icon name={item.type === 'movie' ? 'movie' : 'tv'} size={16} /> {item.type === 'movie' ? 'Película' : 'Episodio'}
                           {item.has_file && <span className="badge-ok"> ✓</span>}
                         </div>
                         {/* No mark means show nothing at all, not a dash. */}

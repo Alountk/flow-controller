@@ -11,7 +11,7 @@ interface Props {
 export function Icon({ name, size = 20, className }: Props) {
   return (
     <svg
-      className={className}
+      className={className ? `icon ${className}` : 'icon'}
       width={size}
       height={size}
       viewBox={ICON_VIEWBOX}

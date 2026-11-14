@@ -149,7 +149,7 @@ function renderFaltantes(Component: typeof Peliculas | typeof Series) {
 async function openScanModal() {
   renderFaltantes(Peliculas)
   await screen.findByText('Your Name.')
-  fireEvent.click(screen.getByText('📁 En carpeta'))
+  fireEvent.click(screen.getByRole('button', { name: 'En carpeta' }))
   // The volume options come from /api/files/roots; selecting a root that is not
   // in the list yet would be a no-op, leaving the modal with no current path.
   await screen.findByRole('option', { name: 'storage' })

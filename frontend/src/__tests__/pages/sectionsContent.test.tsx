@@ -163,8 +163,8 @@ describe('Películas · PR 2 wiring', () => {
 
     expect(await screen.findByText('Todo a la vez en todas partes')).toBeInTheDocument()
     // Every action the row had in Faltantes is still reachable here.
-    expect(screen.getByRole('button', { name: '🔍 Buscar' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '📁 En carpeta' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Buscar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'En carpeta' })).toBeInTheDocument()
       // Same two buttons, now agreeing with Faltantes: 'Faltantes' is lit.
       expectFilterButtonsAgreeWithTab(/Faltantes/)
   })
