@@ -404,6 +404,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
+        env:
+          # Short commit shown next to the version in the sidebar.
+          APP_BUILD: ${{ github.sha }}
         run: |
           IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           docker compose -f docker-compose.yml -f docker-compose.ci.yml build --no-cache

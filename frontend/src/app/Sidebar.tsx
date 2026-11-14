@@ -2,6 +2,9 @@ import type { ReactNode } from 'react'
 import { PAGE_PATHS, type Page } from '../shared/hooks/usePageRoute.ts'
 import './Sidebar.css'
 
+const BUILD = import.meta.env.VITE_APP_BUILD
+const APP_VERSION_LABEL = `v${__APP_VERSION__}${BUILD ? ` · ${BUILD.slice(0, 7)}` : ''}`
+
 // `Page` is owned by hooks/usePageRoute.ts (the router needs it too). Re-exported
 // here so existing `import type { Page } from './Sidebar.tsx'` keeps compiling.
 export type { Page }
@@ -46,7 +49,7 @@ export function Sidebar({ active, onNavigate, developer, hidden = [] }: Props) {
     <aside className="sidebar">
       <div className="sb-header">
         <div className="sb-brand">Flow<span>Controller</span></div>
-        <div className="sb-version">v0.1.0</div>
+        <div className="sb-version">{APP_VERSION_LABEL}</div>
       </div>
 
       <nav className="sb-nav">
