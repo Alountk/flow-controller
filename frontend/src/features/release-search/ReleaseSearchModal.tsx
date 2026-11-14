@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useContext } from 'react'
+import { Icon } from '../../shared/ui/Icon.tsx'
 import { useDialog } from '../../shared/hooks/useDialog.ts'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { addCalendarItem } from '../../shared/api/calendar.ts'
@@ -267,7 +268,7 @@ export function ReleaseSearchModal({
   // B1: while the SSE stream is connected, task events deliver both job
   // results as they happen and the two polls below sleep (`false`).
   const { connected } = useContext(EventStreamContext)
-  // The population the panel's 🔍 Buscar Releases button serves: a title
+  // The population the panel's <Icon name="search" size={16} /> Buscar Releases button serves: a title
   // that still needs a file, and one already inside the library (id 0 must
   // be ADDED first — its ➕ button's job). The same gate guards the
   // 🔍 button and the results cache, so a title that already has
@@ -427,7 +428,7 @@ export function ReleaseSearchModal({
 
 
   // NO MOUNT TRIGGER — selecting a row never searches: the operator presses
-  // 🔍 Buscar Releases below (or the has-file block's "Buscar versiones", or
+  // <Icon name="search" size={16} /> Buscar Releases below (or the has-file block's "Buscar versiones", or
   // an id 0 item's ➕). The one remaining automatic trigger is the SITE
   // checkboxes: in the panel, toggling one re-runs the search.
 
@@ -999,7 +1000,7 @@ export function ReleaseSearchModal({
               )}
               {item.date && (
                 <div className="calendar-modal-date">
-                  {item.type === 'movie' ? '🗓️ Estreno' : '🗓️ Emisión'}: {item.date}
+                  <Icon name="event" size={16} /> {item.type === 'movie' ? 'Estreno' : 'Emisión'}: {item.date}
                 </div>
               )}
             </div>
@@ -1055,7 +1056,7 @@ export function ReleaseSearchModal({
               </div>
               {registryQuery.isError && (
                 <span className="calendar-sites-error" role="alert">
-                  ⚠️{' '}
+                  <Icon name="warning" size={16} />{' '}
                   <span>
                     {registryQuery.error instanceof Error
                       ? registryQuery.error.message
@@ -1157,7 +1158,7 @@ export function ReleaseSearchModal({
                     }}
                     disabled={isProcessing}
                   >
-                    🔍 Buscar Releases
+                    <Icon name="search" size={16} /> Buscar Releases
                   </button>
                 )}
                 {item.id === 0 && (
@@ -1166,7 +1167,7 @@ export function ReleaseSearchModal({
                     onClick={handleAddAndSearch}
                     disabled={isProcessing}
                   >
-                    ➕ Agregar a Biblioteca y Buscar
+                    <Icon name="add" size={16} /> Agregar a Biblioteca y Buscar
                   </button>
                 )}
               </div>
@@ -1210,7 +1211,7 @@ export function ReleaseSearchModal({
                 </span>
                 <div className="calendar-releases-actions">
                   <button className="action-btn" onClick={() => void handleSearch()} disabled={isProcessing}>
-                    🔄 Refrescar
+                    <Icon name="sync" size={16} /> Refrescar
                   </button>
                 </div>
               </div>
@@ -1389,7 +1390,7 @@ export function ReleaseSearchModal({
       >
         <div className="scan-modal-header">
           <div className="scan-selected-info">
-            <span className="scan-selected-type">{item.type === 'movie' ? '🎬' : '📺'}</span>
+            <span className="scan-selected-type"><Icon name={item.type === 'movie' ? 'movie' : 'tv'} size={18} /></span>
             <strong>{item.series_title || item.title}</strong>
           </div>
           <button className="scan-modal-close" onClick={() => onClose?.()} aria-label="Cerrar ventana">×</button>

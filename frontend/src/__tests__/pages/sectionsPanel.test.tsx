@@ -290,7 +290,7 @@ describe('sections · the release search in the panel', () => {
     renderSection(Peliculas)
     await screen.findByText('Your Name.')
 
-    fireEvent.click(screen.getByRole('button', { name: '🔍 Buscar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
 
     // The click bubbles to the row (which selects it) and the panel shows the
     // Releases tab's search for that selection. No modal per row.

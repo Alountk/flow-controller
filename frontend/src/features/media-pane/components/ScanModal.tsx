@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { Icon } from '../../../shared/ui/Icon.tsx'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ScanMatch, ScanResult } from '../../../shared/types.ts'
 import { fetchSeriesEpisodes, scanForMovies } from '../../../shared/api/wanted.ts'
@@ -211,7 +212,7 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
 
         <div className="scan-modal-header">
           <div className="scan-selected-info">
-            <span className="scan-selected-type">{item.type === 'movie' ? '🎬' : '📺'}</span>
+            <span className="scan-selected-type"><Icon name={item.type === 'movie' ? 'movie' : 'tv'} size={18} /></span>
             <strong>{episodeLabel ?? item.title}</strong>
             {episodeLabel && <span className="scan-selected-series">{item.title}</span>}
           </div>
@@ -249,7 +250,7 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
               onClick={() => scan.mutate()}
               disabled={!currentPath || scan.isPending}
             >
-              {scan.isPending ? 'Escaneando...' : `🔍 Buscar "${item.title}" en esta carpeta`}
+              {scan.isPending ? 'Escaneando...' : <><Icon name="search" size={16} /> Buscar "{item.title}" en esta carpeta</>}
             </button>
 
             {item.replacePath && (
@@ -301,7 +302,7 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
                         onClick={(e) => e.stopPropagation()}
                       />
                       <div className="scan-match-info">
-                        <div className="scan-match-file">📄 {m.file_name}</div>
+                        <div className="scan-match-file"><Icon name="description" size={16} /> {m.file_name}</div>
                         <div className="scan-match-path" title={m.file_path}>{m.file_path}</div>
                         <div className="scan-match-score">
                           Similitud: {Math.round(m.score * 100)}% · Título: "{m.matched_title}"
@@ -326,8 +327,8 @@ export function ScanModal({ item, onClose }: { item: ScanItem; onClose: () => vo
                     {placeQueue.isPending
                       ? 'Encolando...'
                       : item.replacePath
-                        ? '📦 Sustituir el archivo elegido en la cola'
-                        : `📦 Colocar ${selectedMatches.length} archivos en la cola`}
+                        ? <><Icon name="inventory_2" size={16} /> Sustituir el archivo elegido en la cola</>
+                        : <><Icon name="inventory_2" size={16} /> Colocar {selectedMatches.length} archivos en la cola</>}
                   </button>
                 </div>
               )}

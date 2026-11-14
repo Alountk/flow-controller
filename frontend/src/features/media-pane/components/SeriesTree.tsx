@@ -1,4 +1,5 @@
 import { Fragment, useContext, useMemo, useState } from 'react'
+import { Icon } from '../../../shared/ui/Icon.tsx'
 import { useQuery } from '@tanstack/react-query'
 import type { AllSeries, DownloadEntry, SeriesEpisode } from '../../../shared/types.ts'
 import { fetchSeriesEpisodes } from '../../../shared/api/wanted.ts'
@@ -217,13 +218,13 @@ export function SeriesTree({
                   className="action-btn search-item"
                   onClick={() => openReleases(catalogSeriesRelease(series))}
                 >
-                  🔍 Buscar
+                  <Icon name="search" size={16} /> Buscar
                 </button>
                 <button
                   className="action-btn scan-folder-btn"
                   onClick={() => onScan({ id: series.id, title: series.title })}
                 >
-                  📁 En carpeta
+                  <Icon name="folder" size={16} /> En carpeta
                 </button>
               </>
             )

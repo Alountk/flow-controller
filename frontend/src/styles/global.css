@@ -133,6 +133,12 @@ body {
   min-height: 100vh;
 }
 
+/* Inline glyphs sit on the text baseline, next to a label. */
+.icon {
+  vertical-align: -0.2em;
+  flex-shrink: 0;
+}
+
 /* Keyboard focus ring for every control that does not draw its own. */
 :focus-visible {
   outline: 2px solid var(--accent);

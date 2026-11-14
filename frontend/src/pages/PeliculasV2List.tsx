@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Icon } from '../shared/ui/Icon.tsx'
 import { hasOpenDialog } from '../shared/hooks/useDialog.ts'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../shared/api/auth.ts'
@@ -194,7 +195,7 @@ export function PeliculasV2List({
         <div className="sec-l2-tools">
           <div className="sec-l2-search">
             <span className="sec-l2-search-icon" aria-hidden="true">
-              🔍
+              <Icon name="search" size={16} />
             </span>
             <input
               ref={searchRef}
@@ -215,7 +216,7 @@ export function PeliculasV2List({
             disabled={query.isFetching}
             onClick={() => void query.refetch()}
           >
-            <span aria-hidden="true">↻</span>
+            <Icon name="sync" size={16} />
             {query.isFetching ? 'Actualizando…' : 'Actualizar'}
           </button>
           {/* The library's actions need no row; the row's need one, and the

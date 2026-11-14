@@ -1,4 +1,5 @@
 import type { WantedMovie, AllMovie } from '../../../shared/types.ts'
+import { Icon } from '../../../shared/ui/Icon.tsx'
 import { formatGrabMark } from '../../../shared/utils/grabMark.ts'
 import { formatBytes } from '../../../shared/utils/text.ts'
 import { SectionRow, catalogRowStatus } from './SectionRow.tsx'
@@ -49,13 +50,13 @@ export function renderCatalogMovies({
                   className="action-btn search-item"
                   onClick={() => openReleases(catalogMovieRelease(movie))}
                 >
-                  🔍 Buscar
+                  <Icon name="search" size={16} /> Buscar
                 </button>
                 <button
                   className="action-btn scan-folder-btn"
                   onClick={() => onScan({ id: movie.id, title: movie.title, year: movie.year, overview: '', remotePoster: movie.remotePoster, has_file: movie.has_file, altTitles: [] })}
                 >
-                  📁 En carpeta
+                  <Icon name="folder" size={16} /> En carpeta
                 </button>
               </>
             )

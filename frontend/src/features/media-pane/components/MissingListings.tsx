@@ -1,4 +1,5 @@
 import type { WantedMovie, WantedEpisode } from '../../../shared/types.ts'
+import { Icon } from '../../../shared/ui/Icon.tsx'
 import { formatGrabMark } from '../../../shared/utils/grabMark.ts'
 import { SectionRow, faltaStatus } from './SectionRow.tsx'
 import { ListingLoading, ListingError, ListingEmpty } from './ListingStates.tsx'
@@ -47,13 +48,13 @@ export function renderMissingMovies({
                   className="action-btn search-item"
                   onClick={() => openReleases(wantedMovieRelease(movie))}
                 >
-                  🔍 Buscar
+                  <Icon name="search" size={16} /> Buscar
                 </button>
                 <button
                   className="action-btn scan-folder-btn"
                   onClick={() => onScan(movie)}
                 >
-                  📁 En carpeta
+                  <Icon name="folder" size={16} /> En carpeta
                 </button>
               </>
             )
@@ -163,7 +164,7 @@ export function renderMissingEpisodes({
                   title="Buscar releases"
                   onClick={() => openReleases(wantedEpisodeRelease(ep))}
                 >
-                  🔍
+                  <Icon name="search" size={16} />
                 </button>
                 <button
                   className="action-btn scan-folder-btn"
@@ -177,7 +178,7 @@ export function renderMissingEpisodes({
                     air_date: ep.air_date,
                   })}
                 >
-                  📁
+                  <Icon name="folder" size={16} />
                 </button>
               </>
             )

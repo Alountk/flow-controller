@@ -1,4 +1,5 @@
 import '../../../shared/ui/atoms.css'
+import { Icon } from '../../../shared/ui/Icon.tsx'
 import '../../../shared/ui/modal.css'
 import { useRef, useState, type ReactNode } from 'react'
 import { useDialog } from '../../../shared/hooks/useDialog.ts'
@@ -114,7 +115,11 @@ export function BulkSearchFlow({ kind, count, filtered }: BulkSearchFlowProps) {
 
   const countLabel = `${count} ${count === 1 ? 'resultado' : 'resultados'}`
   const commandId = launched?.commandId ?? null
-  const triggerLabel = isMovies ? '🔍 Buscar todas las faltantes' : '🔍 Buscar todos los faltantes'
+  const triggerLabel = (
+    <>
+      <Icon name="search" size={16} /> {isMovies ? 'Buscar todas las faltantes' : 'Buscar todos los faltantes'}
+    </>
+  )
 
   return (
     <>
