@@ -14,6 +14,7 @@ import {
   saveSharedDirs,
   type SharedDirsSaveResult,
 } from '../../shared/api/amuleShares.ts'
+import { Icon } from '../../shared/ui/Icon.tsx'
 import './Settings.css'
 
 export function SharedDirsSection() {
@@ -92,7 +93,7 @@ export function SharedDirsSection() {
   return (
     <div className="settings-section">
       <div className="settings-section-header">
-        <span className="settings-section-icon" aria-hidden="true">🤝</span>
+        <span className="settings-section-icon" aria-hidden="true"><Icon name="handshake" size={18} /></span>
         <div>
           <h3 className="settings-section-title">Carpetas compartidas de aMule</h3>
           <p className="settings-section-subtitle">
@@ -165,7 +166,7 @@ export function SharedDirsSection() {
           disabled={save.isPending}
           onClick={() => save.mutate()}
         >
-          {save.isPending ? 'Guardando…' : '💾 Guardar y recargar aMule'}
+          {save.isPending ? 'Guardando…' : <><Icon name="save" size={16} /> Guardar y recargar aMule</>}
         </button>
         <span className="shared-dirs-notice" role="status">
           {notice}
