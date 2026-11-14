@@ -630,7 +630,7 @@ export function Settings() {
           onClick={() => testMutation.mutate()}
           disabled={testMutation.isPending}
         >
-          {testMutation.isPending ? 'Probando…' : '🔌 Probar conexiones'}
+          {testMutation.isPending ? 'Probando…' : <><Icon name="cable" size={16} /> Probar conexiones</>}
         </button>
 
         {testMutation.isError && (

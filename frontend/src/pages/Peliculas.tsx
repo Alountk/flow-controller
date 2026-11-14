@@ -34,6 +34,7 @@ interface SubViewDef {
   label: string
 }
 
+// DEPRECATED(v1-split): sub-view tabs are drawn only when `!pageMode`.
 const SUB_VIEWS: SubViewDef[] = [
   { id: 'biblioteca', label: 'Biblioteca' },
   // 'Faltantes' is not a tab any more: it lives in the filter buttons beside
@@ -45,6 +46,7 @@ const SUB_VIEWS: SubViewDef[] = [
 
 const DETAIL_TABS = ['Releases', 'Archivos', 'Historial']
 
+// DEPRECATED(v1-split): the PR checklist is drawn only when `!pageMode`.
 const NOTES: { pr: string; text: string }[] = [
   { pr: 'PR 1 ✅', text: 'techo: navegación, rutas y la envoltura maestro–detalle.' },
   { pr: 'PR 2 ✅', text: 'Biblioteca y Faltantes muestran las listas reales, extraídas de la sección Faltantes; la selección rellena el panel de detalle.' },
@@ -523,7 +525,12 @@ function PanelHistory({ facts, release }: { facts: RowFacts; release: ReleaseSea
   )
 }
 
-export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
+interface PeliculasProps {
+  /** @deprecated `'split'` is Películas V1: no route reaches it, only its tests. Marked 2026-11-14 to analyse and remove (grep `DEPRECATED(v1-split)`). */
+  layout?: 'split' | 'page'
+}
+
+export function Peliculas({ layout = 'split' }: PeliculasProps) {
   // S1/S3 («detalle-pantalla»): `split` is the deprecated V1 — no route reaches
   // it any more (its tests keep it honest); `page` is the V2 the routes serve:
   // no tabs, and the detail REPLACES the list instead of sitting beside it.
@@ -591,6 +598,7 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
 
   return (
     <section className="section-shell sec-peliculas">
+      {/* DEPRECATED(v1-split): V1-only (drawn when `!pageMode`). */}
       {!pageMode && <div className="sec-subtabs" role="tablist" aria-label="Sub-vistas de Películas">
         {SUB_VIEWS.map((s) => (
           <button
@@ -618,6 +626,7 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
           // the list keeps its own state for the way back (S8).
           hidden={pageMode && detailOpen}
         >
+          {/* DEPRECATED(v1-split): V1-only (drawn when `!pageMode`). */}
           {!pageMode && (
             <div className="sec-master-head">
               <span className="sec-master-title">Películas</span>
@@ -827,6 +836,7 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
               // it lives in the list's Acciones rápidas, so the detail keeps
               // only the files (S4). V1 has no such menu and keeps it here.
               <>
+                {/* DEPRECATED(v1-split): V1-only (drawn when `!pageMode`). */}
                 {!pageMode && <ProbeLibraryCard />}
                 <PanelFiles
                   facts={facts}
@@ -865,6 +875,7 @@ export function Peliculas({ layout = 'split' }: { layout?: 'split' | 'page' }) {
       )}
       {quickScan && <ScanModal item={quickScan} onClose={() => setQuickScan(null)} />}
 
+      {/* DEPRECATED(v1-split): V1-only (drawn when `!pageMode`). */}
       {!pageMode && (
       <section className="sec-notes">
         <h3>Notas de implementación</h3>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Icon } from '../shared/ui/Icon.tsx'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useHashState } from '../shared/hooks/useHashState.ts'
 import {
@@ -433,28 +434,28 @@ function MixRow({
           {task.status === 'running' && (
             <>
               <button type="button" className="sg-mix-btn" onClick={() => onPause(task.task_id)}>
-                ⏸ Pausar
+                <Icon name="pause" size={16} /> Pausar
               </button>
               <button
                 type="button"
                 className="sg-mix-btn sg-mix-btn-cancel"
                 onClick={() => onCancel(task.task_id)}
               >
-                ✕ Cancelar tarea
+                <Icon name="close" size={16} /> Cancelar tarea
               </button>
             </>
           )}
           {task.status === 'paused' && (
             <>
               <button type="button" className="sg-mix-btn" onClick={() => onResume(task.task_id)}>
-                ▶ Reanudar
+                <Icon name="play_arrow" size={16} /> Reanudar
               </button>
               <button
                 type="button"
                 className="sg-mix-btn sg-mix-btn-cancel"
                 onClick={() => onCancel(task.task_id)}
               >
-                ✕ Cancelar tarea
+                <Icon name="close" size={16} /> Cancelar tarea
               </button>
             </>
           )}
@@ -464,7 +465,7 @@ function MixRow({
               className="sg-mix-btn sg-mix-btn-cancel"
               onClick={() => onCancel(task.task_id)}
             >
-              ✕ Cancelar tarea
+              <Icon name="close" size={16} /> Cancelar tarea
             </button>
           )}
         </div>

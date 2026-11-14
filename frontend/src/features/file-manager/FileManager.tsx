@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Icon } from '../../shared/ui/Icon.tsx'
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FileItem, RetentionFile } from '../../shared/types.ts'
 import {
@@ -334,14 +335,14 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
           title="Copiar al otro panel"
           onClick={(e) => { e.stopPropagation(); handleQueue('copy', entry) }}
         >
-          ⬎
+          <Icon name="file_copy" size={16} />
         </button>
         <button
           className="fm-sm-btn accent"
           title="Mover al otro panel"
           onClick={(e) => { e.stopPropagation(); handleQueue('move', entry) }}
         >
-          ⬏
+          <Icon name="drive_file_move" size={16} />
         </button>
         <button
           className="fm-sm-btn"
@@ -349,7 +350,7 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
           aria-label="Copiar ruta absoluta POSIX"
           onClick={(e) => { e.stopPropagation(); handleCopyPath(entry.path) }}
         >
-          ⧉
+          <Icon name="content_copy" size={16} />
         </button>
         <button
           className="fm-sm-btn"
@@ -360,7 +361,7 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
             setRenameValue(entry.name)
           }}
         >
-          ✏
+          <Icon name="edit" size={16} />
         </button>
         {/* Videos only: the template writes a movie's name, so a folder or a
             subtitle would only get a form that cannot propose anything. */}
@@ -374,7 +375,7 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
               setRenameTarget(entry.path)
             }}
           >
-            🏷
+            <Icon name="label" size={16} />
           </button>
         )}
         <button
@@ -382,7 +383,7 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
           title="Eliminar"
           onClick={(e) => { e.stopPropagation(); handleDelete(entry) }}
         >
-          🗑
+          <Icon name="delete" size={16} />
         </button>
       </>
     )
@@ -499,7 +500,7 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
               title="Cerrar detalle"
               onClick={() => setBatchReport(null)}
             >
-              ✕
+              <Icon name="close" size={16} />
             </button>
           </div>
           <ul className="fm-batch-report-list">
@@ -538,7 +539,7 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
               + Carpeta
             </button>
             <button className="fm-action-btn" onClick={invalidateBrowse} title="Refrescar">
-              ↻
+              <Icon name="sync" size={16} />
             </button>
             {expiredPaths.length > 0 && (
               <button
