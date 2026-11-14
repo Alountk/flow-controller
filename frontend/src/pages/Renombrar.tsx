@@ -1,3 +1,4 @@
+import { Icon } from '../shared/ui/Icon'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -191,7 +192,7 @@ export function Renombrar() {
               void queryClient.invalidateQueries({ queryKey: ['renames'] })
             }}
           >
-            <span aria-hidden="true">↻ </span>Actualizar
+            <Icon name="sync" size={14} /> Actualizar
           </button>
           <button
             type="button"
