@@ -101,6 +101,12 @@ function renderCards(props: Partial<Parameters<typeof DashboardCards>[0]> = {}) 
 }
 
 describe('DashboardCards (diseño Stitch 01)', () => {
+  it('uses the singular for exactly one item', () => {
+    renderCards({ downloads: [download({ source: 'radarr', problem: true })] })
+
+    expect(screen.getByText('1 elemento')).toBeInTheDocument()
+  })
+
   it('card 1 counts problem downloads with a per-source breakdown and the warn footer', () => {
     renderCards({
       downloads: [

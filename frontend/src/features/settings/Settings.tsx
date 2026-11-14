@@ -12,6 +12,8 @@ import {
   type ServiceListing,
   type ServiceTestResult,
 } from '../../shared/api/services.ts'
+import { Icon } from '../../shared/ui/Icon.tsx'
+import type { IconName } from '../../shared/ui/iconPaths.ts'
 import { toast } from '../../shared/utils/toast.ts'
 import { SharedDirsSection } from './SharedDirsSection.tsx'
 import { PasswordSection } from './PasswordSection.tsx'
@@ -159,13 +161,13 @@ function LogsSection() {
 
   return (
     <Section
-        icon="📜"
+        icon="history"
         title="Logs del Sistema"
         subtitle="Últimas líneas del registro del panel, para ver qué hizo el orquestador."
       >
       <div className="settings-logs-controls">
         <button className="action-btn" onClick={fetchLogs} disabled={loading}>
-          {loading ? 'Cargando...' : '🔄 Actualizar'}
+          {loading ? 'Cargando...' : <><Icon name="sync" size={16} /> Actualizar</>}
         </button>
         <label className="settings-toggle-label" htmlFor="settings-auto-refresh">
           <button
@@ -220,7 +222,7 @@ function Section({
   subtitle,
   children,
 }: {
-  icon: string
+  icon: IconName
   title: string
   subtitle: string
   children: React.ReactNode
@@ -228,7 +230,7 @@ function Section({
   return (
     <div className="settings-section">
       <div className="settings-section-header">
-        <span className="settings-section-icon" aria-hidden="true">{icon}</span>
+        <span className="settings-section-icon" aria-hidden="true"><Icon name={icon} size={18} /></span>
         <div>
           <h3 className="settings-section-title">{title}</h3>
           <p className="settings-section-subtitle">{subtitle}</p>
@@ -618,7 +620,7 @@ export function Settings() {
         </div>
       </div>
       <Section
-        icon="🔄"
+        icon="sync"
         title="Estado de las conexiones"
         subtitle="Una fila por servicio con la URL intentada, el estado y la latencia medida. Distingue una clave rechazada de un servicio inalcanzable, antes y después de moverlos de sitio. La comprobación es a petición, no al abrir la página; aMule vive sobre EC (TCP) y no se sondea aquí."
       >
@@ -671,7 +673,7 @@ export function Settings() {
       </Section>
 
       <Section
-        icon="🔌"
+        icon="cable"
         title="Servicios"
         subtitle="Endpoints y tokens de autenticación para la orquestación arr."
       >
@@ -743,7 +745,7 @@ export function Settings() {
 
 
       <Section
-        icon="🔒"
+        icon="lock"
         title="Seguridad"
         subtitle="Autenticación del propio panel FlowController y políticas de integridad."
       >
@@ -752,7 +754,7 @@ export function Settings() {
       </Section>
 
       <Section
-        icon="📁"
+        icon="folder"
         title="Rutas"
         subtitle="Mapeo de almacenamiento en disco, librerías y puntos de montaje ZFS/RAID."
       >
@@ -781,7 +783,7 @@ export function Settings() {
       <PasswordSection />
 
       <Section
-        icon="⏱️"
+        icon="timer"
         title="Intervalos"
         subtitle="Temporizadores de sondeo, reintentos de red y límites de procesamiento."
       >
@@ -800,7 +802,7 @@ export function Settings() {
       </Section>
 
       <Section
-        icon="🎚️"
+        icon="tune"
         title="Calidad de biblioteca"
         subtitle="El umbral por debajo del cual una película cuenta como baja calidad."
       >
@@ -818,7 +820,7 @@ export function Settings() {
       </Section>
 
       <Section
-        icon="🧹"
+        icon="cleaning_services"
         title="Seguimiento"
         subtitle="Políticas de retención y limpieza automatizada."
       >
@@ -826,7 +828,7 @@ export function Settings() {
       </Section>
 
       <Section
-        icon="🔔"
+        icon="notifications"
         title="Avisos"
         subtitle="Cuándo avisar y por dónde: el canal ntfy que recibe los mensajes."
       >
@@ -864,7 +866,7 @@ export function Settings() {
       </Section>
 
       <Section
-        icon="🖥️"
+        icon="computer"
         title="Servidor"
         subtitle="Control del daemon HTTP central de FlowController."
       >

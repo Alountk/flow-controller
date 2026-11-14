@@ -27,6 +27,8 @@ const SOURCE_LABELS: Record<string, string> = {
  * derived from a real payload — a footer only renders when there is a fact to
  * report (honesty rule of the handoff).
  */
+const countItems = (n: number) => `${n} ${n === 1 ? 'elemento' : 'elementos'}`
+
 export function DashboardCards({
   downloads,
   disk,
@@ -74,14 +76,14 @@ export function DashboardCards({
         title="Ver el seguimiento de las descargas"
       >
         <span className="dash-label">Descargas atascadas</span>
-        <span className="dash-value">{stuck.length} elementos</span>
+        <span className="dash-value">{countItems(stuck.length)}</span>
         {breakdown && <span className="dash-sub">{breakdown}</span>}
         {stuck.length > 0 && <span className="dash-foot warn">Requiere revisión manual</span>}
       </button>
 
       <div className="dash-card">
         <span className="dash-label">Importaciones bloqueadas</span>
-        <span className="dash-value">{blocked} elementos</span>
+        <span className="dash-value">{countItems(blocked)}</span>
         {blockedDestination && (
           <span className="dash-foot mono">Destino: {blockedDestination}</span>
         )}

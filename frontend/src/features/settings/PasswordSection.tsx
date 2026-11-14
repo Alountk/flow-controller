@@ -7,6 +7,7 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { changePassword, fetchAuthState } from '../../shared/api/auth.ts'
+import { Icon } from '../../shared/ui/Icon.tsx'
 import './Settings.css'
 
 const MIN_LENGTH = 8
@@ -46,7 +47,7 @@ export function PasswordSection() {
   return (
     <div className="settings-section">
       <div className="settings-section-header">
-        <span className="settings-section-icon" aria-hidden="true">🔑</span>
+        <span className="settings-section-icon" aria-hidden="true"><Icon name="key" size={18} /></span>
         <div>
           <h3 className="settings-section-title">Cambiar contraseña</h3>
           <p className="settings-section-subtitle">
