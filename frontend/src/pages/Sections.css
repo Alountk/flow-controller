@@ -550,7 +550,7 @@
 }
 
 .sec-row-path {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--text-dim);
   white-space: nowrap;
@@ -561,7 +561,7 @@
 }
 
 .sec-row-ep {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--accent);
   flex-shrink: 0;
@@ -1474,7 +1474,7 @@
 
 .sec-movie-path {
   font-size: 0.7rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   opacity: 0.5;
   overflow: hidden;
   text-overflow: ellipsis;

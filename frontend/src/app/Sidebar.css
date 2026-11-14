@@ -1,6 +1,6 @@
 /* ---- Sidebar ---- */
 .sidebar {
-  width: 240px;
+  width: 256px;
   flex-shrink: 0;
   background: var(--bg-elev);
   border-right: 1px solid var(--border);
@@ -26,6 +26,12 @@
 
 .sb-brand span {
   color: var(--accent);
+}
+
+.sb-tagline {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
 }
 
 .sb-version {

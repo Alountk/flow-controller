@@ -225,7 +225,7 @@
 }
 
 .sg-pct {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 10.5px;
   color: var(--text-dim);
   flex-shrink: 0;
@@ -251,7 +251,7 @@
 
 .sg-path {
   margin-top: 7px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 10.5px;
   color: var(--text-dim);
   overflow: hidden;
@@ -296,7 +296,7 @@
 }
 
 .sg-op-name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--text-dim);
   flex: 1 1 160px;
@@ -307,7 +307,7 @@
 }
 
 .sg-op-progress {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--text);
   min-width: 110px;
@@ -599,7 +599,7 @@
 }
 
 .sg-det-progress > span {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--text-dim);
 }

@@ -114,7 +114,7 @@
   background: var(--bg);
   color: var(--text);
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--mono);
   outline: none;
 }
 
@@ -220,7 +220,7 @@
 .fm-batch-report-name {
   flex-shrink: 0;
   color: var(--text);
-  font-family: monospace;
+  font-family: var(--mono);
 }
 
 .fm-batch-report-detail {
@@ -259,7 +259,7 @@
 .fm-date {
   font-size: 11px;
   color: var(--text-dim);
-  font-family: monospace;
+  font-family: var(--mono);
   flex-shrink: 0;
   min-width: 60px;
   text-align: right;
@@ -359,8 +359,7 @@
   background: var(--bg);
   color: var(--text);
   font-size: 12px;
-  font-family: monospace;
-  outline: none;
+  font-family: var(--mono);
 }
 
 /* Status bar for queue */

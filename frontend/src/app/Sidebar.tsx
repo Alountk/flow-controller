@@ -49,6 +49,7 @@ export function Sidebar({ active, onNavigate, developer, hidden = [] }: Props) {
     <aside className="sidebar">
       <div className="sb-header">
         <div className="sb-brand">Flow<span>Controller</span></div>
+        <div className="sb-tagline">Gestor Multimedia</div>
         <div className="sb-version">{APP_VERSION_LABEL}</div>
       </div>
 

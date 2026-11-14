@@ -392,7 +392,7 @@
 /* Monospace AND wrapping: a file name is one long unbroken token, and it has
    to break inside the block instead of pushing the panel wider. */
 .has-file-name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 13px;
   color: var(--text);
   overflow-wrap: anywhere;
