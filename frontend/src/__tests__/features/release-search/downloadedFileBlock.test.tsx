@@ -202,7 +202,7 @@ describe('the downloaded-file block', () => {
 
   it('wraps a long name instead of overflowing it', () => {
     // The CSS is the only place that promise lives: monospace + wrapping.
-    expect(calendarCss).toMatch(/\.has-file-name[\s\S]*?font-family:\s*ui-monospace/)
+    expect(calendarCss).toMatch(/\.has-file-name[\s\S]*?font-family:\s*(ui-monospace|var\(--mono\))/)
     expect(calendarCss).toMatch(/\.has-file-name[\s\S]*?overflow-wrap/)
   })
 })

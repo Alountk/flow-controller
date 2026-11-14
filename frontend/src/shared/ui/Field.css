@@ -47,7 +47,7 @@
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
-  font-family: monospace;
+  font-family: var(--mono);
 }
 
 .settings-input:focus {

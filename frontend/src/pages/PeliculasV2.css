@@ -68,7 +68,7 @@
   position: absolute;
   right: 6px;
   padding: 1px 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 10px;
   color: var(--text-dim);
   background: var(--bg-elev);
@@ -295,7 +295,7 @@
 .sec-v2 .sec-res-chip {
   padding: 1px 5px;
   font-size: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   color: color-mix(in srgb, var(--text-dim) 55%, transparent);
   background: transparent;
   border: 1px solid var(--border);
@@ -353,7 +353,7 @@
 
 .sec-v2-keys kbd {
   padding: 1px 5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   color: var(--text);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
@@ -364,7 +364,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
 }
 
 .sec-v2-pager button {

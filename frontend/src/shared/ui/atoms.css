@@ -167,7 +167,7 @@
 .service-test-url {
   font-size: 11px;
   color: var(--text-dim);
-  font-family: monospace;
+  font-family: var(--mono);
   word-break: break-all;
 }
 

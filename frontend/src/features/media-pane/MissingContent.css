@@ -308,7 +308,7 @@
 
 .wanted-ep {
   color: var(--accent);
-  font-family: monospace;
+  font-family: var(--mono);
   font-size: 11px;
 }
 
@@ -318,7 +318,7 @@
 
 .wanted-date {
   color: var(--text-dim);
-  font-family: monospace;
+  font-family: var(--mono);
   font-size: 11px;
 }
 

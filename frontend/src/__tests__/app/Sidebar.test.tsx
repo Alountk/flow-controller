@@ -3,6 +3,12 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { Sidebar } from '../../app/Sidebar.tsx'
 
 describe('Sidebar', () => {
+  it('names the product under the brand, as the Stitch dashboard does', () => {
+    render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
+
+    expect(screen.getByText('Gestor Multimedia')).toBeInTheDocument()
+  })
+
   it('shows the build version, not a hardcoded literal', () => {
     const { container } = render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 
