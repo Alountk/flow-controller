@@ -1,4 +1,5 @@
 import { useRef, useState, useContext, type ReactNode } from 'react'
+import { Icon } from '../shared/ui/Icon.tsx'
 import { useDialog } from '../shared/hooks/useDialog.ts'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { EventStreamContext } from '../shared/hooks/useEventStream.ts'
@@ -274,7 +275,7 @@ function FilePicker({ label, value, onSelect, roots, alternative }: FilePickerPr
         <ScanFrame label={`Seleccionar ${label}`} onClose={() => setOpen(false)}>
           <div className="scan-modal-header">
             <div className="scan-selected-info">
-              <span className="scan-selected-type">📂</span>
+              <span className="scan-selected-type"><Icon name="folder_open" size={18} /></span>
               <strong>Seleccionar {label}</strong>
             </div>
             <button className="scan-modal-close" onClick={() => setOpen(false)}>×</button>
@@ -1085,7 +1086,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
             {/* S2/L14 + mockup 12 — missing required language banner */}
             {probeResult.language_check?.ok === false && !langOk && (
               <div className="mixer-lang-notice">
-                <span className="mixer-lang-notice-icon" aria-hidden="true">⚠</span>
+                <span className="mixer-lang-notice-icon" aria-hidden="true"><Icon name="warning" size={16} /></span>
                 <div className="mixer-lang-notice-body">
                   <div className="mixer-lang-notice-title-row">
                     <span className="mixer-lang-notice-title">
@@ -1369,7 +1370,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
             <div className="mixer-actionbar-buttons">
               {!compatOk && (
                 <div className="mixer-blocked-note">
-                  <span aria-hidden="true">⚠</span>
+                  <span aria-hidden="true"><Icon name="warning" size={16} /></span>
                   <span className="mixer-blocked-text">
                     Mezclado bloqueado: los fps o la duración no coinciden entre A y B
                   </span>
@@ -1397,7 +1398,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
         <ScanFrame label="Elegir carpeta de destino" onClose={() => setFolderPickerOpen(false)}>
           <div className="scan-modal-header">
             <div className="scan-selected-info">
-              <span className="scan-selected-type">📂</span>
+              <span className="scan-selected-type"><Icon name="folder_open" size={18} /></span>
               <strong>Elegir carpeta</strong>
             </div>
             <button className="scan-modal-close" onClick={() => setFolderPickerOpen(false)}>

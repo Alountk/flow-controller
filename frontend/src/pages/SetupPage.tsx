@@ -1,4 +1,5 @@
 import '../shared/ui/atoms.css'
+import { Icon } from '../shared/ui/Icon.tsx'
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../shared/api/auth.ts'
 import { saveSetupStep, type SetupSaveResult, type SetupStepBody } from '../shared/api/setup.ts'
@@ -448,32 +449,32 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
             </p>
             <ul className="setup-checklist">
               <li>
-                <span className="ico">🎬</span>
+                <span className="ico" aria-hidden="true"><Icon name="movie" size={20} /></span>
                 <span>
                   <strong>Radarr</strong> — URL y clave de la API para localizar e importar películas.
                 </span>
               </li>
               <li>
-                <span className="ico">📺</span>
+                <span className="ico" aria-hidden="true"><Icon name="tv" size={20} /></span>
                 <span>
                   <strong>Sonarr</strong> — URL y clave de la API para series.
                 </span>
               </li>
               <li>
-                <span className="ico">⬇️</span>
+                <span className="ico" aria-hidden="true"><Icon name="download" size={20} /></span>
                 <span>
                   <strong>aMuTorrent (opcional)</strong> — URL, clave, usuario y contraseña del
                   gestor de descargas.
                 </span>
               </li>
               <li>
-                <span className="ico">📁</span>
+                <span className="ico" aria-hidden="true"><Icon name="folder" size={20} /></span>
                 <span>
                   <strong>Rutas</strong> — carpetas de descarga y raíces permitidas.
                 </span>
               </li>
               <li>
-                <span className="ico">🛡️</span>
+                <span className="ico" aria-hidden="true"><Icon name="shield" size={20} /></span>
                 <span>
                   <strong>Protección</strong> — clave de la app para cerrar el puerto.
                 </span>

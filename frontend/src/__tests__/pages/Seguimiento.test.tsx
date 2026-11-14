@@ -336,8 +336,8 @@ describe('the unified task list (S2)', () => {
     const mixRow = container.querySelector('.sg-row-mix') as HTMLElement
     const fill = mixRow.querySelector('.mixer-progress-fill') as HTMLElement
     expect(fill.style.width).toBe('42%')
-    expect(within(mixRow).getByRole('button', { name: '⏸ Pausar' })).toBeInTheDocument()
-    expect(within(mixRow).getByRole('button', { name: '✕ Cancelar tarea' })).toBeInTheDocument()
+    expect(within(mixRow).getByRole('button', { name: 'Pausar' })).toBeInTheDocument()
+    expect(within(mixRow).getByRole('button', { name: 'Cancelar tarea' })).toBeInTheDocument()
   })
 })
 
@@ -1061,7 +1061,7 @@ describe('the mix rows (S11)', () => {
     })
     renderView(resp([trace()]))
 
-    const cancel = await screen.findByRole('button', { name: '✕ Cancelar tarea' })
+    const cancel = await screen.findByRole('button', { name: 'Cancelar tarea' })
     fireEvent.click(cancel)
 
     await waitFor(() =>
@@ -1083,14 +1083,14 @@ describe('the mix rows (S11)', () => {
     const calls = stubMixer(state)
     renderView(resp([trace()]))
 
-    fireEvent.click(await screen.findByRole('button', { name: '⏸ Pausar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pausar' }))
     await waitFor(() =>
       expect(
         calls.some((c) => c.url === '/api/mixer/tasks/m-run/pause' && c.method === 'POST'),
       ).toBe(true),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '▶ Reanudar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reanudar' }))
     await waitFor(() =>
       expect(
         calls.some((c) => c.url === '/api/mixer/tasks/m-pa/resume' && c.method === 'POST'),

@@ -308,9 +308,8 @@ describe('búsqueda unificada — estructura del diseño (config-1x1 T4/S2)', ()
     const chips = document.querySelector('.indexadores-source-chips') as HTMLElement
     expect(chips).not.toBeNull()
     within(chips).getByText('Fuentes:')
-    within(chips).getByText('🌐')
-    within(chips).getByText('📥')
-    within(chips).getByText('🔍')
+    // One decorative glyph per source chip (torznab, amule, prowlarr).
+    expect(chips.querySelectorAll('svg.icon[aria-hidden="true"]')).toHaveLength(3)
     for (const source of ['torznab', 'amule', 'prowlarr']) {
       expect(within(chips).getByRole('button', { name: source })).toHaveAttribute(
         'aria-pressed',

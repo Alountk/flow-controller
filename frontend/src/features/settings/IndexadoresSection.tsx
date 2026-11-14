@@ -41,6 +41,8 @@
  *   disabled buttons.
  */
 
+import { Icon } from '../../shared/ui/Icon.tsx'
+import type { IconName } from '../../shared/ui/iconPaths.ts'
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -88,12 +90,12 @@ const GROUP_TITLE: Record<string, string> = {
   amule: 'Resultados daemon aMule (eD2k/Kad)',
 }
 
-/** Emoji del chip de fuente, literal del diseño (decorativo para el nombre
- *  accesible: el chip se llama «torznab», no «🌐 torznab»). */
-const CHIP_EMOJI: Record<IndexerSearchSource, string> = {
-  torznab: '🌐',
-  amule: '📥',
-  prowlarr: '🔍',
+/** Glifo del chip de fuente (decorativo para el nombre accesible: el chip
+ *  se llama «torznab», no «lenguaje torznab»). */
+const CHIP_ICON: Record<IndexerSearchSource, IconName> = {
+  torznab: 'language',
+  amule: 'download',
+  prowlarr: 'search',
 }
 
 function formatSize(size: number | null): string {
@@ -460,7 +462,7 @@ export function IndexadoresSection({
                 aria-pressed={selectedSources.has(source)}
                 onClick={() => toggleSearchSource(source)}
               >
-                <span aria-hidden="true">{CHIP_EMOJI[source]}</span> {source}{' '}
+                <span aria-hidden="true"><Icon name={CHIP_ICON[source]} size={14} /></span> {source}{' '}
                 {search && (
                   <span className="indexadores-chip-count">
                     {search.response.results.filter((r) => r.source === source).length}

@@ -1,3 +1,4 @@
+import { Icon } from '../shared/ui/Icon.tsx'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 /**
@@ -53,7 +54,7 @@ export function QuickActionsMenu({
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <span aria-hidden="true">⚡</span>
+        <span aria-hidden="true"><Icon name="bolt" size={16} /></span>
         Acciones rápidas
       </button>
       {open && (

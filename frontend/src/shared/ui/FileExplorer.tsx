@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Icon } from '../../shared/ui/Icon.tsx'
 import { useDialog } from '../hooks/useDialog.ts'
 import {
   filterByName,
@@ -192,7 +193,7 @@ export function PathBar({
         onClick={() => onNavigate(parentDir(path, rootPaths))}
         disabled={path === ''}
       >
-        ⬆ Subir
+        <Icon name="arrow_upward" size={16} /> Subir
       </button>
       {onRefresh && (
         <button type="button" className="explorer-btn" title="Refrescar listado" onClick={onRefresh}>
@@ -358,7 +359,7 @@ export function FileExplorer({
                 shifts one column left squeezes the name to three letters. */}
             <span className="explorer-check">{renderRowStart?.(entry)}</span>
             <span className="explorer-icon" aria-hidden="true">
-              {entry.isDir ? '📁' : entry.isVideo === false ? '📄' : '🎬'}
+              <Icon name={entry.isDir ? 'folder' : entry.isVideo === false ? 'description' : 'movie'} size={18} />
             </span>
             <div className="explorer-name">
               {/* Without a caller slot the name IS the keyboard path; with one,
@@ -433,7 +434,7 @@ export function FileExplorer({
               {subtitle && <p className="explorer-dialog-subtitle">{subtitle}</p>}
             </div>
             <button type="button" className="explorer-dialog-close" onClick={onCancel} aria-label="Cerrar">
-              ✕
+              <Icon name="close" size={16} />
             </button>
           </header>
           {chrome}
