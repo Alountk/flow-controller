@@ -31,7 +31,7 @@
   border-radius: 7px;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -74,7 +74,7 @@
 }
 
 .renombrar-row.blocked {
-  background: color-mix(in srgb, var(--warn, #d97706) 8%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
 }
 
 .renombrar-row-head {
@@ -125,7 +125,7 @@
 
 .renombrar-warn {
   font-size: 11px;
-  color: var(--warn, #d97706);
+  color: var(--warn);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -142,7 +142,7 @@
 }
 
 .renombrar-report.bad {
-  border-left-color: var(--bad, #dc2626);
+  border-left-color: var(--bad);
 }
 
 .renombrar-report ul {
@@ -188,7 +188,7 @@
 .renombrar-tab.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
   font-weight: 600;
 }
 
@@ -234,7 +234,7 @@
 }
 
 .renombrar-table tr.is-blocked {
-  background: color-mix(in srgb, var(--warn, #d97706) 8%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
 }
 
 .renombrar-cell-actions {
@@ -248,7 +248,7 @@
 .renombrar-blocked {
   display: block;
   font-size: 11px;
-  color: var(--warn, #d97706);
+  color: var(--warn);
 }
 
 /* Only the BUTTON gets the control resets: the Candidatos row keeps the same
@@ -285,8 +285,8 @@ button.renombrar-folder {
 }
 
 .renombrar-badge.is-review {
-  border-color: var(--warn, #d97706);
-  color: var(--warn, #d97706);
+  border-color: var(--warn);
+  color: var(--warn);
 }
 
 .renombrar-badge.is-hand {

@@ -903,12 +903,12 @@
 
 .mixer-btn-primary {
   background: var(--accent);
-  color: var(--on-fill, #fff);
+  color: var(--on-fill);
   border: 1px solid transparent;
 }
 
 .mixer-btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 85%, #000);
+  background: color-mix(in srgb, var(--accent) 85%, black);
 }
 
 .mixer-btn-primary:disabled {

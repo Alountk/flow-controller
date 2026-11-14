@@ -569,7 +569,7 @@
 }
 
 .settings-hint-error {
-  color: var(--danger, #dc2626);
+  color: var(--danger);
 }/* stitch-12: la sección es una tabla de cuatro columnas, no tarjetas. Las
    filas se separan con línea, sin caja por servicio. */
 /* La tabla del diseño no cabe a 380px: en vez de recortar la píldora «Sin

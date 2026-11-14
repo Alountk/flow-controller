@@ -641,7 +641,7 @@
 
 .lang-search-error {
   font-size: 12px;
-  color: var(--danger, #e5484d);
+  color: var(--danger);
 }
 
 .lang-search-empty {
@@ -703,7 +703,7 @@
 
 .lang-search-row-error {
   font-size: 11px;
-  color: var(--danger, #e5484d);
+  color: var(--danger);
 }
 
 
@@ -778,6 +778,6 @@
 }
 
 /* Seeder triage: plenty, thin, dying. */
-.release-peers.is-good { color: #34d399; }
-.release-peers.is-ok { color: #fbbf24; }
-.release-peers.is-bad { color: #f87171; }
+.release-peers.is-good { color: var(--ok); }
+.release-peers.is-ok { color: var(--warn); }
+.release-peers.is-bad { color: var(--bad); }
