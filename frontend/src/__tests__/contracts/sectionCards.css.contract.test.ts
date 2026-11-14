@@ -42,7 +42,7 @@ describe('Section cards (design 03, S7)', () => {
   it('draws the section row as a card: border, 8px radius and padding', () => {
     const body = topLevelRuleBody('.sec-master .sec-row')
     expect(body).toMatch(/border:\s*1px solid var\(--border\)/)
-    expect(body).toMatch(/border-radius:\s*8px/)
+    expect(body).toMatch(/border-radius:\s*var\(--radius-md\)/)
     expect(body).toMatch(/padding:\s*12px/)
     expect(body).toMatch(/background:\s*var\(--bg-elev\)/)
   })

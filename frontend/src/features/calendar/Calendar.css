@@ -42,7 +42,7 @@
 
 .calendar-day {
   background: var(--card-bg);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   overflow: hidden;
 }
@@ -67,7 +67,7 @@
   color: var(--text-secondary);
   background: var(--surface);
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .calendar-day-items {
@@ -81,7 +81,7 @@
   display: flex;
   gap: 10px;
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--border);
   transition: border-color 0.15s;
@@ -116,7 +116,7 @@
   width: 40px;
   height: 60px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 

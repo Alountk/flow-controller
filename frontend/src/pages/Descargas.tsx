@@ -232,11 +232,6 @@ export default function Descargas() {
 
   return (
     <section className="dl">
-      <header className="dl-header">
-        <h2 className="dl-title">Descargas</h2>
-        <p className="dl-subtitle">Cola de aMule en vivo, con control por fichero</p>
-      </header>
-
       {listQuery.isPending && <p className="dl-empty">Cargando…</p>}
       {listQuery.isError && (
         <p className="dl-alert" role="alert">

@@ -28,7 +28,7 @@
 .dash-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -107,7 +107,7 @@ button.dash-card:focus-visible {
   gap: 16px;
   background: color-mix(in srgb, var(--bad) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--bad) 25%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
   margin-bottom: 24px;
 }
@@ -137,7 +137,7 @@ button.dash-card:focus-visible {
   background: var(--bad-strong);
   color: var(--on-fill);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 7px 14px;
   font-size: 13px;
   font-weight: 600;
@@ -155,7 +155,7 @@ button.dash-card:focus-visible {
 .act-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -187,7 +187,7 @@ button.dash-card:focus-visible {
   font-size: 12.5px;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text);
 }
@@ -203,7 +203,7 @@ button.dash-card:focus-visible {
   font-weight: 500;
   padding: 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev);
   color: var(--text-2);
   cursor: pointer;

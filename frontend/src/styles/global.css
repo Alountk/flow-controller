@@ -7,6 +7,10 @@
    Derived tokens (aliases + soft tints) are declared only once: they resolve
    through the palette above them, so they flip with it automatically. */
 :root {
+  /* Stitch scale: 4 controls, 8 cards, 12 panels and modals; pills stay 999px. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   color-scheme: light;
 
   /* Surfaces */

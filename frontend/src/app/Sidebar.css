@@ -62,7 +62,7 @@
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   color: var(--text-dim);
   text-decoration: none;
@@ -94,7 +94,7 @@
 .sb-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--accent-soft);
   display: flex;
   align-items: center;

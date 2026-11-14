@@ -27,7 +27,7 @@
 .dl-alert {
   margin: 0 0 14px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 8%, transparent);
@@ -41,7 +41,7 @@
 
 .dl-row {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 14px 16px;
   background: var(--surface);
   display: flex;
@@ -169,7 +169,7 @@
 
 .dl-field select {
   padding: 4px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
 }
@@ -179,7 +179,7 @@
 .dl-danger,
 .dl-confirm-actions button {
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -204,7 +204,7 @@
 
 .dl-confirm {
   background: var(--surface);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 18px 20px;
   max-width: 420px;
   display: flex;

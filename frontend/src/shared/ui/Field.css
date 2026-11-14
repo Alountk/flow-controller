@@ -30,7 +30,7 @@
   background: var(--warn);
   color: var(--on-warn);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -42,7 +42,7 @@
      (20 chars of monospace), so a 320px rail left the panel overflowing. */
   min-width: 0;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
@@ -58,7 +58,7 @@
 
 .settings-toggle {
   padding: 5px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   cursor: pointer;
   font-size: 13px;

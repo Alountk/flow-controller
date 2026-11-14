@@ -26,7 +26,7 @@
 
 .duplicados-refresh {
   padding: 7px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
   cursor: pointer;
@@ -36,7 +36,7 @@
 .duplicados-notice {
   margin: 0 0 14px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
 }
 
@@ -57,7 +57,7 @@
 
 .duplicados-group {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 14px 16px;
   margin-bottom: 14px;
   background: var(--surface);
@@ -146,7 +146,7 @@
 .duplicados-delete,
 .duplicados-danger {
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -227,7 +227,7 @@
   flex-wrap: wrap;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev);
   font-size: 12px;
 }
@@ -239,7 +239,7 @@
 
 .duplicados-scope-select {
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
@@ -258,7 +258,7 @@
 
 .duplicados-scope-btn {
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);

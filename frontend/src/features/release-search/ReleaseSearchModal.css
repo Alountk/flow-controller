@@ -10,7 +10,7 @@
   width: 80px;
   height: 120px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   flex-shrink: 0;
 }
 
@@ -42,7 +42,7 @@
 
 .calendar-modal-status {
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   font-size: 13px;
   margin-bottom: 12px;
@@ -83,7 +83,7 @@
   padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .calendar-sites-label {
@@ -164,14 +164,14 @@
   max-width: 400px;
   height: 4px;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .progress-bar {
   height: 100%;
   background: var(--accent);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   transition: width 1s linear;
 }
 
@@ -193,14 +193,14 @@
   padding: 10px 12px;
   margin-bottom: 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev);
 }
 
 .release-filter-text {
   width: 100%;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
@@ -223,7 +223,7 @@
 .release-filter-seeders input {
   width: 70px;
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
@@ -273,7 +273,7 @@
 .release-filter-clear {
   align-self: flex-start;
   padding: 3px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-dim);
@@ -299,7 +299,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--border);
   transition: border-color 0.15s, background 0.15s;
@@ -358,7 +358,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 11px;
   color: var(--accent);
 }
@@ -378,7 +378,7 @@
   padding: 10px 12px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .has-file-label {
@@ -423,7 +423,7 @@
   letter-spacing: 0.04em;
   padding: 1px 6px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .has-file-tag.is-on {
@@ -496,7 +496,7 @@
   font-size: 11px;
   font-weight: 600;
   padding: 5px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-secondary);
@@ -532,7 +532,7 @@
   border: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 0 5px;
   font-size: 10px;
   font-weight: 700;
@@ -561,7 +561,7 @@
   margin-bottom: 16px;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev);
 }
 
@@ -601,7 +601,7 @@
 .lang-search-input {
   flex: 1;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
@@ -615,7 +615,7 @@
 
 .lang-search-btn {
   padding: 7px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--accent);
   background: transparent;
   color: var(--accent);
@@ -661,7 +661,7 @@
   gap: 2px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--surface-2);
 }
 
@@ -683,7 +683,7 @@
   align-self: flex-start;
   margin-top: 2px;
   padding: 3px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--accent);
   background: transparent;
   color: var(--accent);
