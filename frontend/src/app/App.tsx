@@ -343,7 +343,8 @@ function App() {
   return (
     <EventStreamContext.Provider value={eventStream}>
       <div className="layout">
-        <Sidebar active={page} onNavigate={setPage} developer={developer} hidden={hiddenPages} />
+        <Sidebar active={page} onNavigate={setPage} developer={developer} hidden={hiddenPages}
+          onLogout={authState.has_user ? handleLogout : undefined} />
 
         <div className="main">
           <Topbar
@@ -352,7 +353,6 @@ function App() {
             lastUpdated={data ? Date.now() : null}
             right={<ServiceChips services={services} />}
             subtitle={PAGE_SUBTITLES[page]}
-            onLogout={authState.has_user ? handleLogout : undefined}
           />
 
           <div className="content-and-queue">

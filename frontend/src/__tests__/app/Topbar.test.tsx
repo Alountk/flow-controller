@@ -58,19 +58,4 @@ describe('Topbar', () => {
 
     expect(screen.getByRole('button', { name: 'Acción' })).toBeInTheDocument()
   })
-
-  it('offers no logout unless an account protects the panel', () => {
-    render(<Topbar title="Dashboard" loading={false} lastUpdated={null} />)
-
-    expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).toBeNull()
-  })
-
-  it('calls onLogout when the user signs out', () => {
-    const onLogout = vi.fn()
-    render(<Topbar title="Dashboard" loading={false} lastUpdated={null} onLogout={onLogout} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
-
-    expect(onLogout).toHaveBeenCalledOnce()
-  })
 })
