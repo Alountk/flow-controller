@@ -9,6 +9,18 @@ describe('Sidebar', () => {
     expect(screen.getByText('Gestor Multimedia')).toBeInTheDocument()
   })
 
+  it('draws each nav icon as a decorative SVG, not an emoji', () => {
+    const { container } = render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
+
+    const links = container.querySelectorAll('.sb-link')
+    expect(links.length).toBeGreaterThan(0)
+    links.forEach((link) => {
+      const icon = link.querySelector('svg.sb-icon')
+      expect(icon).toHaveAttribute('aria-hidden', 'true')
+      expect(link.textContent).not.toMatch(/\p{Extended_Pictographic}/u)
+    })
+  })
+
   it('shows the build version, not a hardcoded literal', () => {
     const { container } = render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 

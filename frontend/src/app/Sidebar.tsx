@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { PAGE_PATHS, type Page } from '../shared/hooks/usePageRoute.ts'
+import { Icon } from '../shared/ui/Icon.tsx'
+import type { IconName } from '../shared/ui/iconPaths.ts'
 import './Sidebar.css'
 
 const BUILD = import.meta.env.VITE_APP_BUILD
@@ -12,26 +14,26 @@ export type { Page }
 interface NavItem {
   key: Page
   label: string
-  icon: string
+  icon: IconName
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: '📊' },
-  { key: 'peliculasV2', label: 'Películas V2', icon: '🧪' },
-  { key: 'series', label: 'Series', icon: '📺' },
-  { key: 'estrenos', label: 'Estrenos', icon: '🗓️' },
-  { key: 'seguimiento', label: 'Seguimiento', icon: '📡' },
-  { key: 'descargas', label: 'Descargas', icon: '📥' },
-  { key: 'disk', label: 'Disco', icon: '💾' },
-  { key: 'files', label: 'Archivos', icon: '📂' },
-  { key: 'renombrar', label: 'Renombrar', icon: '🏷️' },
-  { key: 'duplicados', label: 'Duplicados', icon: '🧬' },
-  { key: 'mixer', label: 'Media Mixer', icon: '🎬' },
-  { key: 'config', label: 'Configuración', icon: '⚙️' },
+  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { key: 'peliculasV2', label: 'Películas V2', icon: 'movie' },
+  { key: 'series', label: 'Series', icon: 'tv' },
+  { key: 'estrenos', label: 'Estrenos', icon: 'calendar_month' },
+  { key: 'seguimiento', label: 'Seguimiento', icon: 'notifications' },
+  { key: 'descargas', label: 'Descargas', icon: 'download' },
+  { key: 'disk', label: 'Disco', icon: 'hard_drive' },
+  { key: 'files', label: 'Archivos', icon: 'folder' },
+  { key: 'renombrar', label: 'Renombrar', icon: 'label' },
+  { key: 'duplicados', label: 'Duplicados', icon: 'difference' },
+  { key: 'mixer', label: 'Media Mixer', icon: 'tune' },
+  { key: 'config', label: 'Configuración', icon: 'settings' },
 ]
 
 const NAV_SYSTEM: NavItem[] = [
-  { key: 'prototypes', label: 'Prototipos', icon: '🎨' },
+  { key: 'prototypes', label: 'Prototipos', icon: 'palette' },
 ]
 
 interface Props {
@@ -62,7 +64,7 @@ export function Sidebar({ active, onNavigate, developer, hidden = [] }: Props) {
             className={`sb-link ${active === item.key ? 'active' : ''}`}
             onClick={(e) => { e.preventDefault(); onNavigate(item.key) }}
           >
-            <span className="sb-icon">{item.icon}</span>
+            <Icon name={item.icon} size={20} className="sb-icon" />
             {item.label}
           </a>
         ))}
@@ -77,7 +79,7 @@ export function Sidebar({ active, onNavigate, developer, hidden = [] }: Props) {
                 className={`sb-link ${active === item.key ? 'active' : ''}`}
                 onClick={(e) => { e.preventDefault(); onNavigate(item.key) }}
               >
-                <span className="sb-icon">{item.icon}</span>
+                <Icon name={item.icon} size={20} className="sb-icon" />
                 {item.label}
               </a>
             ))}
