@@ -21,7 +21,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-left-width: 3px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 11px 14px;
   cursor: pointer;
   box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.55);

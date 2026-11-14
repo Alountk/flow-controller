@@ -123,6 +123,10 @@ const PAGE_SUBTITLES: Partial<Record<Page, string>> = {
   dashboard: 'Vista general del servidor multimedia',
   peliculasV2: 'La misma biblioteca, con el detalle a pantalla completa',
   estrenos: 'Calendario de estrenos: películas y series',
+  descargas: 'Cola de aMule en vivo, con control por fichero',
+  renombrar: 'Copias 4K y 3D que no siguen la plantilla de Radarr',
+  duplicados: 'Carpetas con más de un vídeo de la misma clase',
+  mixer: 'Mezcla de dos archivos · vídeo + audio ordenado · subtítulos externos',
 }
 
 function App() {

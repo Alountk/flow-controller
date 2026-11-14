@@ -951,10 +951,7 @@ export function MediaMixer({ onSubmitted }: MediaMixerProps) {
   return (
     <section className="mixer">
       <div className="mixer-header">
-        <h2>
-          Media Mixer <span className="mixer-engine-chip">remux engine v3</span>
-        </h2>
-        <p>Mezcla de dos archivos · vídeo + audio ordenado · subtítulos externos</p>
+        <span className="mixer-engine-chip">remux engine v3</span>
       </div>
 
       {/* ── File Selection ──────────────────────────────────────────────── */}

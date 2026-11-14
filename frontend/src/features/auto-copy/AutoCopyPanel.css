@@ -14,7 +14,7 @@
 
 .auto-copy-btn {
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--accent);
   background: var(--accent-soft);
   color: var(--text);
@@ -57,7 +57,7 @@
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 14px;
 }
 
@@ -79,7 +79,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--bg-elev);
 }
@@ -107,7 +107,7 @@
 
 .auto-copy-entry {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elev);
   padding: 10px 14px;
 }
@@ -157,7 +157,7 @@
   color: var(--text-dim);
   font-size: 13px;
   border: 1px dashed var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .auto-copy-errors {
@@ -179,6 +179,6 @@
   color: var(--bad-text);
   background: color-mix(in srgb, var(--bad) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--bad) 25%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 10px;
 }

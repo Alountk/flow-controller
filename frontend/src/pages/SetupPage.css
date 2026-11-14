@@ -17,7 +17,7 @@
   max-width: 520px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 36px 40px;
 }
 
@@ -158,7 +158,7 @@
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-left: 3px solid var(--warn);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
 }
 
@@ -207,7 +207,7 @@
   align-items: center;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   font-size: 12px;
 }
@@ -228,7 +228,7 @@
   font-weight: 600;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev-2);
   color: var(--text-dim);
   white-space: nowrap;
@@ -254,7 +254,7 @@
 .setup-notice {
   margin-top: 16px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg-elev-2);
   font-size: 12px;
@@ -276,7 +276,7 @@
   margin-top: 16px;
   padding: 10px 12px;
   border: 1px solid var(--bad);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   color: var(--bad);
 }

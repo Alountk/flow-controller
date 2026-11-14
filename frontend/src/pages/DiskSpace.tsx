@@ -31,10 +31,6 @@ export function DiskSpace() {
 
   return (
     <section className="disk-space">
-      <div className="disk-header">
-        <h2>Espacio en Disco</h2>
-      </div>
-
       {isPending ? (
         <div className="wanted-loading">Cargando...</div>
       ) : data && data.volumes.length > 0 ? (

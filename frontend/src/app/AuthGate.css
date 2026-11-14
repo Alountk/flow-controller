@@ -15,7 +15,7 @@
   max-width: 340px;
   padding: 28px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elev);
 }
 
@@ -34,7 +34,7 @@
 
 .auth-gate-input {
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
@@ -55,7 +55,7 @@
 .auth-gate-button {
   padding: 9px 16px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--on-fill);
   font-size: 13px;

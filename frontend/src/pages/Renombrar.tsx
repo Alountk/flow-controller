@@ -182,10 +182,6 @@ export function Renombrar() {
   return (
     <section className="renombrar">
       <header className="renombrar-head">
-        <div>
-          <h2>Renombrar</h2>
-          <p className="renombrar-sub">Copias 4K y 3D que no siguen la plantilla de Radarr</p>
-        </div>
         <div className="renombrar-head-actions">
           <button
             type="button"

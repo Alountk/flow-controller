@@ -133,6 +133,6 @@ describe('Dashboard.css responsive contract', () => {
   })
 
   it('aligns the dash-card radius with the 8px handoff roundness', () => {
-    expect(topLevelRuleBody('.dash-card')).toMatch(/border-radius:\s*8px\b/)
+    expect(topLevelRuleBody('.dash-card')).toMatch(/border-radius:\s*var\(--radius-md\)/)
   })
 })

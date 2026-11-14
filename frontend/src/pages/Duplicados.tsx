@@ -126,10 +126,6 @@ export default function Duplicados() {
   return (
     <div className="duplicados">
       <header className="duplicados-header">
-        <div>
-          <h1 className="duplicados-title">Duplicados</h1>
-          <p className="duplicados-subtitle">Carpetas con más de un vídeo de la misma clase</p>
-        </div>
         <div className="duplicados-header-actions">
           <button
             type="button"

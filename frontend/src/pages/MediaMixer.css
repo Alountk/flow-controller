@@ -44,7 +44,7 @@
 .mixer-file-input {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px 16px;
 }
 
@@ -61,7 +61,7 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   color: var(--text-2);
@@ -94,7 +94,7 @@
   padding: 6px 12px;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   min-height: 20px;
   display: flex;
   align-items: center;
@@ -148,7 +148,7 @@
 .mixer-file-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 16px;
 }
 
@@ -171,7 +171,7 @@
   color: var(--text-dim);
   background: var(--bg);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
 
@@ -221,7 +221,7 @@
 .mixer-compat {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 12px 16px;
   margin-bottom: 16px;
 }
@@ -333,7 +333,7 @@
 .mixer-compare-card {
   background: color-mix(in srgb, var(--bg) 80%, transparent);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   display: flex;
   align-items: center;
@@ -368,7 +368,7 @@
 .mixer-panel {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 20px;
   margin-bottom: 16px;
 }
@@ -417,7 +417,7 @@
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   cursor: pointer;
   font-size: 12px;
@@ -497,7 +497,7 @@
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   background: color-mix(in srgb, var(--warn) 10%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .mixer-lang-notice-icon {
@@ -506,7 +506,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 20%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
@@ -532,7 +532,7 @@
 
 .mixer-badge-blocking {
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 9px;
   font-family: var(--mono, monospace);
   font-weight: 700;
@@ -564,7 +564,7 @@
 .mixer-btn-indexer {
   flex-shrink: 0;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
@@ -587,7 +587,7 @@
   margin-top: 12px;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   font-size: 12px;
   color: var(--text-2);
@@ -620,7 +620,7 @@
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev-2);
   cursor: pointer;
   font-size: 12px;
@@ -650,7 +650,7 @@
   line-height: 1;
   padding: 2px 3px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .mixer-audio-move:hover:not(:disabled) {
@@ -674,7 +674,7 @@
   color: var(--text-dim);
   background: var(--bg);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -695,7 +695,7 @@
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   font-size: 12px;
 }
@@ -711,7 +711,7 @@
 .mixer-lang-select {
   padding: 4px 6px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-elev);
   color: var(--text);
   font-size: 11px;
@@ -795,7 +795,7 @@
   gap: 16px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 14px 16px;
   margin-bottom: 16px;
 }
@@ -860,7 +860,7 @@
   flex: 1 1 22ch;
   min-width: 14ch;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
@@ -894,7 +894,7 @@
 .mixer-btn-primary,
 .mixer-btn-secondary {
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
