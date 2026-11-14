@@ -7,7 +7,7 @@
 .scan-modal-close {
   border: 0;
   background: none;
-  color: var(--text-dim, #71717a);
+  color: var(--text-dim);
   font-size: 14px;
   cursor: pointer;
   padding: 2px 4px;
@@ -18,7 +18,7 @@
 .scan-replace-note {
   margin: 0;
   font-size: 11px;
-  color: var(--text-dim, #71717a);
+  color: var(--text-dim);
 }
 
 .scan-replace-note code {

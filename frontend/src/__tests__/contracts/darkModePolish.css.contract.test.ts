@@ -155,7 +155,7 @@ describe('T5 — explorer control backgrounds follow --bg-elev', () => {
     it(`${selector} in ${file} fills with var(--bg-elev)`, () => {
       const body = ruleBody(readCss(file), selector)
       expect(body, `${selector} rule exists`).not.toBe('')
-      expect(hasDecl(body, 'background', 'var(--bg-elev, #ffffff)')).toBe(true)
+      expect(hasDecl(body, 'background', 'var(--bg-elev)')).toBe(true)
       expect(hasDecl(body, 'background', '#fff')).toBe(false)
     })
   }
@@ -163,7 +163,7 @@ describe('T5 — explorer control backgrounds follow --bg-elev', () => {
   it('.explorer-btn.is-primary colors text with var(--on-fill)', () => {
     const body = ruleBody(readCss('shared/ui/FileExplorer.css'), '.explorer-btn.is-primary')
     expect(body, '.explorer-btn.is-primary rule exists').not.toBe('')
-    expect(hasDecl(body, 'color', 'var(--on-fill, #ffffff)')).toBe(true)
+    expect(hasDecl(body, 'color', 'var(--on-fill)')).toBe(true)
     expect(hasDecl(body, 'color', '#fff')).toBe(false)
   })
 
@@ -205,7 +205,7 @@ describe('T6 — modal close buttons are glyph buttons, not UA chrome', () => {
       const body = ruleBody(readCss(file), selector)
       expect(body, `${selector} rule exists`).not.toBe('')
       expect(hasDecl(body, 'background', 'none')).toBe(true)
-      expect(hasDecl(body, 'color', 'var(--text-dim, #71717a)')).toBe(true)
+      expect(hasDecl(body, 'color', 'var(--text-dim)')).toBe(true)
     })
   }
 })

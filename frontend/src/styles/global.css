@@ -37,6 +37,8 @@
   --bad-text: #b91c1c;
   --accent: #4f46e5;
   --info: #2563eb;
+  --violet: #7e22ce;
+  --border-strong: #c7c4d8;
 
   /* Interaction + text drawn on filled controls */
   --hover: rgba(0, 0, 0, 0.04);
@@ -53,6 +55,13 @@
   --accent-bg: var(--accent-soft);
   --err: var(--bad);
   --text-secondary: var(--text-2);
+  /* Aliases that components already named but nobody declared: the light
+     fallback hex won in dark mode. They now resolve through the palette. */
+  --text-muted: var(--text-3);
+  --danger: var(--bad);
+  --warning: var(--warn);
+  --success: var(--ok);
+  --font-mono: var(--mono);
   --mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -93,6 +102,8 @@
     --bad-text: #fca5a5;
     --accent: #6366f1;
     --info: #4a9eff;
+    --violet: #c084fc;
+    --border-strong: #3f3f46;
 
     /* Interaction + on-fill (invariant, kept parallel for review) */
     --hover: rgba(255, 255, 255, 0.04);

@@ -20,15 +20,15 @@
 
 .duplicados-subtitle {
   margin: 4px 0 0;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   font-size: 13px;
 }
 
 .duplicados-refresh {
   padding: 7px 14px;
   border-radius: 8px;
-  border: 1px solid var(--border, #d1d5db);
-  background: var(--surface, #fff);
+  border: 1px solid var(--border);
+  background: var(--surface);
   cursor: pointer;
 }
 
@@ -41,26 +41,26 @@
 }
 
 .duplicados-alert {
-  color: var(--danger, #dc2626);
-  background: color-mix(in srgb, var(--danger, #dc2626) 8%, transparent);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .duplicados-notice {
-  color: var(--success, #15803d);
-  background: color-mix(in srgb, var(--success, #15803d) 8%, transparent);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
 }
 
 .duplicados-empty {
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   padding: 16px 0;
 }
 
 .duplicados-group {
-  border: 1px solid var(--border, #e5e7eb);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 16px;
   margin-bottom: 14px;
-  background: var(--surface, #fff);
+  background: var(--surface);
 }
 
 .duplicados-group-header {
@@ -82,19 +82,19 @@
   letter-spacing: 0.04em;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--surface-alt, #f3f4f6);
+  background: var(--surface-alt);
 }
 
 .duplicados-count {
   font-size: 12px;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   margin-left: auto;
 }
 
 .duplicados-titles {
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
 }
 
 .duplicados-files {
@@ -127,7 +127,7 @@
 }
 
 .duplicados-size {
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
@@ -148,13 +148,13 @@
   padding: 5px 12px;
   border-radius: 8px;
   cursor: pointer;
-  border: 1px solid var(--border, #d1d5db);
-  background: var(--surface, #fff);
+  border: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .duplicados-danger {
-  border-color: var(--danger, #dc2626);
-  color: var(--danger, #dc2626);
+  border-color: var(--danger);
+  color: var(--danger);
   font-weight: 600;
 }
 
@@ -168,7 +168,7 @@
   margin: 6px 0 0;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11.5px;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -177,7 +177,7 @@
 .duplicados-summary {
   margin: 0 0 14px;
   font-size: 13px;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
 }
 
 /* «Radarr» no es un adorno: marca cuál es el fichero del catálogo, el que no sobra. */
@@ -192,19 +192,19 @@
 }
 
 .duplicados-known {
-  background: var(--surface-alt, #f3f4f6);
-  color: var(--text-muted, #6b7280);
+  background: var(--surface-alt);
+  color: var(--text-muted);
 }
 
 .duplicados-extra {
-  background: color-mix(in srgb, var(--warning, #b45309) 12%, transparent);
-  color: var(--warning, #b45309);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
 }
 
 /* Sin datos del arr no se puede afirmar nada: ni verde ni aviso, gris. */
 .duplicados-unknown {
-  background: var(--surface-alt, #f3f4f6);
-  color: var(--text-muted, #6b7280);
+  background: var(--surface-alt);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
   padding: 2px 8px;
@@ -285,16 +285,16 @@
 }
 
 .duplicados-chip.is-reclaim {
-  border-color: var(--bad, #dc2626);
-  color: var(--bad, #dc2626);
+  border-color: var(--bad);
+  color: var(--bad);
 }
 
 .duplicados-group-warn {
   margin: 0;
   padding: 8px 14px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--warn, #d97706) 10%, transparent);
-  color: var(--warn, #d97706);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--warn);
   font-size: 11.5px;
 }
 
