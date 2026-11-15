@@ -173,6 +173,35 @@ function buildRows(
   return rows
 }
 
+type Origin = 'all' | 'radarr' | 'sonarr' | 'copy' | 'mix'
+type StageFilter = 'all' | TraceStage
+
+const ORIGIN_LABELS: Record<Origin, string> = {
+  all: 'Todos los orígenes',
+  radarr: 'Radarr',
+  sonarr: 'Sonarr',
+  copy: 'Copias',
+  mix: 'Mixer',
+}
+
+/** The text a row answers the search with — the same one it shows as its title. */
+function rowTitle(row: RowData): string {
+  if (row.kind === 'trace') return row.trace.title
+  if (row.kind === 'copy') return row.op.name
+  return row.task.detail || row.task.task_id
+}
+
+function matchesFilters(row: RowData, query: string, origin: Origin, stage: StageFilter): boolean {
+  if (origin !== 'all') {
+    const own = row.kind === 'trace' ? row.trace.source : row.kind
+    if (own !== origin) return false
+  }
+  // A stage only means something for a download: choosing one hides the rest.
+  if (stage !== 'all' && (row.kind !== 'trace' || row.trace.stage !== stage)) return false
+  const q = query.trim().toLowerCase()
+  return q === '' || rowTitle(row).toLowerCase().includes(q)
+}
+
 /**
  * T3/S1's hoist (the seam above): while a highlight target is present, that
  * row moves to the TOP of the visible list — a reorder of `buildRows`' output,
@@ -697,6 +726,10 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
   const queryClient = useQueryClient()
   const traces = data?.traces ?? []
   const [tab, setTab] = useState<Bucket>('active')
+  const [query, setQuery] = useState('')
+  const [origin, setOrigin] = useState<Origin>('all')
+  const [stage, setStage] = useState<StageFilter>('all')
+  const filtering = query.trim() !== '' || origin !== 'all' || stage !== 'all'
 
   // T3/S1 — the just-submitted mix's highlight (S1 «borde de acento»). The
   // hash carries the mix TASK id (`#/seguimiento?highlight=<task id>`, the
@@ -821,7 +854,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
   // T3/S1 — the hoist applies to the VISIBLE tab: with a highlight target
   // present that row reads first, without one this is the T2 order.
   const visible = hoistHighlight(
-    rows.filter((row) => row.bucket === tab),
+    rows.filter((row) => row.bucket === tab && matchesFilters(row, query, origin, stage)),
     highlightRowKey,
   )
 
@@ -836,7 +869,7 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
     return <div className="sg-empty">Cargando seguimiento…</div>
   }
 
-  // The top of this page is the task list and nothing else — no in-page
+  // The top of this page is the task list and its filters — no in-page
   // header, no summary strip, no board: the retired Trazabilidad must not
   // resurface here. The page title lives in the topbar; the sweep rides below
   // the list.
@@ -878,13 +911,66 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
           <span className="sg-total">{rows.length === 1 ? '1 tarea' : `${rows.length} tareas`}</span>
         </div>
 
+        <div className="sg-filters" role="search">
+          <label className="sg-search">
+            <Icon name="search" size={16} />
+            <input
+              type="search"
+              value={query}
+              placeholder="Buscar release…"
+              aria-label="Buscar en el seguimiento"
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          <select
+            className="sg-select"
+            aria-label="Origen"
+            value={origin}
+            onChange={(e) => setOrigin(e.target.value as Origin)}
+          >
+            {(Object.keys(ORIGIN_LABELS) as Origin[]).map((key) => (
+              <option key={key} value={key}>
+                {ORIGIN_LABELS[key]}
+              </option>
+            ))}
+          </select>
+          <select
+            className="sg-select"
+            aria-label="Fase"
+            value={stage}
+            onChange={(e) => setStage(e.target.value as StageFilter)}
+          >
+            <option value="all">Todas las fases</option>
+            {(Object.keys(STAGE_LABELS) as TraceStage[]).map((key) => (
+              <option key={key} value={key}>
+                {STAGE_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="sg-list" role="tabpanel" aria-label={TAB_LABELS[tab]}>
           {rows.length === 0 ? (
             // The whole view is empty (every source, every state): the message
             // the dashboard's "Descargas atascadas" door has always landed on.
             <div className="sg-empty">Sin descargas registradas.</div>
           ) : visible.length === 0 ? (
-            <div className="sg-empty">{TAB_EMPTY[tab]}</div>
+            <div className="sg-empty">
+              {filtering ? 'Ninguna tarea coincide con los filtros.' : TAB_EMPTY[tab]}
+              {filtering && (
+                <button
+                  type="button"
+                  className="sg-clear"
+                  onClick={() => {
+                    setQuery('')
+                    setOrigin('all')
+                    setStage('all')
+                  }}
+                >
+                  Quitar filtros
+                </button>
+              )}
+            </div>
           ) : (
             visible.map((row) => {
               const highlighted = row.rowKey === highlightRowKey
