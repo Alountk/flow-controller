@@ -828,10 +828,10 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
             type="button"
             role="tab"
             aria-selected={tab === 'error'}
-            className={`sg-tab${tab === 'error' ? ' sg-tab-on' : ''}`}
+            className={`sg-tab${tab === 'error' ? ' sg-tab-on' : ''}${counts.error > 0 ? ' sg-tab-alert' : ''}`}
             onClick={() => selectTab('error')}
           >
-            Errores
+            {counts.error > 0 ? `Errores (${counts.error})` : 'Errores'}
           </button>
           <span className="sg-total">{rows.length === 1 ? '1 tarea' : `${rows.length} tareas`}</span>
         </div>
