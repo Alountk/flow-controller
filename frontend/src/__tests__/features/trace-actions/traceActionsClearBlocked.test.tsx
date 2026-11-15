@@ -202,3 +202,28 @@ describe('feedback on the row', () => {
   })
 })
 
+
+describe('Marcar como completada — a finished download the client still lists', () => {
+  it('is offered on a downloaded trace and not on a blocked one', () => {
+    stubFetch({})
+    renderActions(trace({ stage: 'downloaded' }))
+    expect(screen.getByRole('button', { name: 'Marcar como completada' })).toBeInTheDocument()
+  })
+
+  it('is not offered on a blocked trace', () => {
+    stubFetch({})
+    renderActions(trace())
+    expect(screen.queryByRole('button', { name: 'Marcar como completada' })).not.toBeInTheDocument()
+  })
+
+  it('POSTs the identity with settled: true and refreshes the board', async () => {
+    const fetchMock = stubFetch({})
+    const { onDone } = renderActions(trace({ stage: 'downloaded' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como completada' }))
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/trace/blocked/ack'))
+    expect(bodyOf(call!)).toMatchObject({ download_id: 'abc123', settled: true })
+  })
+})

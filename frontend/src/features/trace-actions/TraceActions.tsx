@@ -252,11 +252,11 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
    * cannot lie about what happened. A refusal comes back as the same
    * `ActionResult` banner the actions use.
    */
-  async function clearBlocked() {
+  async function clearBlocked(settled = false) {
     setAcking(true)
     setResult(null)
     try {
-      const res = await ackBlockedImport(trace)
+      const res = await ackBlockedImport(trace, settled)
       if (res.ok) {
         onDone()
       } else {
@@ -326,6 +326,22 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
         >
           {acking && <span className="action-spinner" aria-hidden="true" />}
           {acking ? 'Procesando…' : 'Descartar bloqueo'}
+        </button>
+      )}
+
+      {/* A download the client still lists never leaves Activas by itself
+          (paused, wrong category) even when the file is already in the
+          library — the operator declares it done. */}
+      {trace.stage === 'downloaded' && (
+        <button
+          className={`action-btn${acking ? ' is-busy' : ''}`}
+          aria-label="Marcar como completada"
+          title="Da esta descarga por terminada: pasa a Completadas (no cambia nada en el cliente ni en el arr)"
+          disabled={busy !== null || acking || copyTask !== null}
+          onClick={() => void clearBlocked(true)}
+        >
+          {acking ? <span className="action-spinner" aria-hidden="true" /> : <Icon name="check" size={14} />}
+          {acking ? 'Procesando…' : 'Marcar como completada'}
         </button>
       )}
 

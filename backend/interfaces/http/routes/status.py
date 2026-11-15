@@ -21,7 +21,7 @@ from application.gateways import (
     blocked_acks,
     check_service,
 )
-from application.use_cases.blocked_acks import incident_key, visible_traces
+from application.use_cases.blocked_acks import incident_key, settled_key, visible_traces
 from application.use_cases.trace_cache import get_traces
 from interfaces.http.deps import verify_api_key
 from state import status_cache, http_session
@@ -125,6 +125,8 @@ class BlockedAckRequest(BaseModel):
     source: str = ""
     download_id: str = ""
     ids: dict = {}
+    # True records "marcar como completada" instead of a blocked discard.
+    settled: bool = False
 
 
 @router.post("/api/trace/blocked/ack")
@@ -138,7 +140,8 @@ async def ack_blocked(req: BlockedAckRequest, _key: str = Depends(verify_api_key
     an unavailable store must not claim a clear that would not survive the
     next poll.
     """
-    key = incident_key(req.model_dump())
+    payload = req.model_dump()
+    key = settled_key(payload) if req.settled else incident_key(payload)
     if key is None:
         return {
             "ok": False,
