@@ -39,16 +39,32 @@ services:
       # Trazabilidad
       - TRACE_LIMIT=${TRACE_LIMIT:-25}
       - AMUTORRENT_INDEXER=${AMUTORRENT_INDEXER:-}
+      # aMule-watchdog: reinicio del contenedor por la Engine API, a través del
+      # socket-proxy de abajo (flow-controller ya no monta el socket de Docker).
+      - DOCKER_HOST=${DOCKER_HOST:-tcp://127.0.0.1:2375}
       # Puerto del servidor
       - PORT=${PORT:-8000}
     volumes:
       - /mnt/storage/config/flow-control:/app/config
       - /mnt/storage:/mnt/storage:rw
       - /mnt/storage-6tb:/mnt/storage-6tb:rw
-      # aMule-watchdog (S4/S5): reinicio del contenedor por la Engine API.
-      # Socket de sólo lectura en el contenedor; si el uid no está en el grupo
-      # del socket, el watchdog falla closed a solo-detección (nunca adivina).
+
+
+  # Único contenedor con acceso al socket de Docker. Sólo deja pasar
+  # `GET /containers/json` y el reinicio de contenedores; el resto de la Engine
+  # API (crear contenedores, montar el host...) responde 403. Escucha sólo en
+  # loopback: flow-controller (network_mode: host) lo alcanza en 127.0.0.1:2375.
+  # Si el reinicio del watchdog diera 403, el watchdog queda en solo-detección
+  # con la razón visible; no se arregla abriendo POST=1 sin revisarlo antes.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1
+      - ALLOW_RESTARTS=1
+      - POST=0
+    ports:
+      - "127.0.0.1:2375:2375"
+    volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    group_add:
-      # gid del grupo docker del host (stat -c '%g' /var/run/docker.sock) — ver README.
-      - ${DOCKER_GID:-999}

@@ -70,10 +70,12 @@ docker compose up -d --build
 ### Watchdog de aMule
 
 Detección de aMule colgado (búsqueda real con timeout, 2 fallos = confirmado) y
-reinicio automático del contenedor por la Docker Engine API (`docker-compose.deploy.yml`
-monta `/var/run/docker.sock` de sólo lectura). Si el socket no es accesible para el
-usuario del contenedor, añade su grupo con `DOCKER_GID` en Portainer
-(`stat -c '%g' /var/run/docker.sock` en el host); sin canal, el watchdog queda en
+reinicio automático del contenedor por la Docker Engine API. flow-controller **no monta
+el socket de Docker** (equivale a root en el host): `docker-compose.deploy.yml` añade
+un `docker-socket-proxy` que sólo permite listar contenedores y reiniciarlos, en
+`127.0.0.1:2375`, y flow-controller lo usa con `DOCKER_HOST=tcp://127.0.0.1:2375`.
+Sin `DOCKER_HOST` se usa el socket Unix `/var/run/docker.sock` como antes (útil en
+desarrollo). Si el proxy no responde o rechaza el reinicio, el watchdog queda en
 modo solo-detección (fail-closed: nunca reinicia un contenedor ambiguo). Cadencia,
 enfriamiento y máximo de reinicios se configuran en `settings.json →
 services.amule.watchdog_*`; el estado (sano/colgado/reiniciando/recuperado/alerta)

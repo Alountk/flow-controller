@@ -1,7 +1,9 @@
-"""Cliente Docker mínimo (amule-watchdog T1 / S4-S5, S8) — Engine API por unix socket.
+"""Cliente Docker mínimo (amule-watchdog T1 / S4-S5, S8) — Engine API por unix socket o TCP.
 
 HTTP con la stdlib (`http.client` sobre `socket.AF_UNIX`) al socket
-`/var/run/docker.sock`; sin dependencias nuevas. En toda la vida de este módulo
+`/var/run/docker.sock`; sin dependencias nuevas. Con `DOCKER_HOST=tcp://host:puerto`
+habla en su lugar con un socket-proxy que sólo deja pasar las dos llamadas de
+abajo, de modo que el contenedor no monta el socket (que equivale a root). En toda la vida de este módulo
 existen DOS llamadas: `GET /containers/json` (resolución, sólo lectura) y UN
 shape fijo de reinicio, `POST /containers/{id}/restart?t=<segundos>` (S8) — sin
 shell, sin paths del usuario, sin credenciales. El `{id}` del reinicio es
@@ -50,6 +52,7 @@ __all__ = [
 ]
 
 DOCKER_SOCKET_PATH = "/var/run/docker.sock"
+_TCP_ENDPOINT_RX = re.compile(r"^tcp://([A-Za-z0-9_.-]{1,253}):(\d{1,5})$")
 CONNECT_TIMEOUT_S = 2.0
 READ_TIMEOUT_S = 10.0
 DEFAULT_RESTART_STOP_TIMEOUT_S = 10
@@ -143,6 +146,25 @@ class _UnixHTTPConnection(http.client.HTTPConnection):
         self.sock = sock
 
 
+class _TcpHTTPConnection(http.client.HTTPConnection):
+    """HTTPConnection por TCP con los mismos dos presupuestos de tiempo que el unix."""
+
+    def __init__(self, host: str, port: int, connect_timeout_s: float, read_timeout_s: float) -> None:
+        super().__init__(host, port, timeout=connect_timeout_s)
+        self._read_timeout_s = read_timeout_s
+
+    def connect(self) -> None:
+        super().connect()
+        self.sock.settimeout(self._read_timeout_s)
+
+
+def _parse_tcp_endpoint(value: str) -> tuple[str, int] | None:
+    match = _TCP_ENDPOINT_RX.match(value.strip())
+    if not match or int(match.group(2)) > 65535:
+        return None
+    return match.group(1), int(match.group(2))
+
+
 def _engine_message(body: bytes) -> str:
     try:
         data = json.loads(body)
@@ -197,7 +219,12 @@ class DockerClient:
         *,
         connect_timeout_s: float = CONNECT_TIMEOUT_S,
         read_timeout_s: float = READ_TIMEOUT_S,
+        endpoint: str | None = None,
     ) -> None:
+        # `endpoint` (default: the DOCKER_HOST env) selects TCP; unset keeps the
+        # unix socket. A set-but-malformed value fails closed on the first
+        # request instead of silently falling back to the socket.
+        self._endpoint = os.environ.get("DOCKER_HOST", "") if endpoint is None else endpoint
         self._socket_path = socket_path
         self._connect_timeout_s = connect_timeout_s
         self._read_timeout_s = read_timeout_s
@@ -270,8 +297,16 @@ class DockerClient:
 
     # -- transporte --
 
+    def _connection(self) -> http.client.HTTPConnection:
+        if not self._endpoint.strip():
+            return _UnixHTTPConnection(self._socket_path, self._connect_timeout_s, self._read_timeout_s)
+        target = _parse_tcp_endpoint(self._endpoint)
+        if target is None:
+            raise DockerConnectionError("DOCKER_HOST must look like tcp://host:port")
+        return _TcpHTTPConnection(target[0], target[1], self._connect_timeout_s, self._read_timeout_s)
+
     def _request(self, method: str, path: str, action: str) -> bytes:
-        conn = _UnixHTTPConnection(self._socket_path, self._connect_timeout_s, self._read_timeout_s)
+        conn = self._connection()
         try:
             conn.request(method, path)
             response = conn.getresponse()
