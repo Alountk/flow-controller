@@ -51,6 +51,17 @@ def incident_key(payload: dict) -> str | None:
     return f"{identity}|q:{ids.get('queue_id')}"
 
 
+#: Namespace of the "marcar como completada" acknowledgement, so it can never
+#: collide with a blocked-incident ack of the same download.
+SETTLED_PREFIX = "settled:"
+
+
+def settled_key(payload: dict) -> str | None:
+    """Key of one operator-declared completion, or ``None`` if unnameable."""
+    key = incident_key(payload)
+    return None if key is None else SETTLED_PREFIX + key
+
+
 def visible_traces(traces: list[dict], acked: set[str]) -> list[dict]:
     """The traces the blocked column and the summary must draw from.
 
@@ -62,8 +73,15 @@ def visible_traces(traces: list[dict], acked: set[str]) -> list[dict]:
     """
     if not acked:
         return traces
-    return [
-        t
-        for t in traces
-        if not (t.get("stage") == "import_blocked" and incident_key(t) in acked)
-    ]
+    out: list[dict] = []
+    for t in traces:
+        stage = t.get("stage")
+        if stage == "import_blocked" and incident_key(t) in acked:
+            continue
+        # A finished download the client still lists (paused, wrong category)
+        # never becomes `sent` by itself; the operator declared it done, e.g.
+        # because the file is already in the library.
+        if stage == "downloaded" and settled_key(t) in acked:
+            t = {**t, "stage": "sent", "settled_by_operator": True}
+        out.append(t)
+    return out

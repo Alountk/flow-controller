@@ -11,13 +11,17 @@ import { apiFetch } from './auth.ts'
  * the endpoint that draws the view. The payload is the same identity
  * `runAction` posts, so both seams agree on "which download".
  */
-export async function ackBlockedImport(trace: Trace): Promise<ActionResult> {
+export async function ackBlockedImport(
+  trace: Trace,
+  settled = false,
+): Promise<ActionResult> {
   const res = await apiFetch('/api/trace/blocked/ack', {
     method: 'POST',
     body: JSON.stringify({
       source: trace.source,
       download_id: trace.download_id,
       ids: trace.ids,
+      settled,
     }),
   })
   if (!res.ok) {

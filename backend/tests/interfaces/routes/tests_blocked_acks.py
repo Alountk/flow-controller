@@ -205,3 +205,48 @@ def test_the_ack_filter_lives_at_the_response_not_in_the_cache(store):
     assert [t["download_id"] for t in raw] == ["abc123"], (
         "the ack filter belongs to the /api/trace response, not the cache"
     )
+
+
+class TestMarcarComoCompletada:
+    """A finished download the client still lists stays `downloaded` forever
+    (paused, wrong category) even when the file is already in the library;
+    the operator can declare it done."""
+
+    _DOWNLOADED = dict(_BLOCKED, stage="downloaded")
+
+    def _settle(self, trace: dict):
+        return client.post(
+            "/api/trace/blocked/ack",
+            json={
+                "source": trace["source"],
+                "download_id": trace["download_id"],
+                "ids": trace["ids"],
+                "settled": True,
+            },
+        )
+
+    def test_a_settled_download_is_counted_as_sent(self, store):
+        with patch(
+            "application.use_cases.trace_cache.build_traces",
+            new_callable=AsyncMock,
+        ) as build:
+            build.return_value = [dict(self._DOWNLOADED)]
+            assert self._settle(self._DOWNLOADED).json()["ok"] is True
+            body = _get().json()
+
+        assert [t["stage"] for t in body["traces"]] == ["sent"]
+        assert body["summary"]["sent"] == 1
+        assert body["summary"]["downloaded"] == 0
+
+    def test_a_blocked_ack_does_not_settle_the_download(self, store):
+        """Both acks name the same download; they must not share a key."""
+        with patch(
+            "application.use_cases.trace_cache.build_traces",
+            new_callable=AsyncMock,
+        ) as build:
+            assert _ack().json()["ok"] is True
+            build.return_value = [dict(self._DOWNLOADED)]
+            _cold()
+            body = _get().json()
+
+        assert [t["stage"] for t in body["traces"]] == ["downloaded"]
