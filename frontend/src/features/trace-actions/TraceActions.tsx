@@ -182,9 +182,10 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
     }
   }, [taskData, copyTask, onDone])
 
-  // Auto-dismiss action results after 4 seconds
+  // A success fades on its own; a failure stays until it is closed, so the
+  // reason is still there when the operator looks back at the row.
   useEffect(() => {
-    if (!result) return
+    if (!result || !result.ok) return
     const t = setTimeout(() => setResult(null), 4000)
     return () => clearTimeout(t)
   }, [result])
@@ -286,7 +287,8 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
             disabled={busy !== null || blocked || copyTask !== null}
             onClick={() => handleClick(key)}
           >
-            {busy === key ? '…' : m.label}
+            {busy === key && <span className="action-spinner" aria-hidden="true" />}
+            {m.label}
           </button>
         )
       })}
@@ -301,7 +303,8 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
           disabled={busy !== null || acking || copyTask !== null}
           onClick={() => void clearBlocked()}
         >
-          {acking ? '…' : 'Descartar bloqueo'}
+          {acking && <span className="action-spinner" aria-hidden="true" />}
+          Descartar bloqueo
         </button>
       )}
 
@@ -310,7 +313,11 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
           {result.ok
             ? (result.steps ?? []).map((s) => s.detail).join(' · ')
             : result.error ?? (result.steps ?? []).map((s) => `${s.target}: ${s.detail}`).join(' · ')}
-          <button className="action-result-close" onClick={() => setResult(null)}>
+          <button
+            className="action-result-close"
+            aria-label="Cerrar aviso"
+            onClick={() => setResult(null)}
+          >
             ×
           </button>
         </div>

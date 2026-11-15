@@ -166,3 +166,39 @@ describe('Reintentar import — the one-click retry, driven end to end', () => {
     })
   })
 })
+
+describe('feedback on the row', () => {
+  it('shows a spinner on the button while the action runs', async () => {
+    let release: (r: Response) => void = () => {}
+    stubFetch({ ack: () => new Promise<Response>((res) => { release = res }) })
+    renderActions(trace())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar bloqueo' }))
+
+    const btn = screen.getByRole('button', { name: 'Descartar bloqueo' })
+    expect(btn.querySelector('.action-spinner')).not.toBeNull()
+    expect(btn).toBeDisabled()
+    release(deferredJson({ ok: true, key: 'k' }))
+    await waitFor(() => expect(btn.querySelector('.action-spinner')).toBeNull())
+  })
+
+  it('keeps a failure on screen until it is closed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      stubFetch({ ack: () => deferredJson({ ok: false, error: 'sin historial' }) })
+      renderActions(trace())
+
+      fireEvent.click(screen.getByRole('button', { name: 'Descartar bloqueo' }))
+      await screen.findByText(/sin historial/)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(screen.getByText(/sin historial/)).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar aviso' }))
+      expect(screen.queryByText(/sin historial/)).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+

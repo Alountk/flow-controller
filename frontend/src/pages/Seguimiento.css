@@ -134,17 +134,55 @@
   max-width: 280px;
 }
 
+.sg-col-life .sg-row-prog {
+  flex: none;
+  max-width: none;
+  min-width: 0;
+}
+
 .sg-row-prog .sg-bar {
   flex: 1;
   margin-top: 0;
 }
 
-.sg-row-foot {
+/* Trace rows are a four-column grid, so a long title or path ellipsizes inside
+   its column instead of reshaping the card. */
+.sg-trace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(130px, auto);
+  gap: 16px;
+  align-items: center;
+}
+
+.sg-col-id,
+.sg-col-life,
+.sg-col-state,
+.sg-col-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sg-id-meta {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sg-col-state {
+  align-items: flex-start;
+}
+
+.sg-col-actions {
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .sg-trace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .sg-svc {
@@ -174,7 +212,6 @@
 }
 
 .sg-age {
-  margin-left: auto;
   font-size: 10.5px;
   color: var(--text-dim);
   flex-shrink: 0;
@@ -261,7 +298,7 @@
 }
 
 .sg-path {
-  margin-top: 7px;
+  margin-top: 0;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--text-dim);
