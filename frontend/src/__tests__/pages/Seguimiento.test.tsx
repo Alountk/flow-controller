@@ -127,7 +127,9 @@ function rowNames(box: HTMLElement): string[] {
 
 /** Open one of the filter tabs by its visible label. */
 function openTab(name: string | RegExp) {
-  fireEvent.click(screen.getByRole('tab', { name }))
+  // «Errores» carries «(n)» once something failed, so a label matches by prefix.
+  const matcher = typeof name === 'string' ? new RegExp(`^${name}( \\(\\d+\\))?$`) : name
+  fireEvent.click(screen.getByRole('tab', { name: matcher }))
 }
 
 function opRow(over: Partial<QueueOp> = {}): QueueOp {
@@ -231,7 +233,8 @@ describe('the unified task list (S2)', () => {
       'aria-selected',
       'false',
     )
-    expect(screen.getByRole('tab', { name: 'Errores' })).toHaveAttribute(
+    // The failed mix is the one error row: the tab now carries its count.
+    expect(screen.getByRole('tab', { name: 'Errores (1)' })).toHaveAttribute(
       'aria-selected',
       'false',
     )
@@ -1297,5 +1300,24 @@ describe('safe-mode banner', () => {
     renderView(resp([]), false, OPEN_ACTIONS)
 
     expect(screen.queryByText(/Modo seguro activo: nada se mueve/)).toBeNull()
+  })
+
+  it('keeps «Errores» plain while nothing failed', async () => {
+    renderView(resp([trace({ stage: 'downloading' })]))
+
+    const tab = await screen.findByRole('tab', { name: 'Errores' })
+    expect(tab).not.toHaveClass('sg-tab-alert')
+  })
+
+  it('flags «Errores» with its count and an alert style once something failed', async () => {
+    renderView(
+      resp([
+        trace({ download_id: 'a', stage: 'failed' }),
+        trace({ download_id: 'b', stage: 'import_blocked' }),
+      ]),
+    )
+
+    const tab = await screen.findByRole('tab', { name: 'Errores (2)' })
+    expect(tab).toHaveClass('sg-tab-alert')
   })
 })
