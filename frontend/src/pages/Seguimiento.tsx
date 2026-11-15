@@ -1012,15 +1012,10 @@ export function Seguimiento({ data, loading, actions, onActionDone }: Props) {
           )}
         </div>
 
-        {/* The sweep belongs below the reading, not on top of it: the top of
-            this page is the task list and nothing else. */}
+        {/* The sweep is the page's footer: one status line (Stitch 05), its
+            detail folded away so the list keeps the height. */}
         <div className="sg-sweep">
-          {actions?.safe_mode && (
-            <p className="sg-safe-banner">
-              Modo seguro activo: nada se mueve, sólo se propone.
-            </p>
-          )}
-          <AutoCopyPanel safeMode={Boolean(actions?.safe_mode)} onDone={onActionDone} />
+          <AutoCopyPanel compact safeMode={Boolean(actions?.safe_mode)} onDone={onActionDone} />
         </div>
       </section>
 

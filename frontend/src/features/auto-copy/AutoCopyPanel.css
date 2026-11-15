@@ -182,3 +182,50 @@
   border-radius: var(--radius-md);
   padding: 6px 10px;
 }
+
+/* The folded variant: one line, the detail opens above the bar's own row. */
+.auto-copy-compact .auto-copy-bar {
+  gap: 10px;
+}
+
+.auto-copy-compact .auto-copy-meta {
+  margin: 0;
+}
+
+.auto-copy-spacer {
+  flex: 1;
+}
+
+.auto-copy-mode {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.auto-copy-toggle {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.auto-copy-toggle:hover {
+  color: var(--accent);
+}
+
+.auto-copy-compact .auto-copy-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+.auto-copy-compact .auto-copy-result {
+  max-height: 40vh;
+  overflow-y: auto;
+}

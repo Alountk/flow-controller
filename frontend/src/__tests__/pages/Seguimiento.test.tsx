@@ -1312,15 +1312,14 @@ describe('safe-mode banner', () => {
   it('announces safe mode when the view opens with it on', async () => {
     renderView(resp([]), false, { ...OPEN_ACTIONS, safe_mode: true })
 
-    expect(
-      await screen.findByText('Modo seguro activo: nada se mueve, sólo se propone.'),
-    ).toBeInTheDocument()
+    const chip = await screen.findByText('Modo seguro activo')
+    expect(chip).toHaveAttribute('title', 'Modo seguro activo: nada se mueve, sólo se propone.')
   })
 
   it('stays hidden when safe mode is off', () => {
     renderView(resp([]), false, OPEN_ACTIONS)
 
-    expect(screen.queryByText(/Modo seguro activo: nada se mueve/)).toBeNull()
+    expect(screen.queryByText('Modo seguro activo')).toBeNull()
   })
 
   it('keeps «Errores» plain while nothing failed', async () => {

@@ -427,3 +427,69 @@ describe('last-sweep meta line (when and who)', () => {
     expect(screen.queryByText(/Último barrido/)).toBeNull()
   })
 })
+
+describe('compact variant — one status line, detail folded away', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const last = {
+    swept_at: 1762000000,
+    trigger: 'auto',
+    ...baseResult({
+      counts: { traces: 7, copy: 3, copied: 2, proposed: 1, wait: 1, skip: 0, failed: 0 },
+    }),
+  }
+
+  function renderCompact(safeMode = false) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input?: RequestInfo | URL) =>
+        String(input).includes('/api/auto-copy/last') ? ok(last) : ok(baseResult()),
+      ),
+    )
+    return render(<AutoCopyPanel compact safeMode={safeMode} />)
+  }
+
+  it('shows the last sweep stamp and the trigger, but not the counts, until opened', async () => {
+    renderCompact()
+
+    expect(await screen.findByText(/Último barrido:/)).toHaveTextContent('automático')
+    expect(screen.queryByText('Trazas revisadas')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Revisar descargas' })).toBeInTheDocument()
+  })
+
+  it('opens and closes the detail with one toggle, flagging what needs attention', async () => {
+    renderCompact()
+
+    const toggle = await screen.findByRole('button', { name: 'Ver detalle (1)' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(toggle)
+    expect(screen.getByText('Trazas revisadas')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ocultar detalle' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalle' }))
+    expect(screen.queryByText('Trazas revisadas')).toBeNull()
+  })
+
+  it('names safe mode on the bar and keeps the full sentence in its title', async () => {
+    renderCompact(true)
+
+    const chip = await screen.findByText('Modo seguro activo')
+    expect(chip).toHaveAttribute('title', 'Modo seguro activo: nada se mueve, sólo se propone.')
+  })
+
+  it('says no sweep has run yet instead of showing zeros', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => ok({ swept_at: null, trigger: null, detail: 'aún no se ha ejecutado ningún barrido' })),
+    )
+    render(<AutoCopyPanel compact safeMode={false} />)
+
+    expect(await screen.findByText('Aún no se ha ejecutado ningún barrido')).toBeInTheDocument()
+  })
+})
