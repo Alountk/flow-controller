@@ -164,6 +164,21 @@ class TestThePollerIsOneLongLivedLoop:
         )
         assert downloads_cache._downloads_cache is None, "nothing was cached, nothing faked"
 
+    def test_a_failed_refresh_is_logged_not_swallowed_silently(self, caplog):
+        _cold()
+
+        async def stop(_seconds: float) -> None:
+            raise asyncio.CancelledError
+
+        with patch.object(
+            downloads_cache, "collect_downloads", new_callable=AsyncMock
+        ) as collect, patch("asyncio.sleep", stop), caplog.at_level("WARNING"):
+            collect.side_effect = ConnectionError("arr unreachable")
+            with pytest.raises(asyncio.CancelledError):
+                asyncio.run(downloads_cache.downloads_poller())
+
+        assert "arr unreachable" in caplog.text
+
     def test_a_dead_notification_channel_cannot_freeze_the_snapshot(self):
         """S7: avisar es un extra. Si el canal revienta, el snapshot se sigue sirviendo
         y el poller sigue vivo — lo contrario dejaría la pantalla congelada por un ntfy
