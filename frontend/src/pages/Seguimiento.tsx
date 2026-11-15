@@ -386,46 +386,85 @@ function CopyRow({
       style={highlighted ? HIGHLIGHT_STYLE : undefined}
       aria-label={op.name}
     >
-      <div className="sg-row-main">
-        <span className={`sg-op-kind sg-op-${op.type}`}>
-          {op.type === 'copy' ? 'Copiar' : 'Mover'}
-        </span>
-        <span className="sg-op-name" title={op.name}>
-          {op.name}
-        </span>
-        <span className={`sg-op-status ${op.status}`}>{opStatusLabel(op)}</span>
-        <span className="sg-op-progress">
-          {op.total_bytes > 0
-            ? `${op.progress}% · ${Math.round(op.copied_bytes / 1024 ** 2)} / ${Math.round(op.total_bytes / 1024 ** 2)} MB`
-            : `${op.progress}%`}
-        </span>
+      <div className="sg-trace-grid">
+        <div className="sg-col-id">
+          <div className="sg-id-meta">
+            <span className={`sg-op-kind sg-op-${op.type}`}>
+              {op.type === 'copy' ? 'Copiar' : 'Mover'}
+            </span>
+          </div>
+          <span className="sg-title sg-op-name" title={op.name}>
+            {op.name}
+          </span>
+          <div className="sg-path" title={`${op.src} → ${op.dst}`}>
+            <Icon name="drive_file_move" size={13} />
+            <span>
+              {op.src} → {op.dst}
+            </span>
+          </div>
+        </div>
+        <div className="sg-col-life">
+          <div className="sg-row-prog">
+            <div
+              className="sg-bar"
+              role="progressbar"
+              aria-valuenow={op.progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Progreso de ${op.name}`}
+            >
+              <i style={{ width: `${op.progress}%` }} />
+            </div>
+            <span className="sg-pct sg-op-progress">
+              {op.total_bytes > 0
+                ? `${op.progress}% · ${formatBytes(op.copied_bytes)} / ${formatBytes(op.total_bytes)}`
+                : `${op.progress}%`}
+            </span>
+          </div>
+          {op.detail && row.bucket !== 'error' && <span className="sg-sub">{op.detail}</span>}
+        </div>
+        <div className="sg-col-state">
+          <span className={`sg-op-status ${op.status}`}>
+            <i className="sg-dot" aria-hidden="true" />
+            {opStatusLabel(op)}
+          </span>
+        </div>
         {/* The × the retired QueueSidebar carried: only an operation still in
             the live queue can be cancelled. T1/S3's human override (✓) is
             broader: a settled-but-stuck row is exactly its target. */}
-        {(op.status === 'running' || op.status === 'pending') && (
-          <>
-            {!row.archived && (
+        <div className="sg-col-actions sg-actions-stack">
+          {(op.status === 'running' || op.status === 'pending') && (
+            <>
               <button
                 type="button"
-                className="sg-op-cancel"
-                onClick={() => onCancel(op.id)}
-                title="Cancelar operación"
+                className="action-btn"
+                onClick={() => onComplete(op.id)}
+                title="Marcar como completada"
               >
-                ×
+                <Icon name="check" size={14} /> Marcar como completada
               </button>
-            )}
-            <button
-              type="button"
-              className="sg-op-ok"
-              onClick={() => onComplete(op.id)}
-              title="Marcar como completada"
-              aria-label="Marcar como completada"
-            >
-              ✓
-            </button>
-          </>
-        )}
+              {!row.archived && (
+                <button
+                  type="button"
+                  className="action-btn destructive"
+                  onClick={() => onCancel(op.id)}
+                  title="Cancelar operación"
+                >
+                  <Icon name="close" size={14} /> Cancelar operación
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
+      {op.detail && row.bucket === 'error' && (
+        <div className="sg-why">
+          <Icon name="warning" size={16} />
+          <div className="sg-why-text">
+            <strong>{op.detail}</strong>
+          </div>
+        </div>
+      )}
     </article>
   )
 }
@@ -478,65 +517,61 @@ function MixRow({
       style={highlighted ? HIGHLIGHT_STYLE : undefined}
       aria-label={task.detail || task.task_id}
     >
-      <div className="sg-row-main">
-        <span className={`mixer-task-status mixer-status-${mixChipClass(task.status)}`}>
-          {MIX_STATUS_LABELS[task.status] || task.status}
-        </span>
-        <span className="sg-mix-detail" title={task.detail}>
-          {task.detail}
-        </span>
-        {task.output_path && (
-          <span className="sg-mix-output" title={task.output_path}>
-            → {task.output_path.split('/').pop()}
-          </span>
-        )}
-        {(task.status === 'running' || task.status === 'paused') && (
-          <div className="sg-row-prog">
-            <div className="mixer-progress-bar">
-              <div
-                className="mixer-progress-fill"
-                style={{ width: `${Math.round(task.progress * 100)}%` }}
-              />
-            </div>
-            <span className="mixer-progress-pct">{Math.round(task.progress * 100)}%</span>
+      <div className="sg-trace-grid">
+        <div className="sg-col-id">
+          <div className="sg-id-meta">
+            <span className="sg-op-kind sg-op-mix">Mixer</span>
           </div>
-        )}
-        <div className="sg-mix-actions">
+          <span className="sg-title sg-mix-detail" title={task.detail}>
+            {task.detail}
+          </span>
+          {task.output_path && (
+            <div className="sg-path sg-mix-output" title={task.output_path}>
+              <Icon name="description" size={13} />
+              <span>{task.output_path.split('/').pop()}</span>
+            </div>
+          )}
+        </div>
+        <div className="sg-col-life">
+          {(task.status === 'running' || task.status === 'paused') && (
+            <div className="sg-row-prog">
+              <div className="mixer-progress-bar">
+                <div
+                  className="mixer-progress-fill"
+                  style={{ width: `${Math.round(task.progress * 100)}%` }}
+                />
+              </div>
+              <span className="mixer-progress-pct">{Math.round(task.progress * 100)}%</span>
+            </div>
+          )}
+        </div>
+        <div className="sg-col-state">
+          <span className={`mixer-task-status mixer-status-${mixChipClass(task.status)}`}>
+            <i className="sg-dot" aria-hidden="true" />
+            {MIX_STATUS_LABELS[task.status] || task.status}
+          </span>
+          {task.created_at > 0 && (
+            <span className="sg-age">{relativeTime(new Date(task.created_at * 1000).toISOString())}</span>
+          )}
+        </div>
+        <div className="sg-col-actions sg-actions-stack">
           {task.status === 'running' && (
-            <>
-              <button type="button" className="sg-mix-btn" onClick={() => onPause(task.task_id)}>
-                <Icon name="pause" size={16} /> Pausar
-              </button>
-              <button
-                type="button"
-                className="sg-mix-btn sg-mix-btn-cancel"
-                onClick={() => onCancel(task.task_id)}
-              >
-                <Icon name="close" size={16} /> Cancelar tarea
-              </button>
-            </>
+            <button type="button" className="action-btn" onClick={() => onPause(task.task_id)}>
+              <Icon name="pause" size={14} /> Pausar
+            </button>
           )}
           {task.status === 'paused' && (
-            <>
-              <button type="button" className="sg-mix-btn" onClick={() => onResume(task.task_id)}>
-                <Icon name="play_arrow" size={16} /> Reanudar
-              </button>
-              <button
-                type="button"
-                className="sg-mix-btn sg-mix-btn-cancel"
-                onClick={() => onCancel(task.task_id)}
-              >
-                <Icon name="close" size={16} /> Cancelar tarea
-              </button>
-            </>
+            <button type="button" className="action-btn" onClick={() => onResume(task.task_id)}>
+              <Icon name="play_arrow" size={14} /> Reanudar
+            </button>
           )}
-          {task.status === 'queued' && (
+          {(task.status === 'running' || task.status === 'paused' || task.status === 'queued') && (
             <button
               type="button"
-              className="sg-mix-btn sg-mix-btn-cancel"
+              className="action-btn destructive"
               onClick={() => onCancel(task.task_id)}
             >
-              <Icon name="close" size={16} /> Cancelar tarea
+              <Icon name="close" size={14} /> Cancelar tarea
             </button>
           )}
         </div>

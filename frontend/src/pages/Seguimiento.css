@@ -160,7 +160,7 @@
 /* ── Fila (traza | copia | mezcla) ── */
 
 /* One shell for every source — the row fits the LIST, not the longest line
-   inside it (the ellipsis on .sg-op-name/.sg-mix-detail finishes the job). */
+   inside it (the ellipsis on .sg-title finishes the job). */
 .sg-row {
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
@@ -451,160 +451,86 @@
 
 .sg-op-kind {
   font-weight: 700;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  min-width: 58px;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
   flex-shrink: 0;
 }
 
-.sg-op-name {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  flex: 1 1 160px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.sg-op-kind.sg-op-move {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 
-.sg-op-progress {
-  font-family: var(--mono);
+.sg-op-kind.sg-op-mix {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sg-sub {
   font-size: 11px;
-  color: var(--text);
-  min-width: 110px;
-  text-align: right;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* Copy and mixer actions: the same stack the trace row's TraceActions draws. */
+.sg-actions-stack .action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+/* Status chips of copy and mixer rows: sentence case with a dot, like the
+   trace pill. */
+.sg-row .sg-op-status,
+.sg-row .mixer-task-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: none;
+}
+
+.sg-op-name {
+  font-family: inherit;
 }
 
 .sg-op-status {
-  font-size: 10.5px;
-  font-weight: 700;
   color: var(--text-dim);
-  min-width: 70px;
-  text-align: right;
+  background: var(--bg-elev);
+  border-radius: 999px;
+  padding: 3px 10px;
 }
 
 .sg-op-status.running {
   color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .sg-op-status.failed {
-  color: var(--bad);
+  color: var(--bad-text);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
 
 .sg-op-status.done {
   color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
 }
-
-/* The × the retired QueueSidebar carried: only a live-queue operation can be
-   cancelled, and only from the row that shows it running. */
-.sg-op-cancel {
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--text-dim);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 2px 8px;
-  cursor: pointer;
-}
-
-.sg-op-cancel:hover {
-  color: var(--bad);
-  border-color: var(--bad);
-}
-
-.sg-op-cancel:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* T1/S3 — manual completion: same compact action as cancel, but the "it IS
-   done" tone; mirrors .sg-op-cancel so both live on one row without layout
-   surprises. */
-.sg-op-ok {
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--text-dim);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 2px 8px;
-  cursor: pointer;
-}
-
-.sg-op-ok:hover {
-  color: var(--ok);
-  border-color: var(--ok);
-}
-
-.sg-op-ok:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* ── Fila de mezcla (S11/T13) ── */
-
-/* The status chip and the progress bar are the mixer display primitives
-   (`.mixer-task-status` / `.mixer-progress-*` live in MediaMixer.css — the
-   darkModePolish contract pins them there); this is only row layout. */
 
 .sg-mix-detail {
-  flex: 1 1 160px;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--text);
 }
 
 .sg-mix-output {
   font-family: var(--mono, monospace);
   font-size: 11px;
   color: var(--text-dim);
-}
-
-.sg-mix-actions {
-  display: flex;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.sg-mix-btn {
-  font: inherit;
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg-elev-2);
-  color: var(--text-2);
-  cursor: pointer;
-}
-
-.sg-mix-btn:hover:not(:disabled) {
-  background: var(--hover, var(--bg));
-}
-
-.sg-mix-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.sg-mix-btn-cancel {
-  color: var(--bad-text);
-  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
-}
-
-.sg-mix-btn-cancel:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bad) 12%, transparent);
-  border-color: var(--bad);
 }
 
 /* ── Barrido automático (bajo la lista) ── */
@@ -815,8 +741,4 @@
     gap: 6px;
   }
 
-  .sg-op-name {
-    flex-basis: 100%;
-    order: 3;
-  }
 }
