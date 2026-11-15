@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type {
   AutoCopyAction,
+  AutoCopySweepCounts,
   AutoCopySweepEntry,
   AutoCopySweepResult,
 } from '../../shared/types.ts'
@@ -30,6 +31,9 @@ import './AutoCopyPanel.css'
 
 interface Props {
   safeMode: boolean
+  /** One status line with the detail folded away (Stitch 05's footer). The
+   *  default keeps the full panel, which the Trazabilidad-era callers expect. */
+  compact?: boolean
   /** Called after a sweep finished, for callers that must refresh their data. */
   onDone?: () => void
 }
@@ -154,7 +158,8 @@ function AutoCopyResult({
   )
 }
 
-export function AutoCopyPanel({ safeMode, onDone }: Props) {
+export function AutoCopyPanel({ safeMode, compact = false, onDone }: Props) {
+  const [open, setOpen] = useState(false)
   const [sweepResult, setSweepResult] = useState<AutoCopySweepResult | null>(null)
   const [sweeping, setSweeping] = useState(false)
 
@@ -177,6 +182,55 @@ export function AutoCopyPanel({ safeMode, onDone }: Props) {
     } finally {
       setSweeping(false)
     }
+  }
+
+  if (compact) {
+    const counts: Partial<AutoCopySweepCounts> = sweepResult?.counts ?? {}
+    const attention = (counts.proposed ?? 0) + (counts.failed ?? 0) + (sweepResult?.errors?.length ?? 0)
+    return (
+      <div className="auto-copy auto-copy-compact">
+        <div className="auto-copy-bar">
+          {safeMode && (
+            <span
+              className="auto-copy-mode"
+              title="Modo seguro activo: nada se mueve, sólo se propone."
+            >
+              Modo seguro activo
+            </span>
+          )}
+          {sweepResult?.swept_at != null ? (
+            <span className="auto-copy-meta">
+              Último barrido:{' '}
+              {relativeTime(new Date(sweepResult.swept_at * 1000).toISOString())}
+              {sweepResult.trigger != null && (
+                <> · {sweepResult.trigger === 'auto' ? 'automático' : 'manual'}</>
+              )}
+            </span>
+          ) : (
+            <span className="auto-copy-meta">Aún no se ha ejecutado ningún barrido</span>
+          )}
+          <span className="auto-copy-spacer" />
+          {sweepResult && (
+            <button
+              type="button"
+              className="auto-copy-toggle"
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? 'Ocultar detalle' : attention > 0 ? `Ver detalle (${attention})` : 'Ver detalle'}
+            </button>
+          )}
+          <button
+            className="auto-copy-btn"
+            onClick={() => void runSweep()}
+            disabled={sweeping}
+          >
+            {sweeping ? 'Revisando…' : 'Revisar descargas'}
+          </button>
+        </div>
+        {open && sweepResult && <AutoCopyResult result={sweepResult} safeMode={safeMode} />}
+      </div>
+    )
   }
 
   return (
