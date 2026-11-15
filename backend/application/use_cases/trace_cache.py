@@ -21,11 +21,14 @@ What bounds a bad cache is the TTL itself: at most 10 s of staleness.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 
 import event_bus
 from state import http_session
 from traces import build_traces
+
+log = logging.getLogger(__name__)
 
 #: Seconds a cached fan-out stays good for. Deliberately shorter than the
 #: frontend's 15 s poll — see the module docstring.
@@ -81,6 +84,7 @@ async def trace_refresher() -> None:
                 await get_traces()
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 — a failed tick must not kill the loop
-            pass  # the last cache (if any) keeps serving; next tick retries
+        except Exception as exc:  # noqa: BLE001 — a failed tick must not kill the loop
+            # The last cache (if any) keeps serving; log so it is not silent.
+            log.warning("trace refresher: tick failed: %s", exc)
         await asyncio.sleep(TRACE_TTL)

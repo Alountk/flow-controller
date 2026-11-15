@@ -208,8 +208,9 @@ async def downloads_poller() -> None:
             snapshot = await get_downloads()
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 — a failed tick must not kill the loop
-            pass  # the last snapshot (if any) keeps serving; next tick retries
+        except Exception as exc:  # noqa: BLE001 — a failed tick must not kill the loop
+            # The last snapshot (if any) keeps serving; log so it is not silent.
+            log.warning("downloads poller: tick failed: %s", exc)
         else:
             await _announce(snapshot)
         await asyncio.sleep(DOWNLOADS_TTL)
