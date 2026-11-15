@@ -1402,3 +1402,69 @@ describe('the filter bar over the list', () => {
     expect(screen.getByRole('tab', { name: 'Activas (3)' })).toBeInTheDocument()
   })
 })
+
+describe('copy and mixer rows share the four-column card', () => {
+  it('draws a copy row as source → destination, size progress and stacked actions', async () => {
+    queueStatusMock.mockResolvedValue({
+      queue: [
+        opRow({
+          name: 'Copia remux Gladiator II (2024)',
+          src: '/mnt/downloads/Gladiator.II',
+          dst: '/mnt/storage/movies/4K',
+          progress: 50,
+          copied_bytes: 512 * 1024 ** 2,
+          total_bytes: 1024 ** 3,
+        }),
+      ],
+      completed: [],
+      running: true,
+    })
+
+    const { container } = renderView(resp([]))
+
+    await screen.findByText('Copia remux Gladiator II (2024)')
+    const row = container.querySelector('.sg-row-copy') as HTMLElement
+    expect(row.querySelector('.sg-trace-grid')).not.toBeNull()
+    expect(within(row).getByText(/\/mnt\/downloads\/Gladiator\.II → \/mnt\/storage\/movies\/4K/)).toBeInTheDocument()
+    expect(row.querySelector('.sg-pct')).toHaveTextContent('50% · 512 MB / 1.0 GB')
+    expect(within(row).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
+    expect(within(row).getByRole('button', { name: /Cancelar operación/ })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: /Marcar como completada/ })).toBeInTheDocument()
+  })
+
+  it('shows a failed copy\'s reason as an alert under the card, not as a subtitle', async () => {
+    queueStatusMock.mockResolvedValue({
+      queue: [opRow({ status: 'failed', detail: 'Bloque defectuoso en el volumen destino' })],
+      completed: [],
+      running: false,
+    })
+
+    const { container } = renderView(resp([]))
+
+    openTab('Errores')
+    const row = (await waitFor(() => {
+      const el = container.querySelector('.sg-row-copy')
+      if (!el) throw new Error('no copy row yet')
+      return el
+    })) as HTMLElement
+    expect(row.querySelector('.sg-why')).toHaveTextContent('Bloque defectuoso en el volumen destino')
+    expect(row.querySelector('.sg-sub')).toBeNull()
+  })
+
+  it('draws a mixer row with its output file, a Mixer badge and the task age', () => {
+    const state = { tasks: [mixTask({ status: 'running', progress: 0.68, detail: 'Remux audio dual', output_path: '/media/out/Alien.Romulus.mkv', created_at: Date.now() / 1000 - 1080 })] }
+    stubMixer(state)
+
+    const { container } = renderView(resp([]))
+
+    return waitFor(() => {
+      const row = container.querySelector('.sg-row-mix') as HTMLElement
+      expect(row).not.toBeNull()
+      expect(within(row).getByText('Mixer')).toBeInTheDocument()
+      expect(within(row).getByText('Alien.Romulus.mkv')).toBeInTheDocument()
+      expect(row.querySelector('.sg-age')).not.toBeNull()
+      expect(within(row).getByRole('button', { name: /Pausar/ })).toBeInTheDocument()
+    })
+  })
+})
+
