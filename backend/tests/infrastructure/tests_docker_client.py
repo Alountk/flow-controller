@@ -349,3 +349,74 @@ def test_default_socket_and_short_timeouts():
     assert DOCKER_SOCKET_PATH == "/var/run/docker.sock"
     assert 0 < CONNECT_TIMEOUT_S <= 2.0
     assert 0 < READ_TIMEOUT_S <= 10.0
+
+
+# --- TCP endpoint (socket-proxy) ---------------------------------------------
+
+
+class _TcpEngine:
+    """A throwaway TCP Engine stand-in that records the request lines."""
+
+    def __init__(self) -> None:
+        self.requests: list[str] = []
+        outer = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def _dispatch(self) -> None:
+                outer.requests.append(f"{self.command} {self.path}")
+                body = b"[]" if self.command == "GET" else b""
+                self.send_response(200 if self.command == "GET" else 204)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            do_GET = do_POST = _dispatch
+
+            def log_message(self, *args) -> None:
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def test_tcp_endpoint_reaches_the_proxy_with_the_same_two_calls():
+    engine = _TcpEngine()
+    try:
+        client = DockerClient(endpoint=f"tcp://127.0.0.1:{engine.port}")
+        with pytest.raises(DockerResolutionError):  # empty list → fail closed, as over the socket
+            client.resolve_container()
+        client.restart_container("abc123")
+    finally:
+        engine.close()
+
+    assert engine.requests[0] == "GET /containers/json"
+    assert RESTART_SHAPE.match(engine.requests[1]), engine.requests
+
+
+def test_docker_host_env_selects_tcp(monkeypatch):
+    engine = _TcpEngine()
+    monkeypatch.setenv("DOCKER_HOST", f"tcp://127.0.0.1:{engine.port}")
+    try:
+        with pytest.raises(DockerResolutionError):
+            DockerClient().resolve_container()
+    finally:
+        engine.close()
+    assert engine.requests == ["GET /containers/json"]
+
+
+@pytest.mark.parametrize("value", ["unix:///var/run/docker.sock", "tcp://host", "http://h:1", "tcp://h:99999"])
+def test_a_malformed_docker_host_fails_closed_instead_of_using_the_socket(value):
+    with pytest.raises(DockerConnectionError, match="tcp://host:port"):
+        DockerClient(endpoint=value).resolve_container()
+
+
+def test_without_docker_host_the_unix_socket_is_still_used(docker_stub, monkeypatch):
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    with pytest.raises(DockerResolutionError):
+        DockerClient(socket_path=docker_stub.socket_path).resolve_container()
+    assert docker_stub.requests == ["GET /containers/json"]
