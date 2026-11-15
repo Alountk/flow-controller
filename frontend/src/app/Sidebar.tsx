@@ -43,9 +43,11 @@ interface Props {
   /** Pages that depend on a service the user has not configured. */
   hidden?: Page[]
   children?: ReactNode
+  /** Present only when a login account protects the panel. */
+  onLogout?: () => void
 }
 
-export function Sidebar({ active, onNavigate, developer, hidden = [] }: Props) {
+export function Sidebar({ active, onNavigate, developer, hidden = [], onLogout }: Props) {
   const visibleItems = NAV_ITEMS.filter((item) => !hidden.includes(item.key))
   return (
     <aside className="sidebar">
@@ -86,6 +88,14 @@ export function Sidebar({ active, onNavigate, developer, hidden = [] }: Props) {
           </>
         )}
       </nav>
+
+      {onLogout && (
+        <div className="sb-actions">
+          <button type="button" className="sb-action" onClick={onLogout}>
+            <Icon name="logout" size={18} /> Cerrar sesión
+          </button>
+        </div>
+      )}
 
       <div className="sb-footer">
         <div className="sb-avatar">FC</div>

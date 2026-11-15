@@ -122,3 +122,29 @@
   color: var(--text-dim);
 }
 
+
+.sb-actions {
+  padding: 8px 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.sb-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 12px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sb-action:hover {
+  background: var(--bg-elev);
+  color: var(--bad);
+}

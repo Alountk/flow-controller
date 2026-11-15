@@ -3,6 +3,21 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { Sidebar } from '../../app/Sidebar.tsx'
 
 describe('Sidebar', () => {
+  it('offers no logout unless an account protects the panel', () => {
+    render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
+
+    expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).toBeNull()
+  })
+
+  it('calls onLogout from the footer when the user signs out', () => {
+    const onLogout = vi.fn()
+    render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} onLogout={onLogout} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+
+    expect(onLogout).toHaveBeenCalledOnce()
+  })
+
   it('names the product under the brand, as the Stitch dashboard does', () => {
     render(<Sidebar active="dashboard" onNavigate={() => {}} developer={false} />)
 
