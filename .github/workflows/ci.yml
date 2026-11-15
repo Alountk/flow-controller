@@ -138,15 +138,10 @@ jobs:
   # Phase 2 runs only if phase 1 is green (default fail-fast); the job log is
   # the record of which variant broke.
   #
-  # Deliberately a sibling of docker-verify, not part of it, and NOT in
-  # docker-push's needs chain: a brand-new browser suite must not be able to
-  # block image publishing until it has earned that.
-  #
-  # Promotion criterion (agreed when this job landed, so it is not a vague
-  # decision in six months): add `e2e` to docker-push's `needs` once it has
-  # run **20 consecutive green runs on main** with no manual intervention and
-  # no `waitForTimeout` anywhere in the specs. Until then a red e2e is
-  # visible on the PR and on main, and it never holds an image back.
+  # A sibling of docker-verify, but in docker-push's needs chain: it earned
+  # that by the agreed criterion (20 consecutive green runs on main, no
+  # `waitForTimeout` in the specs), met on 2026-11-15. A red e2e now holds
+  # the image back.
   e2e:
     runs-on: ubuntu-latest
     needs: [backend-tests, frontend-build]
@@ -389,7 +384,7 @@ jobs:
   # ── Push Docker image (only on main branch push) ───────────────
   docker-push:
     runs-on: ubuntu-latest
-    needs: [docker-verify]
+    needs: [docker-verify, e2e]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       packages: write
