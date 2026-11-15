@@ -197,3 +197,14 @@
   to { transform: rotate(360deg); }
 }
 
+
+.dest-list {
+  max-height: 14rem;
+  overflow: auto;
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+.dest-list li { padding: 2px 0; overflow-wrap: anywhere; }
+.dest-list li.is-match { color: var(--ok); }
