@@ -508,7 +508,28 @@ describe('what each row draws', () => {
     )
 
     openTab('Completadas')
-    expect(screen.getByText(/→ \/mnt\/storage\/tv\/The Bear\/Season 02/)).toBeInTheDocument()
+    expect(screen.getByText('/mnt/storage/tv/The Bear/Season 02')).toBeInTheDocument()
+  })
+
+  it('shows the destination folder on a download still in progress too', () => {
+    renderView(
+      resp([trace({ stage: 'downloading', destination: '/mnt/storage/tv/The Bear/Season 03' })]),
+    )
+
+    expect(screen.getByText('/mnt/storage/tv/The Bear/Season 03')).toBeInTheDocument()
+  })
+
+  it('shows the downloaded size next to the percentage, from the client size', () => {
+    const { container } = renderView(
+      resp([
+        trace({
+          stage: 'downloading',
+          torrent: { ...trace().torrent!, progress: 50, size: 2 * 1024 ** 3 },
+        }),
+      ]),
+    )
+
+    expect(container.querySelector('.sg-pct')).toHaveTextContent('50% — 1.0 GB / 2.0 GB')
   })
 
   it('never invents a number the payload does not carry', () => {

@@ -15,6 +15,16 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+/* Stitch 05: a running action turns into a filled "Procesando…" button. */
+.trace-actions .action-btn.is-busy:disabled {
+  opacity: 1;
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
 }
 
 .action-spinner {

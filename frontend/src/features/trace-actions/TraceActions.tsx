@@ -9,6 +9,8 @@ import { ackBlockedImport } from '../../shared/api/traces.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
 import { slug } from '../../shared/utils/slug.ts'
+import { Icon } from '../../shared/ui/Icon.tsx'
+import type { IconName } from '../../shared/ui/iconPaths.ts'
 import './TraceActions.css'
 
 interface Props {
@@ -58,6 +60,19 @@ function derivePathMapping(trace: Trace) {
   // fixed nothing and stayed in the arr. An empty field lets the user override
   // it; otherwise the backend resolves it.
   return { host, remote_path }
+}
+
+const ACTION_ICONS: Partial<Record<ActionKey, IconName>> = {
+  pause: 'pause',
+  resume: 'play_arrow',
+  retry_import: 'sync',
+  research: 'search',
+  copy_files: 'content_copy',
+  cancel_download: 'close',
+  remove_queue: 'delete',
+  delete_torrent: 'delete',
+  fix_category: 'label',
+  fix_path_mapping: 'cable',
 }
 
 function actionsFor(trace: Trace): ActionKey[] {
@@ -282,13 +297,18 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
         return (
           <button
             key={key}
-            className={`action-btn ${m.destructive ? 'destructive' : ''}`}
+            className={`action-btn${m.destructive ? ' destructive' : ''}${busy === key ? ' is-busy' : ''}`}
             title={blocked ? `${m.description} (bloqueada por modo seguro)` : m.description}
+            aria-label={m.label}
             disabled={busy !== null || blocked || copyTask !== null}
             onClick={() => handleClick(key)}
           >
-            {busy === key && <span className="action-spinner" aria-hidden="true" />}
-            {m.label}
+            {busy === key ? (
+              <span className="action-spinner" aria-hidden="true" />
+            ) : (
+              ACTION_ICONS[key] && <Icon name={ACTION_ICONS[key]} size={14} />
+            )}
+            {busy === key ? 'Procesando…' : m.label}
           </button>
         )
       })}
@@ -298,13 +318,14 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
           a trace. Gated on the stage so only the blocked card offers it. */}
       {trace.stage === 'import_blocked' && (
         <button
-          className="action-btn"
+          className={`action-btn${acking ? ' is-busy' : ''}`}
+          aria-label="Descartar bloqueo"
           title="Reconoce este bloqueo: la tarjeta deja de ocupar la columna Bloqueado (el estado en el arr no cambia)"
           disabled={busy !== null || acking || copyTask !== null}
           onClick={() => void clearBlocked()}
         >
           {acking && <span className="action-spinner" aria-hidden="true" />}
-          Descartar bloqueo
+          {acking ? 'Procesando…' : 'Descartar bloqueo'}
         </button>
       )}
 
