@@ -4,25 +4,61 @@
 }
 
 .trace-actions {
-  position: relative;
   display: flex;
+  flex-direction: column;
   gap: 6px;
-  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.trace-actions .action-btn {
+  display: inline-flex;
   align-items: center;
-}.action-result {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 6px;
-  z-index: 20;
-  max-width: 340px;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+/* Stitch 05: a running action turns into a filled "Procesando…" button. */
+.trace-actions .action-btn.is-busy:disabled {
+  opacity: 1;
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+}
+
+.action-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: action-spin 0.7s linear infinite;
+}
+
+@keyframes action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-spinner {
+    animation-duration: 2s;
+  }
+}
+
+/* Inline, under the buttons: it takes part in the layout so it never covers
+   the next row. */
+.action-result {
+  position: relative;
   font-size: 11px;
   line-height: 1.4;
   padding: 8px 26px 8px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg-elev-2);
-  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  overflow-wrap: anywhere;
 }
 
 .action-result.ok {

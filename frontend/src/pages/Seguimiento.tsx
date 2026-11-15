@@ -23,6 +23,7 @@ import { formatBytes } from '../shared/utils/text.ts'
 import { relativeTime } from '../shared/utils/time.ts'
 import { AutoCopyPanel } from '../features/auto-copy/AutoCopyPanel.tsx'
 import { TraceActions } from '../features/trace-actions/TraceActions.tsx'
+import { TraceStepper } from './TraceStepper.tsx'
 import './Seguimiento.css'
 
 /**
@@ -201,7 +202,21 @@ function cardPath(trace: Trace): string {
   if (trace.stage === 'import_blocked' || trace.stage === 'failed') {
     return trace.queue?.output_path ?? trace.torrent?.content_path ?? trace.torrent?.current_path ?? ''
   }
-  return ''
+  return trace.destination ?? trace.torrent?.save_path ?? ''
+}
+
+/** "1080p WEB-DL" out of a release name; empty when it carries neither. */
+function qualityOf(title: string): string {
+  const res = /\b(2160p|1080p|720p|480p)\b/i.exec(title)?.[1]
+  const src = /\b(WEB-?DL|WEBRip|Blu-?Ray|BDRip|HDTV|Remux)\b/i.exec(title)?.[1]
+  return [res, src].filter(Boolean).join(' ')
+}
+
+/** "74% — 1.8 GB / 2.4 GB": the size is the client's own, never estimated. */
+function progressLabel(trace: Trace): string {
+  const pct = trace.torrent?.progress ?? 0
+  const size = trace.torrent?.size
+  return size ? `${pct}% — ${formatBytes((size * pct) / 100)} / ${formatBytes(size)}` : `${pct}%`
 }
 
 function TraceRow({
@@ -225,11 +240,13 @@ function TraceRow({
   const showBar =
     trace.torrent !== null &&
     (trace.stage === 'downloading' || trace.stage === 'downloaded' || trace.stage === 'importing')
-  const reason =
-    trace.queue?.messages[0] ??
-    (trace.category_ok === false && trace.torrent?.category
-      ? `Categoría «${trace.torrent.category}»; se esperaba «${trace.expected_category ?? '—'}»`
-      : null)
+  const reasons: string[] =
+    trace.queue?.messages.length
+      ? trace.queue.messages
+      : trace.category_ok === false && trace.torrent?.category
+        ? [`Categoría «${trace.torrent.category}»; se esperaba «${trace.expected_category ?? '—'}»`]
+        : []
+  const quality = qualityOf(trace.title)
   const path = cardPath(trace)
 
   return (
@@ -238,50 +255,75 @@ function TraceRow({
       style={highlighted ? HIGHLIGHT_STYLE : undefined}
       aria-label={trace.title}
     >
-      <div className="sg-row-main">
-        <span className={`sg-svc sg-${trace.source}`}>{trace.source}</span>
-        <span className="sg-title" title={trace.title}>
-          {trace.title}
-        </span>
-        <span className={`sg-pill sg-pill-${trace.stage}`}>{STAGE_LABELS[trace.stage]}</span>
-        {trace.category_ok === false && (
-          <span className="sg-chip sg-chip-warn" title={trace.expected_category ?? undefined}>
-            Cat. incorrecta
-          </span>
-        )}
-        {trace.paused && <span className="sg-chip">En pausa</span>}
-        {showBar && (
-          <div className="sg-row-prog">
-            <div
-              className="sg-bar"
-              role="progressbar"
-              aria-valuenow={trace.torrent?.progress ?? 0}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={`Progreso de ${trace.title}`}
-            >
-              <i style={{ width: `${trace.torrent?.progress ?? 0}%` }} />
-            </div>
-            <span className="sg-pct">{trace.torrent?.progress ?? 0}%</span>
+      <div className="sg-trace-grid">
+        <div className="sg-col-id">
+          <div className="sg-id-meta">
+            <span className={`sg-svc sg-${trace.source}`}>{trace.source}</span>
+            {quality && <span className="sg-quality">{quality}</span>}
+            {trace.category_ok === false && (
+              <span className="sg-chip sg-chip-warn" title={trace.expected_category ?? undefined}>
+                Cat. incorrecta
+              </span>
+            )}
+            {trace.paused && <span className="sg-chip">En pausa</span>}
           </div>
-        )}
-        <span className="sg-age">{relativeTime(trace.date)}</span>
+          <span className="sg-title" title={trace.title}>
+            {trace.title}
+          </span>
+          {path && (
+            <div className="sg-path" title={path}>
+              <Icon name="folder" size={13} />
+              <span>{path}</span>
+            </div>
+          )}
+        </div>
+        <div className="sg-col-life">
+          <TraceStepper trace={trace} />
+          {showBar && (
+            <div className="sg-row-prog">
+              <div
+                className="sg-bar"
+                role="progressbar"
+                aria-valuenow={trace.torrent?.progress ?? 0}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`Progreso de ${trace.title}`}
+              >
+                <i style={{ width: `${trace.torrent?.progress ?? 0}%` }} />
+              </div>
+              <span className="sg-pct">{progressLabel(trace)}</span>
+            </div>
+          )}
+        </div>
+        <div className="sg-col-state">
+          <span className={`sg-pill sg-pill-${trace.stage}`}>
+            <i className="sg-dot" aria-hidden="true" />
+            {STAGE_LABELS[trace.stage]}
+          </span>
+          <span className="sg-age">{relativeTime(trace.date)}</span>
+        </div>
+        <div className="sg-col-actions">
+          <TraceActions trace={trace} meta={meta} safeMode={safeMode} onDone={onDone} />
+          {/* The explicit door to the full record: a control of its own, so it
+              never fights TraceActions for the row's clicks and the keyboard
+              gets it for free. */}
+          <button type="button" className="sg-detail-btn" onClick={onDetails}>
+            Ver detalles
+            <Icon name="chevron_right" size={14} />
+          </button>
+        </div>
       </div>
-      {reason && <div className="sg-why">{reason}</div>}
-      {path && (
-        <div className="sg-path" title={path}>
-          → {path}
+      {reasons.length > 0 && (
+        <div className="sg-why">
+          <Icon name="warning" size={16} />
+          <div className="sg-why-text">
+            <strong>{reasons[0]}</strong>
+            {reasons.slice(1).map((m, i) => (
+              <span key={i}>{m}</span>
+            ))}
+          </div>
         </div>
       )}
-      <div className="sg-row-foot">
-        <TraceActions trace={trace} meta={meta} safeMode={safeMode} onDone={onDone} />
-        {/* The explicit door to the full record: a control of its own, so it
-            never fights TraceActions for the row's clicks and the keyboard
-            gets it for free. */}
-        <button type="button" className="sg-detail-btn" onClick={onDetails}>
-          Ver detalles
-        </button>
-      </div>
     </article>
   )
 }

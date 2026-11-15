@@ -1,0 +1,87 @@
+.sg-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sg-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-dim);
+}
+
+/* The connector runs from this dot's centre to the previous one's. */
+.sg-step + .sg-step::before {
+  content: '';
+  position: absolute;
+  top: 9px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+}
+
+.sg-step-done + .sg-step::before,
+.sg-step-done + .sg-step-current::before {
+  background: var(--accent);
+}
+
+.sg-step-done + .sg-step-fail::before {
+  background: var(--bad);
+}
+
+.sg-step-dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sg-step-done .sg-step-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.sg-step-current .sg-step-dot {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.sg-step-fail .sg-step-dot {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: var(--bg);
+}
+
+.sg-step-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.sg-step-current .sg-step-label {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.sg-step-fail .sg-step-label {
+  color: var(--bad-text);
+  font-weight: 700;
+}

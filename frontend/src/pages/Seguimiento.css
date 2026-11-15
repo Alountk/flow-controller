@@ -115,6 +115,12 @@
 
 .sg-row.sg-error {
   border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  border-left: 3px solid var(--warn);
+}
+
+.sg-row.sg-error:has(.sg-pill-failed) {
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+  border-left-color: var(--bad);
 }
 
 .sg-row-main {
@@ -134,33 +140,79 @@
   max-width: 280px;
 }
 
+.sg-col-life .sg-row-prog {
+  flex: none;
+  max-width: none;
+  min-width: 0;
+}
+
 .sg-row-prog .sg-bar {
   flex: 1;
   margin-top: 0;
 }
 
-.sg-row-foot {
+/* Trace rows are a four-column grid, so a long title or path ellipsizes inside
+   its column instead of reshaping the card. */
+.sg-trace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(130px, auto);
+  gap: 16px;
+  align-items: center;
+}
+
+.sg-col-id,
+.sg-col-life,
+.sg-col-state,
+.sg-col-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sg-id-meta {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sg-col-state {
+  align-items: flex-start;
+}
+
+.sg-col-actions {
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .sg-trace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .sg-svc {
   font-weight: 700;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 11px;
+  text-transform: capitalize;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
   flex-shrink: 0;
 }
 
-.sg-svc.radarr {
-  color: var(--accent);
+.sg-svc.sg-radarr {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 
-.sg-svc.sonarr {
-  color: var(--ok);
+.sg-svc.sg-sonarr {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sg-quality {
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .sg-title {
@@ -174,21 +226,28 @@
 }
 
 .sg-age {
-  margin-left: auto;
   font-size: 10.5px;
   color: var(--text-dim);
   flex-shrink: 0;
 }
 
 .sg-pill {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 650;
   border-radius: 999px;
-  padding: 3px 8px;
+  padding: 3px 10px;
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.sg-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .sg-pill-import_blocked {
@@ -243,16 +302,36 @@
 }
 
 .sg-why {
-  margin-top: 8px;
-  font-size: 11px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 10px;
+  font-size: 11.5px;
   line-height: 1.45;
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
   border-radius: var(--radius-md);
-  padding: 7px 8px;
+  padding: 10px 12px;
   /* Queue messages carry unbroken paths — without this a long one blows the
      row sideways instead of wrapping. */
   overflow-wrap: anywhere;
+}
+
+.sg-why .icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sg-why-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sg-why-text span {
+  color: var(--text-dim);
 }
 
 .sg-row.sg-error:has(.sg-pill-failed) .sg-why {
@@ -261,32 +340,45 @@
 }
 
 .sg-path {
-  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--text-dim);
+  min-width: 0;
+}
+
+.sg-path > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.sg-path .icon {
+  flex-shrink: 0;
+}
+
 /* The door to the detail overlay: its own control so it never crowds the
    action bar, and pill-shaped like the chips above it. */
 .sg-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   font: inherit;
   font-size: 11px;
   font-weight: 650;
-  color: var(--accent);
+  color: var(--text-dim);
   background: none;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
   cursor: pointer;
 }
 
 .sg-detail-btn:hover {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
 }
 
 .sg-detail-btn:focus-visible {
