@@ -24,7 +24,15 @@ const RETRY_META: ActionMeta = {
   scope: 'import',
 }
 
-const meta = { retry_import: RETRY_META } as Record<ActionKey, ActionMeta>
+const COPY_META: ActionMeta = {
+  key: 'copy_files',
+  label: 'Copiar archivos',
+  description: 'Copia los archivos al destino',
+  destructive: false,
+  scope: 'arr',
+}
+
+const meta = { retry_import: RETRY_META, copy_files: COPY_META } as Record<ActionKey, ActionMeta>
 
 function trace(overrides: Partial<Trace> = {}): Trace {
   return {
@@ -225,5 +233,61 @@ describe('Marcar como completada — a finished download the client still lists'
     await waitFor(() => expect(onDone).toHaveBeenCalled())
     const call = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/trace/blocked/ack'))
     expect(bodyOf(call!)).toMatchObject({ download_id: 'abc123', settled: true })
+  })
+})
+
+describe('Copiar archivos on a downloaded trace verifies the destination first', () => {
+  const downloaded = () =>
+    trace({
+      stage: 'downloaded',
+      destination: '/movies/Transformers (2007)',
+      torrent: {
+        state: 'pausedUP', progress: 100, category: 'x', save_path: '/dl', current_path: '/dl',
+        content_path: '/dl/Transformers.2007.mkv', size: 1000,
+      },
+    })
+
+  function stubBrowse(items: unknown[]) {
+    const fn = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/files/browse')) {
+        return Promise.resolve(deferredJson({ ok: true, items }))
+      }
+      return Promise.resolve(deferredJson({ ok: true, key: 'k' }))
+    })
+    vi.stubGlobal('fetch', fn)
+    return fn
+  }
+
+  it('lists the destination folder and flags the matching file', async () => {
+    stubBrowse([{ name: 'Transformers.2007.mkv', is_dir: false, size: 1000 }])
+    renderActions(downloaded())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+
+    expect(await screen.findByText(/coincide con la descarga/)).toBeInTheDocument()
+  })
+
+  it('"Ya está en destino" settles the row instead of copying', async () => {
+    const fetchMock = stubBrowse([])
+    const { onDone } = renderActions(downloaded())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Ya está en destino' }))
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/trace/blocked/ack'))
+    expect(bodyOf(call!)).toMatchObject({ settled: true })
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/actions/copy_files'))).toBe(false)
+  })
+
+  it('"No ha llegado" falls through to the normal copy confirmation', async () => {
+    stubBrowse([])
+    renderActions(downloaded())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'No ha llegado: copiar' }))
+
+    expect(await screen.findByRole('button', { name: 'Confirmar' })).toBeInTheDocument()
   })
 })

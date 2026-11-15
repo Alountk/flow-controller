@@ -9,6 +9,7 @@ import { ackBlockedImport } from '../../shared/api/traces.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
 import { slug } from '../../shared/utils/slug.ts'
+import { formatBytes as formatSize } from '../../shared/utils/text.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import type { IconName } from '../../shared/ui/iconPaths.ts'
 import './TraceActions.css'
@@ -152,6 +153,7 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   // below (`refetchInterval` → false); a disconnect wakes it back up.
   const { connected } = useContext(EventStreamContext)
   const [pending, setPending] = useState<Pending | null>(null)
+  const [checking, setChecking] = useState(false)
   const [busy, setBusy] = useState<ActionKey | null>(null)
   const [acking, setAcking] = useState(false)
   const [result, setResult] = useState<ActionResult | null>(null)
@@ -236,6 +238,12 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   }
 
   function handleClick(action: ActionKey) {
+    // A finished download: look at the destination before moving anything —
+    // the file may already be there (Jellyfin sees it) and copying is moot.
+    if (action === 'copy_files' && trace.stage === 'downloaded' && trace.destination) {
+      setChecking(true)
+      return
+    }
     const opts = optionsFor(action, trace)
     if (opts) {
       setPending({ action, options: opts })
@@ -450,6 +458,25 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
         </TraceDialog>
       )}
 
+      {checking && trace.destination && (
+        <DestinationCheck
+          folder={trace.destination}
+          wanted={baseName(
+            trace.torrent?.content_path || trace.torrent?.current_path || trace.queue?.output_path || '',
+          )}
+          onClose={() => setChecking(false)}
+          onArrived={() => {
+            setChecking(false)
+            void clearBlocked(true)
+          }}
+          onCopy={() => {
+            setChecking(false)
+            const opts = optionsFor('copy_files', trace)
+            if (opts) setPending({ action: 'copy_files', options: opts })
+          }}
+        />
+      )}
+
       {copyTask && (
         <TraceDialog label="Progreso de la copia" className="copy-progress-modal">
           <h3>
@@ -509,6 +536,73 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
 }
 
 /** Without `onClose` the dialog cannot be dismissed (copy in progress): Escape and the backdrop do nothing. */
+function baseName(path: string): string {
+  return path.replace(/\/+$/, '').split('/').pop() ?? ''
+}
+
+interface FolderItem {
+  name: string
+  is_dir: boolean
+  size: number
+}
+
+/** Lists the destination folder so the operator can see whether the download
+ *  already arrived; "ya está" settles the row, otherwise the copy proceeds. */
+function DestinationCheck({ folder, wanted, onClose, onArrived, onCopy }: {
+  folder: string
+  wanted: string
+  onClose: () => void
+  onArrived: () => void
+  onCopy: () => void
+}) {
+  const [items, setItems] = useState<FolderItem[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    apiFetch(`/api/files/browse?path=${encodeURIComponent(folder)}`)
+      .then((r) => r.json())
+      .then((body: { ok?: boolean; items?: FolderItem[]; error?: string }) => {
+        if (!alive) return
+        if (body.ok) setItems(body.items ?? [])
+        else setError(body.error ?? 'No se pudo leer la carpeta')
+      })
+      .catch((e: Error) => alive && setError(e.message))
+    return () => { alive = false }
+  }, [folder])
+
+  const match = items?.some((i) => i.name === wanted) ?? false
+
+  return (
+    <TraceDialog label="Verificar destino" onClose={onClose}>
+      <h3>Verificar destino</h3>
+      <p>
+        <code>{folder}</code>
+      </p>
+      {error && <p role="alert">{error}</p>}
+      {!error && items === null && <p>Leyendo la carpeta…</p>}
+      {items && items.length === 0 && <p>La carpeta está vacía.</p>}
+      {items && items.length > 0 && (
+        <ul className="dest-list">
+          {items.map((i) => (
+            <li key={i.name} className={i.name === wanted ? 'is-match' : undefined}>
+              {i.name}
+              {!i.is_dir && <span> · {formatSize(i.size)}</span>}
+              {i.name === wanted && <strong> · coincide con la descarga</strong>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {items && !match && wanted && <p>«{wanted}» no aparece en la carpeta.</p>}
+      <div className="modal-buttons">
+        <button className="action-btn" onClick={onClose}>Cancelar</button>
+        <button className="action-btn" onClick={onCopy}>No ha llegado: copiar</button>
+        <button className="action-btn" onClick={onArrived}>Ya está en destino</button>
+      </div>
+    </TraceDialog>
+  )
+}
+
 function TraceDialog({ label, onClose, className, children }: {
   label: string
   onClose?: () => void
