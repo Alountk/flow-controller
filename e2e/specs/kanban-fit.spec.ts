@@ -184,17 +184,19 @@ test('the unified list fills the view — the 70/30 split is gone (S2)', async (
 
   // The replacement for the fixed board/tail share: there are no halves left
   // to divide. The list takes the FULL width ("menos paneles, una sola
-  // lectura") and the tabs + list + sweep stack closes the box exactly —
+  // lectura") and the tabs + filters + list + sweep stack closes the box exactly —
   // content-driven shares were what made the halves negotiate over pixels.
   const box = await app.evaluate(() => {
     const frame = document.querySelector('.sg-frame');
     const sg = document.querySelector('.sg');
     const tabs = document.querySelector('.sg-tabs');
+    const filters = document.querySelector('.sg-filters');
     const list = document.querySelector('.sg-list');
     const sweep = document.querySelector('.sg-sweep');
-    if (!frame || !sg || !tabs || !list || !sweep) return null;
+    if (!frame || !sg || !tabs || !filters || !list || !sweep) return null;
     const f = frame.getBoundingClientRect();
     const t = tabs.getBoundingClientRect();
+    const fl = filters.getBoundingClientRect();
     const l = list.getBoundingClientRect();
     const s = sweep.getBoundingClientRect();
     return {
@@ -202,7 +204,7 @@ test('the unified list fills the view — the 70/30 split is gone (S2)', async (
       frameH: f.height,
       listW: l.width,
       listH: l.height,
-      stacked: t.height + l.height + s.height,
+      stacked: t.height + fl.height + l.height + s.height,
       gap: parseFloat(getComputedStyle(sg).rowGap) || 0,
     };
   });
@@ -210,7 +212,8 @@ test('the unified list fills the view — the 70/30 split is gone (S2)', async (
   expect(box).not.toBeNull();
   // One reading, one column: the list IS the width of the view.
   expect(Math.abs(box!.listW - box!.frameW)).toBeLessThanOrEqual(FIT);
-  // And the stack closes the box — tabs + list + sweep + the two gaps = the
-  // whole content area, so the page cannot scroll however long the list grows.
-  expect(Math.abs(box!.stacked + 2 * box!.gap - box!.frameH)).toBeLessThanOrEqual(FIT);
+  // And the stack closes the box — tabs + filters + list + sweep + the three
+  // gaps = the whole content area, so the page cannot scroll however long the
+  // list grows.
+  expect(Math.abs(box!.stacked + 3 * box!.gap - box!.frameH)).toBeLessThanOrEqual(FIT);
 });

@@ -81,6 +81,67 @@
   padding: 2px 8px;
 }
 
+/* ── Filtros ── */
+
+.sg-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.sg-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 200px;
+  max-width: 320px;
+  padding: 0 10px;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.sg-search:focus-within {
+  border-color: var(--accent);
+}
+
+.sg-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.sg-select {
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 10px;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.sg-clear {
+  margin-left: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 /* ── La lista ── */
 
 .sg-list {

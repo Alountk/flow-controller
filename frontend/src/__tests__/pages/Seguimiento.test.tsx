@@ -1342,3 +1342,64 @@ describe('safe-mode banner', () => {
     expect(tab).toHaveClass('sg-tab-alert')
   })
 })
+
+describe('the filter bar over the list', () => {
+  const three = () =>
+    resp([
+      trace({ title: 'Dune (2021)', source: 'radarr', stage: 'downloading', download_id: 'a' }),
+      trace({ title: 'The Bear S03E01', source: 'sonarr', stage: 'downloading', download_id: 'b' }),
+      trace({ title: 'Alien (1979)', source: 'radarr', stage: 'downloaded', download_id: 'c' }),
+    ])
+
+  it('narrows the list by title as the operator types', () => {
+    const { container } = renderView(three())
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar en el seguimiento' }), {
+      target: { value: 'bear' },
+    })
+
+    expect(rowNames(list(container))).toEqual(['The Bear S03E01'])
+  })
+
+  it('narrows the list to one origin', () => {
+    const { container } = renderView(three())
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Origen' }), {
+      target: { value: 'radarr' },
+    })
+
+    expect(rowNames(list(container))).toEqual(['Dune (2021)', 'Alien (1979)'])
+  })
+
+  it('narrows the list to one phase', () => {
+    const { container } = renderView(three())
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Fase' }), {
+      target: { value: 'downloaded' },
+    })
+
+    expect(rowNames(list(container))).toEqual(['Alien (1979)'])
+  })
+
+  it('says so and offers to clear when nothing matches, then restores the list', () => {
+    const { container } = renderView(three())
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar en el seguimiento' }), {
+      target: { value: 'zzz' },
+    })
+    expect(screen.getByText(/Ninguna tarea coincide con los filtros/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar filtros' }))
+    expect(rowNames(list(container))).toHaveLength(3)
+  })
+
+  it('leaves the tab counts alone — they count the tasks, not the filter', () => {
+    renderView(three())
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar en el seguimiento' }), {
+      target: { value: 'bear' },
+    })
+
+    expect(screen.getByRole('tab', { name: 'Activas (3)' })).toBeInTheDocument()
+  })
+})
