@@ -85,6 +85,8 @@ def copy_files(
 
         if src.is_dir():
             all_files = sorted(f for f in src.rglob("*") if f.is_file())
+            if not all_files:
+                return {"ok": False, "detail": f"la carpeta no contiene archivos: {src}", "files_copied": 0, "code": "empty_source"}
             to_copy = [f for f in all_files if not (dst_dir / f.relative_to(src)).exists()]
             skipped = len(all_files) - len(to_copy)
             total_bytes = sum(f.stat().st_size for f in to_copy)

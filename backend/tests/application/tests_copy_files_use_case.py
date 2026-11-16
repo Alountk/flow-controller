@@ -151,3 +151,34 @@ def test_no_progress_callback_is_not_an_error(tmp_path):
     src.write_bytes(b"x")
     result = copy_files(src, tmp_path / "library", storage=FakeStorage())
     assert result["ok"] is True
+
+
+def test_a_folder_without_files_is_a_failure_not_a_copy_of_nothing(tmp_path):
+    """Copying nothing must not look like a finished copy.
+
+    The arr is then asked to import a file that was never delivered, and the
+    operator sees a completed task with nothing at the destination.
+    """
+    src = tmp_path / "release"
+    (src / "Subs").mkdir(parents=True)
+    storage = FakeStorage()
+
+    result = copy_files(src, tmp_path / "library", storage=storage)
+
+    assert result["ok"] is False
+    assert result["files_copied"] == 0
+    assert storage.written == []
+
+
+def test_a_folder_whose_files_are_all_there_already_still_succeeds(tmp_path):
+    src = tmp_path / "release"
+    src.mkdir()
+    (src / "film.mkv").write_bytes(b"a")
+    out = tmp_path / "library"
+    out.mkdir()
+    (out / "film.mkv").write_bytes(b"a")
+
+    result = copy_files(src, out, storage=FakeStorage())
+
+    assert result["ok"] is True
+    assert "1 ya existían" in result["detail"]
