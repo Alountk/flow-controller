@@ -37,6 +37,7 @@ log = logging.getLogger("flow-controller")
 # to keep true at the seam.
 from application.ports import CopyCancelled, FileStorage  # noqa: F401  (CopyCancelled is caught here)
 from application.use_cases.copy_files import copy_files
+from application.use_cases.trace_source import source_from_trace
 from application.gateways import (
     amule_categories,
     amule_delete,
@@ -575,10 +576,9 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         log.info("action=copy_files source=%s ids=%s", source, ids)
         if not service:
             return {"ok": False, "steps": [{"target": "arr", "ok": False, "detail": "servicio desconocido"}]}
-        output_path = payload.get("output_path") or ""
+        output_path = payload.get("output_path") or await source_from_trace(payload)
         if not output_path:
-            log.warning("copy_files: sin output_path en payload")
-            return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "sin output_path"}]}
+            return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "sin output_path: la descarga no informa su ruta de origen"}]}
         dest_root = payload.get("dest_root") or ""
         if dest_root:
             # Defence in depth: the combo is fed by the arr's roots and the

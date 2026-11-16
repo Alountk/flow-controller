@@ -812,3 +812,48 @@ def test_the_copy_creation_site_tags_the_copy_channel(tmp_path, monkeypatch):
         assert task is not None and task["channel"] == "copy"
     finally:
         del copy_tasks._tasks[result["task_id"]]
+
+
+class TestCopyFilesSourceFromTrace:
+    """An empty `output_path` is completed from the download's own trace."""
+
+    def _scenario(self, tmp_path, monkeypatch, traces):
+        payload = _foreign_payload(tmp_path, queue_id=7)
+        src = payload.pop("output_path")
+        payload.update({"download_id": "abc123", "matched_hash": "abc123"})
+        dispatches: list[dict] = []
+
+        async def fake_traces():
+            return [t(src) if callable(t) else t for t in traces]
+
+        monkeypatch.setattr("application.use_cases.trace_cache.get_traces", fake_traces)
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(config, "path_is_allowed", lambda path: True)
+        monkeypatch.setattr(
+            clients, "arr_delete_queue", _delete_recorder([], {"ok": True, "detail": "ok"})
+        )
+        monkeypatch.setattr(copy_engine, "run_copy_background", _run_recorder(dispatches))
+        return payload, src, dispatches
+
+    def test_uses_the_torrent_content_path(self, tmp_path, monkeypatch):
+        payload, src, dispatches = self._scenario(
+            tmp_path, monkeypatch,
+            [lambda s: {"download_id": "abc123", "matched_hash": "abc123",
+                        "torrent": {"content_path": s}, "queue": None}],
+        )
+        result = asyncio.run(do_action(None, "copy_files", payload))
+
+        assert result["ok"] is True
+        assert result["src_path"] == src
+        del copy_tasks._tasks[result["task_id"]]
+
+    def test_still_refuses_when_the_trace_has_no_path(self, tmp_path, monkeypatch):
+        payload, _src, dispatches = self._scenario(
+            tmp_path, monkeypatch,
+            [{"download_id": "abc123", "matched_hash": "abc123", "torrent": None, "queue": None}],
+        )
+        result = asyncio.run(do_action(None, "copy_files", payload))
+
+        assert result["ok"] is False
+        assert result["steps"][0]["detail"].startswith("sin output_path")
+        assert dispatches == []

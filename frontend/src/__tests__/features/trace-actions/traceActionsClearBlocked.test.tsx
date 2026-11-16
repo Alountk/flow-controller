@@ -1,3 +1,4 @@
+import { clearToasts, getToasts } from '../../../shared/utils/toast.ts'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -94,6 +95,7 @@ function bodyOf(call: [RequestInfo | URL, RequestInit?]): Record<string, unknown
 }
 
 afterEach(() => {
+  clearToasts()
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })
@@ -289,6 +291,61 @@ describe('Copiar archivos on a downloaded trace verifies the destination first',
     fireEvent.click(await screen.findByRole('button', { name: 'No ha llegado: copiar' }))
 
     expect(await screen.findByRole('button', { name: 'Confirmar' })).toBeInTheDocument()
+  })
+})
+
+describe('Copiar archivos reports a refusal on the row', () => {
+  it('shows the server reason after "No ha llegado: copiar" is confirmed', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/files/browse')) return Promise.resolve(deferredJson({ ok: true, items: [] }))
+      if (url.includes('/api/actions/copy_files')) {
+        return Promise.resolve(deferredJson({
+          ok: false, steps: [{ target: 'radarr', ok: false, detail: 'sin output_path' }],
+        }))
+      }
+      return Promise.resolve(deferredJson({}))
+    }))
+    renderActions(trace({
+      stage: 'downloaded',
+      destination: '/movies/Transformers (2007)',
+      torrent: {
+        state: 'pausedUP', progress: 100, category: 'x', save_path: '/dl', current_path: '/dl',
+        content_path: '/dl/Transformers.2007.mkv', size: 1000,
+      },
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'No ha llegado: copiar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }))
+
+    expect(await screen.findByText(/radarr: sin output_path/)).toBeInTheDocument()
+    expect(getToasts().some((t) => t.tone === 'error' && /sin output_path/.test(t.message))).toBe(true)
+  })
+})
+
+describe('Copiar archivos keeps its source path through the confirmation', () => {
+  it('offers no delete checkbox and always sends the source path', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/actions/copy_files')) {
+        return Promise.resolve(deferredJson({ ok: false, steps: [{ target: 'radarr', ok: false, detail: 'x' }] }))
+      }
+      return Promise.resolve(deferredJson({}))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderActions(trace({
+      queue: { state: 'importPending', status: 'warning', output_path: '/dl/x.mkv', messages: [] },
+    }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+    await screen.findByRole('button', { name: 'Confirmar' })
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).includes('copy_files'))).toBe(true))
+    const call = fetchMock.mock.calls.find(([u]) => String(u).includes('copy_files'))!
+    expect(bodyOf(call as [RequestInfo | URL, RequestInit?])).toMatchObject({ output_path: '/dl/x.mkv' })
   })
 })
 
