@@ -39,8 +39,9 @@ A refusal is ``429`` with ``Retry-After`` and ``{"detail", "retry_after"}``
 this app to police, and the one streaming route (mediacover) gets its
 header before the first byte and counts as ONE request — per-byte limiting
 is out of scope. Behind a reverse proxy the "client address" is the proxy's
-unless the deployment passes the real peer: budgets are per-deployment
-there, which a single-user app can accept.
+unless uvicorn is told to trust it: set ``FORWARDED_ALLOW_IPS`` to the proxy's
+IP and the real peer is read from ``X-Forwarded-For`` (only for that peer;
+a direct client cannot spoof it). Left unset, budgets are per-deployment.
 """
 
 from __future__ import annotations
