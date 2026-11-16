@@ -186,7 +186,7 @@ def _config() -> tuple[bool, float, float, int, float]:
     max_attempts = int(
         _num(_setting("watchdog_max_restarts", "AMULE_WATCHDOG_MAX_RESTARTS", "3"), 3.0)
     )
-    timeout = _num(_setting("watchdog_canary_timeout", "AMULE_WATCHDOG_CANARY_TIMEOUT", "10"), 10.0)
+    timeout = _num(_setting("watchdog_canary_timeout", "AMULE_WATCHDOG_CANARY_TIMEOUT", "20"), 20.0)
     return enabled, interval, cooldown, max_attempts, timeout
 
 

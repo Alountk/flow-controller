@@ -50,7 +50,9 @@ __all__ = [
 ]
 
 #: Seconds a healthy trivial search must answer within before it counts as hung.
-DEFAULT_CANARY_TIMEOUT = 10.0
+#: It must outlast `amule_service._SEARCH_DEADLINE`: a healthy aMule can need the
+#: whole search deadline to reach 100 %, and cutting it earlier reads as a hang.
+DEFAULT_CANARY_TIMEOUT = 20.0
 
 #: Plazo del stop de limpieza: nunca debe frenar al watchdog.
 _STOP_TIMEOUT = 3.0

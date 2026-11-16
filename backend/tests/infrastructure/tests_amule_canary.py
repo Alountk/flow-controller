@@ -215,3 +215,19 @@ def test_a_strange_failure_never_escapes_the_canary(monkeypatch):
     assert result.ok is False
     assert result.status == "error"
     assert "boom" in result.reason
+
+
+def test_default_timeout_outlasts_the_search_deadline():
+    """A healthy aMule may use the whole search deadline to reach 100 %; a
+    canary that gives up earlier reports it hung (the false-Alerta bug)."""
+    from infrastructure import amule_service
+
+    assert amule_canary.DEFAULT_CANARY_TIMEOUT > amule_service._SEARCH_DEADLINE
+
+
+def test_watchdog_default_canary_timeout_follows_the_same_rule(monkeypatch):
+    from infrastructure import amule_service, amule_watchdog
+
+    monkeypatch.delenv("AMULE_WATCHDOG_CANARY_TIMEOUT", raising=False)
+    monkeypatch.setattr(amule_watchdog, "get_setting", lambda *a, default=None, **k: default)
+    assert amule_watchdog._config()[4] > amule_service._SEARCH_DEADLINE
