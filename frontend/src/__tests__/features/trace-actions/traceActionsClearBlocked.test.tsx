@@ -1,3 +1,4 @@
+import { clearToasts, getToasts } from '../../../shared/utils/toast.ts'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -94,6 +95,7 @@ function bodyOf(call: [RequestInfo | URL, RequestInit?]): Record<string, unknown
 }
 
 afterEach(() => {
+  clearToasts()
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })
@@ -318,6 +320,7 @@ describe('Copiar archivos reports a refusal on the row', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }))
 
     expect(await screen.findByText(/radarr: sin output_path/)).toBeInTheDocument()
+    expect(getToasts().some((t) => t.tone === 'error' && /sin output_path/.test(t.message))).toBe(true)
   })
 })
 

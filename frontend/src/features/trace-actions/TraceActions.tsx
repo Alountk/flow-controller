@@ -9,6 +9,7 @@ import { ackBlockedImport } from '../../shared/api/traces.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
 import { slug } from '../../shared/utils/slug.ts'
+import { toast } from '../../shared/utils/toast.ts'
 import { formatBytes as formatSize } from '../../shared/utils/text.ts'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import type { IconName } from '../../shared/ui/iconPaths.ts'
@@ -52,6 +53,11 @@ const confirmOptionText = (action: ActionKey) =>
     ? 'Añadir a la blocklist (no volver a descargar)'
     : 'Eliminar también los archivos descargados'
 const confirmOptionId = (action: ActionKey) => slug(confirmOptionText(action))
+
+/** Why an action failed, in one line. */
+function failureText(res: ActionResult): string {
+  return res.error ?? (res.steps ?? []).map((s) => `${s.target}: ${s.detail}`).join(' · ')
+}
 
 function derivePathMapping(trace: Trace) {
   const host = trace.download_client_host || ''
@@ -238,9 +244,11 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Pro
       } else {
         setResult(res)
         if (res.ok) onDone()
+        else toast(failureText(res), 'error')
       }
     } catch (e) {
       setResult({ ok: false, error: (e as Error).message })
+      toast((e as Error).message, 'error')
     } finally {
       setBusy(null)
       setPending(null)
@@ -367,7 +375,7 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Pro
         <div className={`action-result ${result.ok ? 'ok' : 'bad'}`}>
           {result.ok
             ? (result.steps ?? []).map((s) => s.detail).join(' · ')
-            : result.error ?? (result.steps ?? []).map((s) => `${s.target}: ${s.detail}`).join(' · ')}
+            : failureText(result)}
           <button
             className="action-result-close"
             aria-label="Cerrar aviso"
