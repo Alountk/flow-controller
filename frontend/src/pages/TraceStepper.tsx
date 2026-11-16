@@ -2,6 +2,8 @@ import { Icon } from '../shared/ui/Icon.tsx'
 import type { Trace } from '../shared/types.ts'
 import './TraceStepper.css'
 
+export type CopyPhase = 'copying' | 'importing' | null
+
 export type StepState = 'done' | 'current' | 'todo' | 'fail'
 
 const STEPS = ['Buscado', 'Descargando', 'Descargado', 'Importado', 'Enviado'] as const
@@ -11,7 +13,12 @@ const STEPS = ['Buscado', 'Descargando', 'Descargado', 'Importado', 'Enviado'] a
  * a `failed` trace died on, so a finished torrent means the import failed and
  * anything else means the download did.
  */
-export function stepStates(trace: Pick<Trace, 'stage' | 'torrent'>): StepState[] {
+export function stepStates(
+  trace: Pick<Trace, 'stage' | 'torrent'>,
+  phase: CopyPhase = null,
+): StepState[] {
+  // A copy the operator started is the live step: the import has begun.
+  if (phase) return STEPS.map((_, i) => (i < 3 ? 'done' : i === 3 ? 'current' : 'todo'))
   if (trace.stage === 'sent') return STEPS.map(() => 'done')
   const failedAt = (trace.torrent?.progress ?? 0) >= 100 ? 3 : 1
   const at =
@@ -26,8 +33,11 @@ export function stepStates(trace: Pick<Trace, 'stage' | 'torrent'>): StepState[]
   )
 }
 
-export function TraceStepper({ trace }: { trace: Pick<Trace, 'stage' | 'torrent'> }) {
-  const states = stepStates(trace)
+export function TraceStepper({ trace, phase = null }: {
+  trace: Pick<Trace, 'stage' | 'torrent'>
+  phase?: CopyPhase
+}) {
+  const states = stepStates(trace, phase)
   return (
     <ol className="sg-steps" aria-label="Etapas">
       {STEPS.map((label, i) => (
@@ -37,7 +47,9 @@ export function TraceStepper({ trace }: { trace: Pick<Trace, 'stage' | 'torrent'
             {states[i] === 'fail' && <Icon name="close" size={12} />}
             {(states[i] === 'current' || states[i] === 'todo') && i + 1}
           </span>
-          <span className="sg-step-label">{label}</span>
+          <span className="sg-step-label">
+            {i === 3 && phase ? (phase === 'copying' ? 'Copiando' : 'Importando') : label}
+          </span>
         </li>
       ))}
     </ol>
