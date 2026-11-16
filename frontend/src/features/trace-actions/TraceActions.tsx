@@ -20,16 +20,11 @@ interface Props {
   meta: Record<ActionKey, ActionMeta>
   safeMode: boolean
   onDone: () => void
-  /** Tells the row which lifecycle step the running copy is on. */
-  onCopyPhase?: (phase: 'copying' | 'importing' | null) => void
+  /** The running copy: the row feeds its own progress bar with it. */
+  onCopyTask?: (task: TaskProgress | null) => void
 }
 
-interface Pending {
-  action: ActionKey
-  options: ActionOptions
-}
-
-interface TaskProgress {
+export interface TaskProgress {
   task_id: string
   src_path: string
   dst_path: string
@@ -39,6 +34,11 @@ interface TaskProgress {
   files_done: number
   files_total: number
   detail: string
+}
+
+interface Pending {
+  action: ActionKey
+  options: ActionOptions
 }
 
 // S2: the visible label text is the id/name source — one string, so both cannot drift.
@@ -145,18 +145,10 @@ function optionsFor(action: ActionKey, trace: Trace): ActionOptions | null {
   return null
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  const val = bytes / Math.pow(1024, i)
-  return `${val.toFixed(val >= 100 ? 0 : 1)} ${units[i]}`
-}
-
 const TERMINAL_STATUSES = ['imported', 'renamed_needed', 'import_timeout', 'error', 'cancelled']
 const ACTIVE_STATUSES = ['running', 'done', 'importing', 'renamed_needed']
 
-export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Props) {
+export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Props) {
   // B1: while the SSE stream is connected, copy-task events replace the poll
   // below (`refetchInterval` → false); a disconnect wakes it back up.
   const { connected } = useContext(EventStreamContext)
@@ -169,10 +161,9 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Pro
 
   const keys = actionsFor(trace)
 
-  const copyPhase = copyTask ? (copyTask.status === 'importing' ? 'importing' : 'copying') : null
   useEffect(() => {
-    onCopyPhase?.(copyPhase)
-  }, [copyPhase, onCopyPhase])
+    onCopyTask?.(copyTask)
+  }, [copyTask, onCopyTask])
 
   const { data: taskData } = useQuery({
     queryKey: ['task', copyTask?.task_id],
@@ -303,10 +294,6 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Pro
       // Will be handled by polling
     }
   }
-
-  const progressPct = copyTask && copyTask.total_bytes > 0
-    ? Math.round((copyTask.copied_bytes / copyTask.total_bytes) * 100)
-    : 0
 
   // Nothing this card can offer (no key survived the catalogue, and no
   // leftover result to show): an empty bar inside a kanban card would be
@@ -496,39 +483,9 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Pro
       )}
 
       {copyTask && (
-        <div className="copy-inline" role="status" aria-label="Progreso de la copia">
-          <strong>
-            {copyTask.status === 'importing' ? 'Importando…' : 'Copiando…'}
-          </strong>
-          {copyTask.status !== 'importing' && (
-            <>
-              <div
-                className="copy-bar-container"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progressPct}
-                aria-label="Progreso de la copia"
-              >
-                <div className="copy-bar" style={{ width: `${progressPct}%` }} />
-              </div>
-              <div className="copy-stats">
-                <span>{formatBytes(copyTask.copied_bytes)} / {formatBytes(copyTask.total_bytes)}</span>
-                <span>{progressPct}%</span>
-              </div>
-            </>
-          )}
-          {copyTask.status === 'importing' && (
-            <div className="copy-importing">
-              <span className="copy-spinner" />
-              <span>Esperando que el arr importe el archivo…</span>
-            </div>
-          )}
-          <p className="copy-detail">{copyTask.detail}</p>
-          <button className="action-btn cancel-btn" onClick={cancelTask}>
-            Cancelar copia
-          </button>
-        </div>
+        <button className="action-btn cancel-btn" onClick={cancelTask}>
+          Cancelar copia
+        </button>
       )}
     </div>
   )
