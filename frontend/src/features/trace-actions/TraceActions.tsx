@@ -424,7 +424,7 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Pro
             </div>
           )}
 
-          {pending.action !== 'fix_path_mapping' && (
+          {pending.action !== 'fix_path_mapping' && pending.action !== 'copy_files' && (
             <label className="modal-check" htmlFor={confirmOptionId(pending.action)}>
               <input
                 type="checkbox"
@@ -441,10 +441,10 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Pro
                     p
                       ? {
                           ...p,
-                          options:
-                            p.action === 'remove_queue'
-                              ? { blocklist: value }
-                              : { delete_files: value },
+                          options: {
+                            ...p.options,
+                            ...(p.action === 'remove_queue' ? { blocklist: value } : { delete_files: value }),
+                          },
                         }
                       : p,
                   )
