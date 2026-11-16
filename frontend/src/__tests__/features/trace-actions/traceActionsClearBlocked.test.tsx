@@ -366,19 +366,23 @@ describe('Copiar archivos shows its progress in the row, not in a modal', () => 
       }
       return Promise.resolve(deferredJson({}))
     }))
-    const onCopyPhase = vi.fn()
+    const onCopyTask = vi.fn()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
-        <TraceActions trace={blocked()} meta={meta} safeMode={false} onDone={vi.fn()} onCopyPhase={onCopyPhase} />
+        <TraceActions trace={blocked()} meta={meta} safeMode={false} onDone={vi.fn()} onCopyTask={onCopyTask} />
       </QueryClientProvider>,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }))
 
-    expect(await screen.findByRole('status', { name: 'Progreso de la copia' })).toBeInTheDocument()
+    // The row draws the bar in its centre: this cell only keeps the cancel button.
+    expect(await screen.findByRole('button', { name: 'Cancelar copia' })).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: 'Estado de la copia' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(onCopyPhase).toHaveBeenCalledWith('copying')
+    await waitFor(() =>
+      expect(onCopyTask).toHaveBeenCalledWith(expect.objectContaining({ task_id: 't1', status: 'running' })),
+    )
   })
 })

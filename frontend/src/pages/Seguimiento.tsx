@@ -22,7 +22,8 @@ import {
 import { formatBytes } from '../shared/utils/text.ts'
 import { relativeTime } from '../shared/utils/time.ts'
 import { AutoCopyPanel } from '../features/auto-copy/AutoCopyPanel.tsx'
-import { TraceActions } from '../features/trace-actions/TraceActions.tsx'
+import { TraceActions, type TaskProgress } from '../features/trace-actions/TraceActions.tsx'
+import { rowProgress } from './rowProgress.ts'
 import { TraceStepper, type CopyPhase } from './TraceStepper.tsx'
 import './Seguimiento.css'
 
@@ -241,13 +242,6 @@ function qualityOf(title: string): string {
   return [res, src].filter(Boolean).join(' ')
 }
 
-/** "74% — 1.8 GB / 2.4 GB": the size is the client's own, never estimated. */
-function progressLabel(trace: Trace): string {
-  const pct = trace.torrent?.progress ?? 0
-  const size = trace.torrent?.size
-  return size ? `${pct}% — ${formatBytes((size * pct) / 100)} / ${formatBytes(size)}` : `${pct}%`
-}
-
 function TraceRow({
   row,
   meta,
@@ -267,7 +261,9 @@ function TraceRow({
 }) {
   const trace = row.trace
   // The copy the operator started from this row: it owns the stepper's live step.
-  const [copyPhase, setCopyPhase] = useState<CopyPhase>(null)
+  const [copyTask, setCopyTask] = useState<TaskProgress | null>(null)
+  const copyPhase: CopyPhase = copyTask ? (copyTask.status === 'importing' ? 'importing' : 'copying') : null
+  const bar = rowProgress(trace, copyTask)
   const showBar =
     trace.torrent !== null &&
     (trace.stage === 'downloading' || trace.stage === 'downloaded' || trace.stage === 'importing')
@@ -315,14 +311,14 @@ function TraceRow({
               <div
                 className="sg-bar"
                 role="progressbar"
-                aria-valuenow={trace.torrent?.progress ?? 0}
+                aria-valuenow={bar.pct}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label={`Progreso de ${trace.title}`}
               >
-                <i style={{ width: `${trace.torrent?.progress ?? 0}%` }} />
+                <i style={{ width: `${bar.pct}%` }} />
               </div>
-              <span className="sg-pct">{progressLabel(trace)}</span>
+              <span className="sg-pct">{bar.label}</span>
             </div>
           )}
         </div>
@@ -339,7 +335,7 @@ function TraceRow({
             meta={meta}
             safeMode={safeMode}
             onDone={onDone}
-            onCopyPhase={setCopyPhase}
+            onCopyTask={setCopyTask}
           />
           {/* The explicit door to the full record: a control of its own, so it
               never fights TraceActions for the row's clicks and the keyboard
