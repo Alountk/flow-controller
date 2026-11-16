@@ -1,7 +1,38 @@
 # HANDOFF.md — flow-controller · continuidad de sesión
 
-> Última actualización: 2026-11-13 · **login de usuario + sesión (#322) y serie de accesibilidad de modales (#327–#334)** · `main` = `562916e` · RDD global **on** / **clone-local OFF**
-> · specs: **2383 backend / 1144 frontend** (1 fallo local conocido: `tests_dist_fresh`, `frontend/dist` obsoleto; pasa en CI) · `MAX_LEGACY_LOC` **3605**
+> Última actualización: 2026-11-16 · **Seguimiento afinado (#347–#359), socket-proxy (#356), watchdog aMule (#358, #360)** · `main` = `bf429f0` · RDD global **on** / **clone-local OFF**
+> · specs: **2397 backend** (frontend: sin recontar tras #359) (1 fallo local conocido: `tests_dist_fresh`, `frontend/dist` obsoleto; pasa en CI) · `MAX_LEGACY_LOC` **3605**
+
+## Novedades 2026-11-16 (#347–#360; lo anterior puede estar desfasado)
+
+**Despliegue**: pendiente de redeploy en Portainer (manual). Tras él, definir `FORWARDED_ALLOW_IPS=111.111.111.119` (IP de Nginx Proxy Manager; confirmar que es la que ve flow-controller) y levantar el servicio `docker-socket-proxy` del compose.
+
+### Seguimiento (#347–#355, #359)
+- Una sola lista con pestañas Activas/Completadas/Errores (decisión #213, sin franja de resumen); filas de 4 columnas con stepper; barra de barrido compacta; filas de copia/mixer.
+- «Marcar como completada» (#353): descargas terminadas que el cliente aún lista. Reutiliza `blocked_acks` con prefijo `settled:` (no choca con el descarte de bloqueadas); la traza pasa a `sent` con `settled_by_operator`.
+- «Verificar destino» (#355): modal en Copiar archivos de filas `downloaded`; lista `/api/files/browse?path=`; informativo, la última palabra es del operador, coincidencia solo por nombre exacto.
+- Copia en línea (#359): el progreso va en la fila (`.copy-inline`) y el stepper pasa a «Copiando/Importando» (`CopyPhase`); botones de modales con `flex-wrap`.
+
+### Docker y proxy (#356, #357)
+- `DockerClient` (stdlib) habla por socket unix o, con `DOCKER_HOST=tcp://host:puerto`, con `tecnativa/docker-socket-proxy` (CONTAINERS=1, ALLOW_RESTARTS=1, POST=0). El compose ya no monta `docker.sock`.
+- **Sin verificar**: que `ALLOW_RESTARTS=1` permita el reinicio con `POST=0`. Se comprobará cuando aMule se cuelgue de verdad; si da 403 el watchdog queda solo en detección y el motivo se ve (#360).
+- 401 limitado por dirección tras NPM: uvicorn confía en `FORWARDED_ALLOW_IPS` (por defecto solo 127.0.0.1). README: sección «Detrás de un reverse proxy».
+
+### Watchdog aMule (#358, #360)
+- El canario es una búsqueda EC real con timeout **20 s** (`DEFAULT_CANARY_TIMEOUT`); antes 10 s < `_SEARCH_DEADLINE` 15 s causaba falsas alertas. 2 fallos seguidos = colgado; máx. 3 reinicios y `alerta` fija (se limpia con una sonda sana).
+- #360: el texto de alerta y el log incluyen `last_failure` / `last_restart`; `/api/amule/health` los expone también en el fallback.
+- La búsqueda de la UI usa amuleapi HTTP, no EC: no son el mismo camino. El log de aMule muestra «flow-controller 0.1» (EC directo, sin aMuTorrent).
+
+### Gotchas
+- `frontend/pnpm-lock.yaml` sin seguimiento es **del usuario**: no commitear ni borrar; usar `git add` con rutas concretas (un `git add -A frontend` lo coló en #353).
+- `tests/contracts/tests_dist_fresh.py` falla en local (dist obsoleto); deseleccionar. `npm run build` (`tsc -b`) además de vitest.
+- Stitch MCP no tiene `delete_screen`: las pantallas sobrantes se quitan a mano.
+
+### Pendiente / ideas (no pedidas)
+- Indicador del canal Docker/socket-proxy en Ajustes → aMule · aviso «Radarr no responde» (ver memoria `project_arr_down_feedback`) · «Reintentar fallidos»/«Limpiar finalizadas» en bloque (sin endpoint) · calidad CI (ruff/mypy, audit, Trivy).
+- Resultado de #359/#360 en producción aún no reportado por el usuario.
+
+---
 
 ## Novedades 2026-11-13 (posteriores a #256; el resto del documento es anterior y puede estar desfasado)
 
@@ -29,7 +60,7 @@
 - Gotchas: usar `tsc -b` (no `tsc --noEmit -p .`) para reproducir el `frontend-build` de CI; `user-event` no es dependencia, los tests usan `fireEvent` sobre `window`.
 
 ### Pendiente (análisis, sin verificar desde la lectura original del código)
-- Límite de 401 por dirección detrás de proxy · socket de Docker `:ro` (valorar socket-proxy) · módulos grandes (`arr_client.py` ~2300 líneas, `sqlite_history.py` ~1600, `MediaMixer.tsx`, `ReleaseSearchModal.tsx`) · una conexión SQLite global · 5 bucles en segundo plano sin supervisión · manejo de errores desigual · huecos de e2e y `e2e` sin bloquear `docker-push` · sin ruff/mypy/audit/Trivy · `docker-verify` usa `sleep 15` · `key` por índice · `outline: none` · sin reintento/skeleton en Películas V2.
+- (Resueltos el 11-16: 401 tras proxy y socket de Docker.) Módulos grandes (`arr_client.py` ~2300 líneas, `sqlite_history.py` ~1600, `MediaMixer.tsx`, `ReleaseSearchModal.tsx`) · una conexión SQLite global · 5 bucles en segundo plano sin supervisión · manejo de errores desigual · huecos de e2e y `e2e` sin bloquear `docker-push` · sin ruff/mypy/audit/Trivy · `docker-verify` usa `sleep 15` · `key` por índice · `outline: none` · sin reintento/skeleton en Películas V2.
 - Del handoff anterior sigue vigente: bloque de diseño 🟡, backlog C-01…, B3 publishers, «conexiones directas» pasos 5–6.
 
 ### Convenciones de trabajo
