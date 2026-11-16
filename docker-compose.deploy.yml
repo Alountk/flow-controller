@@ -42,6 +42,11 @@ services:
       # aMule-watchdog: reinicio del contenedor por la Engine API, a través del
       # socket-proxy de abajo (flow-controller ya no monta el socket de Docker).
       - DOCKER_HOST=${DOCKER_HOST:-tcp://127.0.0.1:2375}
+      # IP(s) del reverse proxy en las que uvicorn confía para leer X-Forwarded-For.
+      # Sin esto, detrás del proxy todos los clientes comparten la dirección del
+      # proxy y 10 claves erróneas bloquean a todos (límite de 401). Pon aquí la IP
+      # desde la que el proxy conecta con flow-controller.
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
       # Puerto del servidor
       - PORT=${PORT:-8000}
     volumes:

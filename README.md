@@ -81,6 +81,13 @@ enfriamiento y máximo de reinicios se configuran en `settings.json →
 services.amule.watchdog_*`; el estado (sano/colgado/reiniciando/recuperado/alerta)
 se ve en Ajustes → pestaña aMule y en `GET /api/amule/health`.
 
+### Detrás de un reverse proxy
+
+Para que el límite de intentos de clave (401) cuente por cliente real y no por la IP
+del proxy, define `FORWARDED_ALLOW_IPS` con la IP desde la que el proxy conecta
+(Nginx Proxy Manager lo envía en `X-Forwarded-For`). Sin ello, 10 claves erróneas de
+cualquiera bloquean a todos durante un minuto.
+
 ## Workflow de verificación (ANTES de cada push)
 
 **NUNCA hacer push sin verificar que el sistema arranca.** Pasos obligatorios:
