@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { useDialog } from '../hooks/useDialog.ts'
 import {
@@ -78,7 +78,7 @@ interface FileExplorerProps {
   renderRowActions?: (entry: FileExplorerEntry) => ReactNode
   isRowSelected?: (entry: FileExplorerEntry) => boolean
   /** Row single-click; without it a row click opens directories. */
-  onRowClick?(entry: FileExplorerEntry): void
+  onRowClick?(entry: FileExplorerEntry, event: MouseEvent<HTMLElement>): void
   onNavigate?(path: string): void
   onSelect?(path: string): void
   onConfirm?(path: string): void
@@ -299,9 +299,9 @@ export function FileExplorer({
 
   if (!active) return null
 
-  function activate(entry: FileExplorerEntry) {
+  function activate(entry: FileExplorerEntry, event: MouseEvent<HTMLElement>) {
     if (onRowClick) {
-      onRowClick(entry)
+      onRowClick(entry, event)
       return
     }
     if (entry.isDir) {
@@ -350,7 +350,7 @@ export function FileExplorer({
           <div
             key={entry.key}
             className={`explorer-row${isRowSelected?.(entry) || picked === entry.path ? ' is-selected' : ''}${entry.isDir ? ' is-dir' : ''}`}
-            onClick={() => activate(entry)}
+            onClick={(event) => activate(entry, event)}
             onDoubleClick={() =>
               entry.isDir ? visit(entry.path) : onConfirm?.(entry.path)
             }
@@ -373,7 +373,7 @@ export function FileExplorer({
                   title={entry.name}
                   onClick={(event) => {
                     event.stopPropagation()
-                    activate(entry)
+                    activate(entry, event)
                   }}
                 >
                   {entry.name}
