@@ -208,3 +208,17 @@
 }
 .dest-list li { padding: 2px 0; overflow-wrap: anywhere; }
 .dest-list li.is-match { color: var(--ok); }
+
+/* The running copy, drawn in the row instead of a modal. */
+.copy-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-2);
+  font-size: 12px;
+}
+.copy-inline .copy-bar-container { margin-bottom: 0; }
+.copy-inline .copy-detail { margin: 0; color: var(--text-dim); overflow-wrap: anywhere; }

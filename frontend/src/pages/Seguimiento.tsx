@@ -23,7 +23,7 @@ import { formatBytes } from '../shared/utils/text.ts'
 import { relativeTime } from '../shared/utils/time.ts'
 import { AutoCopyPanel } from '../features/auto-copy/AutoCopyPanel.tsx'
 import { TraceActions } from '../features/trace-actions/TraceActions.tsx'
-import { TraceStepper } from './TraceStepper.tsx'
+import { TraceStepper, type CopyPhase } from './TraceStepper.tsx'
 import './Seguimiento.css'
 
 /**
@@ -266,6 +266,8 @@ function TraceRow({
   highlighted?: boolean
 }) {
   const trace = row.trace
+  // The copy the operator started from this row: it owns the stepper's live step.
+  const [copyPhase, setCopyPhase] = useState<CopyPhase>(null)
   const showBar =
     trace.torrent !== null &&
     (trace.stage === 'downloading' || trace.stage === 'downloaded' || trace.stage === 'importing')
@@ -307,7 +309,7 @@ function TraceRow({
           )}
         </div>
         <div className="sg-col-life">
-          <TraceStepper trace={trace} />
+          <TraceStepper trace={trace} phase={copyPhase} />
           {showBar && (
             <div className="sg-row-prog">
               <div
@@ -332,7 +334,13 @@ function TraceRow({
           <span className="sg-age">{relativeTime(trace.date)}</span>
         </div>
         <div className="sg-col-actions">
-          <TraceActions trace={trace} meta={meta} safeMode={safeMode} onDone={onDone} />
+          <TraceActions
+            trace={trace}
+            meta={meta}
+            safeMode={safeMode}
+            onDone={onDone}
+            onCopyPhase={setCopyPhase}
+          />
           {/* The explicit door to the full record: a control of its own, so it
               never fights TraceActions for the row's clicks and the keyboard
               gets it for free. */}

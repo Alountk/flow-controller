@@ -19,6 +19,8 @@ interface Props {
   meta: Record<ActionKey, ActionMeta>
   safeMode: boolean
   onDone: () => void
+  /** Tells the row which lifecycle step the running copy is on. */
+  onCopyPhase?: (phase: 'copying' | 'importing' | null) => void
 }
 
 interface Pending {
@@ -148,7 +150,7 @@ function formatBytes(bytes: number): string {
 const TERMINAL_STATUSES = ['imported', 'renamed_needed', 'import_timeout', 'error', 'cancelled']
 const ACTIVE_STATUSES = ['running', 'done', 'importing', 'renamed_needed']
 
-export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
+export function TraceActions({ trace, meta, safeMode, onDone, onCopyPhase }: Props) {
   // B1: while the SSE stream is connected, copy-task events replace the poll
   // below (`refetchInterval` → false); a disconnect wakes it back up.
   const { connected } = useContext(EventStreamContext)
@@ -160,6 +162,11 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   const [copyTask, setCopyTask] = useState<TaskProgress | null>(null)
 
   const keys = actionsFor(trace)
+
+  const copyPhase = copyTask ? (copyTask.status === 'importing' ? 'importing' : 'copying') : null
+  useEffect(() => {
+    onCopyPhase?.(copyPhase)
+  }, [copyPhase, onCopyPhase])
 
   const { data: taskData } = useQuery({
     queryKey: ['task', copyTask?.task_id],
@@ -208,6 +215,9 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
   }, [result])
 
   async function execute(action: ActionKey, options: ActionOptions) {
+    // The confirmation closes at once: the row's busy button is the feedback
+    // while the server resolves the destination, not a dialog that looks stuck.
+    setPending(null)
     setBusy(action)
     setResult(null)
     try {
@@ -478,58 +488,39 @@ export function TraceActions({ trace, meta, safeMode, onDone }: Props) {
       )}
 
       {copyTask && (
-        <TraceDialog label="Progreso de la copia" className="copy-progress-modal">
-          <h3>
-            {copyTask.status === 'importing' ? 'Verificando import...' :
-             copyTask.status === 'imported' ? 'Importado correctamente' :
-             copyTask.status === 'renamed_needed' ? 'Importado — renombrado pendiente' :
-             copyTask.status === 'import_timeout' ? 'Timeout de import' :
-             'Copiar archivos'}
-          </h3>
-
-          <div className="copy-paths">
-            <div className="copy-path-row">
-              <span className="copy-path-label">origen:</span>
-              <code className="copy-path-value">{copyTask.src_path}</code>
-            </div>
-            <div className="copy-path-row">
-              <span className="copy-path-label">destino:</span>
-              <code className="copy-path-value">{copyTask.dst_path}</code>
-            </div>
-          </div>
-
+        <div className="copy-inline" role="status" aria-label="Progreso de la copia">
+          <strong>
+            {copyTask.status === 'importing' ? 'Importando…' : 'Copiando…'}
+          </strong>
           {copyTask.status !== 'importing' && (
             <>
-              <div className="copy-bar-container">
+              <div
+                className="copy-bar-container"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPct}
+                aria-label="Progreso de la copia"
+              >
                 <div className="copy-bar" style={{ width: `${progressPct}%` }} />
               </div>
               <div className="copy-stats">
                 <span>{formatBytes(copyTask.copied_bytes)} / {formatBytes(copyTask.total_bytes)}</span>
                 <span>{progressPct}%</span>
               </div>
-              {copyTask.files_total > 0 && (
-                <div className="copy-files-count">
-                  {copyTask.files_done} / {copyTask.files_total} archivos
-                </div>
-              )}
             </>
           )}
-
           {copyTask.status === 'importing' && (
             <div className="copy-importing">
               <span className="copy-spinner" />
-              <span>Esperando que Sonarr/Radarr importe y renombre el archivo...</span>
+              <span>Esperando que el arr importe el archivo…</span>
             </div>
           )}
-
           <p className="copy-detail">{copyTask.detail}</p>
-
-          <div className="modal-buttons">
-            <button className="action-btn cancel-btn" onClick={cancelTask}>
-              Cancelar copia
-            </button>
-          </div>
-        </TraceDialog>
+          <button className="action-btn cancel-btn" onClick={cancelTask}>
+            Cancelar copia
+          </button>
+        </div>
       )}
     </div>
   )

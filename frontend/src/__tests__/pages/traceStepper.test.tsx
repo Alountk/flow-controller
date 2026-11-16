@@ -40,3 +40,10 @@ describe('TraceStepper', () => {
     expect(labels).toEqual(['Buscado', 'Descargando', 'Descargado', 'Importado', 'Enviado'])
   })
 })
+
+describe('a running copy owns the live step', () => {
+  it('shows Copiando as the current step with the earlier ones done', () => {
+    const states = stepStates({ stage: 'import_blocked', torrent: null }, 'copying')
+    expect(states).toEqual(['done', 'done', 'done', 'current', 'todo'])
+  })
+})

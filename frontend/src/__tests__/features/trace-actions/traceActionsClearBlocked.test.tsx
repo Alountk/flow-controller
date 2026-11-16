@@ -291,3 +291,37 @@ describe('Copiar archivos on a downloaded trace verifies the destination first',
     expect(await screen.findByRole('button', { name: 'Confirmar' })).toBeInTheDocument()
   })
 })
+
+describe('Copiar archivos shows its progress in the row, not in a modal', () => {
+  const blocked = () => trace({ queue: { state: 'importPending', status: 'warning', output_path: '/dl/x.mkv', messages: [] } })
+
+  it('closes the confirmation at once and reports the copy phase to the row', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/actions/copy_files')) {
+        return Promise.resolve(deferredJson({ ok: true, task_id: 't1', src_path: '/dl/x.mkv', dst_path: '/movies/x.mkv' }))
+      }
+      if (url.includes('/api/tasks/t1')) {
+        return Promise.resolve(deferredJson({
+          ok: true, task_id: 't1', status: 'running', copied_bytes: 50, total_bytes: 100,
+          files_done: 0, files_total: 1, detail: 'copiando', src_path: '/dl/x.mkv', dst_path: '/movies/x.mkv',
+        }))
+      }
+      return Promise.resolve(deferredJson({}))
+    }))
+    const onCopyPhase = vi.fn()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <TraceActions trace={blocked()} meta={meta} safeMode={false} onDone={vi.fn()} onCopyPhase={onCopyPhase} />
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }))
+
+    expect(await screen.findByRole('status', { name: 'Progreso de la copia' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(onCopyPhase).toHaveBeenCalledWith('copying')
+  })
+})
