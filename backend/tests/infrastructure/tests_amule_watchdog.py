@@ -277,3 +277,36 @@ def test_get_state_returns_the_snapshot_not_the_live_mutable(monkeypatch):
     monkeypatch.setattr(w, "run_canary", lambda timeout: _hung())
     asyncio.run(w.tick())
     assert snapshot["state"] == "sano", "a previously returned snapshot must not mutate under the reader"
+
+
+# ── Diagnóstico: la alerta conserva el porqué ────────────────────────────────
+
+
+def test_alerta_detail_keeps_the_last_canary_failure_and_restart():
+    state = _state(state="colgado", consecutive_failures=2, restart_attempts=3, last_restart_at=1000.0)
+    state = w.apply_restart_result(state, "failed", "docker engine returned HTTP 403", now=1500.0)
+    state, _ = w.process_cycle(state, _hung(), now=5000.0, cooldown=600.0, max_attempts=3)
+
+    assert state["state"] == "alerta"
+    assert "timeout: search exceeded 10s" in state["detail"]
+    assert "último reinicio: failed (docker engine returned HTTP 403)" in state["detail"]
+    assert state["last_failure"]["status"] == "timeout"
+    assert state["last_restart"]["outcome"] == "failed"
+
+
+def test_alerta_refreshes_its_reason_on_every_failed_probe():
+    state = _state(state="alerta", restart_attempts=3, last_restart_at=1000.0)
+    state, _ = w.process_cycle(state, _hung(), now=9000.0, cooldown=600.0, max_attempts=3)
+    assert "timeout: search exceeded 10s" in state["detail"]
+
+
+def test_a_failing_tick_logs_the_canary_reason(monkeypatch, caplog):
+    import asyncio
+
+    monkeypatch.setattr(w, "_config", lambda: _fake_config())
+    monkeypatch.setattr(w, "run_canary", lambda timeout: _hung())
+    monkeypatch.setattr(w, "_publish", lambda snapshot: None)
+    monkeypatch.setattr(w, "get_state", lambda: _state())
+    with caplog.at_level("WARNING", logger="flow-controller"):
+        asyncio.run(w.tick())
+    assert any("canary timeout: timeout: search exceeded 10s" in r.message for r in caplog.records)

@@ -440,6 +440,8 @@ async def amule_health(_key: str = Depends(verify_api_key)):
             "consecutive_failures": 0,
             "restart_attempts": 0,
             "last_restart_at": None,
+            "last_failure": None,
+            "last_restart": None,
         }
     return amule_watchdog.get_state()
 

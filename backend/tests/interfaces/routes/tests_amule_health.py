@@ -53,6 +53,6 @@ def test_health_without_the_module_is_honest_sin_datos(monkeypatch):
 
     assert resp.status_code == 200, "sin inyección se responde honesto, jamás un 500"
     payload = resp.json()
-    assert set(payload) == SNAPSHOT_KEYS
+    assert set(payload) == SNAPSHOT_KEYS | {"last_failure", "last_restart"}
     assert payload["state"] == "sin-datos"
     assert payload["detail"], "el payload honesto debe decir por qué no hay datos"

@@ -20,6 +20,7 @@ momento). Los tests jamás abren red ni Docker: parchean `run_canary`,
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 
@@ -37,6 +38,8 @@ __all__ = [
     "watchdog_loop",
 ]
 
+log = logging.getLogger("flow-controller")
+
 #: S2: two consecutive failed canaries confirm a hang — one never does.
 CONFIRM_THRESHOLD = 2
 
@@ -53,7 +56,23 @@ def initial_state() -> dict:
         "consecutive_failures": 0,
         "restart_attempts": 0,
         "last_restart_at": None,
+        # Why the last canary failed / how the last restart ended: the alerta
+        # text used to overwrite the reason, leaving a human nothing to act on.
+        "last_failure": None,
+        "last_restart": None,
     }
+
+
+def _trail(state: dict) -> str:
+    """The last failure and restart, as a suffix for the human-readable detail."""
+    parts = []
+    failure = state.get("last_failure")
+    if failure:
+        parts.append(f"último fallo del canario: {failure['reason']}")
+    restart = state.get("last_restart")
+    if restart:
+        parts.append(f"último reinicio: {restart['outcome']} ({restart['detail']})")
+    return f" · {' · '.join(parts)}" if parts else ""
 
 
 # Readers keep the dict they are handed, so it is only ever replaced, never
@@ -112,8 +131,14 @@ def process_cycle(
 
     failures = state["consecutive_failures"] + 1
     new["consecutive_failures"] = failures
+    new["last_failure"] = {"at": now, "status": canary.status, "reason": canary.reason}
     if state["state"] == "alerta":
-        return new, False  # alerta clears only on a healthy probe
+        # Alerta clears only on a healthy probe; the detail keeps the freshest reason.
+        new["detail"] = (
+            f"alerta: {state['restart_attempts']} reinicios sin recuperación "
+            f"— intervención manual{_trail(new)}"
+        )
+        return new, False
     if failures < CONFIRM_THRESHOLD:
         new["detail"] = (
             f"fallo del canario ({failures}/{CONFIRM_THRESHOLD}), sin confirmar: {canary.reason}"
@@ -125,7 +150,7 @@ def process_cycle(
             state="alerta",
             detail=(
                 f"alerta: {state['restart_attempts']} reinicios sin recuperación "
-                "— intervención manual"
+                f"— intervención manual{_trail(new)}"
             ),
         )
         return new, False
@@ -139,6 +164,7 @@ def process_cycle(
 def apply_restart_result(state: dict, outcome: str, detail: str, *, now: float) -> dict:
     """Enruta el desenlace de UN intento de reinicio (S3/S4/S5) → nuevo estado."""
     new = dict(state)
+    new["last_restart"] = {"at": now, "outcome": outcome, "detail": detail}
     if outcome == "ok":
         new.update(
             state="reiniciando",
@@ -221,12 +247,18 @@ async def tick() -> None:
         _publish(initial_state())
         return
     canary = await asyncio.to_thread(run_canary, timeout)
+    previous = get_state()
     new_state, wants = process_cycle(
-        get_state(), canary, now=time.time(), cooldown=cooldown, max_attempts=max_attempts
+        previous, canary, now=time.time(), cooldown=cooldown, max_attempts=max_attempts
     )
+    if not canary.ok and canary.status != "unconfigured":
+        log.warning("amule watchdog: canary %s: %s", canary.status, canary.reason)
     if wants:
         outcome, detail = await asyncio.to_thread(_restart_once)
         new_state = apply_restart_result(new_state, outcome, detail, now=time.time())
+        log.warning("amule watchdog: restart %s: %s", outcome, detail)
+    if new_state["state"] != previous["state"]:
+        log.info("amule watchdog: %s -> %s", previous["state"], new_state["state"])
     new_state["checked_at"] = time.time()
     _publish(new_state)
 
