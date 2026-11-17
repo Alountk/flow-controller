@@ -688,17 +688,39 @@ export function Peliculas({ layout = 'split' }: PeliculasProps) {
           className={pageMode ? 'sec-detail sec-detail-page' : 'sec-detail'}
           aria-label="Panel de detalle"
         >
-          {pageMode && (
-            <button
-              type="button"
-              className="sec-detail-close"
-              aria-label="Cerrar detalle"
-              onClick={() => setDetailOpen(false)}
-            >
-              ✕
-            </button>
-          )}
           <div className="sec-detail-sticky">
+          {pageMode && (
+            <div className="sec-detail-actions">
+              {pageMode && selected && (
+                <QuickActionsMenu
+                  items={[
+                    // The search already lives in the Releases tab: the
+                    // action takes you there instead of opening a second,
+                    // identical search over the same panel.
+                    { label: 'Buscar releases', onSelect: () => setDetailTab('Releases') },
+                    {
+                      label: 'Escanear carpeta',
+                      onSelect: () =>
+                        setQuickScan({
+                          type: 'movie',
+                          id: selected.id,
+                          title: selected.detail.title,
+                          source: 'radarr',
+                        }),
+                    },
+                  ]}
+                />
+              )}
+              <button
+                type="button"
+                className="sec-detail-close"
+                aria-label="Cerrar detalle"
+                onClick={() => setDetailOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <div className="sec-detail-head">
             {selected?.detail.poster ? (
               <img
@@ -712,26 +734,6 @@ export function Peliculas({ layout = 'split' }: PeliculasProps) {
             <div className="sec-detail-titles">
               <div className="sec-detail-titlerow">
                 <h3>{selected ? selected.detail.title : 'Sin selección'}</h3>
-                {pageMode && selected && (
-                  <QuickActionsMenu
-                    items={[
-                      // The search already lives in the Releases tab: the
-                      // action takes you there instead of opening a second,
-                      // identical search over the same panel.
-                      { label: 'Buscar releases', onSelect: () => setDetailTab('Releases') },
-                      {
-                        label: 'Escanear carpeta',
-                        onSelect: () =>
-                          setQuickScan({
-                            type: 'movie',
-                            id: selected.id,
-                            title: selected.detail.title,
-                            source: 'radarr',
-                          }),
-                      },
-                    ]}
-                  />
-                )}
                 {selected?.detail.monitored != null && (
                   <span
                     className={`sec-detail-mon${selected.detail.monitored ? ' on' : ''}`}

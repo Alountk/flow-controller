@@ -1547,10 +1547,6 @@
 }
 
 .sec-detail-close {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  z-index: 2;
   width: 2rem;
   height: 2rem;
   line-height: 1;
@@ -1559,6 +1555,18 @@
   color: inherit;
   cursor: pointer;
   border-radius: var(--radius-sm);
+}
+
+/* Top-right of the sticky head: it must live INSIDE the sticky block, whose
+   z-index would otherwise paint over a button anchored to the section. */
+.sec-detail-actions {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .sec-detail-close:hover {
@@ -1593,4 +1601,6 @@
 .sec-detail-sticky .sec-detail-head {
   position: static;
   background: transparent;
+  /* Room for the actions block pinned top-right. */
+  padding-right: 8.5rem;
 }
