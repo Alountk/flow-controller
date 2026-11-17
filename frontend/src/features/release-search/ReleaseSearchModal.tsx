@@ -30,6 +30,7 @@ import {
   toggleInSet,
   type ReleaseFilters,
 } from '../../shared/utils/releaseFilters.ts'
+import '../media-pane/components/ScanModal.css'
 import './ReleaseSearchModal.css'
 
 /** Which kind of id a `ReleaseSearchItem.id` carries — the three the grabs

@@ -11,6 +11,7 @@ import { FileExplorer } from '../../../shared/ui/FileExplorer.tsx'
 import { areAllVisibleSelected, toggleVisibleSelection } from '../../../shared/utils/selection.ts'
 import { filterScanMatches, scanMatchKey } from '../../../shared/utils/scanResults.ts'
 import '../../../shared/ui/atoms.css'
+import './ScanModal.css'
 
 /** What a row asked the pane to scan for: one movie, or one series (possibly
  *  narrowed to a single episode by the "En carpeta" action). */
