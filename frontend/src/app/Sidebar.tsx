@@ -19,7 +19,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { key: 'peliculasV2', label: 'Películas V2', icon: 'movie' },
+  { key: 'peliculas', label: 'Películas', icon: 'movie' },
   { key: 'series', label: 'Series', icon: 'tv' },
   { key: 'estrenos', label: 'Estrenos', icon: 'calendar_month' },
   { key: 'seguimiento', label: 'Seguimiento', icon: 'notifications' },
