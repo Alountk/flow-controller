@@ -13,7 +13,7 @@ import { test, expect, login } from '../fixtures/app';
  * end; it does NOT download anything (see e2e/README.md).
  *
  * PR 7 retired the Faltantes page and the «Películas» page is deprecated in
- * turn: «Películas V2» is the single source of truth. The wanted row lives in
+ * turn: «Películas» is the single source of truth. The wanted row lives in
  * the catalogue's «Sin archivo» filter, the row's chevron opens the fullscreen
  * detail, and the search opens INLINE in the detail's Releases tab — no
  * backdrop, no Escape. A successful grab then keeps you ON the results, so
@@ -40,10 +40,10 @@ import { test, expect, login } from '../fixtures/app';
 test('a wanted row searches releases and grabs one end to end', async ({ app }) => {
   await login(app);
 
-  // Nav link (Sidebar.tsx NAV_ITEMS, label "Películas V2"), then the Topbar's
+  // Nav link (Sidebar.tsx NAV_ITEMS, label "Películas"), then the Topbar's
   // page title as the route proof (App.tsx PAGE_TITLES).
-  await app.getByRole('link', { name: /Películas V2/ }).click();
-  await expect(app.getByRole('heading', { level: 1, name: 'Películas V2' })).toBeVisible({ timeout: 15000 });
+  await app.getByRole('link', { name: /Películas/ }).click();
+  await expect(app.getByRole('heading', { level: 1, name: 'Películas' })).toBeVisible({ timeout: 15000 });
 
   // The wanted row lives under the missing filter: the catalogue opens on
   // «Todas», one click on «Sin archivo» restores the starting point this spec

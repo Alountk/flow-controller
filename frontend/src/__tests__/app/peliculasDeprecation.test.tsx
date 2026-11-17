@@ -58,7 +58,7 @@ function navigate(path: string) {
 /** The V2 shape: the L2 list owns the page — no sub-view tabs, no split. */
 async function expectV2View() {
   await waitFor(() =>
-    expect(screen.getByRole('heading', { level: 1, name: 'Películas V2' })).toBeInTheDocument(),
+    expect(screen.getByRole('heading', { level: 1, name: 'Películas' })).toBeInTheDocument(),
   )
   // The page travels in its own chunk («carga-por-vista»): the L2 search box
   // is the V2 list's own, so its arrival IS the view's arrival.
@@ -79,26 +79,8 @@ afterEach(() => {
   window.history.pushState(null, '', '/dashboard')
 })
 
-describe('Películas V2 is the single source of truth', () => {
-  it('renders the V2 view at /peliculas-v2', async () => {
-    at('/peliculas-v2')
-    renderApp()
-
-    await expectV2View()
-  })
-
-  it('resolves the deprecated /peliculas URL to the V2 view (popstate navigation)', async () => {
-    renderApp()
-    await waitFor(() => expect(document.querySelector('.topbar-dot')).not.toBeNull())
-
-    navigate('/peliculas')
-
-    await expectV2View()
-    // The alias resolves, it does not rewrite: the URL the user typed stays.
-    expect(window.location.pathname).toBe('/peliculas')
-  })
-
-  it('resolves a direct load of /peliculas to the V2 view', async () => {
+describe('Películas lives at /peliculas', () => {
+  it('renders the view at /peliculas', async () => {
     at('/peliculas')
     renderApp()
 
@@ -106,14 +88,21 @@ describe('Películas V2 is the single source of truth', () => {
     expect(window.location.pathname).toBe('/peliculas')
   })
 
-  it('shows no sidebar link to the retired /peliculas entry', async () => {
+  it('resolves the deprecated /peliculas-v2 URL to the view (popstate navigation)', async () => {
     renderApp()
     await waitFor(() => expect(document.querySelector('.topbar-dot')).not.toBeNull())
 
-    expect(document.querySelector('a[href="/peliculas"]')).toBeNull()
-    expect(screen.getByRole('link', { name: /Películas V2/ })).toHaveAttribute(
-      'href',
-      '/peliculas-v2',
-    )
+    navigate('/peliculas-v2')
+
+    await expectV2View()
+    // The alias resolves, it does not rewrite: the URL the user typed stays.
+    expect(window.location.pathname).toBe('/peliculas-v2')
+  })
+
+  it('links the sidebar to /peliculas', async () => {
+    renderApp()
+    await waitFor(() => expect(document.querySelector('.topbar-dot')).not.toBeNull())
+
+    expect(screen.getByRole('link', { name: /Películas/ })).toHaveAttribute('href', '/peliculas')
   })
 })

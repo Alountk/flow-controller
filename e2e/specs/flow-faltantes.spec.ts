@@ -10,7 +10,7 @@ import { test, expect, login } from '../fixtures/app';
  * five specs total.
  *
  * PR 7 of F-08 retired the Faltantes page into the Películas sub-views, and
- * the «Películas» page is deprecated in turn: «Películas V2» — the catalogue
+ * the «Películas» page is deprecated in turn: «Películas» — the catalogue
  * with class chips — is the single source of truth. The missing content is
  * the «Sin archivo» chip filter now (same choice the Faltantes/Biblioteca
  * tabs were), and the wanted/missing listing the old spec drove is gone
@@ -26,12 +26,12 @@ test('the stub listing renders rows and the catalogue filter is reachable', asyn
   await login(app);
 
   // The nav link only exists when an arr is configured (App.tsx hiddenPages);
-  // its label comes from Sidebar.tsx NAV_ITEMS — "Películas V2", the
+  // its label comes from Sidebar.tsx NAV_ITEMS — "Películas", the
   // arr-dependent entry point that is now the only movies page.
-  await app.getByRole('link', { name: /Películas V2/ }).click();
+  await app.getByRole('link', { name: /Películas/ }).click();
 
   // Route proof: the Topbar's page title (App.tsx PAGE_TITLES) is the h1.
-  await expect(app.getByRole('heading', { level: 1, name: 'Películas V2' })).toBeVisible({ timeout: 15000 });
+  await expect(app.getByRole('heading', { level: 1, name: 'Películas' })).toBeVisible({ timeout: 15000 });
   // The list's own head — PeliculasV2List.tsx, <h2 class="sec-l2-title">.
   await expect(app.getByRole('heading', { level: 2, name: 'Películas' })).toBeVisible({ timeout: 15000 });
   // Design-03 shell: the service chips ride this topbar too.
