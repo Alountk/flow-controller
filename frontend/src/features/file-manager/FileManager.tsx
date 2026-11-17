@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FileItem, RetentionFile } from '../../shared/types.ts'
@@ -284,6 +284,18 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
   // The rows below are FileExplorer's; these four slots keep the pane's own
   // row content (selection, inline rename, path cell, chips, buttons) in JSX.
 
+  // A folder is entered by its name or icon and selected only by its checkbox;
+  // a file has nothing to enter, so a click anywhere on it ticks the checkbox.
+  // The second click of a double-click is dropped: it would undo the first.
+  function handleRowClick(entry: FileExplorerEntry, event: MouseEvent<HTMLElement>) {
+    if (event.detail > 1) return
+    if (!entry.isDir) {
+      toggleRowSelection(entry.path)
+      return
+    }
+    if ((event.target as HTMLElement).closest('.explorer-icon, .explorer-name')) navigateTo(entry.path)
+  }
+
   function renderRowStart(entry: FileExplorerEntry) {
     return (
       <input
@@ -554,7 +566,7 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
         }
         onNavigate={navigateTo}
         isRowSelected={(entry) => selected.has(entry.path)}
-        onRowClick={(entry) => setSelected(new Set([entry.path]))}
+        onRowClick={handleRowClick}
         renderRowStart={renderRowStart}
         renderRowName={renderRowName}
         renderFileMeta={renderFileMeta}

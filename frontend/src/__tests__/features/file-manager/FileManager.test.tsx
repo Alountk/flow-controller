@@ -317,6 +317,58 @@ describe('FileManager multi-file selection', () => {
     expect(checkedRowNames()).toEqual([])
   })
 
+  it('clicking a folder\u2019s name or icon enters it; its checkbox only selects it', async () => {
+    mockFetch({
+      listings: {
+        '/mnt/storage': [dir('subcarpeta'), dir('otra'), file('A.mkv')],
+        '/mnt/storage/subcarpeta': [file('Dentro.mkv')],
+        '/mnt/storage/otra': [file('Fuera.mkv')],
+      },
+    })
+    await openPane('A.mkv')
+
+    // The checkbox selects and stays where it is.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar otra' }))
+    expect(screen.getByText('1 seleccionado')).toBeInTheDocument()
+    expect(screen.getByText('A.mkv')).toBeInTheDocument()
+
+    // The name enters.
+    fireEvent.click(screen.getByText('subcarpeta'))
+    expect(await screen.findByText('Dentro.mkv')).toBeInTheDocument()
+  })
+
+  it('clicking a folder\u2019s icon enters it', async () => {
+    mockFetch({
+      listings: {
+        '/mnt/storage': [dir('subcarpeta')],
+        '/mnt/storage/subcarpeta': [file('Dentro.mkv')],
+      },
+    })
+    await openPane('subcarpeta')
+
+    const row = screen.getByText('subcarpeta').closest('.explorer-row') as HTMLElement
+    fireEvent.click(row.querySelector('.explorer-icon') as HTMLElement)
+
+    expect(await screen.findByText('Dentro.mkv')).toBeInTheDocument()
+  })
+
+  it('clicking a file toggles its checkbox, and the second click of a double-click is ignored', async () => {
+    mockFetch({ listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv')] } })
+    await openPane()
+
+    fireEvent.click(screen.getByText('A.mkv'))
+    expect(checkedRowNames()).toEqual(['Seleccionar A.mkv'])
+
+    fireEvent.click(screen.getByText('B.mkv'))
+    expect(checkedRowNames()).toEqual(['Seleccionar A.mkv', 'Seleccionar B.mkv'])
+
+    fireEvent.click(screen.getByText('A.mkv'))
+    expect(checkedRowNames()).toEqual(['Seleccionar B.mkv'])
+
+    fireEvent.click(screen.getByText('A.mkv'), { detail: 2 })
+    expect(checkedRowNames()).toEqual(['Seleccionar B.mkv'])
+  })
+
   it('annotates each row with its retention age, and shows nothing when there is no age', async () => {
     mockFetch({
       listings: {
