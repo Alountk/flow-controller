@@ -698,6 +698,7 @@ export function Peliculas({ layout = 'split' }: PeliculasProps) {
               ✕
             </button>
           )}
+          <div className="sec-detail-sticky">
           <div className="sec-detail-head">
             {selected?.detail.poster ? (
               <img
@@ -804,6 +805,7 @@ export function Peliculas({ layout = 'split' }: PeliculasProps) {
                 {t}
               </button>
             ))}
+          </div>
           </div>
 
           {!selected && (

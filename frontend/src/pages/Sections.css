@@ -1580,3 +1580,17 @@
 .sec-movie-open:hover {
   opacity: 1;
 }
+
+/* Head + tabs ride together as one opaque block: sticky on the head alone left
+   it transparent (rows showed through) and the tabs scrolling away. */
+.sec-detail-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg);
+}
+
+.sec-detail-sticky .sec-detail-head {
+  position: static;
+  background: transparent;
+}
