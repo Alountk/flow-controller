@@ -24,6 +24,7 @@ from infrastructure.arr_client import (
     fetch_qbit_torrents,
 )
 
+from domain.library_path import library_path
 log = logging.getLogger("flow-controller")
 
 
@@ -117,7 +118,7 @@ def _torrent_view(torrent: dict, download_client: str | None = None) -> dict:
     }
 
 
-def _direct_traces(own_grabs: list[dict], torrents: list[dict]) -> list[dict]:
+def _direct_traces(own_grabs: list[dict], torrents: list[dict], library_paths: dict | None = None) -> list[dict]:
     """Trace rows for downloads this app added straight to the client (B-10).
 
     The arr was never told about them, so its history will never carry them —
@@ -170,9 +171,8 @@ def _direct_traces(own_grabs: list[dict], torrents: list[dict]) -> list[dict]:
                 "movie_id": grab.get("movie_id"),
                 "series_id": grab.get("series_id"),
             },
-            # OUR destination, the whole point of the direct grab — never the
-            # arr-derived library path.
-            "destination": grab.get("destination"),
+            # Ours when chosen; a library grab shows the arr's folder instead.
+            "destination": grab.get("destination") or library_path(grab, library_paths),
             "queue": None,
         })
     return rows
@@ -295,7 +295,7 @@ async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
     except Exception as exc:  # noqa: BLE001 — one bad read, not a dead poll
         log.warning("direct traces: own_grabs no disponibles: %s", exc)
         own_grabs = []
-    traces.extend(_direct_traces(own_grabs, torrents))
+    traces.extend(_direct_traces(own_grabs, torrents, paths_by_id))
 
     traces.sort(key=lambda t: t.get("date") or "", reverse=True)
     return traces

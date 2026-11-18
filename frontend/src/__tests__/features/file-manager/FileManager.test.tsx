@@ -1,19 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FileManager } from '../../../features/file-manager/FileManager.tsx'
 import type { RetentionFile, RootsResponse } from '../../../shared/types.ts'
 
 /**
- * Wiring-level tests for the file explorer's multi-file selection.
- *
- * The pure selection helpers are covered in selection.test.ts. What these
- * guard is the integration: that the "select all" control feeds the CURRENT
- * directory listing to `toggleVisibleSelection`, that a batch fans out to the
- * per-item endpoints that already exist (one request each, sequentially), and
- * that a per-item refusal — the seed guard answering a `move` — reaches the
- * screen with the backend's own words instead of being collapsed into a
- * generic "algo falló".
+ * Wiring-level tests for the file explorer pane.
  *
  * fetch is stubbed at the network boundary, like the other component tests.
  */
@@ -45,13 +37,6 @@ const file = (name: string, size = 1_500_000_000): BrowseItem => ({
 function ok(body: unknown): Promise<Response> {
   return Promise.resolve({ ok: true, json: async () => body } as Response)
 }
-
-/** The seed guard's real refusal for a `move` out of the torrent folder. */
-const SEED_GUARD =
-  "'Seed.mkv' está en la carpeta de descargas de torrents (/mnt/storage/torrents) y no se " +
-  'puede mover: qBittorrent comparte exactamente esa ruta, y renombrarla o moverla ' +
-  'rompe el hardlink con el que sigue sembrando. En su lugar, copia o coloca el ' +
-  'fichero — se resuelve con un enlace duro y la semilla no se entera.'
 
 interface MockOptions {
   /** Browse listings keyed by path; anything else lists as empty. */
@@ -135,24 +120,6 @@ function mockFetch(options: MockOptions = {}): MockedFetch {
   return { fn, maxDeleteInFlight: () => peak, events }
 }
 
-type AnyFetch = ReturnType<typeof mockFetch>['fn']
-
-function queueBodies(fn: AnyFetch): Record<string, unknown>[] {
-  return fn.mock.calls
-    .filter(([input]) => String(input).includes('/api/files/queue/add'))
-    .map(([, init]) => JSON.parse(String((init as RequestInit)?.body)) as Record<string, unknown>)
-}
-
-function deleteBodies(fn: AnyFetch): { remote_path: string }[] {
-  return fn.mock.calls
-    .filter(([input]) => String(input).includes('/api/files/delete'))
-    .map(([, init]) => JSON.parse(String((init as RequestInit)?.body)) as { remote_path: string })
-}
-
-/** URLs of every call in issue order, so "refetch AFTER the deletes" is provable. */
-function requestOrder(fn: AnyFetch): string[] {
-  return fn.mock.calls.map(([input]) => String(input))
-}
 
 function renderFileManager() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -169,155 +136,13 @@ async function openPane(firstRow = 'A.mkv') {
   await screen.findByText(firstRow)
 }
 
-/** Accessible name of every row checkbox inside the list. */
-function checkedRowNames(): (string | null)[] {
-  const list = document.querySelector('.explorer-rows') as HTMLElement
-  return within(list)
-    .getAllByRole('checkbox')
-    .filter((box) => (box as HTMLInputElement).checked)
-    .map((box) => box.getAttribute('aria-label'))
-}
-
-describe('FileManager multi-file selection', () => {
+describe('FileManager', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
 
-  it('select-all marks exactly the visible rows, and Limpiar empties the selection', async () => {
-    mockFetch({ listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('C.mkv')] } })
-    await openPane()
-
-    // No batch toolbar while nothing is selected.
-    expect(screen.queryByText('Limpiar')).toBeNull()
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar A.mkv' }))
-    expect(screen.getByText('1 seleccionado')).toBeInTheDocument()
-
-    // The checkbox must not reach the row's own click handler: if it did, the
-    // second click would replace the selection instead of adding to it.
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar B.mkv' }))
-    expect(screen.getByText('2 seleccionados')).toBeInTheDocument()
-
-    // The batch control only ever touches what is on screen: exactly these
-    // three rows, no more and no less.
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar todo' }))
-    expect(screen.getByText('3 seleccionados')).toBeInTheDocument()
-    expect(checkedRowNames()).toEqual([
-      'Seleccionar A.mkv',
-      'Seleccionar B.mkv',
-      'Seleccionar C.mkv',
-    ])
-
-    // The helper's round-trip: everything visible is selected, so the same
-    // control deselects exactly those rows.
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar todo' }))
-    expect(screen.queryByText('3 seleccionados')).toBeNull()
-    expect(checkedRowNames()).toEqual([])
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar B.mkv' }))
-    expect(screen.getByText('1 seleccionado')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Limpiar' }))
-    expect(screen.queryByText('Limpiar')).toBeNull()
-    expect(checkedRowNames()).toEqual([])
-  })
-
-  it('batch delete confirms with the count and the irreversibility sentence, then deletes each file', async () => {
-    const mocked = mockFetch({
-      listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('C.mkv')] },
-      deleteDelayMs: 5,
-    })
-    const confirmMessages: string[] = []
-    let confirmAnswer = false
-    vi.spyOn(window, 'confirm').mockImplementation((message?: string) => {
-      confirmMessages.push(String(message))
-      mocked.events.push(`confirm:${String(message)}`)
-      return confirmAnswer
-    })
-    await openPane()
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar todo' }))
-    expect(screen.getByText('3 seleccionados')).toBeInTheDocument()
-
-    // Refusing the confirmation must delete nothing at all.
-    fireEvent.click(screen.getByText('Eliminar'))
-    expect(confirmMessages).toHaveLength(1)
-    expect(confirmMessages[0]).toContain('3 elementos seleccionados')
-    expect(confirmMessages[0]).toContain('no se puede deshacer')
-    expect(confirmMessages[0]).toContain('no podrás recuperar los datos')
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(deleteBodies(mocked.fn)).toHaveLength(0)
-
-    // Accepting it sends one request per selected file, sequentially.
-    confirmAnswer = true
-    fireEvent.click(screen.getByText('Eliminar'))
-    expect(confirmMessages).toHaveLength(2)
-
-    await waitFor(() => expect(deleteBodies(mocked.fn)).toHaveLength(3))
-    expect(new Set(deleteBodies(mocked.fn).map((b) => b.remote_path))).toEqual(
-      new Set(['/mnt/storage/A.mkv', '/mnt/storage/B.mkv', '/mnt/storage/C.mkv']),
-    )
-    // The confirmation always comes before the first unlink.
-    expect(mocked.events[0]).toMatch(/^confirm:/)
-    expect(mocked.events.findIndex((e) => e.startsWith('delete:'))).toBeGreaterThan(0)
-    // Concurrency against a network mount: never more than one at a time.
-    expect(mocked.maxDeleteInFlight()).toBe(1)
-    expect(await screen.findByText('3 eliminados, 0 rechazados')).toBeInTheDocument()
-  })
-
-  it('batch move surfaces the refused item\u2019s own message while the rest report success', async () => {
-    const mocked = mockFetch({
-      listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('Seed.mkv')] },
-      onQueueAdd: (body) =>
-        String(body.remote_path).endsWith('/Seed.mkv')
-          ? { ok: false, detail: SEED_GUARD }
-          : { ok: true, detail: `Agregado a la cola: ${String(body.remote_path)}` },
-    })
-    await openPane()
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar todo' }))
-    fireEvent.click(screen.getByText('Mover'))
-
-    // Summary with counts — not a collapsed "algo falló".
-    expect(await screen.findByText('2 colocados, 1 rechazado')).toBeInTheDocument()
-
-    // The seed guard's refusal is rendered with the backend's own words...
-    expect(screen.getByText(SEED_GUARD)).toBeInTheDocument()
-    // ...and attributed to the file it is about.
-    const report = document.querySelector('.fm-batch-report') as HTMLElement
-    expect(within(report).getByText('Seed.mkv')).toBeInTheDocument()
-
-    // Every selected file was offered to the backend: the refusal is the
-    // backend's answer, not the frontend quietly skipping the item.
-    expect(queueBodies(mocked.fn)).toHaveLength(3)
-    expect(queueBodies(mocked.fn).map((b) => b.source)).toEqual(['move', 'move', 'move'])
-    expect(new Set(queueBodies(mocked.fn).map((b) => b.remote_path))).toEqual(
-      new Set(['/mnt/storage/A.mkv', '/mnt/storage/B.mkv', '/mnt/storage/Seed.mkv']),
-    )
-  })
-
-  it('clears the selection when navigating into another directory', async () => {
-    mockFetch({
-      listings: {
-        '/mnt/storage': [dir('subcarpeta'), file('A.mkv')],
-        '/mnt/storage/subcarpeta': [file('Dentro.mkv')],
-      },
-    })
-    await openPane()
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar todo' }))
-    expect(screen.getByText('2 seleccionados')).toBeInTheDocument()
-
-    fireEvent.dblClick(screen.getByText('subcarpeta'))
-
-    expect(await screen.findByText('Dentro.mkv')).toBeInTheDocument()
-    expect(screen.queryByText('2 seleccionados')).toBeNull()
-    expect(screen.queryByText('Limpiar')).toBeNull()
-    expect(checkedRowNames()).toEqual([])
-  })
-
-  it('clicking a folder\u2019s name or icon enters it; its checkbox only selects it', async () => {
+  it('clicking a folder\u2019s name enters it and a file click does nothing', async () => {
     mockFetch({
       listings: {
         '/mnt/storage': [dir('subcarpeta'), dir('otra'), file('A.mkv')],
@@ -327,10 +152,9 @@ describe('FileManager multi-file selection', () => {
     })
     await openPane('A.mkv')
 
-    // The checkbox selects and stays where it is.
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar otra' }))
-    expect(screen.getByText('1 seleccionado')).toBeInTheDocument()
-    expect(screen.getByText('A.mkv')).toBeInTheDocument()
+    // A file has nothing to enter: the listing stays where it is.
+    fireEvent.click(screen.getByText('A.mkv'))
+    expect(screen.getByText('otra')).toBeInTheDocument()
 
     // The name enters.
     fireEvent.click(screen.getByText('subcarpeta'))
@@ -350,23 +174,6 @@ describe('FileManager multi-file selection', () => {
     fireEvent.click(row.querySelector('.explorer-icon') as HTMLElement)
 
     expect(await screen.findByText('Dentro.mkv')).toBeInTheDocument()
-  })
-
-  it('clicking a file toggles its checkbox, and the second click of a double-click is ignored', async () => {
-    mockFetch({ listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv')] } })
-    await openPane()
-
-    fireEvent.click(screen.getByText('A.mkv'))
-    expect(checkedRowNames()).toEqual(['Seleccionar A.mkv'])
-
-    fireEvent.click(screen.getByText('B.mkv'))
-    expect(checkedRowNames()).toEqual(['Seleccionar A.mkv', 'Seleccionar B.mkv'])
-
-    fireEvent.click(screen.getByText('A.mkv'))
-    expect(checkedRowNames()).toEqual(['Seleccionar B.mkv'])
-
-    fireEvent.click(screen.getByText('A.mkv'), { detail: 2 })
-    expect(checkedRowNames()).toEqual(['Seleccionar B.mkv'])
   })
 
   it('annotates each row with its retention age, and shows nothing when there is no age', async () => {
@@ -501,90 +308,6 @@ describe('FileManager multi-file selection', () => {
     expect(row.querySelector('.fm-prov')).toBeNull()
   })
 
-  it('Marcar caducados shows only when something is expired, and selects exactly those rows', async () => {
-    // Nothing is past the window: the button must not exist at all.
-    mockFetch({
-      listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv')] },
-      retention: {
-        '/mnt/storage': [
-          { name: 'A.mkv', first_seen_at: 1, age_days: 1.5, expired: false, provenance: null, provenance_label: null },
-          { name: 'B.mkv', first_seen_at: 1, age_days: 2.5, expired: false, provenance: null, provenance_label: null },
-        ],
-      },
-    })
-    const first = renderFileManager()
-    // Retention data is on screen — its absence is what hides the button,
-    // not a query still in flight.
-    expect(await screen.findByText('hace 1 día')).toBeInTheDocument()
-    expect(screen.queryByText('Marcar caducados')).toBeNull()
-    first.unmount()
-
-    // With expired rows the button appears and is a pure selection action.
-    const second = mockFetch({
-      listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('C.mkv')] },
-      retention: {
-        '/mnt/storage': [
-          { name: 'A.mkv', first_seen_at: 1, age_days: 12, expired: true, provenance: null, provenance_label: null },
-          { name: 'B.mkv', first_seen_at: 1, age_days: 2, expired: false, provenance: null, provenance_label: null },
-          { name: 'C.mkv', first_seen_at: 1, age_days: 12, expired: true, provenance: null, provenance_label: null },
-        ],
-      },
-    })
-    renderFileManager()
-    expect(await screen.findAllByText('caducado')).toHaveLength(2)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar caducados' }))
-
-    // Exactly the expired rows — the fresh one stays unselected — and nothing
-    // is deleted: selecting is the whole action, the delete goes through the
-    // batch bar's own confirmation.
-    expect(screen.getByText('2 seleccionados')).toBeInTheDocument()
-    expect(checkedRowNames()).toEqual(['Seleccionar A.mkv', 'Seleccionar C.mkv'])
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(requestOrder(second.fn).filter((u) => u.includes('/api/files/delete'))).toHaveLength(0)
-  })
-
-  it('a batch delete refetches the retention query after the files are gone', async () => {
-    const mocked = mockFetch({
-      listings: { '/mnt/storage': [file('A.mkv'), file('B.mkv'), file('C.mkv')] },
-      retention: {
-        '/mnt/storage': [
-          { name: 'A.mkv', first_seen_at: 1, age_days: 12, expired: true, provenance: null, provenance_label: null },
-          { name: 'B.mkv', first_seen_at: 1, age_days: 2.5, expired: false, provenance: null, provenance_label: null },
-          { name: 'C.mkv', first_seen_at: 1, age_days: 12, expired: true, provenance: null, provenance_label: null },
-        ],
-      },
-      deleteDelayMs: 2,
-    })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    await openPane()
-    await screen.findAllByText('caducado')
-
-    const retentionCalls = () =>
-      requestOrder(mocked.fn).filter((u) => u.includes('/api/files/retention'))
-    expect(retentionCalls()).toHaveLength(1)
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar todo' }))
-    fireEvent.click(screen.getByText('Eliminar'))
-    await waitFor(() =>
-      expect(screen.getByText('3 eliminados, 0 rechazados')).toBeInTheDocument(),
-    )
-
-    // Assert the REFETCH — a second GET /api/files/retention on the network —
-    // not merely that invalidateQueries was called with some key...
-    await waitFor(() => expect(retentionCalls().length).toBeGreaterThan(1))
-
-    // ...and that it lands strictly after the last unlink, because that is the
-    // moment the ages and the pruned rows actually change.
-    const order = requestOrder(mocked.fn)
-    const lastDelete = Math.max(
-      ...order.map((u, i) => (u.includes('/api/files/delete') ? i : -1)),
-    )
-    expect(deleteBodies(mocked.fn)).toHaveLength(3)
-    expect(retentionCalls().length).toBeGreaterThanOrEqual(2)
-    expect(order.some((u, i) => u.includes('/api/files/retention') && i > lastDelete)).toBe(true)
-  })
-
   it('labels the roots, groups destinations under Destinos, and keeps navigation first', async () => {
     mockFetch({
       listings: { '/mnt/storage': [file('A.mkv')] },
@@ -634,16 +357,4 @@ describe('FileManager multi-file selection', () => {
     }
   })
 
-  it('binds the select-all label to its checkbox with htmlFor/id/name (S2)', async () => {
-    mockFetch({ listings: { '/mnt/storage': [file('A.mkv')] } })
-    await openPane()
-
-    const box = screen.getByRole('checkbox', { name: 'Seleccionar todo' }) as HTMLInputElement
-    const label = box.closest('label') as HTMLLabelElement
-    expect(label).not.toBeNull()
-    expect(label.getAttribute('for')).toBe(box.id)
-    // Unique per pane: two exploradores on one screen cannot share a DOM id.
-    expect(box.id).toMatch(/^fm-select-all/)
-    expect(box.name).toBe(box.id)
-  })
 })

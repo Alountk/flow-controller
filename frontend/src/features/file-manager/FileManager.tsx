@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { FileItem, RetentionFile } from '../../shared/types.ts'
+import type { RetentionFile } from '../../shared/types.ts'
 import {
   fetchRoots,
   fetchRetention,
@@ -10,36 +10,12 @@ import {
   deleteItem,
   queueAdd,
 } from '../../shared/api/files.ts'
-import { filterByName, useBrowse } from '../../shared/hooks/useFilesNavigator.ts'
+import { useBrowse } from '../../shared/hooks/useFilesNavigator.ts'
 import { readHashParam } from '../../shared/hooks/useHashState.ts'
 import { FileExplorer, type FileExplorerEntry } from '../../shared/ui/FileExplorer.tsx'
 import { LibraryRenameDialog } from './LibraryRenameDialog.tsx'
-import { areAllVisibleSelected, toggleVisibleSelection } from '../../shared/utils/selection.ts'
 import './FileManager.css'
 import '../../shared/ui/atoms.css'
-
-/** "1 colocado" / "7 colocados" — a count without an agreement is noise. */
-function countWord(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
-/** One item's outcome. The backend answers per file, never per batch. */
-interface BatchOutcome {
-  path: string
-  name: string
-  ok: boolean
-  detail: string
-}
-
-/**
- * What the last batch left behind. Only the refusals are kept on screen: a
- * summary of successes is a toast, but a failure has to stay readable with the
- * backend's own reason until the user dismisses it.
- */
-interface BatchReport {
-  failures: BatchOutcome[]
-  total: number
-}
 
 interface RootsItem {
   path: string
@@ -62,7 +38,6 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
   const queryClient = useQueryClient()
   const initialRoot = roots[index]?.path || roots[0]?.path || '/'
   const [path, setPath] = useState(initialPath || initialRoot)
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -71,8 +46,6 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
   const [renameValue, setRenameValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const [batchReport, setBatchReport] = useState<BatchReport | null>(null)
-  const [batchBusy, setBatchBusy] = useState(false)
   const [nameFilter, setNameFilter] = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const paneRef = useRef<HTMLDivElement>(null)
@@ -97,7 +70,6 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
 
   useEffect(() => {
     if (browseData?.ok) {
-      setSelected(new Set())
       onPathChangeRef.current?.(index, browseData.path)
     } else if (browseData?.error) {
       setError(browseData.error)
@@ -187,15 +159,11 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
   }
 
   function navigateTo(p: string) {
-    setSelected(new Set())
     setPath(p)
   }
 
   function handleFilterChange(value: string) {
     setNameFilter(value)
-    // The selection describes rows on screen: a row the filter hides can no
-    // longer be acted on, so it leaves the selection — same rule as navigation.
-    setSelected(new Set())
   }
 
   function handleCreate() {
@@ -222,13 +190,6 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
     queue.mutate({ type, src: item.path, dst })
   }
 
-  const items = browseData?.ok ? browseData.items : []
-  const itemKey = (item: FileItem) => item.path
-  // The shared name filter; an unfiltered pane keeps the whole listing and
-  // every on-screen action below (selection, batch) works on exactly it.
-  const visibleItems = filterByName(items, nameFilter)
-  const allVisibleSelected = areAllVisibleSelected(selected, visibleItems, itemKey)
-
   // The join: the retention endpoint answers a top-level `path` plus each
   // file's `name`, while rows are keyed by `item.path`. Both come from the
   // same resolved directory, so `path + '/' + name` IS `item.path` — no
@@ -237,9 +198,6 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
   const retentionByPath = new Map<string, RetentionFile>(
     (retentionData?.files ?? []).map((f) => [`${retentionData!.path}/${f.name}`, f]),
   )
-  const expiredPaths = visibleItems
-    .filter((item) => retentionByPath.get(item.path)?.expired)
-    .map((item) => item.path)
 
   /** The row's retention chip. Unknown age (`null`: store unreadable) and
    *  files the endpoint did not report render NOTHING — a fabricated age
@@ -266,47 +224,13 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
     return <span className="fm-prov">{label}</span>
   }
 
-  function toggleRowSelection(itemPath: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(itemPath)) next.delete(itemPath)
-      else next.add(itemPath)
-      return next
-    })
-  }
-
-  function toggleAllSelection() {
-    // The shared helper, never a second copy: select-all only ever touches the
-    // rows currently on screen, so it cannot act on a file nobody is looking at.
-    setSelected((prev) => toggleVisibleSelection(prev, visibleItems, itemKey))
-  }
-
   // The rows below are FileExplorer's; these four slots keep the pane's own
   // row content (selection, inline rename, path cell, chips, buttons) in JSX.
 
-  // A folder is entered by its name or icon and selected only by its checkbox;
-  // a file has nothing to enter, so a click anywhere on it ticks the checkbox.
-  // The second click of a double-click is dropped: it would undo the first.
+  // A folder is entered by its name or icon; a file has nothing to enter.
   function handleRowClick(entry: FileExplorerEntry, event: MouseEvent<HTMLElement>) {
-    if (event.detail > 1) return
-    if (!entry.isDir) {
-      toggleRowSelection(entry.path)
-      return
-    }
+    if (event.detail > 1 || !entry.isDir) return
     if ((event.target as HTMLElement).closest('.explorer-icon, .explorer-name')) navigateTo(entry.path)
-  }
-
-  function renderRowStart(entry: FileExplorerEntry) {
-    return (
-      <input
-        type="checkbox"
-        className="fm-item-check"
-        checked={selected.has(entry.path)}
-        onChange={() => toggleRowSelection(entry.path)}
-        onClick={(e) => e.stopPropagation()}
-        aria-label={`Seleccionar ${entry.name}`}
-      />
-    )
   }
 
   function renderRowName(entry: FileExplorerEntry) {
@@ -401,66 +325,6 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
     )
   }
 
-  /**
-   * One batch: one request per file, one honest result per file.
-   *
-   * Sequential on purpose — these endpoints talk to a network mount, and N
-   * concurrent unlinks against CIFS is how you get timeouts. Copy/move only
-   * enqueues (the queue is already sequential and SQLite-backed), but delete
-   * runs the unlinks itself, so both go through the same loop.
-   */
-  async function runBatch(action: 'copy' | 'move' | 'delete') {
-    // Selection dies on navigation AND on a filter change, so every selected
-    // path belongs to the rows currently on screen.
-    const targets = visibleItems.filter((item) => selected.has(item.path))
-    if (targets.length === 0 || batchBusy) return
-
-    setBatchBusy(true)
-    setBatchReport(null)
-
-    const results: BatchOutcome[] = []
-    for (const item of targets) {
-      let res: { ok: boolean; detail: string }
-      try {
-        res = action === 'delete'
-          ? await deleteItem(item.path)
-          : await queueAdd(action, item.path, `${otherPath}/${item.name}`)
-      } catch (err) {
-        // A dead mount is one failed item, not a reason to drop the rest.
-        res = { ok: false, detail: err instanceof Error ? err.message : String(err) }
-      }
-      results.push({ path: item.path, name: item.name, ok: res.ok, detail: res.detail })
-    }
-
-    const failures = results.filter((r) => !r.ok)
-    setBatchBusy(false)
-    setBatchReport(failures.length > 0 ? { failures, total: results.length } : null)
-    // The batch is consumed either way: leaving the rows selected would invite
-    // a second click that enqueues everything a second time.
-    setSelected(new Set())
-
-    const okCount = results.length - failures.length
-    const done = action === 'delete'
-      ? countWord(okCount, 'eliminado', 'eliminados')
-      : countWord(okCount, 'colocado', 'colocados')
-    showToast(`${done}, ${countWord(failures.length, 'rechazado', 'rechazados')}`)
-
-    if (action === 'delete') {
-      // The unlinks change what the retention endpoint answers: rows for the
-      // deleted files get pruned, so its cache must be re-read, not trusted.
-      invalidateBrowse()
-      queryClient.invalidateQueries({ queryKey: ['retention'] })
-    } else queryClient.invalidateQueries({ queryKey: ['queue'] })
-  }
-
-  function handleBatchDelete() {
-    const n = selected.size
-    const what = n === 1 ? 'elemento seleccionado' : 'elementos seleccionados'
-    const message = `¿Eliminar ${n} ${what}? Esta acción no se puede deshacer: no podrás recuperar los datos borrados.`
-    if (!confirm(message)) return
-    void runBatch('delete')
-  }
-
   return (
     <div className="fm-pane" ref={paneRef}>
       {error && <div className="fm-error" onClick={() => setError(null)}>{error}</div>}
@@ -481,51 +345,6 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
         </div>
       )}
 
-      {selected.size > 0 && (
-        <div className="fm-batch-bar">
-          <span className="fm-batch-count">
-            {selected.size} seleccionado{selected.size === 1 ? '' : 's'}
-          </span>
-          <button className="fm-action-btn" onClick={() => runBatch('copy')} disabled={batchBusy}>
-            Copiar
-          </button>
-          <button className="fm-action-btn" onClick={() => runBatch('move')} disabled={batchBusy}>
-            Mover
-          </button>
-          <button className="fm-action-btn" onClick={handleBatchDelete} disabled={batchBusy}>
-            Eliminar
-          </button>
-          <button className="fm-cancel-btn" onClick={() => setSelected(new Set())} disabled={batchBusy}>
-            Limpiar
-          </button>
-        </div>
-      )}
-
-      {batchReport && (
-        <div className="fm-batch-report">
-          <div className="fm-batch-report-head">
-            <span className="fm-batch-report-title">
-              Rechazados: {batchReport.failures.length} de {batchReport.total}
-            </span>
-            <button
-              className="fm-cancel-btn"
-              title="Cerrar detalle"
-              onClick={() => setBatchReport(null)}
-            >
-              <Icon name="close" size={16} />
-            </button>
-          </div>
-          <ul className="fm-batch-report-list">
-            {batchReport.failures.map((f) => (
-              <li key={f.path} className="fm-batch-report-item">
-                <span className="fm-batch-report-name">{f.name}</span>
-                <span className="fm-batch-report-detail">{f.detail}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <FileExplorer
         accept="both"
         path={path}
@@ -535,39 +354,16 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
         emptyLabel={isLoading ? 'Cargando…' : 'Directorio vacío'}
         toolbarActions={
           <>
-            {visibleItems.length > 0 && (
-              <label className="fm-select-all" htmlFor={`fm-select-all-${index}`}>
-                <input
-                  type="checkbox"
-                  id={`fm-select-all-${index}`}
-                  name={`fm-select-all-${index}`}
-                  checked={allVisibleSelected}
-                  onChange={toggleAllSelection}
-                />
-                <span>Seleccionar todo</span>
-              </label>
-            )}
             <button className="fm-action-btn" onClick={() => setCreating(true)}>
               + Carpeta
             </button>
             <button className="fm-action-btn" onClick={invalidateBrowse} title="Refrescar">
               <Icon name="sync" size={16} />
             </button>
-            {expiredPaths.length > 0 && (
-              <button
-                className="fm-action-btn"
-                onClick={() => setSelected(new Set(expiredPaths))}
-                title="Selecciona solo los que ya han pasado la ventana de retención"
-              >
-                Marcar caducados
-              </button>
-            )}
           </>
         }
         onNavigate={navigateTo}
-        isRowSelected={(entry) => selected.has(entry.path)}
         onRowClick={handleRowClick}
-        renderRowStart={renderRowStart}
         renderRowName={renderRowName}
         renderFileMeta={renderFileMeta}
         renderRowActions={renderRowActions}
