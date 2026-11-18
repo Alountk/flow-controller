@@ -70,9 +70,8 @@ interface FileExplorerProps {
   /** Buttons the caller owns, drawn on the toolbar's right: create a folder,
    *  mark expired rows, copy to the other pane. Content, never chrome. */
   toolbarActions?: ReactNode
-  /** Row slots: the checkbox, an inline-rename name cell, extra meta under the
+  /** Row slots: an inline-rename name cell, extra meta under the
    *  name, and the right-hand actions. Content, never chrome. */
-  renderRowStart?: (entry: FileExplorerEntry) => ReactNode
   renderRowName?: (entry: FileExplorerEntry) => ReactNode
   renderFileMeta?: (entry: FileExplorerEntry) => ReactNode
   renderRowActions?: (entry: FileExplorerEntry) => ReactNode
@@ -226,7 +225,6 @@ export function FileExplorer({
   rootLabel,
   emptyLabel = 'Carpeta vacía',
   toolbarActions,
-  renderRowStart,
   renderRowName,
   renderFileMeta,
   renderRowActions,
@@ -355,9 +353,6 @@ export function FileExplorer({
               entry.isDir ? visit(entry.path) : onConfirm?.(entry.path)
             }
           >
-            {/* The checkbox cell exists even without a slot: a grid that
-                shifts one column left squeezes the name to three letters. */}
-            <span className="explorer-check">{renderRowStart?.(entry)}</span>
             <span className="explorer-icon" aria-hidden="true">
               <Icon name={entry.isDir ? 'folder' : entry.isVideo === false ? 'description' : 'movie'} size={18} />
             </span>
