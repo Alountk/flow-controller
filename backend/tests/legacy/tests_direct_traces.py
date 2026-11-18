@@ -50,6 +50,22 @@ def _grab(**over):
     return base
 
 
+def test_a_library_grab_shows_the_arr_folder_not_the_download_dir():
+    grab = _grab(destination=None)
+
+    (row,) = _direct_traces([grab], [_torrent()], {"radarr": {855: "/movies/Movie (2024)"}})
+    (bare,) = _direct_traces([grab], [_torrent()])
+
+    assert row["destination"] == "/movies/Movie (2024)"
+    assert bare["destination"] is None, "no arr answer: no invented path"
+
+
+def test_an_explicit_destination_wins_over_the_arr_folder():
+    (row,) = _direct_traces([_grab()], [_torrent()], {"radarr": {855: "/movies/Movie (2024)"}})
+
+    assert row["destination"] == "/mnt/storage-6tb/Movies4K"
+
+
 # ── The join ────────────────────────────────────────────────────────────────
 
 
