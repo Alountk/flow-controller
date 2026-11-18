@@ -294,6 +294,33 @@ describe('Copiar archivos on a downloaded trace verifies the destination first',
   })
 })
 
+describe('Copiar archivos on an import_blocked trace verifies the destination too', () => {
+  it('lists the folder of a title that is already in the library (an upgrade)', async () => {
+    const fn = vi.fn((input: RequestInfo | URL) =>
+      Promise.resolve(
+        deferredJson(
+          String(input).includes('/api/files/browse')
+            ? { ok: true, items: [{ name: 'Jurassic Park II (SD).avi', is_dir: false, size: 1000 }] }
+            : { ok: true, key: 'k' },
+        ),
+      ),
+    )
+    vi.stubGlobal('fetch', fn)
+    renderActions(
+      trace({
+        stage: 'import_blocked',
+        destination: '/movies/Jurassic Park II (1997)',
+        queue: { state: 'importBlocked', status: 'warning', output_path: '/dl/Jurassic.Park.II.1080p.mkv', messages: [] },
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+
+    expect(await screen.findByText('Verificar destino')).toBeInTheDocument()
+    expect(fn.mock.calls.some(([url]) => String(url).includes('/api/files/browse'))).toBe(true)
+  })
+})
+
 describe('Copiar archivos reports a refusal on the row', () => {
   it('shows the server reason after "No ha llegado: copiar" is confirmed', async () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {

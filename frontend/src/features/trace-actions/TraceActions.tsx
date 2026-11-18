@@ -247,9 +247,11 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Prop
   }
 
   function handleClick(action: ActionKey) {
-    // A finished download: look at the destination before moving anything —
-    // the file may already be there (Jellyfin sees it) and copying is moot.
-    if (action === 'copy_files' && trace.stage === 'downloaded' && trace.destination) {
+    // A finished or blocked download: look at the destination before moving
+    // anything — the file may already be there (Jellyfin sees it, or it is an
+    // upgrade over a copy already in the library) and copying is moot.
+    const settled = trace.stage === 'downloaded' || trace.stage === 'import_blocked'
+    if (action === 'copy_files' && settled && trace.destination) {
       setChecking(true)
       return
     }
