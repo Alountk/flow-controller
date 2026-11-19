@@ -413,3 +413,39 @@ describe('Copiar archivos shows its progress in the row, not in a modal', () => 
     )
   })
 })
+
+describe('Copiar archivos warns when the file does not fit the destination', () => {
+  const blocked = () => trace({ queue: { state: 'importPending', status: 'warning', output_path: '/dl/x.mkv', messages: [] } })
+
+  it('asks first and, once accepted, resends the copy to the suggested folder', async () => {
+    const fn = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+      const body = String(_init?.body ?? '')
+      if (String(input).includes('/api/actions/copy_files')) {
+        return Promise.resolve(
+          body.includes('dest_root')
+            ? deferredJson({ ok: true, task_id: 't2', src_path: '/dl/x.mkv', dst_path: '/4k/x.mkv' })
+            : deferredJson({
+                ok: false,
+                needs_confirmation: true,
+                mismatch: { file: 'x.mkv', resolution: '2160', destination: '/lib/Movie', suggested: '/4k' },
+              }),
+        )
+      }
+      return Promise.resolve(deferredJson({ ok: true, status: 'running' }))
+    })
+    vi.stubGlobal('fetch', fn)
+    renderActions(blocked())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }))
+    expect(await screen.findByText('Esta carpeta no es la que toca')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar a la carpeta correcta' }))
+
+    await waitFor(() => {
+      const sent = fn.mock.calls.filter((c) => String(c[0]).includes('/api/actions/copy_files')).map((c) => bodyOf(c as [RequestInfo | URL, RequestInit?]))
+      expect(sent).toHaveLength(2)
+      expect(sent[1]).toMatchObject({ dest_root: '/4k', output_path: '/dl/x.mkv' })
+    })
+  })
+})

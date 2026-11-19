@@ -3,7 +3,7 @@ import '../../shared/ui/modal.css'
 import { useState, useEffect, useContext, useRef, type ReactNode } from 'react'
 import { useDialog } from '../../shared/hooks/useDialog.ts'
 import { useQuery } from '@tanstack/react-query'
-import type { ActionKey, ActionMeta, ActionResult, Trace } from '../../shared/types.ts'
+import type { ActionKey, ActionMeta, ActionResult, CopyMismatch, Trace } from '../../shared/types.ts'
 import { runAction, type ActionOptions } from '../../shared/api/actions.ts'
 import { ackBlockedImport } from '../../shared/api/traces.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
@@ -154,6 +154,7 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Prop
   const { connected } = useContext(EventStreamContext)
   const [pending, setPending] = useState<Pending | null>(null)
   const [checking, setChecking] = useState(false)
+  const [mismatch, setMismatch] = useState<{ found: CopyMismatch; options: ActionOptions } | null>(null)
   const [busy, setBusy] = useState<ActionKey | null>(null)
   const [acking, setAcking] = useState(false)
   const [result, setResult] = useState<ActionResult | null>(null)
@@ -232,6 +233,8 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Prop
           files_total: 0,
           detail: 'iniciando...',
         })
+      } else if (res.needs_confirmation && res.mismatch) {
+        setMismatch({ found: res.mismatch, options })
       } else {
         setResult(res)
         if (res.ok) onDone()
@@ -461,6 +464,36 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Prop
             >
               Confirmar
             </button>
+          </div>
+        </TraceDialog>
+      )}
+
+      {mismatch && (
+        <TraceDialog label="Carpeta destino" onClose={() => setMismatch(null)}>
+          <h3>Esta carpeta no es la que toca</h3>
+          <p>
+            {mismatch.found.file} mide {mismatch.found.resolution}p y el destino es{' '}
+            <code>{mismatch.found.destination}</code>.
+            {mismatch.found.suggested
+              ? <> ¿Copiarlo a <code>{mismatch.found.suggested}</code>? No se avisa a Radarr/Sonarr.</>
+              : ' No se ha podido determinar la carpeta correcta.'}
+          </p>
+          <div className="modal-buttons">
+            <button className="action-btn" onClick={() => setMismatch(null)}>
+              Cancelar
+            </button>
+            {mismatch.found.suggested && (
+              <button
+                className="action-btn destructive"
+                onClick={() => {
+                  const { options } = mismatch
+                  setMismatch(null)
+                  void execute('copy_files', { ...options, dest_root: mismatch.found.suggested })
+                }}
+              >
+                Copiar a la carpeta correcta
+              </button>
+            )}
           </div>
         </TraceDialog>
       )}

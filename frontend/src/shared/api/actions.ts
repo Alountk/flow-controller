@@ -8,6 +8,7 @@ export interface ActionOptions {
   remote_path?: string
   local_path?: string
   output_path?: string
+  dest_root?: string
 }
 
 export async function runAction(
