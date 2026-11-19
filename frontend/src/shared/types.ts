@@ -135,7 +135,17 @@ export interface ActionStep {
   detail: string
 }
 
+/** A copy refused before touching anything: the file does not belong in that folder. */
+export interface CopyMismatch {
+  file: string
+  resolution: string
+  destination: string
+  suggested: string
+}
+
 export interface ActionResult {
+  needs_confirmation?: boolean
+  mismatch?: CopyMismatch
   action?: ActionKey
   label?: string
   destructive?: boolean

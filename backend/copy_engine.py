@@ -45,6 +45,7 @@ from application.gateways import (
     amule_resume,
     amule_set_category,
 )
+from infrastructure.copy_guard import for_copy
 from infrastructure.file_storage import storage as _local_storage
 
 #: Typed at the port, not at the adapter. This module's question is "something
@@ -592,6 +593,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                         {"target": source, "ok": False, "detail": f"destino no permitido: {dest_root}"}
                     ],
                 }
+            if (found := await for_copy(output_path, dest_root, source, ids, session, service)): return found
             # Take the item out of the arr's queue BEFORE copying, so the arr
             # cannot import it into the library behind our back. A failure here
             # fails the whole action: the hard constraint is that a folder
@@ -640,7 +642,6 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
             # The foreign destination is used exactly as given: no arr root and
             # no `Season XX` subfolder, which only belongs to the library layout.
             root = dest_root
-            log.info("copy_files: destino ajeno=%s", root)
         else:
             if source == "sonarr" and ids.get("series_id"):
                 root = await arr_series_root_folder(session, service, ids["series_id"])
@@ -648,15 +649,14 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                     season_num = await arr_episode_season(session, service, ids["episode_id"])
                     if season_num is not None:
                         root = str(Path(root) / f"Season {season_num}")
-                        log.info("copy_files: season folder → %s", root)
             elif source == "radarr" and ids.get("movie_id"):
                 root = await arr_movie_root_folder(session, service, ids["movie_id"])
             else:
                 root = ""
-            log.info("copy_files: output_path=%s  root=%s", output_path, root)
             if not root:
                 log.error("copy_files: no se pudo obtener root folder para %s (series_id=%s, movie_id=%s)", source, ids.get("series_id"), ids.get("movie_id"))
                 return {"ok": False, "steps": [{"target": source, "ok": False, "detail": "no se pudo obtener la carpeta raíz de la librería"}]}
+            if (found := await for_copy(output_path, root, source, ids, session, service)): return found
 
         # Populated only where a foreign destination asked a question; the
         # library path leaves it None so the task detail stays byte for byte
