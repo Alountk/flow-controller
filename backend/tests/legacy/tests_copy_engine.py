@@ -297,6 +297,30 @@ class TestCopyFilesForeignDestination:
         assert not (dest_root / "Season 1").exists()
         del copy_tasks._tasks[result["task_id"]]
 
+    def test_a_resolution_that_does_not_fit_asks_before_touching_the_queue(self, tmp_path, monkeypatch):
+        payload = _foreign_payload(tmp_path, dest_root=tmp_path / "4k")
+        removals: list[dict] = []
+        monkeypatch.setattr(copy_engine, "SERVICES", [_arr_service()])
+        monkeypatch.setattr(config, "path_is_allowed", lambda path: True)
+        monkeypatch.setattr(config, "PATH_4K", str(tmp_path / "4k"))
+        monkeypatch.setattr(clients, "arr_delete_queue", _delete_recorder(removals, {"ok": True}))
+        monkeypatch.setattr(
+            "infrastructure.copy_guard.probe_file", lambda path: {"resolution": "1080"}
+        )
+
+        async def movie_folder(session, service, movie_id):
+            return "/lib/Movie (2000)"
+
+        monkeypatch.setattr("infrastructure.copy_guard.arr_movie_root_folder", movie_folder)
+
+        result = asyncio.run(do_action(None, "copy_files", payload))
+
+        assert result["ok"] is False and result["needs_confirmation"] is True
+        assert result["mismatch"]["resolution"] == "1080"
+        assert result["mismatch"]["suggested"] == "/lib/Movie (2000)"
+        assert removals == []
+        assert not (tmp_path / "4k").exists()
+
     def test_proceeds_when_the_arr_is_not_tracking_the_item(self, tmp_path, monkeypatch):
         payload = _foreign_payload(tmp_path, queue_id=7)
         removals: list[dict] = []
