@@ -18,7 +18,6 @@ from config import (
     AMUTORRENT_PASSWORD,
     AMUTORRENT_URL,
     AMUTORRENT_USER,
-    EXPECTED_CATEGORY,
     _AMU_WS_COMPLETE,
     QBIT_COMPLETED,
     QBIT_DOWNLOADING,
@@ -957,20 +956,6 @@ async def arr_root_folders(session: aiohttp.ClientSession, service: dict) -> lis
         return []
 
 
-async def fetch_qbit_torrents(session: aiohttp.ClientSession) -> list[dict]:
-    headers = qbit_headers(AMUTORRENT_API_KEY)
-    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 3)
-    try:
-        async with session.get(
-            f"{AMUTORRENT_URL}/api/v2/torrents/info", headers=headers, timeout=timeout
-        ) as resp:
-            if resp.status != 200:
-                return []
-            return await resp.json(content_type=None)
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        return []
-
-
 async def amu_torrent_categories(session: aiohttp.ClientSession) -> list[str]:
     """Category names configured in aMuTorrent, or [] if it cannot be reached."""
     try:
@@ -1166,64 +1151,6 @@ async def amutorrent_reload_shared_dirs(session: aiohttp.ClientSession) -> dict:
             return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": f"recarga: {type(exc).__name__}"}
-
-
-def arr_categories_for(service_key: str, available: list[str]) -> list[str]:
-    """aMuTorrent categories that belong to an arr service.
-
-    Includes localized variants: the server has `radarr` AND `radarr-ru`, so
-    matching only the configured base name would silently miss downloads.
-    """
-    bases = {service_key, EXPECTED_CATEGORY.get(service_key, service_key)}
-    bases.discard("")
-
-    matches = []
-    for candidate in available:
-        for base in bases:
-            if candidate == base or candidate.startswith(f"{base}-"):
-                matches.append(candidate)
-                break
-    return sorted(set(matches))
-
-
-async def fetch_amu_torrents_by_category(
-    session: aiohttp.ClientSession, categories: list[str]
-) -> tuple[list[dict], dict | None]:
-    """Torrents for the given categories, plus a failure description.
-
-    `torrents/info` unfiltered returns ~1097 KB for 813 torrents, and its
-    `hashes=`/`filter=` parameters are ignored — only `category=` works. A
-    failure is returned rather than swallowed so the caller can tell "no
-    downloads" apart from "could not ask".
-    """
-    if not categories:
-        return [], None
-
-    collected: list[dict] = []
-    failures: list[str] = []
-
-    for category in categories:
-        try:
-            async with session.get(
-                f"{AMUTORRENT_URL}/api/v2/torrents/info",
-                params={"category": category},
-                headers=qbit_headers(AMUTORRENT_API_KEY),
-                timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 3),
-            ) as resp:
-                if resp.status != 200:
-                    failures.append(f"{category}: HTTP {resp.status}")
-                    continue
-                data = await resp.json(content_type=None)
-                if isinstance(data, list):
-                    collected.extend(data)
-        except asyncio.TimeoutError:
-            failures.append(f"{category}: no respondió a tiempo")
-        except aiohttp.ClientError as exc:
-            failures.append(f"{category}: {type(exc).__name__}")
-
-    if failures and not collected:
-        return [], {"error_kind": "unreachable", "error": "aMuTorrent: " + "; ".join(failures)}
-    return collected, None
 
 
 def arr_failure(service: dict, *, status: int | None = None, exc: BaseException | None = None) -> dict:
