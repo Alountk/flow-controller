@@ -18,6 +18,7 @@ import { browsePath } from '../../shared/api/files.ts'
 import type { BrowseResponse, FileItem } from '../../shared/types.ts'
 import { FileExplorer } from '../../shared/ui/FileExplorer.tsx'
 import { ReleaseResultsTable } from './ReleaseResultsTable.tsx'
+import type { SortState } from '../../shared/utils/releaseTable.ts'
 import { looksThreeD } from '../../shared/utils/threeD.ts'
 import { fromName } from '../../shared/utils/resolution.ts'
 import { toast } from '../../shared/utils/toast.ts'
@@ -192,7 +193,7 @@ async function fetchRoutingListing(folder: string): Promise<FileItem[]> {
  */
 const panelResults = new Map<
   string,
-  { detail: string; releases: Release[]; threeDOverrides: Record<string, boolean> }
+  { detail: string; releases: Release[]; threeDOverrides: Record<string, boolean>; sort: SortState }
 >()
 
 const LIBRARY = 'Biblioteca (la del arr)'
@@ -297,6 +298,8 @@ export function ReleaseSearchModal({
   const [releases, setReleases] = useState<Release[]>(restored?.releases ?? [])
   const [searchDetail, setSearchDetail] = useState(restored?.detail ?? '')
   const [filters, setFilters] = useState<ReleaseFilters>(NO_RELEASE_FILTERS)
+  // Lives here, not in the table: a grab leaves the results step and unmounts it.
+  const [sort, setSort] = useState<SortState>(restored?.sort ?? { key: null, dir: 'asc' })
   // Per-row corrections to the 3D suggestion. An absent guid means "no human
   // has spoken, trust the title"; present means "this is what I said".
   const [threeDOverrides, setThreeDOverrides] = useState<Record<string, boolean>>(
@@ -441,8 +444,9 @@ export function ReleaseSearchModal({
       detail: searchDetail,
       releases,
       threeDOverrides,
+      sort,
     })
-  }, [inPanel, step, item.source, item.type, item.id, searchDetail, releases, threeDOverrides])
+  }, [inPanel, step, item.source, item.type, item.id, searchDetail, releases, threeDOverrides, sort])
 
   // Timer for loading state
   useEffect(() => {
@@ -1306,6 +1310,8 @@ export function ReleaseSearchModal({
               ) : (
                 <ReleaseResultsTable
                   releases={visibleReleases}
+                  sort={sort}
+                  onSortChange={setSort}
                   actions={{
                     isProcessing,
                     path4k,

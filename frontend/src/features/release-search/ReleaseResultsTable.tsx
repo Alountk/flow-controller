@@ -46,11 +46,18 @@ function sourceLabel(r: ReleaseRow): string {
 export function ReleaseResultsTable<T extends ReleaseRow>({
   releases,
   actions,
+  sort: controlled,
+  onSortChange,
 }: {
   releases: T[]
   actions: ReleaseTableActions<T>
+  /** Held by the parent when the table unmounts mid-flow (a grab leaves the results step). */
+  sort?: SortState
+  onSortChange?: (next: SortState) => void
 }) {
-  const [sort, setSort] = useState<SortState>({ key: null, dir: 'asc' })
+  const [own, setOwn] = useState<SortState>({ key: null, dir: 'asc' })
+  const sort = controlled ?? own
+  const setSort = onSortChange ?? setOwn
   const rows = sortReleases(releases, sort)
   const ariaSort = (key: SortKey | null) => {
     if (!key || sort.key !== key) return 'none' as const
@@ -73,7 +80,7 @@ export function ReleaseResultsTable<T extends ReleaseRow>({
                   <button
                     type="button"
                     className="release-sort"
-                    onClick={() => setSort((prev) => nextSort(prev, column.key as SortKey))}
+                    onClick={() => setSort(nextSort(sort, column.key as SortKey))}
                   >
                     {column.label}
                     {sort.key === column.key && (
