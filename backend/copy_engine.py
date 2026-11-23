@@ -574,7 +574,6 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
         })
 
     elif action == "copy_files":
-        log.info("action=copy_files source=%s ids=%s", source, ids)
         if not service:
             return {"ok": False, "steps": [{"target": "arr", "ok": False, "detail": "servicio desconocido"}]}
         output_path = payload.get("output_path") or await source_from_trace(payload)

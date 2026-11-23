@@ -456,6 +456,18 @@ class TestRunActionValidation:
             "into an AttributeError 500 instead of a classified failure"
         )
 
+    def test_the_chosen_destination_reaches_do_action(self):
+        """The model once dropped `dest_root`: accepting the suggested folder
+        resent the same copy to the same folder, and the warning came back."""
+        with patch("interfaces.http.routes.actions.do_action", new_callable=AsyncMock) as action:
+            action.return_value = {"ok": True, "steps": []}
+            client.post(
+                "/api/actions/copy_files",
+                json={"source": "radarr", "output_path": "/dl/x.mkv", "dest_root": "/mnt/storage/4k"},
+            )
+
+        assert action.await_args.args[2]["dest_root"] == "/mnt/storage/4k"
+
 
 class TestSpaFallback:
     def test_root_returns_index(self):
