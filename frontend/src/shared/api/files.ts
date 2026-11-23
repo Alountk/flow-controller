@@ -1,4 +1,4 @@
-import type { BrowseResponse, RetentionResponse, RootsResponse } from '../types.ts'
+import type { BrowseResponse, CopyMismatch, RetentionResponse, RootsResponse } from '../types.ts'
 import { apiFetch } from './auth.ts'
 
 async function handleResponse(res: Response): Promise<{ ok: boolean; detail: string }> {
@@ -194,6 +194,15 @@ export async function copyItem(src: string, dst: string): Promise<{ ok: boolean;
   return handleResponse(res)
 }
 
+/** `needs_confirmation` means nothing was queued: the file does not fit the folder. */
+export interface QueueAddResult {
+  ok: boolean
+  detail: string
+  op?: QueueOp
+  needs_confirmation?: boolean
+  mismatch?: CopyMismatch
+}
+
 export async function queueAdd(
   type: 'copy' | 'move',
   src: string,
@@ -201,7 +210,7 @@ export async function queueAdd(
   arrSource?: string,
   movieId?: number,
   seriesId?: number,
-): Promise<{ ok: boolean; detail: string; op?: QueueOp }> {
+): Promise<QueueAddResult> {
   const body: Record<string, unknown> = { source: type, remote_path: src, local_path: dst }
   if (arrSource) {
     body.host = arrSource
@@ -214,7 +223,7 @@ export async function queueAdd(
     method: 'POST',
     body: JSON.stringify(body),
   })
-  return handleResponse(res) as Promise<{ ok: boolean; detail: string; op?: QueueOp }>
+  return handleResponse(res) as Promise<QueueAddResult>
 }
 
 export async function queueStatus(): Promise<QueueStatusResponse> {

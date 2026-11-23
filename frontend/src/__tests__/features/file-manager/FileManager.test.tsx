@@ -46,7 +46,7 @@ interface MockOptions {
   /** Roots for /api/files/roots; defaults to the navigation mount alone. */
   roots?: RootsResponse['roots']
   /** Backend answer for one queue/add call, decided per file. */
-  onQueueAdd?: (body: Record<string, unknown>) => { ok: boolean; detail: string }
+  onQueueAdd?: (body: Record<string, unknown>) => { ok: boolean; detail: string; needs_confirmation?: boolean; mismatch?: Record<string, string> }
   /** Backend answer for one delete call, decided per path. */
   onDelete?: (path: string) => { ok: boolean; detail: string }
   /** Simulated per-delete latency, to expose non-sequential fan-out. */
@@ -357,4 +357,53 @@ describe('FileManager', () => {
     }
   })
 
+  it('offers the folder that fits when the file does not fit where it is going', async () => {
+    const queued: Record<string, unknown>[] = []
+    mockFetch({
+      listings: { '/mnt/storage': [file('A.mkv')] },
+      onQueueAdd: (body) => {
+        queued.push(body)
+        return queued.length === 1
+          ? {
+              ok: false,
+              detail: '',
+              needs_confirmation: true,
+              mismatch: { file: 'A.mkv', resolution: '2160', destination: '/mnt/storage/movies', suggested: '/mnt/storage/4k' },
+            }
+          : { ok: true, detail: 'Agregado a la cola' }
+      },
+    })
+    await openPane('A.mkv')
+
+    fireEvent.click(screen.getAllByTitle('Copiar al otro panel')[0])
+    const dialog = await screen.findByRole('dialog', { name: 'Carpeta destino' })
+    expect(dialog).toHaveTextContent('A.mkv mide 2160p')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copiar a la carpeta correcta' }))
+
+    await screen.findByText('Agregado a la cola')
+    expect(queued).toHaveLength(2)
+    expect(queued[1]).toMatchObject({ source: 'copy', local_path: '/mnt/storage/4k/A.mkv' })
+  })
+
+  it('cancelling the warning queues nothing', async () => {
+    const queued: unknown[] = []
+    mockFetch({
+      listings: { '/mnt/storage': [file('A.mkv')] },
+      onQueueAdd: (body) => {
+        queued.push(body)
+        return { ok: false, detail: '', needs_confirmation: true, mismatch: { file: 'A.mkv', resolution: '1080', destination: '/mnt/storage/4k', suggested: '' } }
+      },
+    })
+    await openPane('A.mkv')
+
+    fireEvent.click(screen.getAllByTitle('Mover al otro panel')[0])
+    const dialog = await screen.findByRole('dialog', { name: 'Carpeta destino' })
+    expect(within(dialog).queryByRole('button', { name: /a la carpeta correcta/ })).toBeNull()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(queued).toHaveLength(1)
+  })
 })
