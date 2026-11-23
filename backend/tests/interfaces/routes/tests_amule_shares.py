@@ -1,4 +1,4 @@
-"""Shared folders of aMule: read from aMule, written back, then reloaded.
+"""Shared folders of aMule: read from aMule and written back.
 
 The feature exists because the alternative — configuring aMule by hand — is
 the thing the maintainer asked to stop doing. What these tests pin down:
@@ -8,12 +8,9 @@ the thing the maintainer asked to stop doing. What these tests pin down:
 * a rejected path leaves **nothing** half-written;
 * a path outside `allowed_roots` is refused, because publishing a folder to
   the ED2K network cannot be undone from here;
-* a reload that fails is reported as *pending*, not as success — the files
-  are written, but aMule has not seen them yet.
 """
 
 import copy
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,12 +35,8 @@ def _amule_config(tmp_path):
     config.rebuild()
 
 
-def _put(payload: dict, reload_ok: bool = True):
-    with patch(
-        "interfaces.http.routes.amule_shares.amutorrent_reload_shared_dirs",
-        new=AsyncMock(return_value={"ok": reload_ok, "detail": "recarga pedida a aMule"}),
-    ) as reload:
-        return client.put("/api/amule/shared-dirs", json=payload), reload
+def _put(payload: dict):
+    return client.put("/api/amule/shared-dirs", json=payload)
 
 
 class TestItReadsWhatAMuleHas:
@@ -75,29 +68,28 @@ class TestItReadsWhatAMuleHas:
         )
 
 
-class TestItWritesAndAsksAMuleToReload:
-    def test_both_files_are_written_and_a_reload_is_requested(self, _amule_config):
-        resp, reload = _put({
+class TestItWrites:
+    def test_both_files_are_written(self, _amule_config):
+        resp = _put({
             "recursive": ["/mnt/storage/movies", "/mnt/storage-6tb/shared-media"],
             "explicit": [],
         })
 
         assert resp.status_code == 200
-        assert reload.await_count == 1, "writing without reloading leaves aMule unaware"
         recursive = (_amule_config / "shareddir-recursive.dat").read_text()
         explicit = (_amule_config / "shareddir-explicit.dat").read_text()
         assert recursive == "/mnt/storage/movies\n/mnt/storage-6tb/shared-media\n"
         assert explicit == ""
 
     def test_the_response_carries_what_is_now_configured(self, _amule_config):
-        resp, _ = _put({"recursive": ["/mnt/storage/movies"], "explicit": []})
+        resp = _put({"recursive": ["/mnt/storage/movies"], "explicit": []})
 
         body = resp.json()
         assert body["recursive"] == ["/mnt/storage/movies"]
         assert body["ok"] is True
 
     def test_a_path_is_kept_once_even_if_sent_twice(self, _amule_config):
-        resp, _ = _put({"recursive": ["/mnt/storage/movies", "/mnt/storage/movies/"], "explicit": []})
+        resp = _put({"recursive": ["/mnt/storage/movies", "/mnt/storage/movies/"], "explicit": []})
 
         assert resp.json()["recursive"] == ["/mnt/storage/movies"], (
             "aMule regenerates its union from these — duplicates would survive it"
@@ -106,13 +98,12 @@ class TestItWritesAndAsksAMuleToReload:
 
 class TestItRefusesBeforeItWrites:
     def test_a_relative_path_is_rejected(self, _amule_config):
-        resp, reload = _put({"recursive": ["etc/passwd"], "explicit": []})
+        resp = _put({"recursive": ["etc/passwd"], "explicit": []})
 
         assert resp.status_code == 422
-        assert reload.await_count == 0, "nothing may be written once a path is refused"
 
     def test_a_path_outside_allowed_roots_is_rejected(self, _amule_config):
-        resp, _ = _put({"recursive": ["/etc"], "explicit": []})
+        resp = _put({"recursive": ["/etc"], "explicit": []})
 
         assert resp.status_code == 403, resp.text
         assert not (_amule_config / "shareddir-recursive.dat").exists(), (
@@ -122,19 +113,6 @@ class TestItRefusesBeforeItWrites:
     def test_the_config_directory_that_does_not_exist_is_reported_not_guessed(self):
         settings_mod._settings.setdefault("paths", {})["amule_config"] = "/definitely/not/here"
 
-        resp, reload = _put({"recursive": ["/mnt/storage/movies"], "explicit": []})
+        resp = _put({"recursive": ["/mnt/storage/movies"], "explicit": []})
 
         assert resp.status_code == 503
-        assert reload.await_count == 0
-
-
-class TestReloadFailureIsNotSilent:
-    def test_written_but_not_reloaded_reads_as_pending(self, _amule_config):
-        resp, _ = _put({"recursive": ["/mnt/storage/movies"], "explicit": []}, reload_ok=False)
-
-        body = resp.json()
-        assert body["ok"] is False, "the files are written but aMule has not seen them"
-        assert body["reload"]["ok"] is False
-        assert (_amule_config / "shareddir-recursive.dat").read_text() == "/mnt/storage/movies\n", (
-            "the change is kept, not rolled back — it only needs a reload"
-        )

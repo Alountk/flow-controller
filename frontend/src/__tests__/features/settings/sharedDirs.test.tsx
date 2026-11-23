@@ -8,9 +8,7 @@ import { SharedDirsSection } from '../../../features/settings/SharedDirsSection.
  *
  * 1. a path outside `allowed_roots` never reaches the backend — publishing a
  *    folder to the ED2K network cannot be undone from here;
- * 2. a reload that failed is reported as *pending*, not as saved — the files
- *    are written but aMule has not seen them;
- * 3. save sends BOTH lists, because replacing one file and leaving the other
+ * 2. save sends BOTH lists, because replacing one file and leaving the other
  *    would leave aMule sharing something the user just removed.
  */
 
@@ -21,7 +19,7 @@ const sharedDirs = {
   allowed_roots: ['/mnt/storage', '/mnt/storage-6tb'],
 }
 
-function mockFetch(saveResult?: { ok: boolean; reload: { ok: boolean; detail: string } }) {
+function mockFetch(saveResult?: { ok: boolean }) {
   const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.includes('/api/amule/shared-dirs') && init?.method === 'PUT') {
@@ -30,7 +28,7 @@ function mockFetch(saveResult?: { ok: boolean; reload: { ok: boolean; detail: st
       }
       return Promise.resolve({
         ok: true,
-        json: async () => ({ ok: saveResult.ok, recursive: [], explicit: [], reload: saveResult.reload }),
+        json: async () => ({ ok: saveResult.ok, recursive: [], explicit: [] }),
       } as Response)
     }
     if (url.includes('/api/amule/shared-dirs')) {
@@ -79,7 +77,7 @@ describe('aMule shared folders panel', () => {
     expect(await screen.findByText(/Fuera de las raíces permitidas/)).toBeInTheDocument()
     expect(screen.queryByText('/etc')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Guardar y recargar aMule/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Guardar carpetas/ }))
     await waitFor(() => expect(fn.mock.calls.length).toBeGreaterThan(0))
 
     const put = fn.mock.calls.find(
@@ -108,7 +106,7 @@ describe('aMule shared folders panel', () => {
     fireEvent.click(removes[0])
     expect(screen.queryByText('/mnt/storage/movies')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Guardar y recargar aMule/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Guardar carpetas/ }))
 
     await waitFor(() => {
       const put = fn.mock.calls.find(
@@ -123,19 +121,6 @@ describe('aMule shared folders panel', () => {
       expect(body.recursive).toEqual(['/mnt/storage-6tb/shared-media'])
       expect(body.explicit).toEqual([])
     })
-  })
-
-  it('reports a failed reload as pending, never as saved', async () => {
-    mockFetch({
-      ok: false,
-      reload: { ok: false, detail: 'HTTP 500: boom' },
-    })
-    renderSection()
-
-    fireEvent.click(await screen.findByRole('button', { name: /Guardar y recargar aMule/ }))
-
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/recarga falló/))
-    expect(screen.getByRole('status')).toHaveTextContent('boom')
   })
 
   it('adds a path under both roots when it is inside one of them', async () => {

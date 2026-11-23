@@ -33,10 +33,9 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from application.gateways import amutorrent_reload_shared_dirs, get_setting
+from application.gateways import get_setting
 from config import ALLOWED_ROOTS
 from interfaces.http.deps import verify_api_key
-from state import http_session
 
 router = APIRouter()
 log = logging.getLogger("flow-controller")
@@ -130,16 +129,5 @@ async def put_shared_dirs(body: dict, _key: str = Depends(verify_api_key)):
     except OSError as exc:
         raise HTTPException(500, f"no se pudo escribir en {base}: {exc}") from exc
 
-    async with http_session() as session:
-        reload_result = await amutorrent_reload_shared_dirs(session)
-
-    log.info(
-        "shared-dirs guardadas: %d recursivas, %d explícitas (recarga: %s)",
-        len(recursive), len(explicit), reload_result.get("ok"),
-    )
-    return {
-        "ok": bool(reload_result.get("ok")),
-        "recursive": recursive,
-        "explicit": explicit,
-        "reload": reload_result,
-    }
+    log.info("shared-dirs guardadas: %d recursivas, %d explícitas", len(recursive), len(explicit))
+    return {"ok": True, "recursive": recursive, "explicit": explicit}
