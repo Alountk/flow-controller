@@ -193,7 +193,7 @@ describe('DashboardCards (diseño Stitch 01)', () => {
         traces={[]}
         services={[
           { key: 'radarr', label: 'Radarr', state: 'online', reason: '' },
-          { key: 'amutorrent', label: 'AmuTorrent', state: 'offline', reason: 'timeout tras 5s' },
+          { key: 'sonarr', label: 'Sonarr', state: 'offline', reason: 'timeout tras 5s' },
         ]}
         onOpenSeguimiento={() => {}}
       />,
@@ -201,7 +201,7 @@ describe('DashboardCards (diseño Stitch 01)', () => {
 
     expect(screen.getByText('1 de 2 activos')).toBeInTheDocument()
     expect(screen.getByText('Radarr operativos')).toBeInTheDocument()
-    expect(screen.getByText('AmuTorrent: timeout tras 5s')).toBeInTheDocument()
+    expect(screen.getByText('Sonarr: timeout tras 5s')).toBeInTheDocument()
   })
 
   it('hides the services card when nothing is configured', () => {
