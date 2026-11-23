@@ -49,6 +49,8 @@ interface MockOptions {
   onQueueAdd?: (body: Record<string, unknown>) => { ok: boolean; detail: string; needs_confirmation?: boolean; mismatch?: Record<string, string> }
   /** Backend answer for one delete call, decided per path. */
   onDelete?: (path: string) => { ok: boolean; detail: string }
+  /** Answers any other URL first; return undefined to fall through. */
+  extra?: (url: string) => unknown
   /** Simulated per-delete latency, to expose non-sequential fan-out. */
   deleteDelayMs?: number
 }
@@ -72,6 +74,9 @@ function mockFetch(options: MockOptions = {}): MockedFetch {
 
   const fn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
+
+    const extra = options.extra?.(url)
+    if (extra !== undefined) return ok(extra)
 
     if (url.includes('/api/files/roots')) {
       return ok({
@@ -405,5 +410,41 @@ describe('FileManager', () => {
 
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(queued).toHaveLength(1)
+  })
+
+  it('offers the rename dialog once a file sent to the right folder has landed', async () => {
+    let first = true
+    mockFetch({
+      listings: { '/mnt/storage': [file('A.mkv')] },
+      onQueueAdd: () => {
+        if (first) {
+          first = false
+          return {
+            ok: false,
+            detail: '',
+            needs_confirmation: true,
+            mismatch: { file: 'A.mkv', resolution: '2160', destination: '/mnt/storage/movies', suggested: '/mnt/storage/4k' },
+          }
+        }
+        return { ok: true, detail: 'Agregado a la cola', op: { id: 'op1' } } as never
+      },
+      extra: (url) => {
+        if (url.includes('/api/files/queue/status')) {
+          return { queue: [], completed: [{ id: 'op1', status: 'done' }], running: false }
+        }
+        if (url.includes('/api/files/main-video')) return { ok: true, path: '/mnt/storage/4k/A.mkv' }
+        if (url.includes('/api/files/rename-preview')) {
+          return { ok: true, folder: 'Peli (2020)', name: 'Peli (2020) [Bluray-2160p]', warnings: [], movie: { id: 1, title: 'Peli', year: 2020 } }
+        }
+        return undefined
+      },
+    })
+    await openPane('A.mkv')
+
+    fireEvent.click(screen.getAllByTitle('Copiar al otro panel')[0])
+    fireEvent.click(await screen.findByRole('button', { name: 'Copiar a la carpeta correcta' }))
+
+    expect(await screen.findByRole('dialog', {}, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('Peli (2020) [Bluray-2160p]')).toBeInTheDocument()
   })
 })
