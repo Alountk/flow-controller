@@ -14,6 +14,7 @@ class ActionRequest(BaseModel):
     host: str = ""
     remote_path: str = ""
     local_path: str = ""
+    dest_root: str = ""
 
 
 class CalendarSearchRequest(BaseModel):
