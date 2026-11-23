@@ -101,7 +101,7 @@ describe('the app reflects what is configured', () => {
   })
 
   it('hides the arr-dependent pages when no arr is configured', async () => {
-    mockFetch(['amutorrent'])
+    mockFetch(['qbit'])
     renderApp()
 
     // Wait for PRESENCE first: asserting absence passes while the app is still

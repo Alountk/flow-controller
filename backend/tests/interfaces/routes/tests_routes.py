@@ -2786,7 +2786,7 @@ class TestServiceConnectionTester:
 
         body = resp.json()
         assert {r["key"] for r in body["results"]} == ARR_KEYS | {
-            "amutorrent", "prowlarr", "qbit", "amuleapi"
+            "prowlarr", "qbit", "amuleapi"
         }
         assert body["ok"] is True
 
@@ -2897,19 +2897,6 @@ class TestHealthCheckHonesty:
         assert state == "offline"
         assert "ClientError" in reason
 
-    def test_the_download_client_reports_a_rejected_key_too(self):
-        from infrastructure.arr_client import check_qbit
-
-        async def _run():
-            session = _StubSession({"/api/v2/app/version": (403, {})})
-            return await check_qbit(session, ARR_BY_KEY["radarr"] | {"kind": "qbit"})
-
-        with patch("asyncio.sleep"):
-            state, reason, _ = asyncio.run(_run())
-
-        assert state == "misconfigured"
-        assert "403" in reason
-
 
 # ── Configured services ──────────────────────────────────────────────────────
 
@@ -2967,7 +2954,7 @@ class TestConfiguredServices:
         mixed = [
             {"key": "radarr", "kind": "arr", "url": "http://r:1", "api_key": "k", "configured": True},
             {"key": "sonarr", "kind": "arr", "url": "", "api_key": "", "configured": False},
-            {"key": "amutorrent", "kind": "qbit", "url": "http://a:1", "api_key": "k", "configured": True},
+            {"key": "prowlarr", "kind": "prowlarr", "url": "http://a:1", "api_key": "k", "configured": True},
         ]
         with patch.object(config, "SERVICES", mixed), patch(
             "interfaces.http.routes.settings.SERVICES", mixed
@@ -2976,9 +2963,9 @@ class TestConfiguredServices:
                 body = client.get("/api/services").json()
 
         session.assert_not_called()
-        assert body["configured"] == ["radarr", "amutorrent"]
+        assert body["configured"] == ["radarr", "prowlarr"]
         assert {s["key"]: s["configured"] for s in body["services"]} == {
-            "radarr": True, "sonarr": False, "amutorrent": True,
+            "radarr": True, "sonarr": False, "prowlarr": True,
         }
 
     def test_the_endpoint_requires_auth(self):  # noqa
@@ -3195,8 +3182,7 @@ class TestMaskedSecretsRoundTrip:
     """The UI receives secrets masked and posts the form back unchanged.
 
     Saving that verbatim replaced every real credential with its mask —
-    "****ABCD" — destroying the Radarr, Sonarr and aMuTorrent keys and the
-    aMuTorrent password, and locking the user out: the app's own API key became
+    "****ABCD" — destroying the Radarr and Sonarr keys, and locking the user out: the app's own API key became
     "****ABCD", so no real key could ever match again.
     """
 
@@ -3204,12 +3190,6 @@ class TestMaskedSecretsRoundTrip:
         "services": {
             "radarr": {"url": "http://r:7878", "api_key": "REAL-RADARR-1234"},
             "sonarr": {"url": "http://s:8989", "api_key": "REAL-SONARR-5678"},
-            "amutorrent": {
-                "url": "http://a:4000",
-                "api_key": "REAL-AMU-9012",
-                "user": "admin",
-                "password": "REAL-PASSWORD-SECRETO",
-            },
             "qbit": {
                 "url": "http://q:8080",
                 "user": "chan",
@@ -3253,8 +3233,6 @@ class TestMaskedSecretsRoundTrip:
 
         assert saved["services"]["radarr"]["api_key"] == "REAL-RADARR-1234"
         assert saved["services"]["sonarr"]["api_key"] == "REAL-SONARR-5678"
-        assert saved["services"]["amutorrent"]["api_key"] == "REAL-AMU-9012"
-        assert saved["services"]["amutorrent"]["password"] == "REAL-PASSWORD-SECRETO"
         assert saved["services"]["qbit"]["password"] == "REAL-QBIT-PASSWORD"
 
     def test_the_qbit_password_is_masked_and_the_mask_round_trips(self, stored):
@@ -3333,7 +3311,6 @@ class TestFirstRunSetup:
                 "services": {
                     "radarr": {"url": "", "api_key": ""},
                     "sonarr": {"url": "", "api_key": ""},
-                    "amutorrent": {"url": "", "api_key": "", "user": "", "password": ""},
                 },
                 "security": {},
             },

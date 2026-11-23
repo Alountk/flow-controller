@@ -17,7 +17,6 @@ const settings = {
   services: {
     radarr: { url: 'http://localhost:7878', api_key: 'radarr-key' },
     sonarr: { url: 'http://localhost:8989', api_key: 'sonarr-key' },
-    amutorrent: { url: 'http://localhost:4000', api_key: 'amule-key', user: 'admin', password: 'p' },
     qbit: { url: 'http://localhost:8080', user: 'admin', password: 'p' },
     opensubtitles: { api_key: 'os-key' },
   },
@@ -83,7 +82,7 @@ describe('settings API key masking', () => {
     // conteo (4), misma aserción por campo.
     const general = await screen.findByRole('tabpanel', { name: 'General' })
     const serviceKeys = await within(general).findAllByLabelText('API Key')
-    expect(serviceKeys).toHaveLength(4)
+    expect(serviceKeys).toHaveLength(3)
     for (const key of serviceKeys) {
       expect(key).toHaveAttribute('type', 'password')
     }
@@ -103,14 +102,14 @@ describe('settings API key masking', () => {
     const urls = await within(general).findAllByLabelText('URL')
     // amule-32 T2 added the aMule API card (4 → 5); the move to the aMule
     // tab takes its URL back out of this panel (5 → 4).
-    expect(urls).toHaveLength(4)
+    expect(urls).toHaveLength(3)
     for (const url of urls) {
       expect(url).toHaveAttribute('type', 'text')
     }
     // ADAPTADO (qbit-nativo T3/S3, sin aflojar): qBittorrent también usa
     // «Usuario» (1 → 2); misma aserción por campo, conteo actualizado.
     const users = screen.getAllByLabelText('Usuario')
-    expect(users).toHaveLength(2)
+    expect(users).toHaveLength(1)
     for (const user of users) {
       expect(user).toHaveAttribute('type', 'text')
     }

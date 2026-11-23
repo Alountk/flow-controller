@@ -15,7 +15,7 @@ from application.use_cases import downloads_cache
 #: `arr_source` is only a service when it names one of ours — anything else
 #: (a host, a typo) is not a label the UI can stand behind, and the item
 #: reports no service rather than a foreign string.
-_SERVICES = {"radarr", "sonarr", "amutorrent"}
+_SERVICES = {"radarr", "sonarr", "amule"}
 
 
 def _operation_item(op: dict) -> dict:

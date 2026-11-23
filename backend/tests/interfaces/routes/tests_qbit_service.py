@@ -87,16 +87,11 @@ class TestQbitServiceEntry:
         entry = next(s for s in config.SERVICES if s["key"] == "qbit")
 
         assert entry["kind"] == "qbittorrent", (
-            "nuevo kind: no confundir con el 'qbit' de la fachada aMuTorrent"
+            "nuevo kind: no confundir con el kind 'qbit' retirado"
         )
         assert entry["api_key"] == "", "este servicio se autentica por login, no por api key"
         for field in ("url", "user", "password"):
             assert field in entry, f"la sonda necesita {field} para el login"
-
-    def test_the_amutorrent_entry_keeps_its_own_kind(self):
-        amu = next(s for s in config.SERVICES if s["key"] == "amutorrent")
-
-        assert amu["kind"] == "qbit", "el kind antiguo no cambia (S7: amutorrent sigue vivo)"
 
     def test_configured_needs_url_user_and_password(self):
         entry = next(s for s in config.SERVICES if s["key"] == "qbit")

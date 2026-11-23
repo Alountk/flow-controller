@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import time
 import uuid
 from pathlib import Path
@@ -263,26 +262,13 @@ async def verify_import(task_id: str, service: dict, source: str, ids: dict):
     copy_tasks.update(task_id, status="import_timeout", detail=f"timeout después de {config.IMPORT_POLL_TIMEOUT}s — verifica manualmente")
 
 
-def _ec_direct() -> bool:
-    """Whether the queue operations go through the direct EC seam.
-
-    `AMULE_EC_DIRECT` is read from the environment on EVERY call, never
-    cached: the mandated rollback must take effect on the next action without
-    a restart. Unset or anything except `"0"` is the EC default (S4); `"0"`
-    is the exact aMuTorrent path this module has always run.
-    """
-    return os.environ.get("AMULE_EC_DIRECT") != "0"
-
-
 def _ec_md4(matched_hash: str) -> str | None:
     """The EC-addressable MD4 form of a matched hash, or None.
 
     EC addresses aMule downloads by their raw 16-byte ED2K hash; the client
-    helpers take the 32-char hex, and aMuTorrent's joins pad that same hash
-    to 40 chars with trailing zeros (`amu_ws_items` truncates the padding
-    back). Any other shape — a qBittorrent SHA1 — has no EC address at all:
-    those items keep the exact aMuTorrent path they run on today (S5: never
-    invent an address the protocol does not have).
+    helpers take the 32-char hex; older rows padded it to 40 chars with
+    trailing zeros. Any other shape (a SHA1) has no EC address: never invent
+    one the protocol does not have.
     """
     h = (matched_hash or "").strip().lower()
     if len(h) == 40 and h.endswith("00000000"):
@@ -343,35 +329,23 @@ async def _ec_fix_category(file_hash: str, category: str) -> dict:
     return await _ec_step(amule_set_category, file_hash, index)
 
 
+async def _ec_on_hash(matched_hash: str, call, *args) -> dict:
+    """Run one EC operation on a download, or refuse a hash EC cannot address."""
+    ec_hash = _ec_md4(matched_hash)
+    if not ec_hash:
+        return {"target": "amule", "ok": False, "detail": "hash no direccionable en aMule"}
+    return await _ec_step(call, ec_hash, *args)
+
+
 async def _client_delete(matched_hash: str, delete_files: bool) -> dict:
-    """Remove a download from the client — EC by default, WS as rollback.
+    """Remove a download from aMule over EC.
 
-    Shared by `delete_torrent` and `cancel_download`: both end with "the
-    client no longer holds this download" and differ only on the files.
-
-    The EC path maps the files question the way L7 decided: with
-    `delete_files`, a COMPLETE file (one the server lists among its shared
-    files) leaves the disk via `KNOWNFILE_DELETE` and everything else is
-    discarded via `PARTFILE_DELETE` — which is what today's cancel means by
-    "sus ficheros parciales". Without `delete_files` it is always
-    `PARTFILE_DELETE`: EC has no "keep the partials" parameter to express
-    today's `deleteFiles: False` (documented delta). A hash EC cannot address
-    (a qBittorrent SHA1) and the `AMULE_EC_DIRECT=0` rollback keep the exact
-    aMuTorrent path.
+    With `delete_files`, a COMPLETE file (one the server lists among its
+    shared files) leaves the disk via `KNOWNFILE_DELETE` and everything else
+    is discarded via `PARTFILE_DELETE`. Without it EC has no "keep the
+    partials" parameter, so it is always `PARTFILE_DELETE`.
     """
-    ec_hash = _ec_md4(matched_hash) if _ec_direct() else None
-    if ec_hash:
-        return await _ec_step(amule_delete, ec_hash, delete_files)
-    from infrastructure.arr_client import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
-    client, inst = await amu_ws_find_instance(matched_hash)
-    return await amu_ws(
-        "batchDelete",
-        {
-            "items": _amu_ws_items_fn(matched_hash, client=client or "amule", instance_id=inst),
-            "deleteFiles": delete_files,
-            "source": "downloads",
-        },
-    )
+    return await _ec_on_hash(matched_hash, amule_delete, delete_files)
 
 
 async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) -> dict:
@@ -408,27 +382,15 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
 
     elif action == "fix_category":
         if not matched_hash:
-            return {"ok": False, "steps": [{"target": "amutorrent", "ok": False, "detail": "sin hash correlacionado"}]}
+            return {"ok": False, "steps": [{"target": "amule", "ok": False, "detail": "sin hash correlacionado"}]}
         category = EXPECTED_CATEGORY.get(source)
         if not category:
-            return {"ok": False, "steps": [{"target": "amutorrent", "ok": False, "detail": "categoría esperada desconocida"}]}
-        ec_hash = _ec_md4(matched_hash) if _ec_direct() else None
-        if ec_hash:
-            steps.append(await _ec_fix_category(ec_hash, category))
-        else:
-            from infrastructure.arr_client import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
-            client, inst = await amu_ws_find_instance(matched_hash)
-            steps.append({
-                "target": "amutorrent",
-                **await amu_ws(
-                    "batchSetFileCategory",
-                    {
-                        "items": _amu_ws_items_fn(matched_hash, client=client or "qbittorrent", instance_id=inst),
-                        "categoryName": category,
-                        "moveFiles": False,
-                    },
-                ),
-            })
+            return {"ok": False, "steps": [{"target": "amule", "ok": False, "detail": "categoría esperada desconocida"}]}
+        ec_hash = _ec_md4(matched_hash)
+        steps.append(
+            await _ec_fix_category(ec_hash, category) if ec_hash
+            else {"target": "amule", "ok": False, "detail": "hash no direccionable en aMule"}
+        )
         if service:
             steps.append({
                 "target": source,
@@ -437,25 +399,8 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
 
     elif action in ("pause", "resume"):
         if not matched_hash:
-            return {"ok": False, "steps": [{"target": "amutorrent", "ok": False, "detail": "sin hash correlacionado"}]}
-        ec_hash = _ec_md4(matched_hash) if _ec_direct() else None
-        if ec_hash:
-            # The EC path (default): the seam addresses aMule by MD4, which
-            # is the same operation aMuTorrent's batch reaches in the end.
-            steps.append(await _ec_step(
-                amule_pause if action == "pause" else amule_resume, ec_hash,
-            ))
-        else:
-            # The exact aMuTorrent path: the `AMULE_EC_DIRECT=0` rollback,
-            # and the permanent home of the items EC cannot address (a
-            # qBittorrent SHA1 has no EC address at all).
-            from infrastructure.arr_client import amu_ws_find_instance, amu_ws, amu_ws_items as _amu_ws_items_fn
-            ws_action = "batchPause" if action == "pause" else "batchResume"
-            client, inst = await amu_ws_find_instance(matched_hash)
-            steps.append({
-                "target": "amutorrent",
-                **await amu_ws(ws_action, {"items": _amu_ws_items_fn(matched_hash, client=client or "amule", instance_id=inst)}),
-            })
+            return {"ok": False, "steps": [{"target": "amule", "ok": False, "detail": "sin hash correlacionado"}]}
+        steps.append(await _ec_on_hash(matched_hash, amule_pause if action == "pause" else amule_resume))
 
     elif action == "remove_queue":
         if not service or not queue_id:
@@ -469,11 +414,8 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
 
     elif action == "delete_torrent":
         if not matched_hash:
-            return {"ok": False, "steps": [{"target": "amutorrent", "ok": False, "detail": "sin hash correlacionado"}]}
-        steps.append({
-            "target": "amutorrent",
-            **await _client_delete(matched_hash, bool(payload.get("delete_files"))),
-        })
+            return {"ok": False, "steps": [{"target": "amule", "ok": False, "detail": "sin hash correlacionado"}]}
+        steps.append(await _client_delete(matched_hash, bool(payload.get("delete_files"))))
 
     elif action == "cancel_download":
         # Cancel an in-flight download: BOTH halves, or the lie shows up
@@ -503,10 +445,7 @@ async def do_action(session: aiohttp.ClientSession, action: str, payload: dict) 
                     ),
                 })
         if matched_hash:
-            steps.append({
-                "target": "amutorrent",
-                **await _client_delete(matched_hash, True),
-            })
+            steps.append(await _client_delete(matched_hash, True))
 
     elif action == "fix_path_mapping":
         if not service:

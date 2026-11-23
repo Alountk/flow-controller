@@ -1,8 +1,7 @@
 """Tests for the joined downloads view.
 
-Radarr knows the import state; aMuTorrent knows speed, ETA and seeds. Neither
-alone answers "where is this download", so they are joined by
-``downloadId`` <-> ``hash``. These tests use the real join logic against a
+Radarr knows the import state. The arr queue rows are joined with the
+client's by ``downloadId`` <-> ``hash``. These tests use the real join logic against a
 stubbed HTTP transport, since the bugs worth catching live in that logic.
 """
 
@@ -14,7 +13,6 @@ from tests._stubs import _StubSession
 
 RADARR_URL = "http://radarr.test:7878"
 SONARR_URL = "http://sonarr.test:8989"
-AMU_URL = "http://amu.test:4000"
 
 HASH_UPPER = "35B9CD21161D24D8E5A958094375098700000000"
 
@@ -29,7 +27,7 @@ def _queue_item(**overrides) -> dict:
         "size": 200,
         "sizeleft": 120,
         "timeleft": "00:45:19",
-        "downloadClient": "aMuTorrent",
+        "downloadClient": "aMule",
         "indexer": "Knaben",
         "downloadId": HASH_UPPER,
         "statusMessages": [{"messages": ["algo"]}],
@@ -40,7 +38,7 @@ def _queue_item(**overrides) -> dict:
 
 def _torrent(**overrides) -> dict:
     torrent = {
-        "hash": HASH_UPPER.lower(),  # aMuTorrent lowercases: the join must ignore case
+        "hash": HASH_UPPER.lower(),  # the client lowercases: the join must ignore case
         "name": "Transformers",
         "state": "downloading",
         "progress": 0.3098,
@@ -58,10 +56,6 @@ def _routes(*, radarr_queue=None, sonarr_queue=None, categories=None, torrents=N
     routes = {
         f"{RADARR_URL}/api/v3/queue": (200, {"records": radarr_queue or []}),
         f"{SONARR_URL}/api/v3/queue": (200, {"records": sonarr_queue or []}),
-        f"{AMU_URL}/api/v2/torrents/categories": (
-            200,
-            {c: {} for c in (categories or ["radarr", "radarr-ru", "tv-sonarr", "tv-sonarr-ru"])},
-        ),
     }
     for category, items in (torrents or {}).items():
         routes[f"category={category}"] = (200, items)
@@ -77,14 +71,12 @@ def _collect(routes):
     services = [
         {"key": "radarr", "kind": "arr", "url": RADARR_URL, "api_key": "k"},
         {"key": "sonarr", "kind": "arr", "url": SONARR_URL, "api_key": "k"},
-        {"key": "amutorrent", "kind": "qbit", "url": AMU_URL, "api_key": "k"},
     ]
     # The collector opens its own session, so the patch must be a factory bound
     # to these routes — `_StubSession` bare would answer every call with 503.
     arr = [s for s in services if s["kind"] == "arr"]
     with patch("application.use_cases.downloads_cache.configured_services", return_value=arr), patch(
-        "infrastructure.arr_client.AMUTORRENT_URL", AMU_URL
-    ), patch("aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
+        "aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)):
         return asyncio.run(_run())
 
 
@@ -153,18 +145,6 @@ def test_problems_sort_first():
 
 
 # ── Failures are reported, not disguised ─────────────────────────────────────
-
-
-def test_a_failing_download_client_is_reported():
-    routes = _routes(radarr_queue=[_queue_item()], torrents={})
-    routes[f"{AMU_URL}/api/v2/torrents/categories"] = (500, {})
-
-    result = _collect(routes)
-
-    # Categories could not be listed, so no torrent call happens; the caller
-    # still gets the arr's view rather than an empty screen.
-    assert len(result["downloads"]) == 1
-    assert result["downloads"][0]["matched"] is False
 
 
 def test_an_arr_queue_failure_is_reported():

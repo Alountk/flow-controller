@@ -1,6 +1,6 @@
 """Service credentials are encrypted at rest.
 
-The Radarr/Sonarr/aMuTorrent keys and the aMuTorrent password must be SENT to
+The Radarr/Sonarr/OpenSubtitles keys must be SENT to
 those services, so unlike the app's own key they cannot be hashed. They are
 encrypted instead, with a key derived from the deployment secret.
 
@@ -46,12 +46,7 @@ def _with_secrets() -> dict:
         "services": {
             "radarr": {"url": "http://r:7878", "api_key": "CLAVE-RADARR-1234"},
             "sonarr": {"url": "http://s:8989", "api_key": "CLAVE-SONARR-5678"},
-            "amutorrent": {
-                "url": "http://a:4000",
-                "api_key": "CLAVE-AMU-9012",
-                "user": "admin",
-                "password": "PASSWORD-SECRETO",
-            },
+            "opensubtitles": {"api_key": "CLAVE-OPEN-9012"},
         },
         "security": {"api_key_hash": "h", "api_key_salt": "s", "safe_mode": True},
     }
@@ -63,7 +58,7 @@ class TestSecretsAreEncryptedOnDisk:
 
         raw = _raw(cfg)
 
-        for secret in ("CLAVE-RADARR-1234", "CLAVE-SONARR-5678", "CLAVE-AMU-9012", "PASSWORD-SECRETO"):
+        for secret in ("CLAVE-RADARR-1234", "CLAVE-SONARR-5678", "CLAVE-OPEN-9012"):
             assert secret not in raw, f"{secret} was written in the clear"
 
     def test_the_values_are_ciphertext(self, cfg):
@@ -72,7 +67,7 @@ class TestSecretsAreEncryptedOnDisk:
         stored = json.loads(_raw(cfg))
 
         assert credentials.is_encrypted(stored["services"]["radarr"]["api_key"])
-        assert credentials.is_encrypted(stored["services"]["amutorrent"]["password"])
+        assert credentials.is_encrypted(stored["services"]["opensubtitles"]["api_key"])
 
     def test_the_secret_itself_is_never_written(self, cfg):
         _save(_with_secrets())
@@ -95,7 +90,7 @@ class TestRoundTrip:
         settings.load_settings()
 
         assert settings.get_setting("services", "radarr", "api_key") == "CLAVE-RADARR-1234"
-        assert settings.get_setting("services", "amutorrent", "password") == "PASSWORD-SECRETO"
+        assert settings.get_setting("services", "opensubtitles", "api_key") == "CLAVE-OPEN-9012"
 
     def test_an_existing_plaintext_file_is_migrated(self, cfg):
         (cfg / "settings.json").write_text(json.dumps(_with_secrets()))
@@ -105,6 +100,18 @@ class TestRoundTrip:
         raw = _raw(cfg)
         assert "CLAVE-RADARR-1234" not in raw, "a legacy plaintext key was left in the file"
         assert settings.get_setting("services", "radarr", "api_key") == "CLAVE-RADARR-1234"
+
+
+class TestRetiredServiceGroup:
+    def test_a_legacy_amutorrent_group_is_dropped_on_load(self, cfg):
+        data = _with_secrets()
+        data["services"]["amutorrent"] = {"url": "http://a:4000", "api_key": "VIEJA", "password": "VIEJA"}
+        (cfg / "settings.json").write_text(json.dumps(data))
+
+        settings.load_settings()
+
+        assert "amutorrent" not in settings.get_settings()["services"]
+        assert "VIEJA" not in _raw(cfg), "the retired group is gone from the file after the re-save"
 
 
 class TestWrongSecretFailsLoudly:

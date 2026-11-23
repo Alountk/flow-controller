@@ -21,7 +21,6 @@ const settings = {
     // api_key arrives MASKED from GET — the card must never probe with it.
     radarr: { url: 'http://localhost:7878', api_key: '****7890' },
     sonarr: { url: 'http://localhost:8989', api_key: 'k' },
-    amutorrent: { url: 'http://localhost:4000', api_key: 'k', user: 'admin', password: 'p' },
     qbit: { url: 'http://111.111.111.111:8080', user: 'chan', password: '****wxyz' },
     opensubtitles: { api_key: '' },
   },
@@ -122,7 +121,7 @@ describe('«Probar conexión» on every Servicios card', () => {
     const buttons = within(section).getAllByRole('button', { name: 'Probar conexión' })
     // amule-32 T2 added the aMule API card (5 → 6); T10 moved that card to
     // the aMule tab — its probe lives there (serviceConnections), so 5 here.
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(4)
   })
 
   it('probes the current form values and never sends the masked password', async () => {

@@ -19,7 +19,7 @@ interface DashboardCardsProps {
 const SOURCE_LABELS: Record<string, string> = {
   radarr: 'Radarr',
   sonarr: 'Sonarr',
-  amutorrent: 'AmuTorrent',
+  amule: 'aMule',
 }
 
 /**

@@ -88,20 +88,19 @@ def _restore_masked_secrets(incoming: dict, current: dict) -> dict:
 
     Secrets are sent to the UI masked, and the form posts them back unchanged.
     Saving that verbatim replaced every real credential with its mask —
-    "****ABCD" — destroying the Radarr, Sonarr and aMuTorrent keys and the
-    aMuTorrent password, and locking the user out of the app entirely.
+    "****ABCD" — destroying the Radarr and Sonarr keys, and locking the user out of the app entirely.
 
     An empty value is NOT a mask: clearing a field still clears it.
     """
     merged = copy.deepcopy(incoming)
 
-    for svc in ("radarr", "sonarr", "amutorrent", "qbit"):
+    for svc in ("radarr", "sonarr", "qbit"):
         incoming_key = merged.get("services", {}).get(svc, {}).get("api_key")
         if _is_mask(incoming_key):
             stored = current.get("services", {}).get(svc, {}).get("api_key", "")
             merged.setdefault("services", {}).setdefault(svc, {})["api_key"] = stored
 
-    for svc in ("amutorrent", "qbit"):
+    for svc in ("qbit",):
         incoming_pw = merged.get("services", {}).get(svc, {}).get("password")
         if _is_mask(incoming_pw):
             stored_pw = current.get("services", {}).get(svc, {}).get("password", "")
@@ -153,7 +152,7 @@ def _apply_app_key_change(body: dict, data: dict) -> dict:
 
 def _mask_secrets(data: dict) -> dict:
     masked = copy.deepcopy(data)
-    for svc in ("radarr", "sonarr", "amutorrent", "qbit"):
+    for svc in ("radarr", "sonarr", "qbit"):
         key = masked.get("services", {}).get(svc, {}).get("api_key", "")
         if key:
             masked["services"][svc]["api_key"] = "****" + key[-4:] if len(key) > 4 else "****"
@@ -161,7 +160,7 @@ def _mask_secrets(data: dict) -> dict:
     # needs to know whether one is set, so an untouched field stays masked.
     if credentials.app_key_is_set(masked):
         masked["security"]["api_key"] = credentials.MASK_PREFIX
-    for svc in ("amutorrent", "qbit"):
+    for svc in ("qbit",):
         pw = masked.get("services", {}).get(svc, {}).get("password", "")
         if pw:
             masked["services"][svc]["password"] = "****"
@@ -513,7 +512,7 @@ async def run_setup(
     current = get_settings()
     merged = copy.deepcopy(current)
 
-    for key in ("radarr", "sonarr", "amutorrent"):
+    for key in ("radarr", "sonarr"):
         service = incoming.get(key)
         if not isinstance(service, dict):
             continue

@@ -28,19 +28,17 @@ import './SetupPage.css'
  *    `POST /api/setup` answers 403. The key is remembered the moment step 7
  *    saves, and step 8 sends nothing.
  *
- * Product rule: Radarr and Sonarr are required — at least one of them — while
- * aMuTorrent is optional. Steps 2-4 are all skippable while walking through;
+ * Product rule: Radarr and Sonarr are required — at least one of them. Steps 2-3 are skippable while walking through;
  * the requirement is enforced once, on step 8.
  */
 
-type ServiceKey = 'radarr' | 'sonarr' | 'amutorrent'
+type ServiceKey = 'radarr' | 'sonarr'
 type Tone = 'ok' | 'fail' | 'warn'
 
 type StepId =
   | 'welcome'
   | 'radarr'
   | 'sonarr'
-  | 'amutorrent'
   | 'paths'
   | 'advanced'
   | 'review'
@@ -49,7 +47,6 @@ const STEPS: StepId[] = [
   'welcome',
   'radarr',
   'sonarr',
-  'amutorrent',
   'paths',
   'advanced',
   'review',
@@ -58,20 +55,11 @@ const STEPS: StepId[] = [
 const SERVICE_LABEL: Record<ServiceKey, string> = {
   radarr: 'Radarr',
   sonarr: 'Sonarr',
-  amutorrent: 'aMuTorrent',
-}
-
-/** The step heading — only aMuTorrent differs from its service label. */
-const STEP_HEADING: Record<ServiceKey, string> = {
-  radarr: 'Radarr',
-  sonarr: 'Sonarr',
-  amutorrent: 'aMuTorrent (opcional)',
 }
 
 const SERVICE_PLACEHOLDER: Record<ServiceKey, string> = {
   radarr: 'http://localhost:7878',
   sonarr: 'http://localhost:8989',
-  amutorrent: 'http://localhost:4000',
 }
 
 /**
@@ -85,10 +73,6 @@ const DEFAULT_FORM: Record<string, string> = {
   'services.radarr.api_key': '',
   'services.sonarr.url': '',
   'services.sonarr.api_key': '',
-  'services.amutorrent.url': '',
-  'services.amutorrent.api_key': '',
-  'services.amutorrent.user': '',
-  'services.amutorrent.password': '',
   'paths.download_amule': '/mnt/storage-6tb/shared-downloads/amule',
   'paths.download_torrent': '/mnt/storage/downloads/qbittorrent/completed',
   'paths.allowed_roots': '/mnt/storage, /mnt/storage-6tb',
@@ -187,7 +171,7 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
   }
 
   // Step 8 gate: at least one of Radarr/Sonarr must have url+API key.
-  // aMuTorrent contributes nothing. This set is a strict subset of the old
+  // This set is a strict subset of the old
   // "some service configured or an app key exists" floor, so whenever Entrar
   // is enabled `needs_setup` has already flipped — `onDone` invalidating the
   // ['setup'] query can never bounce straight back into the wizard.
@@ -208,17 +192,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
       case 'sonarr':
         return {
           services: { [id]: { url: f[`services.${id}.url`], api_key: f[`services.${id}.api_key`] } },
-        }
-      case 'amutorrent':
-        return {
-          services: {
-            amutorrent: {
-              url: f['services.amutorrent.url'],
-              api_key: f['services.amutorrent.api_key'],
-              user: f['services.amutorrent.user'],
-              password: f['services.amutorrent.password'],
-            },
-          },
         }
       case 'paths':
         return {
@@ -292,9 +265,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
         service: key,
         url: f[`services.${key}.url`],
         api_key: f[`services.${key}.api_key`],
-        ...(key === 'amutorrent'
-          ? { user: f['services.amutorrent.user'], password: f['services.amutorrent.password'] }
-          : {}),
       })
       const { tone, text } = probeOutcome(result)
       setProbes((prev) => ({
@@ -371,12 +341,10 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
       radarr: 'Se usa para localizar e importar películas. Puedes probar la conexión antes de guardar nada.',
       sonarr:
         'Se usa para localizar e importar series. Una API key incorrecta se reporta como tal, no como un servicio caído.',
-      amutorrent:
-        'Gestor de descargas. Es opcional: basta con Radarr o Sonarr para terminar el asistente.',
     }
     return (
       <>
-        <h2>{STEP_HEADING[key]}</h2>
+        <h2>{SERVICE_LABEL[key]}</h2>
         <p className="setup-lede">{lede[key]}</p>
         <div className="setup-form">
           {field(`services.${key}.url`, 'URL', {
@@ -387,15 +355,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
             ariaLabel: `API Key de ${SERVICE_LABEL[key]}`,
             type: 'password',
           })}
-          {key === 'amutorrent' && (
-            <>
-              {field('services.amutorrent.user', 'Usuario', { ariaLabel: 'Usuario de aMuTorrent' })}
-              {field('services.amutorrent.password', 'Contraseña', {
-                ariaLabel: 'Contraseña de aMuTorrent',
-                type: 'password',
-              })}
-            </>
-          )}
           {probeCard(key)}
         </div>
       </>
@@ -422,11 +381,7 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
     const done = p && p.status === 'done'
     const url = f[`services.${key}.url`].trim()
     const configured = Boolean(url && f[`services.${key}.api_key`].trim())
-    const state = configured
-      ? url
-      : key === 'amutorrent'
-        ? 'Sin configurar (opcional)'
-        : 'Sin configurar'
+    const state = configured ? url : 'Sin configurar'
     return summaryRow(
       SERVICE_LABEL[key],
       state,
@@ -461,13 +416,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
                 </span>
               </li>
               <li>
-                <span className="ico" aria-hidden="true"><Icon name="download" size={20} /></span>
-                <span>
-                  <strong>aMuTorrent (opcional)</strong> — URL, clave, usuario y contraseña del
-                  gestor de descargas.
-                </span>
-              </li>
-              <li>
                 <span className="ico" aria-hidden="true"><Icon name="folder" size={20} /></span>
                 <span>
                   <strong>Rutas</strong> — carpetas de descarga y raíces permitidas.
@@ -487,7 +435,6 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
         )
       case 'radarr':
       case 'sonarr':
-      case 'amutorrent':
         return serviceStep(step)
       case 'paths':
         return (
@@ -495,7 +442,7 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
             <h2>Rutas</h2>
             <p className="setup-lede">Dónde caen las descargas y qué carpetas puede tocar la app.</p>
             <div className="setup-form">
-              {field('paths.download_amule', 'Carpeta descargas aMuTorrent')}
+              {field('paths.download_amule', 'Carpeta descargas aMule')}
               {field('paths.download_torrent', 'Carpeta descargas Torrent')}
               {field('paths.allowed_roots', 'Raíces permitidas (separadas por coma)')}
             </div>
@@ -535,9 +482,9 @@ export function SetupPage({ onDone }: { onDone: () => void }) {
               Resumen de lo guardado y resultado de las comprobaciones. Este paso no escribe nada.
             </p>
             <div className="setup-summary">
-              {(['radarr', 'sonarr', 'amutorrent'] as ServiceKey[]).map(summaryService)}
+              {(['radarr', 'sonarr'] as ServiceKey[]).map(summaryService)}
               {summaryRow(
-                'Descargas aMuTorrent',
+                'Descargas aMule',
                 f['paths.download_amule'] || '(sin definir)',
                 <span className="sum-k">guardado</span>,
               )}

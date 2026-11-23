@@ -1,6 +1,6 @@
 # Flow Controller
 
-Panel de control para el flujo de descargas **Radarr → aMule → Sonarr**: desde esta feature las descargas hablan **directo con aMule por EC** (`AMULE_URL`/`AMULE_EC_PORT`/`AMULE_EC_PASSWORD`), el tramo ed2k va por **EC directo** con la búsqueda a través de **aMule API** (con el EC como fallback), el tramo magnet/http va **directo a qBittorrent** con un cliente nativo propio (servicio `qbit` en Configuración → Servicios, login+SID, sin intermediario) y el puente aMuTorrent queda **sólo** como rollback (`AMULE_EC_DIRECT=0`).
+Panel de control para el flujo de descargas **Radarr → aMule → Sonarr**: desde esta feature las descargas hablan **directo con aMule por EC** (`AMULE_URL`/`AMULE_EC_PORT`/`AMULE_EC_PASSWORD`), el tramo ed2k va por **EC directo** con la búsqueda a través de **aMule API** (con el EC como fallback) y el tramo magnet/http va **directo a qBittorrent** con un cliente nativo propio (servicio `qbit` en Configuración → Servicios, login+SID, sin intermediario). aMuTorrent ya no se usa.
 Detecta dónde se rompe el pipeline y ofrece acciones de remediación directas
 desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 
@@ -12,7 +12,6 @@ desde la UI (corregir categorías, mapear rutas, reintentar imports, etc.).
 - **Frontend**: React 19 / TypeScript / Vite 7 / @tanstack/react-query
 - **Conexión directa aMule**: protocolo EC (autenticación challenge-response con el hash de `AMULE_EC_PASSWORD`) — pestaña **aMule** en Ajustes con su config, su watchdog y el control de servidores y enlaces
 - **Cliente qBittorrent nativo**: propio y sin dependencias nuevas (sólo aiohttp) — login+SID contra `POST /api/v2/auth/login`, éxito honesto (`200` y cuerpo `Ok.`), servicio `qbit` en Configuración → Servicios
-- **Control aMuTorrent**: WebSocket nativo (`ws://host:4000/ws`) — ruta de rollback (`AMULE_EC_DIRECT=0`)
 
 ### aMule API (amuleapi)
 
@@ -26,7 +25,7 @@ como fallback. El runbook de subida a aMule 3.2.0 + `amuleapi` está en
 
 - Python 3.10+
 - Node.js 18+
-- Radarr, Sonarr y aMuTorrent corriendo y accesibles (aMuTorrent sólo para el rollback `AMULE_EC_DIRECT=0`)
+- Radarr, Sonarr y aMule (con EC activo) corriendo y accesibles
 - qBittorrent accesible para el tramo magnet/http nativo (opcional: sin configurar, esas filas responden un rechazo honesto)
 
 ## Instalación
@@ -153,14 +152,9 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `RADARR_API_KEY` | API key de Radarr |
 | `SONARR_URL` | URL de Sonarr |
 | `SONARR_API_KEY` | API key de Sonarr |
-| `AMUTORRENT_URL` | URL de aMuTorrent (API qBittorrent-compatible) |
-| `AMUTORRENT_API_KEY` | API key de aMuTorrent |
-| `AMUTORRENT_USER` | Usuario de la web UI de aMuTorrent |
-| `AMUTORRENT_PASSWORD` | Contraseña de la web UI (requerida para WebSocket) |
 | `AMULE_URL` | Host/URL de aMule para la conexión directa EC |
 | `AMULE_EC_PORT` | Puerto EC de aMule (default `4712`) |
 | `AMULE_EC_PASSWORD` | Hash md5 de la contraseña EC (se usa tal cual, nunca en claro) |
-| `AMULE_EC_DIRECT` | `0` para volver al puente aMuTorrent byte-idéntico (default: EC directo) |
 | `AMULE_CONTAINER` | Nombre del contenedor de aMule para el reinicio automático del watchdog (vacío = coincidencia única nombre+imagen `/amule/i`) |
 | `AMULE_WATCHDOG` | `0` desactiva el watchdog de aMule (default: activo) |
 | `AMULE_WATCHDOG_INTERVAL` | Segundos entre canarios de búsqueda EC (default: `60`) |
@@ -189,7 +183,7 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `/api/indexers/{id}` | PUT/DELETE | Editar (clave vacía = conservar la guardada) / eliminar un indexador |
 | `/api/indexers/{id}/test` | POST | Prueba la conexión con `t=caps` sin persistir nada |
 | `/api/indexers/search` | POST | Búsqueda unificada: Torznab + aMule (EC) + Prowlarr, con `skipped` honesto por fuente; `indexer_ids` opcional restringe el fan-out Torznab a filas concretas del registro |
-| `/api/indexers/download` | POST | Descarga una fila: ed2k/hash → EC directo (o aMuTorrent bajo rollback), magnet/http → **qBittorrent nativo** (servicio `qbit`) con el destino en el `detail` |
+| `/api/indexers/download` | POST | Descarga una fila: ed2k/hash → EC directo, magnet/http → **qBittorrent nativo** (servicio `qbit`) con el destino en el `detail` |
 | `/api/amule/test` | POST | Prueba la conexión EC a aMule (lo escrito en Configuración o lo guardado; sólo handshake, nunca encola) |
 | `/api/amule/shared-dirs` | GET/PUT | Carpetas que aMule comparte (lee/escribe `shareddir*.dat` y recarga) |
 | `/api/amule/servers` | GET | Servidores de aMule con estado (`{ok, servers, detail}`; campos opcionales solo cuando el core los informa) |
@@ -219,7 +213,6 @@ Copia `backend/.env.example` a `backend/.env` y rellena:
 | `remove_queue` | Elimina el item de la cola del *arr |
 | `delete_torrent` | Elimina la descarga de aMule (EC directo; de disco si está completa) |
 
-Con `AMULE_EC_DIRECT=0` estas acciones vuelven al WebSocket de aMuTorrent con el comportamiento previo byte-idéntico.
 
 ## Arquitectura
 
@@ -229,7 +222,7 @@ flow-controller/
 ├── backend/
 │   ├── config.py              # Environment variables, constants, action catalog
 │   ├── settings.py            # Persistent JSON config (settings.json)
-│   ├── clients.py             # API clients: Radarr, Sonarr, aMuTorrent (WS + REST)
+│   ├── clients.py             # API clients: Radarr, Sonarr
 │   ├── traces.py              # Trace building: path resolution, stage derivation
 │   ├── copy_engine.py         # File copy with progress, cancellation, import verification
 │   ├── app.py                 # FastAPI app, lifespan, routes, static files
@@ -533,7 +526,7 @@ Detalles:
 
 ### 🔌 #24 — Probar las conexiones desde Configuración
 
-**Hecho ✅** — botón en Configuración que prueba Radarr, Sonarr, Prowlarr, aMuTorrent, **aMule API** y **qBittorrent**
+**Hecho ✅** — botón en Configuración que prueba Radarr, Sonarr, Prowlarr, **aMule API** y **qBittorrent**
 (servicio nativo `qbit`, sonda de login — Bearer no vale en el build real) y dice **qué**
 falla en cada uno.
 
@@ -556,7 +549,6 @@ el motivo clasificado cuando no: `auth` (401/403), `http`, `timeout`, `unreachab
 ```
 [OK  ] radarr      http://…:7878  Conectado (6.4.4.10685)
 [OK  ] sonarr      http://…:8989  Conectado (4.0.20.3014)
-[OK  ] amutorrent  http://…:4000  Conectado (v5.1.4)
 ```
 
 y con una clave forzada a mala:
@@ -621,91 +613,15 @@ descargas 1/3 abajo).
 `Transformers El ultimo caballero (2017).BDrip 2160p x265 10Bit DV HDR DUAL ac3-eac3.(.HispaShare.).mkv`
 junto con progreso, velocidad y ETA.
 
-**Unión de dos fuentes** por `downloadId` ↔ `hash` (con `normalize_hash`, el mismo que ya usaba
-la trazabilidad). Cada fuente aporta lo que la otra no tiene:
-
-| Radarr/Sonarr | aMuTorrent |
-| --- | --- |
-| `trackedDownloadState`, `statusMessages`, `timeleft`, `sizeleft` | `dlspeed`, `eta`, `num_seeds` |
-
-**Control de coste** (el hallazgo que decidió el diseño):
-
-| Enfoque | Torrents | Payload |
-| --- | --- | --- |
-| `/torrents/info` sin filtro | 813 | **1097 KB** |
-| Filtrado por categoría | **1** | **1.4 KB** |
-
-Comprobado que `hashes=` y `filter=` **se ignoran** y `category=` sí funciona. Y las categorías
-reales incluyen **`radarr-ru`** y **`tv-sonarr-ru`**, así que el filtro cubre la base y sus
-variantes con guion — filtrar solo las base perdería las descargas rusas. **Con la cola vacía no
-se consulta a aMuTorrent**: en reposo el coste es cero.
-
-**Verificado en vivo** con una descarga real:
-
-```json
-{"title": "Transformers El ultimo caballero (2017).BDrip 2160p...",
- "problem": true, "tracked_state": "importBlocked", "tracked_status": "warning",
- "messages": ["Failed to import movie"],
- "progress": 88.6, "speed": 4680957, "eta_seconds": 483, "seeders": 1, "matched": true}
-```
-
-Ese caso — descarga terminada e **import bloqueado** — es justo lo que la app existe para
-detectar, y hasta ahora no se veía en ningún sitio.
-
-**Degradación y errores:** si el cliente de descargas falla, se sigue mostrando el progreso de
-Radarr, se marca "Sin datos del cliente de descargas" y **se dice cuál falló y por qué**; nunca
-se presenta como "sin descargas".
+**Fuentes:** la cola de Radarr/Sonarr (`trackedDownloadState`, `sizeleft`, `timeleft`) y las descargas
+de aMule leídas por EC directo (velocidad, ETA, fuentes). Se unen por `downloadId` ↔ `hash`
+(`normalize_hash`). aMuTorrent ya no participa: con la cola vacía no se consulta nada.
 
 #### Qué se quiere
 
 Al añadir una descarga desde un indexador, no hay ninguna señal de por dónde va.
 Idea inicial: dividir la zona de la cola de operaciones en **2/3 cola de operaciones** y
 **1/3 descargas**.
-
-#### Estudio de APIs (medido en vivo)
-
-**Fuentes disponibles**
-
-| Fuente | Endpoint | Qué aporta |
-| --- | --- | --- |
-| Radarr/Sonarr | `GET /api/v3/queue` | `status`, `trackedDownloadState`, `size`/`sizeleft`, `timeleft`, `estimatedCompletionTime`, `statusMessages`, `downloadId`, `downloadClient`, `indexer` |
-| aMuTorrent | `GET /api/v2/torrents/info` | `progress`, **`dlspeed`**, **`eta`**, `num_seeds`, `state`, `hash` |
-| aMuTorrent | `GET /api/v2/torrents/properties?hash=` | `dl_speed`, `dl_speed_avg`, `eta`, `peers` — solo para UN torrent |
-
-**Clave de unión:** `downloadId` de Radarr ↔ `hash` de aMuTorrent. Ya existe `normalize_hash`
-en `traces.py`, y `build_traces` ya hace este join para la vista de trazabilidad.
-
-**El hallazgo que condiciona el diseño:** `GET /api/v2/torrents/info` sin filtro devuelve
-**1097 KB / 813 torrents**. Un poll cada 3 s serían ~20 MB/min. Comprobado qué filtros funcionan:
-
-| Parámetro | Resultado |
-| --- | --- |
-| `hashes=` | **ignorado** (813) |
-| `filter=downloading` | **ignorado** (813) |
-| `category=radarr` | **funciona** (1) |
-
-Ojo con las categorías reales del servidor: existen **`radarr-ru`** y **`tv-sonarr-ru`** además
-de `radarr` / `tv-sonarr` / `sonarr`. Un filtro que solo cubra las no-RU perdería descargas.
-
-`GET /api/v2/sync/maindata` (el endpoint incremental de qBittorrent) devuelve **401** con la API
-key; requeriría sesión de login como la que ya usa `amu_ws_login`.
-
-El **WebSocket** de aMuTorrent es de **comandos** (enviar acción y esperar `*_complete`), no un
-stream de progreso. No sirve para push de descargas tal cual.
-
-#### Diseño recomendado
-
-1. **Endpoint nuevo y ligero** `GET /api/downloads` — NO reutilizar `/api/trace`, que carga
-   historial de grabs, todas las películas y todas las series (medido ~1 s). El nuevo solo
-   consulta las dos colas y aMuTorrent.
-2. **Filtrar aMuTorrent por categoría** para evitar el megabyte. Y **si la cola está vacía, no
-   llamar a aMuTorrent**: en reposo el coste es cero.
-3. **Polling dinámico**, como ya hace `QueueSidebar`: 3-5 s con descargas activas, 15-30 s en reposo.
-4. **Errores explícitos por fuente** (lección de `/api/wanted` y del grab): si aMuTorrent cae,
-   mostrar la descarga con el progreso de Radarr y marcar velocidad/ETA como no disponibles. Si
-   cae Radarr, decirlo — **nunca** un fallo de red debe parecer "no hay descargas".
-5. **Destacar `importBlocked` / `warning` / `failed`**: es el propósito de la app y ahora mismo
-   hay un caso real en el servidor (`Transformers ... 2160p`, `importBlocked` con `warning`).
 
 #### Punto a decidir
 

@@ -18,7 +18,6 @@ function fixtures(amuleapi: { url: string; port: string; password: string }) {
     services: {
       radarr: { url: 'http://localhost:7878', api_key: '****7890' },
       sonarr: { url: 'http://localhost:8989', api_key: 'k' },
-      amutorrent: { url: 'http://localhost:4000', api_key: 'k', user: 'admin', password: 'p' },
       qbit: { url: 'http://111.111.111.111:8080', user: 'chan', password: '****wxyz' },
       amuleapi,
       opensubtitles: { api_key: '' },

@@ -11,7 +11,6 @@ os.environ.setdefault("FOLDER_DOWNLOAD_AMULE", "/mnt/storage-6tb/shared-download
 os.environ.setdefault("FOLDER_DOWNLOAD_TORRENT", "/mnt/storage/downloads/qbittorrent/completed")
 os.environ.setdefault("RADARR_URL", "http://localhost:7878")
 os.environ.setdefault("SONARR_URL", "http://localhost:8989")
-os.environ.setdefault("AMUTORRENT_URL", "http://localhost:4000")
 
 from traces import host_path as _host_path, resolve_current_path as _resolve_current_path
 from config import _VOLUME_MAP
@@ -400,7 +399,6 @@ class TestStatusEndpoint:
         data = resp.json()
         assert "radarr" in data
         assert "sonarr" in data
-        assert "amutorrent" in data
         assert "flow" in data
 
 
@@ -1343,7 +1341,6 @@ class TestCalendarGrab:
         the category the arr watches (`radarr` for source radarr — Radarr
         imports and organises as before). No `arr_grab_release` anywhere (S2),
         and the own-grab row is `direct=True` on every success (S2)."""
-        monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
         link = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Some.Movie.2024"
         calls = []
 
@@ -1375,7 +1372,6 @@ class TestCalendarGrab:
         (our own client category; the arr neither sees nor imports it) and the
         success detail keeps the honesty suffix. `arr_root_folders` is not
         consulted anymore: nothing passes through the arr (S3)."""
-        monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
         link = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Some.Movie.2024"
         calls = []
 
@@ -1421,7 +1417,6 @@ class TestCalendarGrab:
         """S2: `ed2k://` dispatches to the direct EC add (AMULE_EC_DIRECT's
         default) — NO re-search, the row already carries the link — and the
         arr is never told."""
-        monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
         link = (
             "ed2k://|file Your.Name.2016.1080p.BluRay.x264-GRP.mkv"
             "|8589934592|ABCDEF0123456789ABCDEF0123456789|/"

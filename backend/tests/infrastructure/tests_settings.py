@@ -45,7 +45,7 @@ class TestFirstRunSeedsFromEnvironment:
         assert _file(cfg)["services"]["radarr"]["url"] == "http://seed:7878"
 
     def test_empty_environment_falls_back_to_defaults(self, cfg, monkeypatch):
-        for key in ("RADARR_URL", "RADARR_API_KEY", "SONARR_URL", "AMUTORRENT_URL"):
+        for key in ("RADARR_URL", "RADARR_API_KEY", "SONARR_URL"):
             monkeypatch.delenv(key, raising=False)
 
         settings.migrate_env_vars()

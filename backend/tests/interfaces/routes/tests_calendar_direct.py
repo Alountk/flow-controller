@@ -112,7 +112,6 @@ def test_an_unrecognisable_target_sends_nothing_anywhere(monkeypatch):
     own target, and what it cannot recognise is refused before any client is
     touched (was `test_a_missing_link_sends_nothing_anywhere`, whose refusal
     came from the deleted link re-search)."""
-    monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
 
     def _fail(*args, **kwargs):
         raise AssertionError("no client seam may be called for a refused target")
@@ -120,14 +119,12 @@ def test_an_unrecognisable_target_sends_nothing_anywhere(monkeypatch):
     with patch.object(gateways, "amule_add_ed2k", _fail), \
             patch.object(gateways, "amule_download_search_result", _fail), \
             patch.object(gateways, "qbit_add_download", AsyncMock(side_effect=_fail)) as qbit, \
-            patch.object(gateways, "amutorrent_add_download", AsyncMock(side_effect=_fail)) as bridge, \
             patch(RECORD, new=MagicMock()) as record:
         body = _post(guid="not-a-link", title="Never.Seen.2024.2160p")
 
     assert body["ok"] is False
     assert body["detail"] == BAD_SCHEME
     qbit.assert_not_awaited()
-    bridge.assert_not_awaited()
     record.assert_not_called()
 
 

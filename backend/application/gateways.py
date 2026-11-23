@@ -132,16 +132,6 @@ def bind(
     )
 
 
-def amu_torrent_categories(*args, **kwargs):
-    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
-    return _arr.amu_torrent_categories(*args, **kwargs)
-
-
-def amutorrent_add_download(*args, **kwargs):
-    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
-    return _arr.amutorrent_add_download(*args, **kwargs)
-
-
 def qbit_add_download(*args, **kwargs):
     """Delegate to the bound adapter (the NATIVE qBittorrent add, S4)."""
     return _arr.qbit_add_download(*args, **kwargs)

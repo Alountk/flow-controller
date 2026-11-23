@@ -5,7 +5,7 @@ import type { ServiceStatus } from '../../shared/types.ts'
 
 const services: ServiceStatus[] = [
   { key: 'radarr', label: 'Radarr', state: 'online', reason: '' },
-  { key: 'amutorrent', label: 'AmuTorrent', state: 'offline', reason: 'timeout' },
+  { key: 'qbit', label: 'qBittorrent', state: 'offline', reason: 'timeout' },
   { key: 'sonarr', label: 'Sonarr', state: 'unknown', reason: 'Sin datos' },
 ]
 
@@ -14,7 +14,7 @@ describe('ServiceChips (diseño Stitch 01 — topbar)', () => {
     const { container } = render(<ServiceChips services={services} />)
 
     expect(screen.getByText('Radarr: Conectado')).toBeInTheDocument()
-    expect(screen.getByText('AmuTorrent: Alerta')).toBeInTheDocument()
+    expect(screen.getByText('qBittorrent: Alerta')).toBeInTheDocument()
     expect(screen.getByText('Sonarr: Sin datos')).toBeInTheDocument()
     expect(container.querySelectorAll('.service-chip')).toHaveLength(3)
   })

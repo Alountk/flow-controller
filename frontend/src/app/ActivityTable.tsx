@@ -54,7 +54,7 @@ function stateOf(item: ActivityItem): State {
 const SERVICE_CLASS: Record<string, string> = {
   radarr: 'act-dot-warn',
   sonarr: 'act-dot-accent',
-  amutorrent: 'act-dot-neutral',
+  amule: 'act-dot-neutral',
 }
 
 const capitalize = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1)

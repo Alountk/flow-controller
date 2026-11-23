@@ -20,7 +20,6 @@ const settings = {
   services: {
     radarr: { url: 'http://localhost:7878', api_key: 'k' },
     sonarr: { url: 'http://localhost:8989', api_key: 'k' },
-    amutorrent: { url: 'http://localhost:4000', api_key: 'k', user: 'admin', password: 'p' },
     // GET /api/settings returns the qbit password ALWAYS masked (sentinel).
     qbit: { url: 'http://111.111.111.111:8080', user: 'chan', password: '****wxyz' },
     opensubtitles: { api_key: '' },

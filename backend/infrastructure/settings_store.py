@@ -20,7 +20,6 @@ DEFAULTS: dict[str, Any] = {
         # Búsqueda por idioma en la alternativa (S6/T1). Vacío a propósito: sin
         # URL ni clave el servicio queda "no configurado" y nunca se le llama.
         "prowlarr": {"url": "", "api_key": ""},
-        "amutorrent": {"url": "http://localhost:4000", "api_key": "", "user": "admin", "password": ""},
         # Cliente qBittorrent nativo (qbit-nativo S3). Vacío a propósito: sin
         # URL/usuario la descarga magnet/http responde el rechazo honesto. El
         # grupo va SIEMPRE en el payload de GET /api/settings: la tarjeta de
@@ -84,10 +83,6 @@ _env_to_settings: dict[str, tuple[str, ...]] = {
     "SONARR_API_KEY": ("services", "sonarr", "api_key"),
     "PROWLARR_URL": ("services", "prowlarr", "url"),
     "PROWLARR_API_KEY": ("services", "prowlarr", "api_key"),
-    "AMUTORRENT_URL": ("services", "amutorrent", "url"),
-    "AMUTORRENT_API_KEY": ("services", "amutorrent", "api_key"),
-    "AMUTORRENT_USER": ("services", "amutorrent", "user"),
-    "AMUTORRENT_PASSWORD": ("services", "amutorrent", "password"),
     "OPENSUBTITLES_API_KEY": ("services", "opensubtitles", "api_key"),
     "API_KEY": ("security", "api_key"),
     "SAFE_MODE": ("security", "safe_mode"),
@@ -191,6 +186,9 @@ def load_settings() -> dict[str, Any]:
             log.info("Loaded settings from %s", SETTINGS_FILE)
         except Exception as exc:
             log.error("Failed to load settings from %s: %s", SETTINGS_FILE, exc)
+        # A pre-aMule-direct file may still carry the retired aMuTorrent group.
+        if isinstance(file_data.get("services"), dict):
+            file_data["services"].pop("amutorrent", None)
         _settings = _env_fills_gaps(file_data)
         # Migrate a plaintext app key (or clear one corrupted by the mask bug)
         # before anything reads it.

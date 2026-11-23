@@ -17,7 +17,6 @@ const settings = {
   services: {
     radarr: { url: 'http://localhost:7878', api_key: 'k' },
     sonarr: { url: 'http://localhost:8989', api_key: 'k' },
-    amutorrent: { url: 'http://localhost:4000', api_key: 'k', user: 'admin', password: 'p' },
     qbit: { url: 'http://localhost:8080', user: 'admin', password: 'p' },
     opensubtitles: { api_key: 'os-key-123' },
   },

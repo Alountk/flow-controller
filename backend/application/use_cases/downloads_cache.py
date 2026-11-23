@@ -1,10 +1,8 @@
 """The downloads snapshot behind `/api/downloads` (F-06(e)).
 
 Radarr and Sonarr know what the *arr* is tracking (state, import status, size
-left). aMuTorrent knows how the download is actually going (speed, ETA,
-seeds). Neither alone answers "where is this download", so the two are joined
-by ``downloadId`` <-> ``hash`` using the same normalization the trace view
-uses.
+left); the download clients keep their own rows, joined by
+``downloadId`` <-> ``hash`` with the same normalization the trace view uses.
 
 Failures are reported per source. A download client that cannot be reached
 must never look like "no downloads".

@@ -5,7 +5,7 @@ treated the same way:
 
 - **The app's own API key** is only ever *compared*, never sent anywhere, so it
   is stored as a hash. A leaked settings.json no longer reveals it.
-- **Radarr/Sonarr/aMuTorrent keys, the aMuTorrent password and the aMule EC
+- **Radarr/Sonarr keys and the aMule EC
   password** must be *sent* to those services, so they cannot be hashed. They
   are handled separately.
 
@@ -42,14 +42,12 @@ ENC_SALT_PATH = ("security", "encryption_salt")
 
 # ── Secrets that must survive as-is ──────────────────────────────────────────
 #
-# These are sent to Radarr/Sonarr/aMuTorrent/aMule, so unlike the app's own key
+# These are sent to Radarr/Sonarr/aMule, so unlike the app's own key
 # they cannot be hashed. They are encrypted at rest instead.
 
 ENCRYPTED_SECRET_FIELDS = (
     ("services", "radarr", "api_key"),
     ("services", "sonarr", "api_key"),
-    ("services", "amutorrent", "api_key"),
-    ("services", "amutorrent", "password"),
     ("services", "opensubtitles", "api_key"),
     # La contraseña EC va al daemon aMule (handshake y operaciones), así que
     # cifrado en reposo como sus hermanos. En memoria queda el texto plano que
