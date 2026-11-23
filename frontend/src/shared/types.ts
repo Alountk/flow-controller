@@ -1,4 +1,4 @@
-export type ServiceKey = 'radarr' | 'sonarr' | 'amutorrent' | 'qbit'
+export type ServiceKey = 'radarr' | 'sonarr' | 'qbit'
 
 export type ServiceState =
   | 'online'
@@ -14,27 +14,19 @@ export interface TorrentStats {
   errors: number
 }
 
-export interface AmutorrentMeta {
-  version?: string
-  torrents?: TorrentStats
-}
-
 export interface ServiceStatus {
   key: ServiceKey
   label: string
   state: ServiceState
   reason: string
-  meta?: AmutorrentMeta
 }
 
 export interface StatusResponse {
   radarr: string
   sonarr: string
-  amutorrent: string
   flow: string
   updated_at: number
   checking: boolean
-  amutorrent_meta?: AmutorrentMeta
   [key: string]: unknown
 }
 
@@ -278,7 +270,6 @@ export interface Settings {
   services: {
     radarr: { url: string; api_key: string }
     sonarr: { url: string; api_key: string }
-    amutorrent: { url: string; api_key: string; user: string; password: string }
     /** aMule 3.x REST daemon (amule-32 T2): no api_key — password auth. */
     amuleapi: { url: string; port: string; password: string }
     /** Native qBittorrent (qbit-nativo S3): no api_key — login/password auth. */

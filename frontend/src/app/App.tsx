@@ -96,7 +96,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 const SERVICES: { key: ServiceKey; label: string }[] = [
   { key: 'radarr', label: 'Radarr' },
-  { key: 'amutorrent', label: 'AmuTorrent' },
   { key: 'sonarr', label: 'Sonarr' },
 ]
 
@@ -310,8 +309,7 @@ function App() {
         .filter(({ key }) => !servicesReady || isConfigured(key))
         .map(({ key, label }) => {
           const { state, reason } = parseStatus(data?.[key])
-          const meta = key === 'amutorrent' ? data?.amutorrent_meta : undefined
-          return { key, label, state, reason, meta }
+          return { key, label, state, reason }
         }),
     [data, servicesReady, isConfigured],
   )
@@ -384,7 +382,7 @@ function App() {
                   {nothingConfigured ? (
                     <div className="wanted-empty" role="alert">
                       No hay ningún servicio configurado todavía. Ve a <strong>Configuración</strong> para
-                      añadir la URL y la API key de Radarr, Sonarr o aMuTorrent.
+                      añadir la URL y la API key de Radarr o Sonarr.
                     </div>
                   ) : null}
 

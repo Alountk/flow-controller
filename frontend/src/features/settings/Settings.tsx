@@ -47,13 +47,12 @@ const CONNECTION_LABEL: Record<ConnectionState, string> = {
 }
 
 /** El nombre que ve el usuario, no la clave del backend: la tabla del diseño
- *  escribe «Radarr» y «aMuTorrent», y `services[].key` es lo que es.
+ *  escribe «Radarr», y `services[].key` es lo que es.
  *  Una clave desconocida cae al propio key, nunca a vacío. */
 const SERVICE_NAME: Record<string, string> = {
   radarr: 'Radarr',
   sonarr: 'Sonarr',
   prowlarr: 'Prowlarr',
-  amutorrent: 'aMuTorrent',
   amuleapi: 'aMule API',
   qbit: 'qBittorrent',
   amule: 'aMule',
@@ -700,25 +699,6 @@ export function Settings() {
           </div>
         </div>
         <div className="settings-group">
-          <h4>aMuTorrent</h4>
-          <p className="settings-hint">Ruta de rollback (AMULE_EC_DIRECT=0): el camino activo va por EC directo y búsqueda vía aMule API.</p>
-          <Field label="URL" value={form.services.amutorrent.url} onChange={(v) => update('services.amutorrent.url', v)} restart={isRestarting('services.amutorrent.url')} placeholder="http://localhost:4000" />
-          <Field label="API Key" value={form.services.amutorrent.api_key} onChange={(v) => update('services.amutorrent.api_key', v)} restart={isRestarting('services.amutorrent.api_key')} placeholder="Tu API key" type="password" />
-          <Field label="Usuario" value={form.services.amutorrent.user} onChange={(v) => update('services.amutorrent.user', v)} restart={isRestarting('services.amutorrent.user')} />
-          <Field label="Contraseña" value={form.services.amutorrent.password} onChange={(v) => update('services.amutorrent.password', v)} restart={isRestarting('services.amutorrent.password')} type="password" />
-          <div className="settings-group-actions">
-            <ServiceProbeButton
-              service="amutorrent"
-              values={{
-                url: form.services.amutorrent.url,
-                api_key: form.services.amutorrent.api_key,
-                user: form.services.amutorrent.user,
-                password: form.services.amutorrent.password,
-              }}
-            />
-          </div>
-        </div>
-        <div className="settings-group">
           <h4>qBittorrent</h4>
           <Field label="URL" value={form.services.qbit.url} onChange={(v) => update('services.qbit.url', v)} restart={isRestarting('services.qbit.url')} placeholder="http://localhost:8080" />
           <Field label="Usuario" value={form.services.qbit.user} onChange={(v) => update('services.qbit.user', v)} restart={isRestarting('services.qbit.user')} />
@@ -758,7 +738,7 @@ export function Settings() {
         title="Rutas"
         subtitle="Mapeo de almacenamiento en disco, librerías y puntos de montaje ZFS/RAID."
       >
-        <Field label="Carpeta descargas aMuTorrent" value={form.paths.download_amule} onChange={(v) => update('paths.download_amule', v)} />
+        <Field label="Carpeta descargas aMule" value={form.paths.download_amule} onChange={(v) => update('paths.download_amule', v)} />
         <Field label="Carpeta descargas Torrent" value={form.paths.download_torrent} onChange={(v) => update('paths.download_torrent', v)} />
         <Field label="Raíces permitidas (separadas por coma)" value={(form.paths.allowed_roots ?? []).join(", ")} onChange={(v) => updateList('paths.allowed_roots', v)} />
         <Field

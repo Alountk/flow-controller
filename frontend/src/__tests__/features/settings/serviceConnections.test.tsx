@@ -14,7 +14,6 @@ const settings = {
   services: {
     radarr: { url: 'http://localhost:7878', api_key: 'k' },
     sonarr: { url: 'http://localhost:8989', api_key: 'k' },
-    amutorrent: { url: 'http://localhost:4000', api_key: 'k', user: 'admin', password: 'p' },
     amuleapi: { url: 'http://localhost:4713', password: 'clave-amule' },
     qbit: { url: 'http://localhost:8080', user: 'admin', password: 'p' },
     opensubtitles: { api_key: '' },
@@ -122,7 +121,6 @@ describe('service connection tester', () => {
     mockFetch([
       result(),
       result({ key: 'sonarr', url: 'http://localhost:8989', detail: 'Conectado (4.0.20)' }),
-      result({ key: 'amutorrent', kind: 'qbit', url: 'http://localhost:4000', detail: 'Conectado (v5.1.4)' }),
     ])
     renderSettings()
     await clickTest()
@@ -133,8 +131,7 @@ describe('service connection tester', () => {
     const table = await screen.findByRole('table')
     await waitFor(() => expect(within(table).getByText('Radarr')).toBeInTheDocument())
     expect(within(table).getByText('Sonarr')).toBeInTheDocument()
-    expect(within(table).getByText('aMuTorrent')).toBeInTheDocument()
-    expect(within(table).getAllByText('Conectado')).toHaveLength(3)
+    expect(within(table).getAllByText('Conectado')).toHaveLength(2)
   })
 
   it('shows the qbit row when the backend returns it', async () => {
@@ -239,16 +236,9 @@ describe('service connection tester', () => {
     })
   })
 
-  it('the aMuTorrent card carries the rollback hint and the aMule API card is unaffected', async () => {
-    // amule-32 T5/S2: la tarjeta aMuTorrent es sólo el rollback — la pista lo
-    // dice bajo el <h4>, y la tarjeta aMule API (T2) sigue intacta.
+  it('keeps the aMule API card on its own tab', async () => {
     mockFetch([])
     renderSettings()
-
-    const card = (await screen.findByRole('heading', { name: 'aMuTorrent' })).closest(
-      '.settings-group',
-    ) as HTMLElement
-    expect(within(card).getByText(/Ruta de rollback/)).toHaveTextContent('AMULE_EC_DIRECT=0')
 
     // T10: cambio de pestaña — la API es del dominio aMule, no de Servicios.
     fireEvent.click(await screen.findByRole('tab', { name: 'aMule' }))

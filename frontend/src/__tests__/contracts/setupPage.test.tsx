@@ -12,7 +12,7 @@ import type { ServiceTestResult } from '../../shared/api/services.ts'
  * time, Atrás/Siguiente only — there is no step list to jump with. Each
  * step saves with its own `POST /api/setup` body, and candidate URLs are
  * probed before they are committed. Entering requires at least one of
- * Radarr or Sonarr; aMuTorrent is optional. The two original gate tests are
+ * Radarr or Sonarr. The two original gate tests are
  * the safety net and did not change.
  */
 
@@ -187,17 +187,16 @@ describe('first-run setup wizard', () => {
     expect(screen.queryByText(/Bienvenido/)).not.toBeInTheDocument()
   })
 
-  // ── The step-8 rule: at least one of Radarr/Sonarr, aMuTorrent optional ──
+  // ── The last-step rule: at least one of Radarr/Sonarr ──
 
   it('disables Entrar until Radarr or Sonarr is configured', async () => {
     mockFetch({ needsSetup: true, authRequired: false })
     await start()
 
-    // Walk all seven steps without configuring any service.
+    // Walk every step without configuring any service.
     fireEvent.click(screen.getByRole('button', { name: 'Empezar' }))
     await advanceThrough(
       'Sonarr',
-      'aMuTorrent (opcional)',
       'Rutas',
       'Ajustes',
       'Revisar y entrar',
@@ -205,8 +204,6 @@ describe('first-run setup wizard', () => {
 
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeDisabled()
     expect(screen.getByText('Configura Radarr o Sonarr para continuar')).toBeInTheDocument()
-    // Nothing failed: the optional service simply reads as not configured.
-    expect(screen.getByText('Sin configurar (opcional)')).toBeInTheDocument()
     expect(screen.getAllByText('Sin configurar')).toHaveLength(2)
   })
 
@@ -221,11 +218,9 @@ describe('first-run setup wizard', () => {
     })
     fireEvent.change(screen.getByLabelText('API Key de Radarr'), { target: { value: 'r-key' } })
 
-    // Sonarr and aMuTorrent stay empty — one of the two required services
-    // is enough.
+    // Sonarr stays empty — one of the two services is enough.
     await advanceThrough(
       'Sonarr',
-      'aMuTorrent (opcional)',
       'Rutas',
       'Ajustes',
       'Revisar y entrar',
@@ -235,7 +230,6 @@ describe('first-run setup wizard', () => {
     expect(
       screen.queryByText('Configura Radarr o Sonarr para continuar'),
     ).not.toBeInTheDocument()
-    expect(screen.getByText('Sin configurar (opcional)')).toBeInTheDocument()
   })
 
   // ── Rewritten: the single-screen layout they pinned is gone ──────────────
@@ -247,26 +241,17 @@ describe('first-run setup wizard', () => {
     // Nothing of the services is on the welcome step.
     expect(screen.queryByLabelText('URL de Radarr')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('URL de Sonarr')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Usuario de aMuTorrent')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Empezar' }))
     expect(await screen.findByLabelText('URL de Radarr')).toBeInTheDocument()
     expect(screen.getByLabelText('API Key de Radarr')).toBeInTheDocument()
     expect(screen.queryByLabelText('URL de Sonarr')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Usuario de aMuTorrent')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
     expect(await screen.findByLabelText('URL de Sonarr')).toBeInTheDocument()
     expect(screen.getByLabelText('API Key de Sonarr')).toBeInTheDocument()
     expect(screen.queryByLabelText('URL de Radarr')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Usuario de aMuTorrent')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
-    expect(await screen.findByLabelText('URL de aMuTorrent')).toBeInTheDocument()
-    expect(screen.getByLabelText('API Key de aMuTorrent')).toBeInTheDocument()
-    expect(screen.getByLabelText('Usuario de aMuTorrent')).toBeInTheDocument()
-    expect(screen.getByLabelText('Contraseña de aMuTorrent')).toBeInTheDocument()
-    expect(screen.queryByLabelText('URL de Radarr')).not.toBeInTheDocument()
   })
 
   it('has no protection step: the account was created before the wizard', async () => {
@@ -277,7 +262,7 @@ describe('first-run setup wizard', () => {
     await screen.findByRole('heading', { name: 'Radarr' })
     fireEvent.change(screen.getByLabelText('URL de Radarr'), { target: { value: 'http://r:7878' } })
     fireEvent.change(screen.getByLabelText('API Key de Radarr'), { target: { value: 'r-key' } })
-    await advanceThrough('Sonarr', 'aMuTorrent (opcional)', 'Rutas', 'Ajustes', 'Revisar y entrar')
+    await advanceThrough('Sonarr', 'Rutas', 'Ajustes', 'Revisar y entrar')
 
     expect(screen.queryByLabelText('API key de la app')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Proteger la app' })).not.toBeInTheDocument()
@@ -297,34 +282,31 @@ describe('first-run setup wizard', () => {
     fireEvent.change(screen.getByLabelText('URL de Radarr'), { target: { value: 'http://r:7878' } })
     fireEvent.change(screen.getByLabelText('API Key de Radarr'), { target: { value: 'r-key' } })
 
-    await advanceThrough('Sonarr', 'aMuTorrent (opcional)', 'Rutas', 'Ajustes', 'Revisar y entrar')
+    await advanceThrough('Sonarr', 'Rutas', 'Ajustes', 'Revisar y entrar')
 
     const bodies = setupPosts(fn)
-    expect(bodies).toHaveLength(5)
+    expect(bodies).toHaveLength(4)
     expect(bodies[0]).toEqual({ services: { radarr: { url: 'http://r:7878', api_key: 'r-key' } } })
     expect(bodies[1]).toEqual({ services: { sonarr: { url: '', api_key: '' } } })
-    expect(bodies[2]).toEqual({
-      services: { amutorrent: { url: '', api_key: '', user: '', password: '' } },
-    })
-    expect(Object.keys(bodies[3])).toEqual(['paths'])
-    expect(Object.keys(bodies[4])).toEqual(['intervals', 'tracing', 'server'])
+    expect(Object.keys(bodies[2])).toEqual(['paths'])
+    expect(Object.keys(bodies[3])).toEqual(['intervals', 'tracing', 'server'])
 
     // The last step writes nothing.
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
     await waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'Revisar y entrar' })).not.toBeInTheDocument(),
     )
-    expect(setupPosts(fn)).toHaveLength(5)
+    expect(setupPosts(fn)).toHaveLength(4)
   })
 
   // ── Rewritten: navigation, per-step saves, the candidate probe ───────────
 
-  it('walks the seven steps with Atrás and Siguiente, with no step list to jump', async () => {
+  it('walks the six steps with Atrás and Siguiente, with no step list to jump', async () => {
     const fn = mockFetch({ needsSetup: true, authRequired: false })
     await start()
 
-    // Counter and dots open on step 1 of 8: current emphasised, rest pending.
-    expect(screen.getByText('1 de 7')).toBeInTheDocument()
+    // Counter and dots open on step 1 of 6: current emphasised, rest pending.
+    expect(screen.getByText('1 de 6')).toBeInTheDocument()
     expect(dotClasses()[0]).toContain('is-now')
     expect(dotClasses().slice(1).every((c) => c === 'setup-dot')).toBe(true)
 
@@ -337,7 +319,7 @@ describe('first-run setup wizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Empezar' }))
     await screen.findByRole('heading', { name: 'Radarr' })
-    expect(screen.getByText('2 de 7')).toBeInTheDocument()
+    expect(screen.getByText('2 de 6')).toBeInTheDocument()
     expect(dotClasses()[0]).toContain('is-done')
     expect(dotClasses()[1]).toContain('is-now')
 
@@ -345,26 +327,25 @@ describe('first-run setup wizard', () => {
     fireEvent.change(screen.getByLabelText('API Key de Radarr'), { target: { value: 'r-key' } })
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
     await screen.findByRole('heading', { name: 'Sonarr' })
-    expect(screen.getByText('3 de 7')).toBeInTheDocument()
+    expect(screen.getByText('3 de 6')).toBeInTheDocument()
 
     // Atrás walks back one step, allowed at any time.
     fireEvent.click(screen.getByRole('button', { name: 'Atrás' }))
     await screen.findByRole('heading', { name: 'Radarr' })
-    expect(screen.getByText('2 de 7')).toBeInTheDocument()
+    expect(screen.getByText('2 de 6')).toBeInTheDocument()
 
     // Forward again: Siguiente is the only way ahead.
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
     await advanceThrough(
-      'aMuTorrent (opcional)',
       'Rutas',
       'Ajustes',
       'Revisar y entrar',
     )
 
-    expect(screen.getByText('7 de 7')).toBeInTheDocument()
+    expect(screen.getByText('6 de 6')).toBeInTheDocument()
     const dots = dotClasses()
-    expect(dots.slice(0, 6).every((c) => c.includes('is-done'))).toBe(true)
-    expect(dots[6]).toContain('is-now')
+    expect(dots.slice(0, 5).every((c) => c.includes('is-done'))).toBe(true)
+    expect(dots[5]).toContain('is-now')
     expect(screen.queryByLabelText('Pasos del asistente')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Rutas/ })).not.toBeInTheDocument()
 
@@ -384,9 +365,9 @@ describe('first-run setup wizard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Empezar' }))
     await screen.findByRole('heading', { name: 'Radarr' })
-    await advanceThrough('Sonarr', 'aMuTorrent (opcional)', 'Rutas')
+    await advanceThrough('Sonarr', 'Rutas')
 
-    fireEvent.change(screen.getByLabelText('Carpeta descargas aMuTorrent'), {
+    fireEvent.change(screen.getByLabelText('Carpeta descargas aMule'), {
       target: { value: '/data/amule' },
     })
     fireEvent.change(screen.getByLabelText('Carpeta descargas Torrent'), {
@@ -472,7 +453,6 @@ describe('first-run setup wizard', () => {
     expect(dotClasses()[0]).toContain('is-done')
 
     await advanceThrough(
-      'aMuTorrent (opcional)',
       'Rutas',
       'Ajustes',
       'Revisar y entrar',
@@ -480,7 +460,7 @@ describe('first-run setup wizard', () => {
 
     // The review step lists every service's last result.
     expect(screen.getByText('✗ API key rechazada (HTTP 401)')).toBeInTheDocument()
-    expect(screen.getAllByText('Sin comprobar')).toHaveLength(2)
+    expect(screen.getAllByText('Sin comprobar')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeEnabled()
   })
 
