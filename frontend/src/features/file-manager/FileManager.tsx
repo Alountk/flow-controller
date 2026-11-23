@@ -16,6 +16,7 @@ import { FileExplorer, type FileExplorerEntry } from '../../shared/ui/FileExplor
 import { LibraryRenameDialog } from './LibraryRenameDialog.tsx'
 import './FileManager.css'
 import '../../shared/ui/atoms.css'
+import '../../shared/ui/modal.css'
 
 interface RootsItem {
   path: string
