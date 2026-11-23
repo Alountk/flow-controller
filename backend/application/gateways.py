@@ -152,11 +152,6 @@ def amuleapi_search(*args, **kwargs):
     return _arr.amuleapi_search(*args, **kwargs)
 
 
-def amutorrent_reload_shared_dirs(*args, **kwargs):
-    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
-    return _arr.amutorrent_reload_shared_dirs(*args, **kwargs)
-
-
 def direct_link_identity(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.direct_link_identity(*args, **kwargs)

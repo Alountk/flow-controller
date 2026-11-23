@@ -20,11 +20,9 @@ export interface SharedDirs {
 }
 
 export interface SharedDirsSaveResult {
-  /** False when the files were written but aMule has not reloaded yet. */
   ok: boolean
   recursive: string[]
   explicit: string[]
-  reload: { ok: boolean; detail: string }
 }
 
 export async function fetchSharedDirs(): Promise<SharedDirs> {

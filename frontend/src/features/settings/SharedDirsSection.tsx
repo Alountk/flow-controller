@@ -39,11 +39,7 @@ export function SharedDirsSection() {
   const save = useMutation({
     mutationFn: () => saveSharedDirs({ recursive, explicit }),
     onSuccess: (result: SharedDirsSaveResult) => {
-      setNotice(
-        result.ok
-          ? 'Guardado y recargado en aMule.'
-          : `Guardado, pero la recarga falló: ${result.reload.detail}`,
-      )
+      setNotice(result.ok ? 'Guardado. aMule lo leerá al recargar o reiniciar.' : 'No se pudo guardar.')
       queryClient.invalidateQueries({ queryKey: ['amule-shared-dirs'] })
     },
     onError: (error: Error) => setNotice(`No se pudo guardar: ${error.message}`),
@@ -166,7 +162,7 @@ export function SharedDirsSection() {
           disabled={save.isPending}
           onClick={() => save.mutate()}
         >
-          {save.isPending ? 'Guardando…' : <><Icon name="save" size={16} /> Guardar y recargar aMule</>}
+          {save.isPending ? 'Guardando…' : <><Icon name="save" size={16} /> Guardar carpetas</>}
         </button>
         <span className="shared-dirs-notice" role="status">
           {notice}
