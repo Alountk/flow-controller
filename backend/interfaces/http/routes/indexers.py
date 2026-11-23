@@ -37,17 +37,14 @@ the Torznab fan-out to a per-row subset of the registry.
 The T5/S5 download (`POST /api/indexers/download`, the L6 amendment) is the
 free search's «Descargar»: `POST /api/calendar/grab` needs an arr service and
 a movieId/episodeId the free rows do not have, so this one dispatches by the
-SHAPE of the target and persists nothing — `ed2k://` to the direct EC seam
-(or, under the `AMULE_EC_DIRECT=0` rollback, to the legacy aMuTorrent bridge),
-a 32-hex aMule hash-id to `amule_download_search_result` (a hash has no
-bridge entry point under the rollback — an honest refusal says so), and
+SHAPE of the target and persists nothing — `ed2k://` to the direct EC seam,
+a 32-hex aMule hash-id to `amule_download_search_result`, and
 `magnet:`/`http(s)` to the bridge with `routes_mixer.py:591-631`'s exact
 session and `{ok, detail}` mapping. 200 with `ok`/`detail` in BOTH directions,
 like every refusal in this repo.
 """
 
 import asyncio
-import os
 import re
 from urllib.parse import urlsplit
 
@@ -625,24 +622,9 @@ HASH32 = re.compile(r"[0-9a-fA-F]{32}\Z")
 #: The pinned answers — `grab_release._ec_add_link`'s success text and
 #: `routes_mixer.py:591-631`'s bridge mapping, mirrored byte for byte.
 _EC_ADDED = "Descarga añadida"
-_HASH_REFUSED_FLAG0 = (
-    "el puente aMuTorrent no tiene entrada para el hash de aMule: "
-    "esta fila sólo puede descargarse con el EC directo (AMULE_EC_DIRECT)"
-)
 _BAD_SCHEME = (
     "link no válido: se espera ed2k://, magnet:, http(s) o un hash de aMule (32 hex)"
 )
-
-
-def _ec_direct() -> bool:
-    """Mirror of `grab_release._ec_direct` (same semantics, same contract):
-
-    `AMULE_EC_DIRECT` is read from the environment on EVERY call, never
-    cached — the mandated rollback must take effect on the next request
-    without a restart. Unset or anything except `"0"` is the EC direct
-    default; `"0"` is the exact legacy aMuTorrent path.
-    """
-    return os.environ.get("AMULE_EC_DIRECT") != "0"
 
 
 def _download_target(body: dict) -> str:
@@ -668,19 +650,12 @@ def _download_target(body: dict) -> str:
 
 
 async def _download_ed2k(link: str, category: str | None = None) -> dict:
-    """An ed2k link: the direct EC seam by default, the LEGACY aMuTorrent
-    bridge under rollback (`_download_bridge_legacy` — S7: aMule's domain,
-    never qBittorrent's).
+    """An ed2k link through the direct EC seam.
 
-    The EC adapter is SYNC, so the add rides `asyncio.to_thread` (the
-    `grab_release._ec_add_link` precedent) and the tests hold it off the loop.
-    A refusal is a dict, never a raise. The EC add takes NO category (it is an
-    aMule category id and none is invented, S5); the legacy bridge forwards
-    the caller's category (S3) and defaults to its own when absent — which is
-    what keeps `POST /api/indexers/download` byte-identical.
+    The EC adapter is SYNC, so the add rides `asyncio.to_thread`. A refusal is
+    a dict, never a raise. The EC add takes no category: `category` is kept
+    only so every dispatch target shares one signature.
     """
-    if not _ec_direct():
-        return await _download_bridge_legacy(link, category)
     try:
         await asyncio.to_thread(gateways.amule_add_ed2k, link)
     except Exception as exc:  # noqa: BLE001 — la negativa «no configurado» + errores EC tipados
@@ -689,14 +664,7 @@ async def _download_ed2k(link: str, category: str | None = None) -> dict:
 
 
 async def _download_hash(file_hash: str) -> dict:
-    """A 32-hex aMule hash-id (rows without a buildable link): the EC seam.
-
-    Under the `AMULE_EC_DIRECT=0` rollback this is an HONEST refusal: the
-    legacy bridge has no hash-id entry point at all, so there is nothing to
-    fall back to and pretending otherwise would fail in silence later.
-    """
-    if not _ec_direct():
-        return {"ok": False, "detail": _HASH_REFUSED_FLAG0}
+    """A 32-hex aMule hash-id (rows without a buildable link): the EC seam."""
     try:
         await asyncio.to_thread(gateways.amule_download_search_result, file_hash)
     except Exception as exc:  # noqa: BLE001 — la negativa «no configurado» + errores EC tipados
@@ -730,36 +698,12 @@ async def _download_bridge(link: str, category: str | None = None) -> dict:
         return {"ok": False, "detail": _redact(_skip_reason(exc), "")}
 
 
-async def _download_bridge_legacy(link: str, category: str | None = None) -> dict:
-    """The aMuTorrent bridge — ONLY for the `AMULE_EC_DIRECT=0` rollback (S7).
-
-    Byte-identical legacy shape: one `http_session()` per call, and a refusal
-    keeps the «aMuTorrent no aceptó la descarga: …» prefix of always. Same
-    category rule as `_download_bridge`: forwarded when the caller chose one
-    (S3), the seam's own default otherwise.
-    """
-    try:
-        async with http_session() as session:
-            if category is None:
-                added = await gateways.amutorrent_add_download(session, link)
-            else:
-                added = await gateways.amutorrent_add_download(session, link, category)
-        detail = _redact(str(added.get("detail", "")), "")
-        if not added.get("ok"):
-            return {"ok": False, "detail": f"aMuTorrent no aceptó la descarga: {detail}"}
-        return {"ok": True, "detail": detail}
-    except Exception as exc:  # noqa: BLE001 — la negativa del puente + errores de transporte
-        return {"ok": False, "detail": _redact(_skip_reason(exc), "")}
-
-
 async def dispatch_direct(target: str, category: str | None = None) -> dict:
     """One target straight to a client, dispatched by SHAPE — `{ok, detail}`.
 
     Serves BOTH `POST /api/indexers/download` and the calendar grab flows
-    (calendario-directo T2/S2): `ed2k://` → the direct EC seam (the legacy
-    aMuTorrent bridge under the `AMULE_EC_DIRECT=0` rollback), a 32-hex aMule
-    hash-id → `amule_download_search_result` (an honest refusal under the
-    rollback), `magnet:`/`http(s)` → the NATIVE qBittorrent client, and
+    (calendario-directo T2/S2): `ed2k://` → the direct EC seam , a 32-hex aMule
+    hash-id → `amule_download_search_result`, `magnet:`/`http(s)` → the NATIVE qBittorrent client, and
     anything else is the `_BAD_SCHEME` honest refusal. NO query, NO re-search:
     the caller already holds the link.
 
@@ -783,10 +727,8 @@ async def download_indexer(body: dict, _key: str = Depends(verify_api_key)):
 
     Body `{link?, guid?}` — at least one, dispatched by the target's shape
     through `dispatch_direct` (the SAME dispatch the calendar grab uses,
-    calendario-directo T2/S2): `ed2k://` → the direct EC seam (the legacy
-    aMuTorrent bridge under the `AMULE_EC_DIRECT=0` rollback), a 32-hex aMule
-    hash → `amule_download_search_result` (an honest refusal under the
-    rollback), `magnet:`/`http(s)` → the NATIVE qBittorrent client (S4/S5,
+    calendario-directo T2/S2): `ed2k://` → the direct EC seam , a 32-hex aMule
+    hash → `amule_download_search_result`, `magnet:`/`http(s)` → the NATIVE qBittorrent client (S4/S5,
     destination named in the detail per S2). No persistence, no query, and
     200 `{ok, detail}` in BOTH directions — the only 400s are the body's own
     (no link AND no guid, or a non-string), all of them in Spanish.

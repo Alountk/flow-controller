@@ -10,7 +10,6 @@ from pydantic import BaseModel
 
 import event_bus
 from config import (
-    AMUTORRENT_INDEXER,
     all_services,
     configured_services,
     find_service,
@@ -171,7 +170,6 @@ async def get_trace(_key: str = Depends(verify_api_key)):
     return {
         "traces": traces,
         "summary": summary,
-        "indexer": AMUTORRENT_INDEXER,
         "updated_at": int(time.time()),
     }
 

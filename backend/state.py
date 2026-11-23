@@ -113,7 +113,6 @@ status_cache: dict = {
     "updated_at": 0,
     "radarr": "unknown:init",
     "sonarr": "unknown:init",
-    "amutorrent": "unknown:init",
 }
 
 # ── File queue ────────────────────────────────────────────────────────────────
@@ -138,7 +137,7 @@ consumer_active: bool = False
 # pool its connections.
 
 # aiohttp's defaults, stated explicitly: the ceiling should be visible rather
-# than implied. Three hosts (radarr, sonarr, amutorrent) and the trace fan-out
+# than implied. Three hosts (radarr, sonarr, amule) and the trace fan-out
 # of four calls each sit well inside `limit_per_host`.
 _HTTP_LIMIT = 100
 _HTTP_LIMIT_PER_HOST = 30

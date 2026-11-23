@@ -17,11 +17,6 @@ services:
       # Sonarr
       - SONARR_URL=${SONARR_URL:-http://localhost:8989}
       - SONARR_API_KEY=${SONARR_API_KEY:-}
-      # AmuTorrent
-      - AMUTORRENT_URL=${AMUTORRENT_URL:-http://localhost:4000}
-      - AMUTORRENT_API_KEY=${AMUTORRENT_API_KEY:-}
-      - AMUTORRENT_USER=${AMUTORRENT_USER:-admin}
-      - AMUTORRENT_PASSWORD=${AMUTORRENT_PASSWORD:-}
       # Seguridad
       - SAFE_MODE=${SAFE_MODE:-true}
       - API_KEY=${API_KEY:-}
@@ -38,7 +33,6 @@ services:
       - IMPORT_TIMEOUT=${IMPORT_TIMEOUT:-40}
       # Trazabilidad
       - TRACE_LIMIT=${TRACE_LIMIT:-25}
-      - AMUTORRENT_INDEXER=${AMUTORRENT_INDEXER:-}
       # aMule-watchdog: reinicio del contenedor por la Engine API, a través del
       # socket-proxy de abajo (flow-controller ya no monta el socket de Docker).
       - DOCKER_HOST=${DOCKER_HOST:-tcp://127.0.0.1:2375}

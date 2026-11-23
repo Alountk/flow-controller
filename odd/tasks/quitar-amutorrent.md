@@ -10,7 +10,7 @@ Objetivo: eliminar todo uso de aMuTorrent; aMule solo por su API directa (EC). R
 ## Tasks
 - T1 (S2) PR 1: traces y downloads_cache sin aMuTorrent (adaptador desde EC + completados en disco) — inline — hecho (PR pendiente de merge)
 - T2 (S3) PR 2: recarga de carpetas compartidas — inline — hecho: recarga eliminada (EC no la expone; el usuario aceptó perderla), guardar devuelve ok al escribir los ficheros
-- T3 (S4) PR 3: borrar lo viejo — inline — pendiente
+- T3 (S4) PR 3: borrar lo viejo — inline — backend, compose y README hechos; frontend pendiente
 
 ## Log
 - L1: "verifica que no estemos utilizando nada del amutorrent." → "quiero quitarlo todo, nuestra comunicacion ya sera por la api directa de amule." → "si" (plan en 3 PRs).

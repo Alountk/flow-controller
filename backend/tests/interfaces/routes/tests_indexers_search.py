@@ -785,16 +785,14 @@ class TestTheAmuleapiSeam:
         # failure never discards the others.
         assert body["skipped"] == [{"source": "amule", "reason": detail}]
 
-    def test_the_configured_search_never_touches_the_amutorrent_port(self, store):
-        """S2: «Ninguna llamada activa pasa por aMuTorrent (:4000)» — every
-        URL the search reaches is amuleapi's, and the EC seam is never asked."""
+    def test_the_configured_search_only_reaches_amuleapi(self, store):
+        """Every URL the search reaches is amuleapi's, and the EC seam is never asked."""
         with _amule_unused() as ec_calls, _amuleapi_rest() as session:
             resp = _search({"query": "Артур", "sources": ["amule"]})
 
         assert resp.json()["results"], "la REST responde"
         urls = [url for url, _ in session.calls]
         assert urls and all(AMULEAPI_URL in url for url in urls)
-        assert [url for url in urls if ":4000" in url] == []
         assert ec_calls == []
 
 

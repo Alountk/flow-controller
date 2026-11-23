@@ -44,9 +44,9 @@ _DOWNLOAD_CLIENT_PATHS: dict[str, str] = {}
 ACTIONS: dict[str, dict] = {
     "fix_category": {
         "label": "Corregir categoría",
-        "description": "Pone la categoría correcta en aMuTorrent y reintenta el import.",
+        "description": "Pone la categoría correcta en aMule y reintenta el import.",
         "destructive": False,
-        "scope": "amutorrent+arr",
+        "scope": "amule+arr",
     },
     "retry_import": {
         "label": "Reintentar import",
@@ -62,15 +62,15 @@ ACTIONS: dict[str, dict] = {
     },
     "pause": {
         "label": "Pausar",
-        "description": "Pausa la descarga en aMuTorrent.",
+        "description": "Pausa la descarga en aMule.",
         "destructive": False,
-        "scope": "amutorrent",
+        "scope": "amule",
     },
     "resume": {
         "label": "Reanudar",
-        "description": "Reanuda la descarga en aMuTorrent.",
+        "description": "Reanuda la descarga en aMule.",
         "destructive": False,
-        "scope": "amutorrent",
+        "scope": "amule",
     },
     "remove_queue": {
         "label": "Quitar de la cola",
@@ -80,15 +80,15 @@ ACTIONS: dict[str, dict] = {
     },
     "delete_torrent": {
         "label": "Eliminar descarga",
-        "description": "Elimina la descarga de aMuTorrent (opcionalmente con sus archivos).",
+        "description": "Elimina la descarga de aMule (opcionalmente con sus archivos).",
         "destructive": True,
-        "scope": "amutorrent",
+        "scope": "amule",
     },
     "cancel_download": {
         "label": "Cancelar descarga",
         "description": "Cancela una descarga en curso: quita la cola del arr (si la sigue) y elimina la descarga del cliente con sus ficheros parciales.",
         "destructive": True,
-        "scope": "amutorrent+arr",
+        "scope": "amule+arr",
     },
     "fix_path_mapping": {
         "label": "Mapear ruta",
@@ -105,15 +105,6 @@ ACTIONS: dict[str, dict] = {
 }
 
 PAUSED_STATES = {"pausedDL", "pausedUP", "stoppedDL", "stoppedUP"}
-
-QBIT_DOWNLOADING = {
-    "downloading", "forcedDL", "metaDL", "allocating",
-    "checkingDL", "stalledDL", "queuedDL",
-}
-QBIT_COMPLETED = {
-    "uploading", "pausedUP", "stalledUP", "forcedUP",
-    "queuedUP", "stoppedUP", "checkingUP",
-}
 
 def service_is_configured(url: str, api_key: str) -> bool:
     """A service is usable only when it has both a URL and its API key.
@@ -199,11 +190,11 @@ def rebuild() -> None:
     else: `find_service` kept returning the old one until the container
     restarted, right after the UI said it had been saved.
     """
-    global RADARR_URL, SONARR_URL, PROWLARR_URL, AMUTORRENT_URL
+    global RADARR_URL, SONARR_URL, PROWLARR_URL
     global AMULE_URL, AMULE_EC_PORT, AMULE_EC_PASSWORD
     global AMULEAPI_URL, AMULEAPI_PORT, AMULEAPI_PASSWORD
-    global RADARR_API_KEY, SONARR_API_KEY, PROWLARR_API_KEY, AMUTORRENT_API_KEY
-    global AMUTORRENT_USER, AMUTORRENT_PASSWORD, QBIT_URL, QBIT_USER, QBIT_PASSWORD
+    global RADARR_API_KEY, SONARR_API_KEY, PROWLARR_API_KEY
+    global QBIT_URL, QBIT_USER, QBIT_PASSWORD
     global CHECK_INTERVAL, MAX_RETRIES, RETRY_DELAY, REQUEST_TIMEOUT
     global IMPORT_POLL_TIMEOUT, SWEEP_INTERVAL, TRACE_LIMIT
     global SAFE_MODE, DEVELOPER
@@ -213,7 +204,6 @@ def rebuild() -> None:
 
     RADARR_URL = get_setting("services", "radarr", "url", default="http://localhost:7878")
     SONARR_URL = get_setting("services", "sonarr", "url", default="http://localhost:7878")
-    AMUTORRENT_URL = get_setting("services", "amutorrent", "url", default="http://localhost:4000")
 
     # Conexión directa EC (S2): settings.json manda; si no está, manda el
     # entorno (.env.local / env_file del despliegue). La contraseña EC es un
@@ -239,10 +229,6 @@ def rebuild() -> None:
     # api_key de radarr — sin configurar, `configured` es False y nadie lo llama.
     PROWLARR_URL = get_setting("services", "prowlarr", "url", default="")
     PROWLARR_API_KEY = get_setting("services", "prowlarr", "api_key", default="")
-    AMUTORRENT_API_KEY = get_setting("services", "amutorrent", "api_key", default="")
-
-    AMUTORRENT_USER = get_setting("services", "amutorrent", "user", default="admin")
-    AMUTORRENT_PASSWORD = get_setting("services", "amutorrent", "password", default="")
     QBIT_URL = get_setting("services", "qbit", "url", default="")
     QBIT_USER = get_setting("services", "qbit", "user", default="")
     QBIT_PASSWORD = get_setting("services", "qbit", "password", default="")
@@ -281,7 +267,6 @@ def rebuild() -> None:
     _DOWNLOAD_CLIENT_PATHS.clear()
     _DOWNLOAD_CLIENT_PATHS.update({
         "amule": FOLDER_DOWNLOAD_AMULE,
-        "amutorrent": FOLDER_DOWNLOAD_AMULE,
         "qbittorrent": FOLDER_DOWNLOAD_TORRENT,
         "qbit": FOLDER_DOWNLOAD_TORRENT,
     })
@@ -313,13 +298,6 @@ def rebuild() -> None:
             "configured": service_is_configured(PROWLARR_URL, PROWLARR_API_KEY),
         },
         {
-            "key": "amutorrent",
-            "kind": "qbit",
-            "url": AMUTORRENT_URL,
-            "api_key": AMUTORRENT_API_KEY,
-            "configured": service_is_configured(AMUTORRENT_URL, AMUTORRENT_API_KEY),
-        },
-        {
             # Conexiones directas (S2): `kind` propio — EC no es HTTP, queda
             # fuera de los bucles "arr" y "qbit". `api_key` vacía a propósito:
             # la lista de servicios enmascara/expone `api_key`, y aquí el
@@ -349,11 +327,6 @@ def rebuild() -> None:
 
 
 rebuild()
-
-#: Derived from the URL, so only once `rebuild()` has run.
-AMUTORRENT_INDEXER = os.getenv(
-    "AMUTORRENT_INDEXER", f"{AMUTORRENT_URL}/indexer/amule/api"
-)
 
 
 def all_services() -> list[dict]:
@@ -397,14 +370,6 @@ def service_unavailable_reason(key: str, kind: str | None = None) -> str:
     if not known:
         return f"servicio desconocido: {key}"
     return f"{key} no está configurado (faltan la URL o la API key)"
-
-_AMU_WS_COMPLETE = {
-    "batchPause": "batch-pause-complete",
-    "batchResume": "batch-resume-complete",
-    "batchStop": "batch-stop-complete",
-    "batchDelete": "batch-delete-complete",
-    "batchSetFileCategory": "batch-category-changed",
-}
 
 _VOLUME_MAP = [
     ("/downloads/incoming/", "/mnt/storage-6tb/shared-downloads/amule/"),

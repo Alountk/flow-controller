@@ -10,14 +10,11 @@ result's file hash. calendario-directo T2/S2 deletes that machinery from
 into the worker, and these tests pin the grab-level contract of it:
 
 * the row's own target (`link or guid`) reaches the right seam AS-IS — ed2k
-  → `amule_add_ed2k` (EC, AMULE_EC_DIRECT default), 32-hex aMule hash →
+  → `amule_add_ed2k` (EC), 32-hex aMule hash →
   `amule_download_search_result`, magnet → the native qBittorrent client —
   and NOT ONE search seam is ever called (the no-re-search proof);
 * the category is chosen by destination (S3): library → the arr's watched
   category (`tv-sonarr` for sonarr), explicit destination → `flow`;
-* `AMULE_EC_DIRECT=0` is the exact aMuTorrent rollback (S7) at the grab level
-  too: the legacy bridge receives the link and the category, never the EC
-  seams.
 
 The transport-level rules of the dispatch itself (refusals, redaction,
 `_BAD_SCHEME`, the off-the-loop EC adapter) are covered endpoint-side by
@@ -113,14 +110,12 @@ def _transport():
     seams.hash_add = MagicMock()
     seams.search = MagicMock(return_value=[])
     seams.qbit = AsyncMock(return_value={"ok": True, "detail": "Descarga añadida en qBittorrent (stub), categoría flow"})
-    seams.bridge = AsyncMock(return_value={"ok": True, "detail": "Descarga añadida (categoría flow)"})
     seams.record = MagicMock()
     patches = (
         patch.object(gateways, "amule_add_ed2k", seams.add),
         patch.object(gateways, "amule_download_search_result", seams.hash_add),
         patch.object(gateways, "amule_search", seams.search),
         patch.object(gateways, "qbit_add_download", seams.qbit),
-        patch.object(gateways, "amutorrent_add_download", seams.bridge),
         patch("application.use_cases.grab_release.record_own_grab", seams.record),
         patch("application.use_cases.grab_release.direct_link_identity", direct_link_identity),
     )
@@ -131,7 +126,7 @@ def _run_seams(**kwargs):
     """One grab through the worker with the transport scripted; returns the
     settled task and the recording seams."""
     patches, seams = _transport()
-    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
         task = _settle(**kwargs)
     return task, seams
 
@@ -141,8 +136,7 @@ def _run_seams(**kwargs):
 
 def test_an_ed2k_link_is_enqueued_by_the_ec_seam_and_never_searched(monkeypatch):
     """S2: «no se re-busca el enlace» — the ed2k link goes to `amule_add_ed2k`
-    AS-IS (AMULE_EC_DIRECT default) and the search seam is never touched."""
-    monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
+    AS-IS and the search seam is never touched."""
     task, seams = _run_seams(guid=ED2K_LINK)
 
     assert task["status"] == "done"
@@ -157,7 +151,6 @@ def test_an_ed2k_link_is_enqueued_by_the_ec_seam_and_never_searched(monkeypatch)
 def test_a_magnet_is_added_by_the_native_client_under_the_arrs_watched_category(monkeypatch):
     """S2/S3: `magnet:` → the native qBittorrent client, and a library grab
     takes the category the arr watches — literal `tv-sonarr` for sonarr."""
-    monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
     task, seams = _run_seams(source="sonarr", guid=MAGNET)
 
     assert task["status"] == "done"
@@ -171,7 +164,6 @@ def test_a_magnet_is_added_by_the_native_client_under_the_arrs_watched_category(
 def test_a_32_hex_hash_is_added_via_download_search_result(monkeypatch):
     """S2: a 32-hex aMule hash-id (rows without a buildable link) → the EC
     `DOWNLOAD_SEARCH_RESULT` entry point, no search, no join."""
-    monkeypatch.delenv("AMULE_EC_DIRECT", raising=False)
     task, seams = _run_seams(guid=HASH)
 
     assert task["status"] == "done"
@@ -181,22 +173,16 @@ def test_a_32_hex_hash_is_added_via_download_search_result(monkeypatch):
     seams.add.assert_not_called()
 
 
-def test_the_rollback_takes_the_legacy_bridge_and_keeps_the_category():
-    """S2/S7: `AMULE_EC_DIRECT=0` is the exact aMuTorrent rollback at the grab
-    level too — the legacy bridge receives the row's link and the category
-    (S3: an explicit destination is `flow`), and the EC seams stay shut."""
-    with patch.dict("os.environ", {"AMULE_EC_DIRECT": "0"}):
-        task, seams = _run_seams(guid=ED2K_LINK, destination=FOREIGN)
+def test_an_explicit_destination_is_added_over_ec_and_flagged_direct():
+    """S3: a foreign destination goes straight to aMule over EC, and the
+    detail says the arr will neither see nor import it."""
+    task, seams = _run_seams(guid=ED2K_LINK, destination=FOREIGN)
 
     assert task["status"] == "done"
     assert task["ok"] is True
-    assert seams.bridge.await_args.args[1] == ED2K_LINK
-    assert seams.bridge.await_args.args[2] == "flow"
-    seams.add.assert_not_called()
+    seams.add.assert_called_once_with(ED2K_LINK)
     seams.hash_add.assert_not_called()
-    assert task["detail"] == (
-        "Descarga añadida (categoría flow) — directa: el arr no la verá ni la importará"
-    )
+    assert task["detail"] == "Descarga añadida — directa: el arr no la verá ni la importará"
 
 
 def test_the_row_link_wins_over_the_guid_and_the_guid_is_the_fallback():

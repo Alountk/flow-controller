@@ -38,8 +38,7 @@ the worker dispatches the row's own target by its SHAPE — `ed2k://` → direct
 EC, a 32-hex aMule hash → EC `DOWNLOAD_SEARCH_RESULT`, `magnet:`/`http(s)` →
 the qBittorrent client — exactly like `POST /api/indexers/download`, whose
 `interfaces.http.routes.indexers.dispatch_direct` the route injects here (this
-layer may not import `interfaces/`; `AMULE_EC_DIRECT=0` rides along inside the
-dispatch as the mandated aMuTorrent rollback). NO link is re-searched — the
+layer may not import `interfaces/`). NO link is re-searched — the
 row already carries `link`/`guid` — and `arr_grab_release` is gone from this
 flow. The client category is chosen by DESTINATION (S3, `category_for`), and
 every successful add is recorded with `direct=True` plus the client identity

@@ -13,15 +13,6 @@ import aiohttp
 from domain.media_info import compose, language_token
 from domain.resolution import from_dimensions, parse_dimensions
 
-from config import (
-    AMUTORRENT_API_KEY,
-    AMUTORRENT_PASSWORD,
-    AMUTORRENT_URL,
-    AMUTORRENT_USER,
-    _AMU_WS_COMPLETE,
-    QBIT_COMPLETED,
-    QBIT_DOWNLOADING,
-)
 from domain.naming import MEDIA_EXTENSIONS
 from infrastructure import amuleapi_client, qbit_client
 
@@ -32,13 +23,6 @@ def arr_headers(api_key: str) -> dict:
     headers = {"accept": "application/json"}
     if api_key:
         headers["X-Api-Key"] = api_key
-    return headers
-
-
-def qbit_headers(api_key: str) -> dict:
-    headers = {"accept": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
     return headers
 
 
@@ -82,58 +66,6 @@ async def check_arr(session: aiohttp.ClientSession, service: dict) -> tuple[str,
     return "offline", f"Fallaron {config.MAX_RETRIES} intentos ({last_error})", {}
 
 
-async def fetch_qbit_meta(session: aiohttp.ClientSession, service: dict) -> dict:
-    headers = qbit_headers(service["api_key"])
-    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
-    meta: dict = {}
-    try:
-        async with session.get(f"{service['url']}/api/v2/app/version", headers=headers, timeout=timeout) as resp:
-            if resp.status == 200:
-                meta["version"] = (await resp.text()).strip()
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        pass
-    try:
-        async with session.get(f"{service['url']}/api/v2/torrents/info", headers=headers, timeout=timeout) as resp:
-            if resp.status == 200:
-                torrents = await resp.json(content_type=None)
-                downloading = sum(1 for t in torrents if t.get("state") in QBIT_DOWNLOADING)
-                completed = sum(1 for t in torrents if t.get("state") in QBIT_COMPLETED)
-                errored = sum(1 for t in torrents if t.get("state") == "error")
-                meta["torrents"] = {
-                    "total": len(torrents),
-                    "downloading": downloading,
-                    "completed": completed,
-                    "errors": errored,
-                }
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        pass
-    return meta
-
-
-async def check_qbit(session: aiohttp.ClientSession, service: dict) -> tuple[str, str, dict]:
-    url = service["url"]
-    headers = qbit_headers(service["api_key"])
-    endpoint = f"{url}/api/v2/app/version"
-    last_error = "sin respuesta"
-    for attempt in range(1, config.MAX_RETRIES + 1):
-        try:
-            timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
-            async with session.get(endpoint, headers=headers, timeout=timeout) as resp:
-                if resp.status in AUTH_STATUSES:
-                    return "misconfigured", f"API key rechazada (HTTP {resp.status})", {}
-                if resp.status == 200:
-                    meta = await fetch_qbit_meta(session, service)
-                    return "online", f"Conexión exitosa (intento {attempt})", meta
-                last_error = f"HTTP {resp.status}"
-        except asyncio.TimeoutError:
-            last_error = "Timeout"
-        except aiohttp.ClientError as exc:
-            last_error = type(exc).__name__
-        if attempt < config.MAX_RETRIES:
-            await asyncio.sleep(config.RETRY_DELAY)
-    return "offline", f"Fallaron {config.MAX_RETRIES} intentos ({last_error})", {}
-
-
 async def check_qbittorrent(session: aiohttp.ClientSession, service: dict) -> tuple[str, str, dict]:
     """Cliente qBittorrent NATIVO: la sonda es el login y nada más (S4/D2).
 
@@ -152,8 +84,6 @@ async def check_qbittorrent(session: aiohttp.ClientSession, service: dict) -> tu
 
 
 async def check_service(session: aiohttp.ClientSession, service: dict) -> tuple[str, str, dict]:
-    if service["kind"] == "qbit":
-        return await check_qbit(session, service)
     if service["kind"] == "qbittorrent":
         return await check_qbittorrent(session, service)
     return await check_arr(session, service)
@@ -202,9 +132,6 @@ async def _probe_service_connection(session: aiohttp.ClientSession, service: dic
         # ve por EC — vacío significa «REST viva, núcleo no cuadrado».
         endpoint = f"{service['url']}/api/v1/version"
         headers = {}
-    elif service["kind"] == "qbit":
-        endpoint = f"{service['url']}/api/v2/app/version"
-        headers = qbit_headers(service["api_key"])
     elif service["kind"] == "prowlarr":
         # Prowlarr is a v1 API: it 404s every /api/v3 path, so the generic
         # arr probe would paint a perfectly healthy instance as down.
@@ -221,9 +148,7 @@ async def _probe_service_connection(session: aiohttp.ClientSession, service: dic
             if resp.status != 200:
                 return {**result, "ok": False, **_failure_detail(service, status=resp.status)}
 
-            if service["kind"] == "qbit":
-                version = (await resp.text()).strip()
-            elif service["kind"] == "amuleapi":
+            if service["kind"] == "amuleapi":
                 # Prioridad al amuled conectado; amuleapi_version es el respaldo.
                 data = await resp.json(content_type=None)
                 version = data.get("daemon_version") or data.get("amuleapi_version", "")
@@ -305,145 +230,6 @@ async def arr_cancel_command(session: aiohttp.ClientSession, service: dict, comm
             return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
     except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
         return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
-
-
-async def amu_ws_login(session: aiohttp.ClientSession) -> tuple[bool, str]:
-    if not AMUTORRENT_PASSWORD:
-        return False, "faltan credenciales (AMUTORRENT_PASSWORD)"
-    try:
-        async with session.post(
-            f"{AMUTORRENT_URL}/api/auth/login",
-            json={
-                "username": AMUTORRENT_USER,
-                "password": AMUTORRENT_PASSWORD,
-                "rememberMe": True,
-            },
-            headers={"Referer": AMUTORRENT_URL},
-            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 2),
-        ) as resp:
-            data = await resp.json(content_type=None)
-            if data.get("success"):
-                return True, "sesión iniciada"
-            return False, data.get("message") or f"HTTP {resp.status}"
-    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
-        return False, f"{type(exc).__name__}: {exc}"
-
-
-def amu_ws_url() -> str:
-    base = AMUTORRENT_URL.rstrip("/")
-    if base.startswith("https://"):
-        return "wss://" + base[len("https://"):] + "/ws"
-    if base.startswith("http://"):
-        return "ws://" + base[len("http://"):] + "/ws"
-    return base + "/ws"
-
-
-async def amu_ws(action: str, payload: dict, *, timeout: float = 15.0) -> dict:
-    expect = _AMU_WS_COMPLETE.get(action)
-    if expect is None:
-        return {"ok": False, "detail": f"acción WS desconocida: {action}"}
-    jar = aiohttp.CookieJar(unsafe=True)
-    async with aiohttp.ClientSession(cookie_jar=jar) as session:
-        ok, detail = await amu_ws_login(session)
-        if not ok:
-            return {"ok": False, "detail": f"login aMuTorrent: {detail}"}
-        try:
-            async with session.ws_connect(
-                amu_ws_url(),
-                headers={"Referer": AMUTORRENT_URL},
-                timeout=aiohttp.ClientTimeout(total=timeout),
-                heartbeat=None,
-            ) as ws:
-                await ws.send_json({"action": action, **payload})
-                deadline = time.monotonic() + timeout
-                while True:
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        return {"ok": False, "detail": "sin confirmación (timeout)"}
-                    msg = await ws.receive(timeout=remaining)
-                    if msg.type == aiohttp.WSMsgType.TEXT:
-                        try:
-                            event = json.loads(msg.data)
-                        except ValueError:
-                            continue
-                        etype = event.get("type")
-                        if etype == "error":
-                            return {
-                                "ok": False,
-                                "detail": event.get("message") or "error de aMuTorrent",
-                            }
-                        if etype == expect:
-                            results = event.get("results")
-                            if isinstance(results, list) and results:
-                                failed = [r for r in results if not r.get("success")]
-                                if failed:
-                                    why = failed[0].get("error") or "rechazado"
-                                    return {
-                                        "ok": False,
-                                        "detail": f"{len(failed)}/{len(results)} fallaron: {why}",
-                                    }
-                            return {"ok": True, "detail": "aplicado vía WebSocket"}
-                    elif msg.type in (
-                        aiohttp.WSMsgType.CLOSED,
-                        aiohttp.WSMsgType.CLOSE,
-                        aiohttp.WSMsgType.ERROR,
-                    ):
-                        return {"ok": False, "detail": f"WebSocket cerrado ({msg.data})"}
-        except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
-            return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
-
-
-async def amu_ws_find_instance(
-    matched_hash: str, *, timeout: float = 10.0,
-) -> tuple[str, str]:
-    jar = aiohttp.CookieJar(unsafe=True)
-    async with aiohttp.ClientSession(cookie_jar=jar) as session:
-        ok, _ = await amu_ws_login(session)
-        if not ok:
-            return "", ""
-        try:
-            async with session.ws_connect(
-                amu_ws_url(),
-                headers={"Referer": AMUTORRENT_URL},
-                timeout=aiohttp.ClientTimeout(total=timeout),
-            ) as ws:
-                await asyncio.wait_for(ws.receive(), timeout=5)
-                await ws.send_json({"action": "subscribe", "channel": "items"})
-                deadline = time.monotonic() + timeout
-                h_lower = matched_hash.lower()
-                h_prefix = h_lower[:32]
-                while time.monotonic() < deadline:
-                    msg = await ws.receive(timeout=min(5, deadline - time.monotonic()))
-                    if msg.type != aiohttp.WSMsgType.TEXT:
-                        continue
-                    try:
-                        ev = json.loads(msg.data)
-                    except ValueError:
-                        continue
-                    if ev.get("type") != "batch-update":
-                        continue
-                    items = ev.get("data", {}).get("items", [])
-                    for item in items:
-                        ih = item.get("hash", "").lower()
-                        if ih == h_lower or ih == h_prefix:
-                            client = item.get("client", "amule")
-                            inst = item.get("instanceId", "")
-                            return client, inst
-                return "", ""
-        except Exception:
-            return "", ""
-
-
-def amu_ws_items(matched_hash: str, *, client: str = "amule", instance_id: str | None = None, name: str | None = None) -> list[dict]:
-    h = matched_hash.lower()
-    if len(h) == 40 and h.endswith("00000000"):
-        h = h[:32]
-    item: dict = {"fileHash": h, "clientType": client}
-    if instance_id:
-        item["instanceId"] = instance_id
-    if name:
-        item["fileName"] = name
-    return [item]
 
 
 async def arr_delete_queue(
@@ -956,30 +742,13 @@ async def arr_root_folders(session: aiohttp.ClientSession, service: dict) -> lis
         return []
 
 
-async def amu_torrent_categories(session: aiohttp.ClientSession) -> list[str]:
-    """Category names configured in aMuTorrent, or [] if it cannot be reached."""
-    try:
-        async with session.get(
-            f"{AMUTORRENT_URL}/api/v2/torrents/categories",
-            headers=qbit_headers(AMUTORRENT_API_KEY),
-            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
-        ) as resp:
-            if resp.status != 200:
-                return []
-            data = await resp.json(content_type=None)
-            return list(data.keys()) if isinstance(data, dict) else []
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        return []
-
-
 def direct_link_identity(link: str, fallback_title: str) -> tuple[str, str | None]:
     """What the client will call the download, and its hash when knowable.
 
     Pure, because the identity rules deserve tests without a client. The
     `ed2k://|file <name>|<size>|<hash>|/` name IS what the client names the
-    download — but the link's hash is deliberately NOT returned: aMuTorrent
-    translates the ED2K hash into its own infohash, and guessing that mapping
-    would join the wrong torrent. A magnet carries its identity in `dn` and a
+    download — but the link's hash is deliberately NOT returned: the
+    client names its own identity for the download. A magnet carries its identity in `dn` and a
     hex `btih`, both literal.
     """
     if link.startswith("ed2k://"):
@@ -994,27 +763,6 @@ def direct_link_identity(link: str, fallback_title: str) -> tuple[str, str | Non
     return (fallback_title, None)
 
 
-async def amutorrent_ensure_category(session: aiohttp.ClientSession, category: str) -> bool:
-    """The category exists in the client, creating it if missing.
-
-    Best effort on purpose: a torrent with NO category is still invisible to
-    the arr (it only polls its own), so a failed create must never block the
-    add — it only loses the bookkeeping label.
-    """
-    try:
-        if category in await amu_torrent_categories(session):
-            return True
-        async with session.post(
-            f"{AMUTORRENT_URL}/api/v2/torrents/createCategories",
-            headers=qbit_headers(AMUTORRENT_API_KEY),
-            data={"name": category},
-            timeout=aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT),
-        ) as resp:
-            return resp.status in (200, 409)
-    except (asyncio.TimeoutError, aiohttp.ClientError):
-        return False
-
-
 def _empty_answer_detail(exc: BaseException, timeout: aiohttp.ClientTimeout) -> str:
     """A failure detail that never ends in an empty tail.
 
@@ -1027,36 +775,6 @@ def _empty_answer_detail(exc: BaseException, timeout: aiohttp.ClientTimeout) -> 
     if str(exc):
         return f"{type(exc).__name__}: {exc}"
     return f"{type(exc).__name__}: sin respuesta tras {int(timeout.total)}s"
-
-
-async def amutorrent_add_download(
-    session: aiohttp.ClientSession, url: str, category: str = DIRECT_DOWNLOAD_CATEGORY
-) -> dict:
-    """``POST /api/v2/torrents/add`` — the same call the arr itself makes.
-
-    This is the whole of option B: the link goes straight to the client under
-    OUR category, and the arr never learns the download exists.
-    """
-    await amutorrent_ensure_category(session, category)
-    # Same ×12 as the amuleapi search: ED2K work is throttled server-side and
-    # measured at ~30 s, and the add POST is what kicks that work off — at ×2
-    # (10 s) the client had already accepted the link (the download started)
-    # while our side timed out with a bare "TimeoutError: ".
-    timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT * 12)
-    log.info("amutorrent_add_download category=%s link=%s", category, url[:48])
-    try:
-        async with session.post(
-            f"{AMUTORRENT_URL}/api/v2/torrents/add",
-            headers=qbit_headers(AMUTORRENT_API_KEY),
-            data={"urls": url, "category": category},
-            timeout=timeout,
-        ) as resp:
-            if resp.status == 200:
-                return {"ok": True, "detail": f"Descarga añadida (categoría {category})", "category": category}
-            text = await resp.text()
-            return {"ok": False, "detail": f"HTTP {resp.status}: {text[:200]}"}
-    except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
-        return {"ok": False, "detail": _empty_answer_detail(exc, timeout)}
 
 
 async def qbit_add_download(*args, **kwargs):
