@@ -182,11 +182,6 @@ def arr_command(*args, **kwargs):
     return _arr.arr_command(*args, **kwargs)
 
 
-def arr_categories_for(*args, **kwargs):
-    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
-    return _arr.arr_categories_for(*args, **kwargs)
-
-
 def arr_episode_metadata(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.arr_episode_metadata(*args, **kwargs)
@@ -316,11 +311,6 @@ def fetch_all_movies_detailed(*args, **kwargs):
 def fetch_all_series_detailed(*args, **kwargs):
     """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
     return _arr.fetch_all_series_detailed(*args, **kwargs)
-
-
-def fetch_amu_torrents_by_category(*args, **kwargs):
-    """Delegate to the bound adapter. Resolved on every call — see the module docstring."""
-    return _arr.fetch_amu_torrents_by_category(*args, **kwargs)
 
 
 def fetch_arr_grabbed(*args, **kwargs):

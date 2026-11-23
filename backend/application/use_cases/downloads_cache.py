@@ -37,14 +37,10 @@ import time
 
 import event_bus
 from application.gateways import (
-    arr_categories_for,
-    amu_torrent_categories,
-    fetch_amu_torrents_by_category,
     fetch_arr_queue,
 )
 from application.use_cases import download_notices
 from config import configured_services, get_setting
-from traces import normalize_hash
 from state import http_session
 
 log = logging.getLogger(__name__)
@@ -133,28 +129,10 @@ async def collect_downloads() -> dict:
         for service, result in zip(arr_services, queues):
             queue_items.extend((service["key"], item) for item in result)
 
-        # Nothing downloading means nothing to ask the download client: idle
-        # cost is zero, and the unfiltered endpoint is ~1 MB.
         if not queue_items:
             return {"downloads": [], "errors": errors, "updated_at": int(time.time())}
 
-        available = await amu_torrent_categories(session)
-        categories: list[str] = []
-        for service in arr_services:
-            categories.extend(arr_categories_for(service["key"], available))
-
-        torrents, failure = await fetch_amu_torrents_by_category(session, categories)
-        if failure:
-            errors.append({"source": "amutorrent", **failure})
-
-        torrents_by_hash = {
-            normalize_hash(t.get("hash", "")): t for t in torrents if t.get("hash")
-        }
-
-    downloads = []
-    for service_key, item in queue_items:
-        torrent = torrents_by_hash.get(normalize_hash(item.get("downloadId", "")))
-        downloads.append(_build_download(service_key, item, torrent))
+    downloads = [_build_download(service_key, item, None) for service_key, item in queue_items]
 
     # Problems first, then the most advanced downloads.
     downloads.sort(key=lambda d: (not d["problem"], -d["progress"]))

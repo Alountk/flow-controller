@@ -21,9 +21,8 @@ from infrastructure.arr_client import (
     fetch_arr_all_series,
     fetch_arr_grabbed,
     fetch_arr_queue,
-    fetch_qbit_torrents,
 )
-
+from infrastructure.amule_torrents import fetch_amule_torrents
 from domain.library_path import library_path
 log = logging.getLogger("flow-controller")
 
@@ -205,7 +204,20 @@ async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
             paths_by_id["radarr"] = results[idx] if idx < len(results) else {}
             idx += 1
 
-    torrents = await fetch_qbit_torrents(session)
+    # Direct adds (B-10): the arr was never told, so its history will never
+    # carry them — without these rows the operator's chosen destination would
+    # never be reached (no trace, no sweep decision, no copy). Best-effort:
+    # an unreadable registry degrades to "nothing provably ours", the same
+    # answer the sweep treats as "act on nothing".
+    try:
+        own_grabs = await asyncio.to_thread(
+            list_own_grabs, time.time() - OWN_GRAB_LOOKBACK_SECONDS
+        )
+    except Exception as exc:  # noqa: BLE001 — one bad read, not a dead poll
+        log.warning("direct traces: own_grabs no disponibles: %s", exc)
+        own_grabs = []
+    finished = {g["client_name"]: g.get("client_hash") or "" for g in own_grabs if g.get("direct") and g.get("client_name")}
+    torrents = await fetch_amule_torrents(finished)
     amu_hashes = {normalize_hash(t.get("hash", "")) for t in torrents}
     torrents_by_hash = {normalize_hash(t.get("hash", "")): t for t in torrents}
 
@@ -283,18 +295,6 @@ async def build_traces(session: aiohttp.ClientSession) -> list[dict]:
                 }
             )
 
-    # Direct adds (B-10): the arr was never told, so its history will never
-    # carry them — without these rows the operator's chosen destination would
-    # never be reached (no trace, no sweep decision, no copy). Best-effort:
-    # an unreadable registry degrades to "nothing provably ours", the same
-    # answer the sweep treats as "act on nothing".
-    try:
-        own_grabs = await asyncio.to_thread(
-            list_own_grabs, time.time() - OWN_GRAB_LOOKBACK_SECONDS
-        )
-    except Exception as exc:  # noqa: BLE001 — one bad read, not a dead poll
-        log.warning("direct traces: own_grabs no disponibles: %s", exc)
-        own_grabs = []
     traces.extend(_direct_traces(own_grabs, torrents, paths_by_id))
 
     traces.sort(key=lambda t: t.get("date") or "", reverse=True)

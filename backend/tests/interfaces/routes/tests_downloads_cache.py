@@ -20,7 +20,6 @@ from fastapi.testclient import TestClient
 import app as app_module
 from app import app
 from application.use_cases import downloads_cache
-from tests._stubs import _StubSession
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -184,27 +183,6 @@ class TestThePayloadShapeIsUntouched:
 
         assert resp.status_code == 200
         assert resp.json() == _SNAPSHOT
-
-    def test_the_join_payload_still_matches_the_pre_change_golden(self):
-        """The real collector, through the endpoint, against the golden
-        captured BEFORE the cache existed: same join, same fields, same
-        values — only the serving path moved."""
-        _cold()
-        routes = _routes()
-        with patch.object(
-            downloads_cache, "configured_services", return_value=_arr_services()
-        ), patch(
-            "infrastructure.arr_client.AMUTORRENT_URL", AMU_URL
-        ), patch(
-            "aiohttp.ClientSession", lambda *a, **k: _StubSession(routes)
-        ):
-            resp = client.get("/api/downloads")
-
-        assert resp.status_code == 200
-        body = resp.json()
-        updated_at = body.pop("updated_at")
-        assert isinstance(updated_at, int) and updated_at > 0
-        assert body == _GOLDEN
 
 
 class TestThePollersLifecycle:

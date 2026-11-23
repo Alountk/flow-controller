@@ -151,7 +151,7 @@ def test_build_traces_appends_the_direct_row(monkeypatch):
     monkeypatch.setattr(traces_module, "fetch_arr_queue", _no_queue)
     monkeypatch.setattr(traces_module, "arr_download_clients", _no_dc)
     monkeypatch.setattr(traces_module, "fetch_arr_all_movies", _no_paths)
-    monkeypatch.setattr(traces_module, "fetch_qbit_torrents", _torrents)
+    monkeypatch.setattr(traces_module, "fetch_amule_torrents", _torrents)
     monkeypatch.setattr(traces_module, "list_own_grabs", lambda since, limit=200: [_grab()])
 
     result = asyncio.run(traces_module.build_traces(None))
@@ -187,7 +187,7 @@ def test_build_traces_survives_an_unreadable_registry(monkeypatch):
     monkeypatch.setattr(traces_module, "fetch_arr_queue", _no_queue)
     monkeypatch.setattr(traces_module, "arr_download_clients", _no_dc)
     monkeypatch.setattr(traces_module, "fetch_arr_all_movies", _no_paths)
-    monkeypatch.setattr(traces_module, "fetch_qbit_torrents", _torrents)
+    monkeypatch.setattr(traces_module, "fetch_amule_torrents", _torrents)
     monkeypatch.setattr(traces_module, "list_own_grabs", _boom)
 
     result = asyncio.run(traces_module.build_traces(None))

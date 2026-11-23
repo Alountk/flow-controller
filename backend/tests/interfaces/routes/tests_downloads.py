@@ -91,27 +91,6 @@ def _collect(routes):
 # ── The join ─────────────────────────────────────────────────────────────────
 
 
-def test_joins_the_download_client_by_hash_ignoring_case():
-    routes = _routes(radarr_queue=[_queue_item()], torrents={"radarr": [_torrent()]})
-
-    result = _collect(routes)
-    download = result["downloads"][0]
-
-    assert download["matched"] is True
-    assert download["speed"] == 4196000
-    assert download["eta_seconds"] == 3177
-    assert download["seeders"] == 1
-
-
-def test_reports_progress_and_speed_from_the_client():
-    routes = _routes(radarr_queue=[_queue_item()], torrents={"radarr": [_torrent()]})
-
-    download = _collect(routes)["downloads"][0]
-
-    assert download["progress"] == 31.0
-    assert download["torrent_state"] == "downloading"
-
-
 def test_falls_back_to_arr_bookkeeping_when_the_join_fails():
     """No torrent match must still show progress, just without speed/ETA."""
     routes = _routes(radarr_queue=[_queue_item()], torrents={})
@@ -171,24 +150,6 @@ def test_problems_sort_first():
 
 
 # ── Categories ───────────────────────────────────────────────────────────────
-
-
-def test_queries_localized_category_variants():
-    """The server has radarr-ru / tv-sonarr-ru: filtering only the base loses them."""
-    from infrastructure.arr_client import arr_categories_for
-
-    available = ["radarr", "radarr-ru", "tv-sonarr", "tv-sonarr-ru", "juegos", "lidarr"]
-
-    assert arr_categories_for("radarr", available) == ["radarr", "radarr-ru"]
-    assert arr_categories_for("sonarr", available) == ["tv-sonarr", "tv-sonarr-ru"]
-
-
-def test_does_not_pick_unrelated_categories():
-    from infrastructure.arr_client import arr_categories_for
-
-    available = ["juegos", "libros", "3d", "radarr"]
-
-    assert arr_categories_for("radarr", available) == ["radarr"]
 
 
 # ── Failures are reported, not disguised ─────────────────────────────────────
