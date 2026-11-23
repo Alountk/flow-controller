@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Icon } from '../../shared/ui/Icon.tsx'
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { RetentionFile } from '../../shared/types.ts'
+import type { CopyMismatch, RetentionFile } from '../../shared/types.ts'
 import {
   fetchRoots,
   fetchRetention,
@@ -16,6 +16,7 @@ import { FileExplorer, type FileExplorerEntry } from '../../shared/ui/FileExplor
 import { LibraryRenameDialog } from './LibraryRenameDialog.tsx'
 import './FileManager.css'
 import '../../shared/ui/atoms.css'
+import '../../shared/ui/modal.css'
 
 interface RootsItem {
   path: string
@@ -132,13 +133,17 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
     },
   })
 
+  const [mismatch, setMismatch] = useState<{ found: CopyMismatch; type: 'copy' | 'move'; src: string } | null>(null)
+
   const queue = useMutation({
     mutationFn: ({ type, src, dst }: { type: 'copy' | 'move'; src: string; dst: string }) =>
       queueAdd(type, src, dst),
-    onSuccess: (res) => {
+    onSuccess: (res, vars) => {
       if (res.ok) {
         showToast(`${res.detail}`)
         queryClient.invalidateQueries({ queryKey: ['queue'] })
+      } else if (res.needs_confirmation && res.mismatch) {
+        setMismatch({ found: res.mismatch, type: vars.type, src: vars.src })
       } else {
         setError(res.detail)
       }
@@ -329,6 +334,36 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
     <div className="fm-pane" ref={paneRef}>
       {error && <div className="fm-error" onClick={() => setError(null)}>{error}</div>}
       {toast && <div className="fm-toast">{toast}</div>}
+
+      {mismatch && (
+        <div className="modal-backdrop" onClick={() => setMismatch(null)}>
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Carpeta destino" onClick={(e) => e.stopPropagation()}>
+            <h3>Esta carpeta no es la que toca</h3>
+            <p>
+              {mismatch.found.file} mide {mismatch.found.resolution}p y el destino es{' '}
+              <code>{mismatch.found.destination}</code>.
+              {mismatch.found.suggested
+                ? <> ¿{mismatch.type === 'move' ? 'Moverlo' : 'Copiarlo'} a <code>{mismatch.found.suggested}</code>?</>
+                : ' Elige otra carpeta: no hay una carpeta que le corresponda aquí.'}
+            </p>
+            <div className="modal-buttons">
+              <button className="action-btn" onClick={() => setMismatch(null)}>Cancelar</button>
+              {mismatch.found.suggested && (
+                <button
+                  className="action-btn destructive"
+                  onClick={() => {
+                    const { type, src, found } = mismatch
+                    setMismatch(null)
+                    queue.mutate({ type, src, dst: `${found.suggested}/${src.split('/').pop()}` })
+                  }}
+                >
+                  {mismatch.type === 'move' ? 'Mover' : 'Copiar'} a la carpeta correcta
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {creating && (
         <div className="fm-input-row">

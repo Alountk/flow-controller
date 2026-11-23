@@ -25,7 +25,7 @@ from application.gateways import (
     arr_root_folders,
     fetch_all_movies_detailed,
 )
-from application.use_cases import library_rename, place_file
+from application.use_cases import destination_guard, library_rename, place_file
 from application.use_cases.file_provenance import file_provenance
 from import_service import post_move_import
 from models import ActionRequest
@@ -651,6 +651,14 @@ async def _consume_queue():
             await asyncio.to_thread(gateways.history.record_operation, op)
 
 
+async def _misfit(src: str, dst: str) -> dict | None:
+    """Why the file does not fit the folder it is going to; only a 4K folder can be suggested."""
+    return await destination_guard.check(
+        src, os.path.dirname(dst), path_4k=host_path(config.PATH_4K),
+        path_3d=host_path(config.PATH_3D), probe=probe_file,
+    )
+
+
 @router.post("/api/files/queue/add")
 async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Agrega una operación de copy/move a la cola."""
@@ -668,6 +676,9 @@ async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
         blocked = place_file.seed_block_reason(src, config.FOLDER_DOWNLOAD_TORRENT, "mover")
         if blocked:
             return {"ok": False, "detail": blocked}
+    # Arr flows (`host`) have no confirmation step, so only the explorer is judged.
+    if not req.host and (found := await _misfit(src, dst)):
+        return {"ok": False, "needs_confirmation": True, "mismatch": found}
 
     op = {
         "id": str(int(time.time() * 1000)),
