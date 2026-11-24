@@ -659,6 +659,16 @@ async def _misfit(src: str, dst: str) -> dict | None:
     )
 
 
+@router.get("/api/files/main-video")
+async def file_main_video(path: str = "", _key: str = Depends(verify_api_key)):
+    """The video a copied file or folder is about: itself, or its biggest video."""
+    src = _require_path(path)
+    video = await asyncio.to_thread(destination_guard.main_video, Path(src))
+    if video is None:
+        return {"ok": False, "detail": "No hay ningún vídeo en esa ruta"}
+    return {"ok": True, "path": str(video)}
+
+
 @router.post("/api/files/queue/add")
 async def queue_add(req: ActionRequest, _key: str = Depends(verify_api_key)):
     """Agrega una operación de copy/move a la cola."""

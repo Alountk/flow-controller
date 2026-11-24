@@ -11,7 +11,7 @@ from domain.media_info import resolution as probed_resolution
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".m4v", ".mov", ".ts", ".wmv"}
 
 
-def _main_video(src: Path) -> Path | None:
+def main_video(src: Path) -> Path | None:
     if src.is_file():
         return src
     if not src.is_dir():
@@ -26,7 +26,7 @@ async def check(src: str, dest: str, *, path_4k: str, path_3d: str, probe, libra
     `library_root` is an async callable giving the folder a non-4K file belongs
     in; it is only awaited when that is the suggestion.
     """
-    video = await asyncio.to_thread(_main_video, Path(src))
+    video = await asyncio.to_thread(main_video, Path(src))
     if video is None:
         return None
     try:

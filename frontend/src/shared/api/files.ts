@@ -226,6 +226,12 @@ export async function queueAdd(
   return handleResponse(res) as Promise<QueueAddResult>
 }
 
+/** The video inside a copied file or folder, for the rename dialog. */
+export async function fetchMainVideo(path: string): Promise<{ ok: boolean; path?: string; detail?: string }> {
+  const res = await apiFetch(`/api/files/main-video?path=${encodeURIComponent(path)}`, {})
+  return res.json()
+}
+
 export async function queueStatus(): Promise<QueueStatusResponse> {
   const res = await apiFetch('/api/files/queue/status', {})
   return (await res.json()) as QueueStatusResponse

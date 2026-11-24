@@ -9,6 +9,8 @@ import {
   renameItem,
   deleteItem,
   queueAdd,
+  queueStatus,
+  fetchMainVideo,
 } from '../../shared/api/files.ts'
 import { useBrowse } from '../../shared/hooks/useFilesNavigator.ts'
 import { readHashParam } from '../../shared/hooks/useHashState.ts'
@@ -135,12 +137,35 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
 
   const [mismatch, setMismatch] = useState<{ found: CopyMismatch; type: 'copy' | 'move'; src: string } | null>(null)
 
+  const [awaitingRename, setAwaitingRename] = useState<{ opId: string; dst: string } | null>(null)
+
+  useEffect(() => {
+    if (!awaitingRename) return
+    let live = true
+    const timer = setInterval(async () => {
+      const status = await queueStatus().catch(() => null)
+      const op = status?.completed.find((o) => o.id === awaitingRename.opId)
+      if (!live || !op) return
+      clearInterval(timer)
+      setAwaitingRename(null)
+      if (op.status !== 'done') return
+      const video = await fetchMainVideo(awaitingRename.dst).catch(() => null)
+      if (live && video?.ok && video.path) setRenameTarget(video.path)
+    }, 1500)
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [awaitingRename])
+
   const queue = useMutation({
-    mutationFn: ({ type, src, dst }: { type: 'copy' | 'move'; src: string; dst: string }) =>
+    mutationFn: ({ type, src, dst }: { type: 'copy' | 'move'; src: string; dst: string; fixed?: boolean }) =>
       queueAdd(type, src, dst),
     onSuccess: (res, vars) => {
       if (res.ok) {
         showToast(`${res.detail}`)
+        // A file sent to the folder that fits is offered a name once it lands.
+        if (vars.fixed && res.op) setAwaitingRename({ opId: res.op.id, dst: vars.dst })
         queryClient.invalidateQueries({ queryKey: ['queue'] })
       } else if (res.needs_confirmation && res.mismatch) {
         setMismatch({ found: res.mismatch, type: vars.type, src: vars.src })
@@ -354,7 +379,7 @@ function FilePane({ roots, index, otherPath, initialPath, onPathChange }: PanePr
                   onClick={() => {
                     const { type, src, found } = mismatch
                     setMismatch(null)
-                    queue.mutate({ type, src, dst: `${found.suggested}/${src.split('/').pop()}` })
+                    queue.mutate({ type, src, dst: `${found.suggested}/${src.split('/').pop()}`, fixed: true })
                   }}
                 >
                   {mismatch.type === 'move' ? 'Mover' : 'Copiar'} a la carpeta correcta
