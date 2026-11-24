@@ -7,6 +7,8 @@ import type { ActionKey, ActionMeta, ActionResult, CopyMismatch, Trace } from '.
 import { runAction, type ActionOptions } from '../../shared/api/actions.ts'
 import { ackBlockedImport } from '../../shared/api/traces.ts'
 import { apiFetch } from '../../shared/api/auth.ts'
+import { fetchMainVideo } from '../../shared/api/files.ts'
+import { LibraryRenameDialog } from '../file-manager/LibraryRenameDialog.tsx'
 import { EventStreamContext } from '../../shared/hooks/useEventStream.ts'
 import { slug } from '../../shared/utils/slug.ts'
 import { toast } from '../../shared/utils/toast.ts'
@@ -159,6 +161,10 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Prop
   const [acking, setAcking] = useState(false)
   const [result, setResult] = useState<ActionResult | null>(null)
   const [copyTask, setCopyTask] = useState<TaskProgress | null>(null)
+  // A copy into a folder the arr does not watch never reaches `imported`:
+  // `done` is its end, and it is the one that offers the rename.
+  const foreignCopy = useRef(false)
+  const [renameTarget, setRenameTarget] = useState<string | null>(null)
 
   const keys = actionsFor(trace)
 
@@ -189,7 +195,15 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Prop
       return
     }
     setCopyTask((prev) => prev ? { ...prev, ...taskData } : null)
-    if (taskData.status === 'imported' || taskData.status === 'renamed_needed') {
+    if (taskData.status === 'done' && foreignCopy.current) {
+      foreignCopy.current = false
+      setCopyTask(null)
+      setResult({ ok: true, steps: [{ target: 'filesystem', ok: true, detail: taskData.detail }] })
+      onDone()
+      void fetchMainVideo(taskData.dst_path || copyTask.dst_path).then((v) => {
+        if (v.ok && v.path) setRenameTarget(v.path)
+      })
+    } else if (taskData.status === 'imported' || taskData.status === 'renamed_needed') {
       setCopyTask(null)
       setResult({ ok: true, steps: [{ target: 'filesystem', ok: true, detail: taskData.detail }] })
       onDone()
@@ -221,6 +235,7 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Prop
     try {
       const res = await runAction(action, trace, options)
       if (action === 'copy_files' && res.ok && 'task_id' in res) {
+        foreignCopy.current = !!options.dest_root
         const r = res as unknown as { task_id: string; src_path: string; dst_path: string }
         setCopyTask({
           task_id: r.task_id,
@@ -466,6 +481,18 @@ export function TraceActions({ trace, meta, safeMode, onDone, onCopyTask }: Prop
             </button>
           </div>
         </TraceDialog>
+      )}
+
+      {renameTarget && (
+        <LibraryRenameDialog
+          path={renameTarget}
+          origin="a mano"
+          onClose={() => setRenameTarget(null)}
+          onRenamed={(detail) => {
+            toast(detail)
+            onDone()
+          }}
+        />
       )}
 
       {mismatch && (

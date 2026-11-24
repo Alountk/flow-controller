@@ -448,4 +448,42 @@ describe('Copiar archivos warns when the file does not fit the destination', () 
       expect(sent[1]).toMatchObject({ dest_root: '/4k', output_path: '/dl/x.mkv' })
     })
   })
+  it('offers the rename dialog once the copy to the right folder has landed', async () => {
+    const fn = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input)
+      const body = String(_init?.body ?? '')
+      if (url.includes('/api/actions/copy_files')) {
+        return Promise.resolve(
+          body.includes('dest_root')
+            ? deferredJson({ ok: true, task_id: 't2', src_path: '/dl/x.mkv', dst_path: '/4k/x.mkv' })
+            : deferredJson({
+                ok: false,
+                needs_confirmation: true,
+                mismatch: { file: 'x.mkv', resolution: '2160', destination: '/lib/Movie', suggested: '/4k' },
+              }),
+        )
+      }
+      if (url.includes('/api/tasks/t2')) {
+        return Promise.resolve(deferredJson({ ok: true, status: 'done', detail: 'copiado', dst_path: '/4k/x.mkv' }))
+      }
+      if (url.includes('/api/files/main-video')) {
+        return Promise.resolve(deferredJson({ ok: true, path: '/4k/x.mkv' }))
+      }
+      if (url.includes('/api/library/rename')) {
+        return Promise.resolve(deferredJson({ ok: true, folder: '/4k', name: 'Movie (2007).mkv' }))
+      }
+      return Promise.resolve(deferredJson({ ok: true, status: 'running' }))
+    })
+    vi.stubGlobal('fetch', fn)
+    renderActions(blocked())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar archivos' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Copiar a la carpeta correcta' }))
+
+    await waitFor(() => {
+      expect(fn.mock.calls.some((c) => String(c[0]).includes('/api/files/main-video?path=%2F4k%2Fx.mkv'))).toBe(true)
+    })
+    expect(await screen.findByText('Renombrar como Radarr')).toBeInTheDocument()
+  })
 })
